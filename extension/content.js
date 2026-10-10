@@ -885,7 +885,7 @@
       spotEl.setAttribute("data-archiver-spotlight", "");
       spotEl.style.cssText =
         "position:fixed;left:0;top:0;z-index:2147483000;pointer-events:none;" +
-        "outline:1.5px solid #fff;box-shadow:0 0 0 100vmax rgba(0,0,0,.42);" +
+        "outline:1.5px dashed #fff;box-shadow:0 0 0 100vmax rgba(0,0,0,.42);" +
         "opacity:0;transition:opacity .2s ease;";
       document.documentElement.appendChild(spotEl);
       spotEl.getBoundingClientRect();
@@ -963,7 +963,7 @@
     }
     ghost.style.cssText =
       `position:fixed;left:0;top:0;z-index:2147483647;pointer-events:none;width:${w}px;height:${h}px;` +
-      `box-sizing:border-box;padding:${SPOT_PAD}px;overflow:hidden;outline:1.5px solid #fff;` +
+      `box-sizing:border-box;padding:${SPOT_PAD}px;overflow:hidden;outline:1.5px dashed #fff;` +
       `background:${bg};opacity:.92;box-shadow:0 18px 50px rgba(0,0,0,.45);` +
       `transform-origin:0 0;transition:scale .18s ease;` +
       (cs ? `font:${cs.font};color:${cs.color};line-height:${cs.lineHeight};text-align:${cs.textAlign};` : "");

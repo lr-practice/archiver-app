@@ -357,7 +357,7 @@ button {
   padding: 9px 14px;
   border: none;
   border-radius: var(--r-md);
-  outline: 1px solid rgba(var(--ink-rgb), 0.22);
+  outline: 1px dashed rgba(var(--ink-rgb), 0.22);
   outline-offset: -1px;
   background: transparent;
   font-size: 13px;
@@ -367,7 +367,7 @@ button {
 .v-drop-chip:hover,
 .v-drop-chip.drop-active {
   background: rgba(45, 90, 235, 0.2);
-  outline: 1px solid #2d5aeb;
+  outline: 1px dashed #2d5aeb;
   color: var(--text);
 }
 

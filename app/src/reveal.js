@@ -1,7 +1,7 @@
 // reveal.js
 // Licht-Öffnung nach der Einstiegstour: ein WebGL-Shader über dem Fenster.
-// Aus dem Dunkel erscheint kurz „ARCHIVER“, dann öffnet Licht die Oberfläche,
-// als Welle von der Mitte (Standard) oder als Lid aus einer Lichtlinie.
+// Aus dem Dunkel öffnet sich die Oberfläche, weich von der Mitte aus (Welle,
+// Standard) oder als Lid aus einer Lichtlinie.
 // Elemente erscheinen, wenn das Licht sie erreicht. Zum Schluss leuchtet der
 // Fensterrand kurz von innen. Ruhig und langsam, zusammen etwa 3,5 s.
 
@@ -44,7 +44,7 @@
       float edge;
       if (u_mode < 0.5) {
         float d = distance(px, c);
-        cover = smoothstep(u_r - 70.0, u_r + 50.0, d);
+        cover = smoothstep(u_r - 320.0, u_r + 80.0, d);
         edge = d - u_r;
       } else {
         float d = abs(px.y - c.y);
@@ -146,10 +146,7 @@
     const layer = document.createElement("div");
     layer.className = "reveal";
     const canvas = document.createElement("canvas");
-    const word = document.createElement("div");
-    word.className = "reveal-word";
-    word.textContent = "Archiver";
-    layer.append(canvas, word);
+    layer.append(canvas);
     document.body.appendChild(layer);
 
     if (still) {
@@ -184,7 +181,7 @@
     gl.uniform1f(u.mode, mode === "lid" ? 1 : 0);
 
     const lid = mode === "lid";
-    const START = lid ? 1000 : 900;
+    const START = lid ? 1000 : 300;
     const DUR = lid ? 2000 : 2600;
     const TOTAL = START + DUR + 600;
     const Rmax = Math.hypot(W / 2, H / 2) + 120;
@@ -215,15 +212,6 @@
       return revealElement(node, timeAt(dist, Rmax) - 200);
     });
 
-    word.animate(
-      [
-        { opacity: 0, filter: "blur(8px)", letterSpacing: "0.5em" },
-        { opacity: 0.9, filter: "blur(0px)", letterSpacing: "0.32em", offset: lid ? 0.4 : 0.45 },
-        { opacity: 0.9, offset: lid ? 0.5 : 0.45 },
-        { opacity: 0, filter: "blur(10px)", letterSpacing: "0.4em" },
-      ],
-      { duration: lid ? 2400 : 2200, easing: "cubic-bezier(.45,0,.25,1)", fill: "forwards" }
-    );
     if (onStart) onStart();
 
     const frameAt = START + DUR * (lid ? 0.5 : 0.6);
@@ -242,8 +230,9 @@
           const pre = Math.min(1, Math.max(0, (ms - START + 600) / 600));
           gl.uniform1f(u.ring, smooth(pre) * (t < 0.6 ? 0.7 : (0.7 * (1 - t)) / 0.4));
         } else {
-          gl.uniform1f(u.r, e * Rmax);
-          gl.uniform1f(u.ring, t === 0 ? 0 : Math.min(1, t / 0.15) * (t < 0.7 ? 0.7 : (0.7 * (1 - t)) / 0.3));
+          // Ohne sichtbaren Ring: das Dunkel weicht weich von der Mitte aus
+          gl.uniform1f(u.r, e * (Rmax + 320));
+          gl.uniform1f(u.ring, 0);
         }
         const f = (ms - frameAt) / frameDur;
         gl.uniform1f(u.frame, f <= 0 || f >= 1 ? 0 : 0.55 * (f < 0.35 ? smooth(f / 0.35) : smooth((1 - f) / 0.65)));

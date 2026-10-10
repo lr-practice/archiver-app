@@ -4112,12 +4112,13 @@
   // verlässt die App das Vollbild, dann öffnet Licht die Oberfläche (reveal.js).
 
   const TOUR_PREF = "tour3Done";
-  const DEMO_HOT = ["Typografie", "Plakate", "Verpackung", "Identität"];
-  const DEMO_WEB = ["welle-plakat", "dreieck", "zitrone-etikett", "buchstabe-g", "raster-gelb", "abend-verlauf"];
+  // Mitgelieferte Grafiken für das Schema, wenn die Tour in der eigenen Bibliothek läuft
+  const TOUR_WEB = ["welle-plakat", "dreieck", "zitrone-etikett", "buchstabe-g", "raster-gelb", "abend-verlauf"];
   // Eintrag im Chrome Web Store, sobald es ihn gibt; bis dahin der Weg über chrome://extensions
   const EXT_STORE_URL = null;
   const tourStats = { drops: 0, pdfs: 0, collected: 0 };
-  const tourDemo = { on: false, prevOrder: null };
+  const tourDemo = { on: false, prevOrder: null, zones: [], web: [] };
+  const demoHot = () => tourDemo.zones.filter((z) => z !== "Inbox").slice(0, HOT_ZONES);
 
   const zoneByName = (name) => state.zones.find((z) => z.path === name);
   const kbdHtml = (s) => s; // Texte stammen aus i18n.js und enthalten <kbd>
@@ -4126,7 +4127,9 @@
     tourDemo.prevOrder = pref("zoneOrder", []);
     setPref("demoPrevOrder", tourDemo.prevOrder);
     const info = await invoke("open_demo");
-    setPref("zoneOrder", [...DEMO_HOT, ...info.zones.filter((z) => !DEMO_HOT.includes(z))]);
+    tourDemo.zones = info.zones;
+    tourDemo.web = info.web;
+    setPref("zoneOrder", info.zones);
     tourDemo.on = true;
     document.body.classList.add("demo-lib");
     if (state.focus != null || state.query) setFocus(null);
@@ -4161,7 +4164,7 @@
 
   function finderList() {
     const list = el("div", "tour-finder");
-    const zones = (tourDemo.on ? DEMO_HOT.map(zoneByName) : state.zones.slice(0, HOT_ZONES)).filter(Boolean).slice(0, 3);
+    const zones = (tourDemo.on ? demoHot().map(zoneByName) : state.zones.slice(0, HOT_ZONES)).filter(Boolean).slice(0, 3);
     for (const z of zones) {
       const row = el("div", "tour-finder-row");
       row.innerHTML =
@@ -4170,6 +4173,23 @@
       list.appendChild(row);
     }
     return list;
+  }
+
+  // Vorschläge aus dem, was die Bildanalyse in den Objekten gefunden hat:
+  // zwei häufige Farben und zwei häufige Bildinhalte, auf Deutsch, wo es geht.
+  function tourSearchWords() {
+    const de = new Map();
+    if (lang === "de") for (const [word, en] of Object.entries(SEARCH_DE)) if (!de.has(en)) de.set(en, word);
+    const colors = new Map();
+    const labels = new Map();
+    for (const item of state.items) {
+      const idx = searchIndex(item);
+      for (const [c, share] of idx.colors) if (share >= COLOR_SHARE && c !== "white" && c !== "black" && c !== "gray") colors.set(c, (colors.get(c) || 0) + 1);
+      for (const l of idx.labels.slice(0, 3)) labels.set(l, (labels.get(l) || 0) + 1);
+    }
+    const top = (m, n) => [...m].sort((a, b) => b[1] - a[1]).slice(0, n).map(([k]) => de.get(k) || k);
+    const words = [...top(colors, 2), ...top(labels, 2)];
+    return words.length >= 2 ? words : t("tourSearchTry").split(", ");
   }
 
   function keyList() {
@@ -4188,7 +4208,7 @@
     bar.append(el("span", "tour-schema-dots"), el("span", "tour-schema-url", t("tourSchemaUrl")));
     const grid = el("div", "tour-schema-grid");
     const drop = el("div", "tour-schema-drop");
-    const zones = (tourDemo.on ? DEMO_HOT : state.zones.slice(0, HOT_ZONES).map((z) => z.path)).slice(0, HOT_ZONES);
+    const zones = (tourDemo.on ? demoHot() : state.zones.slice(0, HOT_ZONES).map((z) => z.path)).slice(0, HOT_ZONES);
     zones.forEach((z, i) => {
       const d = el("div", "tour-schema-zone");
       d.dataset.zone = z;
@@ -4206,18 +4226,19 @@
       zoneEl.classList.remove("flash");
       void zoneEl.offsetWidth;
       zoneEl.classList.add("flash");
-      if (tourDemo.on) invoke("demo_collect", { file: node.dataset.file, zone }).catch(() => {});
+      if (tourDemo.on && node.dataset.file) invoke("demo_collect", { file: node.dataset.file, zone }).catch(() => {});
       if (byUser) {
         tourStats.collected++;
         toast(t("tourSchemaSaved", { zone: zoneLabel(zone) }));
       }
     };
 
-    for (const name of DEMO_WEB) {
+    const web = tourDemo.on && tourDemo.web.length ? tourDemo.web : TOUR_WEB.map((n) => ({ file: "", show: "tour/" + n + ".jpg" }));
+    for (const w of web) {
       const item = el("div", "tour-schema-item");
-      item.dataset.file = name + ".jpg";
+      item.dataset.file = w.file;
       const img = el("img");
-      img.src = "tour/" + name + ".jpg";
+      img.src = w.show.startsWith("/") ? fileSrc(w.show) : w.show;
       img.alt = "";
       img.draggable = false;
       item.appendChild(img);
@@ -4427,8 +4448,8 @@
       corner: true,
       setup: (ctx) => {
         ctx.seen = false;
-        const typo = zoneByName("Typografie");
-        if (tourDemo.on && typo) setFocus(typo.path);
+        const zone = tourDemo.on && zoneByName(demoHot()[0]);
+        if (zone) setFocus(zone.path);
         else if (state.items.length && state.focus == null) setFocus(ALL);
       },
       done: (ctx) => ctx.seen || (ctx.seen = !!state.lightbox),
@@ -4444,7 +4465,7 @@
       },
       extra: () => {
         const chips = el("div", "tour-chips");
-        for (const w of t("tourSearchTry").split(", ")) {
+        for (const w of tourSearchWords()) {
           chips.appendChild(
             chip("„" + w + "“", false, () => {
               const input = $("search");
@@ -4467,8 +4488,8 @@
         ctx.n = tourStats.pdfs;
         $("search").value = "";
         $("search").blur();
-        const zone = zoneByName("Plakate");
-        if (tourDemo.on && zone) setFocus(zone.path);
+        const zone = tourDemo.on && zoneByName(demoHot()[1] || demoHot()[0]);
+        if (zone) setFocus(zone.path);
         else if (state.focus == null && state.items.length) setFocus(ALL);
       },
       buttons: (api, ctx) =>

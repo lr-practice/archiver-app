@@ -242,35 +242,25 @@ async fn open_library(app: AppHandle, path: String) -> Result<(), String> {
 }
 
 // ---- Demo-Bibliothek für die Einstiegstour ----
-// Eigener Ordner ~/Archiver Demo/ mit mitgelieferten Grafiken (src-tauri/demo).
-// Sie wird geöffnet, ohne die eigene Bibliothek in den Einstellungen zu ersetzen.
+// Eigener Ordner ~/Archiver Demo/. Gefüllt mit Kopien aus der eigenen Bibliothek
+// (vier Active Zones, Inbox, dazu Bilder für das Browser-Schema in .web/);
+// ist die eigene Bibliothek noch zu leer, mit den mitgelieferten Grafiken
+// (src-tauri/demo). Geöffnet wird sie, ohne die eigene Bibliothek in den
+// Einstellungen zu ersetzen. .seed.json merkt sich, was nicht selbst gesammelt wurde.
 
-const DEMO_ZONES: [(&str, &str); 5] = [
+const DEMO_BUNDLED: [(&str, &str); 5] = [
     ("typografie", "Typografie"),
     ("plakate", "Plakate"),
     ("verpackung", "Verpackung"),
     ("identitaet", "Identität"),
     ("inbox", library::INBOX),
 ];
+const DEMO_PER_ZONE: usize = 8;
+const DEMO_INBOX: usize = 6;
+const DEMO_WEB: usize = 6;
 
 fn demo_root() -> PathBuf {
     dirs::home_dir().unwrap_or_default().join("Archiver Demo")
-}
-
-/// Namen der mitgelieferten Demo-Dateien je Zone
-fn demo_seed(app: &AppHandle) -> Result<Vec<(PathBuf, String, String)>, String> {
-    let res = app.path().resource_dir().map_err(|e| e.to_string())?.join("demo");
-    let mut out = Vec::new();
-    for (dir, zone) in DEMO_ZONES {
-        let Ok(entries) = std::fs::read_dir(res.join(dir)) else { continue };
-        for e in entries.flatten() {
-            let name = e.file_name().to_string_lossy().into_owned();
-            if !name.starts_with('.') {
-                out.push((e.path(), zone.to_string(), name));
-            }
-        }
-    }
-    Ok(out)
 }
 
 #[derive(Serialize)]
@@ -278,36 +268,146 @@ fn demo_seed(app: &AppHandle) -> Result<Vec<(PathBuf, String, String)>, String> 
 struct DemoInfo {
     root: String,
     zones: Vec<String>,
+    web: Vec<DemoWeb>,
+}
+
+/// Bild für das Browser-Schema: `file` liegt in .web/ (zum Ablegen),
+/// `show` ist zum Anzeigen (Pfad in der eigenen Bibliothek oder Name der
+/// mitgelieferten Grafik unter app/src/tour/).
+#[derive(Serialize)]
+struct DemoWeb {
+    file: String,
+    show: String,
+}
+
+/// Was in die Demo kommt: (Quelle, Zone, Dateiname)
+fn demo_plan(app: &AppHandle, own: Option<&Library>) -> Result<(Vec<(PathBuf, String, String)>, Vec<PathBuf>), String> {
+    let mut plan = Vec::new();
+    let mut web = Vec::new();
+    if let Some(lib) = own {
+        let items: Vec<Item> = lib.items()?.into_iter().filter(|i| library::is_image(Path::new(&i.abs))).collect();
+        let (order, hot) = lib.zone_order();
+        let mut zones: Vec<String> = if hot.is_empty() { order } else { hot };
+        zones.retain(|z| !z.is_empty() && z != library::INBOX && items.iter().any(|i| &i.zone == z));
+        if zones.len() < 4 {
+            let mut counts: Vec<(String, usize)> = Vec::new();
+            for i in &items {
+                if i.zone.is_empty() || i.zone == library::INBOX || zones.contains(&i.zone) {
+                    continue;
+                }
+                match counts.iter_mut().find(|(z, _)| z == &i.zone) {
+                    Some(c) => c.1 += 1,
+                    None => counts.push((i.zone.clone(), 1)),
+                }
+            }
+            counts.sort_by(|a, b| b.1.cmp(&a.1));
+            zones.extend(counts.into_iter().map(|(z, _)| z).take(4 - zones.len()));
+        }
+        zones.truncate(4);
+        if zones.len() >= 2 {
+            let mut used = std::collections::HashSet::new();
+            for z in &zones {
+                let name = z.rsplit('/').next().unwrap_or(z).to_string();
+                for i in items.iter().filter(|i| &i.zone == z).take(DEMO_PER_ZONE) {
+                    used.insert(i.path.clone());
+                    plan.push((PathBuf::from(&i.abs), name.clone(), i.filename.clone()));
+                }
+            }
+            // Inbox: unsortiert, möglichst aus der eigenen Inbox, sonst aus dem Rest
+            let rest: Vec<&Item> = items.iter().filter(|i| !used.contains(&i.path)).collect();
+            let mut inbox: Vec<&Item> = rest.iter().copied().filter(|i| i.zone == library::INBOX).take(DEMO_INBOX).collect();
+            for i in rest.iter().copied().filter(|i| i.zone != library::INBOX) {
+                if inbox.len() >= DEMO_INBOX {
+                    break;
+                }
+                inbox.push(i);
+            }
+            for i in &inbox {
+                used.insert(i.path.clone());
+                plan.push((PathBuf::from(&i.abs), library::INBOX.to_string(), i.filename.clone()));
+            }
+            web = items.iter().filter(|i| !used.contains(&i.path)).take(DEMO_WEB).map(|i| PathBuf::from(&i.abs)).collect();
+            if plan.len() >= 12 {
+                return Ok((plan, web));
+            }
+            plan.clear();
+            web.clear();
+        }
+    }
+    // Zu wenig Eigenes: mitgelieferte Grafiken
+    let res = app.path().resource_dir().map_err(|e| e.to_string())?.join("demo");
+    for (dir, zone) in DEMO_BUNDLED {
+        let Ok(entries) = std::fs::read_dir(res.join(dir)) else { continue };
+        for e in entries.flatten() {
+            let name = e.file_name().to_string_lossy().into_owned();
+            if !name.starts_with('.') {
+                plan.push((e.path(), zone.to_string(), name));
+            }
+        }
+    }
+    if let Ok(entries) = std::fs::read_dir(res.join("web")) {
+        web = entries.flatten().map(|e| e.path()).collect();
+        web.sort();
+    }
+    Ok((plan, web))
 }
 
 #[tauri::command]
-async fn open_demo(app: AppHandle) -> Result<DemoInfo, String> {
+async fn open_demo(app: AppHandle, state: State<'_, AppState>) -> Result<DemoInfo, String> {
+    let own = state.library.lock().unwrap().clone();
+    let (plan, web) = demo_plan(&app, own.as_deref())?;
     let root = demo_root();
-    for (src, zone, name) in demo_seed(&app)? {
+    if root.exists() {
+        // Reste einer früheren Demo
+        let _ = trash::delete(&root);
+    }
+    let mut seed = Vec::new();
+    let mut zones: Vec<String> = Vec::new();
+    for (src, zone, name) in plan {
         let dir = root.join(&zone);
         std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
-        let dest = dir.join(&name);
-        if !dest.exists() {
-            std::fs::copy(&src, &dest).map_err(|e| e.to_string())?;
+        let dest = library::unique_path(&dir, &name);
+        if std::fs::copy(&src, &dest).is_ok() {
+            seed.push(format!("{}/{}", zone, dest.file_name().unwrap_or_default().to_string_lossy()));
+            if !zones.contains(&zone) {
+                zones.push(zone);
+            }
         }
     }
+    // Inbox ans Ende: die ersten vier sind die Active Zones
+    if let Some(p) = zones.iter().position(|z| z == library::INBOX) {
+        let inbox = zones.remove(p);
+        zones.push(inbox);
+    }
+    let web_dir = root.join(".web");
+    std::fs::create_dir_all(&web_dir).map_err(|e| e.to_string())?;
+    let bundled = app.path().resource_dir().ok();
+    let mut web_out = Vec::new();
+    for src in web {
+        let name = src.file_name().unwrap_or_default().to_string_lossy().into_owned();
+        let dest = library::unique_path(&web_dir, &name);
+        if std::fs::copy(&src, &dest).is_ok() {
+            let from_bundle = bundled.as_ref().is_some_and(|r| src.starts_with(r));
+            web_out.push(DemoWeb {
+                file: dest.to_string_lossy().into_owned(),
+                show: if from_bundle { format!("tour/{name}") } else { src.to_string_lossy().into_owned() },
+            });
+        }
+    }
+    std::fs::write(root.join(".seed.json"), serde_json::to_vec(&seed).unwrap()).map_err(|e| e.to_string())?;
     activate(&app, &root)?;
-    Ok(DemoInfo {
-        root: root.to_string_lossy().into_owned(),
-        zones: DEMO_ZONES.iter().map(|(_, z)| z.to_string()).collect(),
-    })
+    Ok(DemoInfo { root: root.to_string_lossy().into_owned(), zones, web: web_out })
 }
 
 /// Zurück zur eigenen Bibliothek. Was in der Demo selbst gesammelt wurde,
-/// wandert in deren Eingang; ohne `keep` geht der Demo-Ordner in den Papierkorb.
+/// wandert in deren Inbox; ohne `keep` geht der Demo-Ordner in den Papierkorb.
 #[tauri::command]
 async fn close_demo(app: AppHandle, keep: bool) -> Result<usize, String> {
     let root = demo_root();
     let own = load_settings(&app).library.map(PathBuf::from);
-    let seed: std::collections::HashSet<(String, String)> =
-        demo_seed(&app)?.into_iter().map(|(_, zone, name)| (zone, name)).collect();
-    let web: std::collections::HashSet<String> = std::fs::read_dir(demo_web(&app)?)
-        .map(|d| d.flatten().map(|e| e.file_name().to_string_lossy().into_owned()).collect())
+    let seed: std::collections::HashSet<String> = std::fs::read(root.join(".seed.json"))
+        .ok()
+        .and_then(|b| serde_json::from_slice(&b).ok())
         .unwrap_or_default();
     let mut moved = 0;
     if let Some(own) = own.as_ref().filter(|o| o.is_dir() && root.is_dir()) {
@@ -320,12 +420,11 @@ async fn close_demo(app: AppHandle, keep: bool) -> Result<usize, String> {
             .filter_map(|e| e.ok())
             .filter(|e| e.file_type().is_file())
         {
-            let rel = e.path().strip_prefix(&root).unwrap_or(e.path());
-            let zone = rel.parent().map(|p| p.to_string_lossy().into_owned()).unwrap_or_default();
-            let name = e.file_name().to_string_lossy().into_owned();
-            if seed.contains(&(zone, name.clone())) || web.contains(&name) {
+            let rel = e.path().strip_prefix(&root).unwrap_or(e.path()).to_string_lossy().replace('\\', "/");
+            if seed.contains(&rel) {
                 continue;
             }
+            let name = e.file_name().to_string_lossy().into_owned();
             let dest = library::unique_path(&inbox, &name);
             if std::fs::rename(e.path(), &dest).is_err() {
                 std::fs::copy(e.path(), &dest).map_err(|e| e.to_string())?;
@@ -344,23 +443,19 @@ async fn close_demo(app: AppHandle, keep: bool) -> Result<usize, String> {
     Ok(moved)
 }
 
-fn demo_web(app: &AppHandle) -> Result<PathBuf, String> {
-    Ok(app.path().resource_dir().map_err(|e| e.to_string())?.join("demo").join("web"))
-}
-
 /// Tour, Kapitel „Sammeln im Browser“: Ein Bild aus dem Schema landet wirklich in der Demo-Zone.
+/// Es zählt als selbst gesammelt.
 #[tauri::command]
-async fn demo_collect(app: AppHandle, file: String, zone: String) -> Result<(), String> {
-    let name = Path::new(&file).file_name().ok_or("Ungültiger Name")?.to_owned();
-    let dir = demo_root().join(&zone);
-    if !dir.starts_with(demo_root()) || zone.contains("..") {
-        return Err("Ungültige Zone".into());
+async fn demo_collect(file: String, zone: String) -> Result<(), String> {
+    let root = demo_root();
+    let src = PathBuf::from(&file);
+    if !src.starts_with(root.join(".web")) || file.contains("..") || zone.contains("..") || zone.starts_with('.') {
+        return Err("Ungültiger Pfad".into());
     }
+    let name = src.file_name().ok_or("Ungültiger Name")?.to_string_lossy().into_owned();
+    let dir = root.join(&zone);
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
-    let dest = dir.join(&name);
-    if !dest.exists() {
-        std::fs::copy(demo_web(&app)?.join(&name), &dest).map_err(|e| e.to_string())?;
-    }
+    std::fs::copy(&src, library::unique_path(&dir, &name)).map_err(|e| e.to_string())?;
     Ok(())
 }
 

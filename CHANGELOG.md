@@ -1,5 +1,12 @@
 # Changelog
 
+## App 0.19.1 · Extension 3.16.2 (10.10.2026)
+
+- Getting Started: Die Demo-Bibliothek füllt sich mit Kopien aus der eigenen Bibliothek (vier Active Zones, Inbox, Bilder für das Browser-Schema). Mitgelieferte Grafiken nur, wenn die eigene Bibliothek noch zu leer ist. Suchvorschläge kommen aus der Bildanalyse.
+- Öffnung nach der Tour ohne Lichtring und ohne Schriftzug: das Dunkel weicht weich von der Mitte, dann glänzt die Oberfläche blau.
+- Gestrichelte Linien sind zurück (App, Observer, Extension).
+- Updates werden auch im laufenden Betrieb gesucht: alle 30 Minuten und beim Zurückkehren ins Fenster.
+
 ## App 0.19.0 (10.10.2026)
 
 - Getting Started neu: neun Kapitel, fünf zum Mitmachen, im Vollbild. Auf Wunsch in einer Demo-Bibliothek (~/Archiver Demo/, 28 eigene Grafiken in fünf Zonen), getrennt von der eigenen Bibliothek. Am Ende wandert Selbstgesammeltes in die Inbox, die Demo in den Papierkorb.
