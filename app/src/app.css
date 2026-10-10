@@ -7,7 +7,7 @@
   --card-bg: rgba(20, 20, 20, 0.28);
   --panel: rgba(24, 24, 24, 0.96);
   --line: rgba(var(--ink-rgb), 0.1);
-  --dash: rgba(var(--ink-rgb), 0.35);
+  --dash: rgba(var(--ink-rgb), 0.2);
   --text: var(--ink);
   --muted: #8a8a8e;
   --accent: #2d5aeb;
@@ -111,7 +111,7 @@ button {
 
 .welcome-inner {
   max-width: 520px;
-  outline: 1px dashed var(--dash);
+  outline: 1px solid var(--dash);
   outline-offset: -1px;
   background: var(--card-bg);
   padding: 44px 40px;
@@ -185,7 +185,7 @@ button {
 
 .zone-card {
   background: var(--card-bg);
-  outline: 1px dashed var(--dash);
+  outline: 1px solid var(--dash);
   outline-offset: -1px;
   display: flex;
   flex-direction: column;
@@ -196,7 +196,7 @@ button {
 
 .zone-card.drop-active {
   background: rgba(32, 48, 79, 0.85);
-  outline: 1px dashed var(--accent);
+  outline: 1px solid var(--accent);
 }
 
 .zone-card-name {
@@ -329,7 +329,7 @@ button {
   overflow-y: auto;
   z-index: 10;
   background: var(--panel);
-  outline: 1px dashed var(--dash);
+  outline: 1px solid var(--dash);
   outline-offset: -1px;
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
   padding: 16px;
@@ -662,7 +662,7 @@ html.light .lb-bar {
   padding: 9px 14px;
   border: none;
   border-radius: var(--r-md);
-  outline: 1px dashed rgba(var(--ink-rgb), 0.22);
+  outline: 1px solid rgba(var(--ink-rgb), 0.22);
   outline-offset: -1px;
   background: transparent;
   font-size: 13px;
@@ -672,7 +672,7 @@ html.light .lb-bar {
 
 .lb-chip:hover {
   background: rgba(var(--accent-rgb), 0.2);
-  outline: 1px dashed var(--accent);
+  outline: 1px solid var(--accent);
 }
 
 .lb-chip.current {
@@ -800,7 +800,7 @@ html.light .lb-bar {
   width: 520px;
   max-width: calc(100% - 40px);
   background: var(--panel);
-  outline: 1px dashed var(--dash);
+  outline: 1px solid var(--dash);
   outline-offset: -1px;
   padding: 22px 24px 20px;
 }
@@ -812,7 +812,7 @@ html.light .lb-bar {
 
 .dialog section {
   padding: 14px 0;
-  border-top: 1px dashed var(--line);
+  border-top: 1px solid var(--line);
 }
 
 .dialog h4 {
@@ -842,7 +842,7 @@ html.light .lb-bar {
   display: flex;
   justify-content: flex-end;
   padding-top: 12px;
-  border-top: 1px dashed var(--line);
+  border-top: 1px solid var(--line);
 }
 
 /* Rückfrage: kompakt, ohne Rahmenlinien */
@@ -978,7 +978,7 @@ html.light .lb-bar {
   flex-direction: column;
   padding: 4px;
   background: var(--panel);
-  outline: 1px dashed var(--dash);
+  outline: 1px solid var(--dash);
   outline-offset: -1px;
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
 }
@@ -1308,7 +1308,7 @@ body {
 
 .p-color.active {
   opacity: 1;
-  outline: 1px dashed var(--ink);
+  outline: 1px solid var(--ink);
   outline-offset: 2px;
 }
 
@@ -1426,7 +1426,7 @@ body {
 
 .p-row.p-new {
   color: var(--p-faint);
-  border-bottom-style: dashed;
+  border-bottom-style: solid;
 }
 
 .p-row.p-new:hover,
@@ -1450,7 +1450,7 @@ body {
   max-width: 320px;
   padding: 3px 6px;
   border: none;
-  outline: 1px dashed var(--dash);
+  outline: 1px solid var(--dash);
   background: rgba(var(--ink-rgb), 0.06);
   font-size: inherit;
   user-select: text;
@@ -1460,7 +1460,7 @@ body {
 /* Ablegen: gleiche Sprache wie die Zonen in der Extension */
 .drop-active {
   background: rgba(var(--accent-rgb), 0.2) !important;
-  outline: 1px dashed var(--accent) !important;
+  outline: 1px solid var(--accent) !important;
   outline-offset: -1px;
   color: var(--ink) !important;
 }
@@ -1593,7 +1593,7 @@ body.sorting * {
 /* Ziel beim Umsortieren: die ganze Karte gestrichelt und hervorgehoben */
 .p-card.drop-before,
 .p-card.drop-after {
-  outline: 1.5px dashed var(--ink);
+  outline: 1.5px solid var(--ink);
   outline-offset: 3px;
   background: rgba(var(--ink-rgb), 0.08);
 }
@@ -1683,7 +1683,7 @@ body.sorting * {
 
 .p-card.p-new {
   background: transparent;
-  outline: 1px dashed rgba(var(--ink-rgb), 0.18);
+  outline: 1px solid rgba(var(--ink-rgb), 0.18);
   outline-offset: -1px;
   padding: 14px 16px 16px;
   color: var(--p-faint);
@@ -1910,7 +1910,7 @@ body.sorting * {
 .p-drop-chip {
   padding: 9px 14px;
   border-radius: var(--r-md);
-  outline: 1px dashed rgba(var(--ink-rgb), 0.22);
+  outline: 1px solid rgba(var(--ink-rgb), 0.22);
   outline-offset: -1px;
   font-size: 13px;
 }
@@ -2420,7 +2420,7 @@ body.lightbox-open .p-dropbar {
 
 .card.selected,
 .p-section .card.selected {
-  outline: 1px dashed var(--ink);
+  outline: 1px solid var(--ink);
   outline-offset: 2px;
 }
 
@@ -2430,7 +2430,7 @@ body.lightbox-open .p-dropbar {
 }
 
 .original .card.selected img {
-  outline: 1px dashed var(--ink);
+  outline: 1px solid var(--ink);
   outline-offset: 1px;
 }
 
@@ -2466,7 +2466,7 @@ body.has-selection .card:not(.selected):hover img {
   z-index: 40;
   width: min(440px, 80vw);
   padding: 32px 32px 30px;
-  outline: 1px dashed var(--dash);
+  outline: 1px solid var(--dash);
   outline-offset: -1px;
   background: var(--p-pill);
   -webkit-backdrop-filter: blur(24px);
@@ -2516,7 +2516,7 @@ body.has-selection .card:not(.selected):hover img {
 
 .tour-ring {
   position: fixed;
-  outline: 1.5px dashed var(--ink);
+  outline: 1.5px solid var(--ink);
   outline-offset: 0;
   border-radius: var(--r-lg);
   box-shadow: 0 0 0 100vmax rgba(0, 0, 0, 0.28);
@@ -2965,7 +2965,7 @@ html.light .p-nav {
 /* ---- Startseite per Tastatur: gewählte Zone ---- */
 
 .p-home .kbd-focus {
-  outline: 1px dashed var(--ink);
+  outline: 1px solid var(--ink);
   outline-offset: 2px;
 }
 
@@ -3057,7 +3057,7 @@ html.light .p-nav {
 }
 
 .original .card-text.selected .text-sheet {
-  outline: 1px dashed var(--ink);
+  outline: 1px solid var(--ink);
   outline-offset: 1px;
 }
 
@@ -3452,7 +3452,7 @@ body.has-selection .card-text:not(.selected):hover .text-sheet {
 
 .p-hot-card.swap-target,
 .p-row.swap-target {
-  outline: 1.5px dashed var(--ink);
+  outline: 1.5px solid var(--ink);
   outline-offset: 3px;
   background: rgba(var(--ink-rgb), 0.08);
 }
@@ -3673,7 +3673,7 @@ html.light .pdf-maker {
 }
 
 .pdf-cell.lifted {
-  outline: 1px dashed var(--accent);
+  outline: 1px solid var(--accent);
   outline-offset: calc(var(--u) * 5);
   opacity: 0.85;
 }
@@ -3925,7 +3925,7 @@ html.light .p-nav-brand {
 .p-ctx-zone.on {
   color: var(--p-dim);
   background: transparent;
-  outline: 1px dashed rgba(var(--ink-rgb), 0.2);
+  outline: 1px solid rgba(var(--ink-rgb), 0.2);
   outline-offset: -1px;
   cursor: default;
 }

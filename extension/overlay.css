@@ -181,7 +181,7 @@ input {
 .area-box {
   position: fixed;
   display: none;
-  outline: 1.5px dashed #ffffff;
+  outline: 1.5px solid #ffffff;
   outline-offset: 0;
   box-shadow: 0 0 0 100vmax rgba(0, 0, 0, 0.32);
   background: transparent;
@@ -219,7 +219,7 @@ input {
   padding: 8px 12px;
   border: 0;
   border-radius: 6px;
-  outline: 1px dashed rgba(255, 255, 255, 0.22);
+  outline: 1px solid rgba(255, 255, 255, 0.22);
   outline-offset: -1px;
   background: transparent;
   color: #ededed;
@@ -298,7 +298,7 @@ html.light .area-hint,
 
 html.light .area-box,
 :host(.light) .area-box {
-  outline: 1.5px dashed #111111;
+  outline: 1.5px solid #111111;
   box-shadow: 0 0 0 100vmax rgba(0, 0, 0, 0.096);
 }
 
@@ -315,7 +315,7 @@ html.light .area-pick-label,
 
 html.light .area-chip,
 :host(.light) .area-chip {
-  outline: 1px dashed rgba(17, 17, 17, 0.22);
+  outline: 1px solid rgba(17, 17, 17, 0.22);
   color: #111111;
 }
 

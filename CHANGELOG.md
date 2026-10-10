@@ -3,6 +3,8 @@
 ## Unveröffentlicht
 
 - Der Betrachter heißt jetzt Observer.
+- Neues App-Icon ohne gestrichelten Rahmen, als runde Mac-Kachel.
+- Gestrichelte Linien überall durch feine durchgehende ersetzt (App, Observer, Extension).
 
 ## App 0.18.0 · Extension 3.16.0 (10.10.2026)
 

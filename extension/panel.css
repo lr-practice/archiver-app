@@ -232,7 +232,7 @@
 }
 
 .mini-action.active {
-  outline: 1px dashed currentColor;
+  outline: 1px solid currentColor;
   outline-offset: -1px;
 }
 
