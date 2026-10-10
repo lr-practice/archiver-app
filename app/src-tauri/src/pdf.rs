@@ -40,6 +40,9 @@ pub struct Layout {
     pub portrait: bool,
     #[serde(default = "yes")]
     pub captions: bool,
+    /// Plakat: Bilder randlos im Raster, angeschnitten, Beschriftung im Bild
+    #[serde(default)]
+    pub poster: bool,
 }
 
 fn yes() -> bool {
@@ -54,7 +57,7 @@ impl Layout {
             2 => (2, 1),
             _ => (3, 2),
         };
-        Layout { cols, rows, portrait: false, captions: true }
+        Layout { cols, rows, portrait: false, captions: true, poster: false }
     }
 }
 
@@ -62,6 +65,27 @@ struct Picture {
     w: u32,
     h: u32,
     jpeg: Vec<u8>,
+    /// Helligkeit 0–1 in einem 32 × 32-Raster (Zeile 0 oben), für lesbare Beschriftung
+    luma: Vec<f64>,
+}
+
+const LUMA_GRID: usize = 32;
+
+impl Picture {
+    /// Mittlere Helligkeit im Ausschnitt (Anteile 0–1, y von oben).
+    fn luma_in(&self, x0: f64, y0: f64, x1: f64, y1: f64) -> f64 {
+        let n = LUMA_GRID as f64;
+        let (cx0, cx1) = ((x0 * n).floor().max(0.0) as usize, ((x1 * n).ceil() as usize).clamp(1, LUMA_GRID));
+        let (cy0, cy1) = ((y0 * n).floor().max(0.0) as usize, ((y1 * n).ceil() as usize).clamp(1, LUMA_GRID));
+        let (mut sum, mut count) = (0.0, 0.0);
+        for y in cy0..cy1.max(cy0 + 1).min(LUMA_GRID) {
+            for x in cx0..cx1.max(cx0 + 1).min(LUMA_GRID) {
+                sum += self.luma[y * LUMA_GRID + x];
+                count += 1.0;
+            }
+        }
+        if count > 0.0 { sum / count } else { 1.0 }
+    }
 }
 
 /// Lädt ein Bild, verkleinert es auf höchstens `max` px und legt Transparenz
@@ -76,9 +100,14 @@ fn picture(path: &std::path::Path, max: u32) -> Option<Picture> {
         let mix = |c: u8| ((c as u32 * a + 255 * (255 - a)) / 255) as u8;
         rgb.put_pixel(x, y, image::Rgb([mix(p[0]), mix(p[1]), mix(p[2])]));
     }
+    let small = image::imageops::resize(&rgb, LUMA_GRID as u32, LUMA_GRID as u32, image::imageops::FilterType::Triangle);
+    let luma = small
+        .pixels()
+        .map(|p| (0.2126 * p[0] as f64 + 0.7152 * p[1] as f64 + 0.0722 * p[2] as f64) / 255.0)
+        .collect();
     let mut jpeg = Vec::new();
     image::codecs::jpeg::JpegEncoder::new_with_quality(&mut jpeg, 86).encode_image(&rgb).ok()?;
-    Some(Picture { w: rgb.width(), h: rgb.height(), jpeg })
+    Some(Picture { w: rgb.width(), h: rgb.height(), jpeg, luma })
 }
 
 /// Zeichen in WinAnsi (Standardkodierung der Helvetica), Unbekanntes als "?".
@@ -187,6 +216,9 @@ fn text_op(content: &mut Vec<u8>, font: &str, size: f64, x: f64, y: f64, bytes: 
 
 /// Baut den Kontaktbogen. `title` steht oben links, `meta` oben rechts.
 pub fn contact_sheet(title: &str, meta: &str, items: &[SheetItem], layout: Layout) -> Vec<u8> {
+    if layout.poster {
+        return poster_sheet(title, meta, items, layout);
+    }
     let cols = layout.cols.clamp(1, 6);
     let rows = layout.rows.clamp(1, 6);
     let (page_w, page_h) = if layout.portrait { (A4_SHORT, A4_LONG) } else { (A4_LONG, A4_SHORT) };
@@ -302,6 +334,11 @@ pub fn contact_sheet(title: &str, meta: &str, items: &[SheetItem], layout: Layou
         page_ids.push(objects.len());
     }
 
+    finish(objects, &page_ids)
+}
+
+/// Seitenbaum eintragen und Objekte mit xref-Tabelle zu einer Datei fügen.
+fn finish(mut objects: Vec<Vec<u8>>, page_ids: &[usize]) -> Vec<u8> {
     let kids: Vec<String> = page_ids.iter().map(|id| format!("{id} 0 R")).collect();
     objects[1] = format!("<< /Type /Pages /Kids [{}] /Count {} >>", kids.join(" "), page_ids.len()).into_bytes();
 
@@ -322,6 +359,155 @@ pub fn contact_sheet(title: &str, meta: &str, items: &[SheetItem], layout: Layou
         format!("trailer\n<< /Size {} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n", objects.len() + 1).as_bytes(),
     );
     out
+}
+
+fn image_object(objects: &mut Vec<Vec<u8>>, xobjects: &mut String, pic: &Picture) -> usize {
+    let id = objects.len() + 1;
+    let mut obj = format!(
+        "<< /Type /XObject /Subtype /Image /Width {} /Height {} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length {} >>\nstream\n",
+        pic.w,
+        pic.h,
+        pic.jpeg.len()
+    )
+    .into_bytes();
+    obj.extend_from_slice(&pic.jpeg);
+    obj.extend_from_slice(b"\nendstream");
+    objects.push(obj);
+    let _ = write!(xobjects, "/Im{id} {id} 0 R ");
+    id
+}
+
+/// Courier: jedes Zeichen 600/1000 em breit.
+fn mono_width(bytes: &[u8], size: f64) -> f64 {
+    bytes.len() as f64 * 0.6 * size
+}
+
+fn fit_mono(text: &str, size: f64, width: f64) -> Vec<u8> {
+    let mut bytes: Vec<u8> = text.chars().map(win_ansi).collect();
+    if mono_width(&bytes, size) <= width {
+        return bytes;
+    }
+    while !bytes.is_empty() && mono_width(&bytes, size) + 0.6 * size > width {
+        bytes.pop();
+    }
+    while bytes.last() == Some(&b' ') {
+        bytes.pop();
+    }
+    bytes.push(0x85);
+    bytes
+}
+
+/// Plakat wie eine Shop-Seite: Bilder randlos im Raster, auf das Feld
+/// angeschnitten, Name und Quelle klein in Schreibmaschinenschrift unten
+/// links im Bild (schwarz oder weiß, je nach Helligkeit darunter). Oben ein
+/// schmaler Streifen mit Titel und Angaben.
+fn poster_sheet(title: &str, meta: &str, items: &[SheetItem], layout: Layout) -> Vec<u8> {
+    const HEAD: f64 = 22.0;
+    const PAD: f64 = 7.0;
+    const CAP: f64 = 5.6;
+    let cols = layout.cols.clamp(1, 6);
+    let rows = layout.rows.clamp(1, 6);
+    let (page_w, page_h) = if layout.portrait { (A4_SHORT, A4_LONG) } else { (A4_LONG, A4_SHORT) };
+    let per_page = cols * rows;
+    let pages = items.len().div_ceil(per_page).max(1);
+    let large = per_page <= 2;
+
+    let mut objects: Vec<Vec<u8>> = Vec::new();
+    objects.push(b"<< /Type /Catalog /Pages 2 0 R >>".to_vec());
+    objects.push(Vec::new());
+    objects.push(b"<< /Type /Font /Subtype /Type1 /BaseFont /Courier /Encoding /WinAnsiEncoding >>".to_vec());
+    objects.push(b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>".to_vec());
+
+    let grid_top = page_h - HEAD;
+    let cell_w = page_w / cols as f64;
+    let cell_h = grid_top / rows as f64;
+
+    let mut page_ids = Vec::new();
+    for p in 0..pages {
+        let mut content = Vec::new();
+        let mut xobjects = String::new();
+        let head_y = page_h - HEAD / 2.0 - CAP * 0.35;
+        let title_b = fit_mono(&title.to_uppercase(), CAP, page_w / 2.0 - PAD);
+        text_op(&mut content, "F1", CAP, PAD, head_y, &title_b);
+        let right = format!("{}  {} / {}", meta, p + 1, pages).to_uppercase();
+        let right_b = fit_mono(&right, CAP, page_w / 2.0 - PAD);
+        text_op(&mut content, "F1", CAP, page_w - PAD - mono_width(&right_b, CAP), head_y, &right_b);
+
+        for (slot, item) in items.iter().skip(p * per_page).take(per_page).enumerate() {
+            let x = (slot % cols) as f64 * cell_w;
+            let y = grid_top - ((slot / cols) as f64 + 1.0) * cell_h;
+            let pic = if item.quote.is_some() {
+                None
+            } else {
+                let hires = if large { item.file.as_deref().and_then(|f| picture(f, 2400)) } else { None };
+                hires.or_else(|| item.thumb.as_deref().and_then(|t| picture(t, 1200))).or_else(|| {
+                    if large { None } else { item.file.as_deref().and_then(|f| picture(f, 1200)) }
+                })
+            };
+            // Hell (Text schwarz) oder dunkel (Text weiß) unter der Beschriftung
+            let mut dark = false;
+            if let Some(pic) = &pic {
+                // Anschneiden: Feld ganz füllen, mittig
+                let scale = (cell_w / pic.w as f64).max(cell_h / pic.h as f64);
+                let (w, h) = (pic.w as f64 * scale, pic.h as f64 * scale);
+                let (ix, iy) = (x + (cell_w - w) / 2.0, y + (cell_h - h) / 2.0);
+                let id = image_object(&mut objects, &mut xobjects, pic);
+                content.extend_from_slice(
+                    format!("q {x:.2} {y:.2} {cell_w:.2} {cell_h:.2} re W n {w:.2} 0 0 {h:.2} {ix:.2} {iy:.2} cm /Im{id} Do Q\n")
+                        .as_bytes(),
+                );
+                // Genau die Fläche unter der Beschriftung, in Bildanteilen (y von oben)
+                let text_w = item.name.chars().count().max(item.source.as_deref().map_or(0, |s| s.chars().count())) as f64 * 0.6 * CAP;
+                let fx0 = (x + PAD - ix) / w;
+                let fx1 = (x + PAD + text_w.min(cell_w - 2.0 * PAD) - ix) / w;
+                let fy0 = 1.0 - (y + PAD + CAP * 2.6 - iy) / h;
+                let fy1 = 1.0 - (y + PAD - 2.0 - iy) / h;
+                dark = pic.luma_in(fx0.clamp(0.0, 1.0), fy0.clamp(0.0, 1.0), fx1.clamp(0.0, 1.0), fy1.clamp(0.0, 1.0)) < 0.5;
+            } else if let Some(quote) = &item.quote {
+                let size = if large { 16.0 } else { 9.0 };
+                let lead = size * 1.3;
+                let lines = ((cell_h - 2.0 * PAD - 24.0) / lead).floor().max(1.0) as usize;
+                let mut ty = y + cell_h - PAD - size;
+                for line in wrap(&format!("„{}“", quote.trim()), size, cell_w - 2.0 * PAD, lines) {
+                    text_op(&mut content, "F2", size, x + PAD, ty, &line);
+                    ty -= lead;
+                }
+            } else {
+                content.extend_from_slice(format!("0.93 g {x:.2} {y:.2} {cell_w:.2} {cell_h:.2} re f 0 g\n").as_bytes());
+                let label = fit_mono(&item.label, CAP, cell_w);
+                content.extend_from_slice(format!("{GREY}\n").as_bytes());
+                text_op(&mut content, "F1", CAP, x + (cell_w - mono_width(&label, CAP)) / 2.0, y + cell_h / 2.0, &label);
+                content.extend_from_slice(b"0 g\n");
+            }
+            if !layout.captions {
+                continue;
+            }
+            content.extend_from_slice(if dark { b"1 g\n" } else { b"0 g\n" });
+            let name = item.name.rsplit_once('.').filter(|(stem, ext)| !stem.is_empty() && ext.len() <= 5).map_or(item.name.as_str(), |(stem, _)| stem);
+            let source = item.source.as_deref().filter(|s| !s.is_empty());
+            let base = y + PAD;
+            let name_y = if source.is_some() { base + CAP * 1.35 } else { base };
+            text_op(&mut content, "F1", CAP, x + PAD, name_y, &fit_mono(&name.to_uppercase(), CAP, cell_w - 2.0 * PAD));
+            if let Some(source) = source {
+                text_op(&mut content, "F1", CAP, x + PAD, base, &fit_mono(&source.to_uppercase(), CAP, cell_w - 2.0 * PAD));
+            }
+            content.extend_from_slice(b"0 g\n");
+        }
+
+        let mut stream = format!("<< /Length {} >>\nstream\n", content.len()).into_bytes();
+        stream.extend_from_slice(&content);
+        stream.extend_from_slice(b"\nendstream");
+        objects.push(stream);
+        let content_id = objects.len();
+        objects.push(
+            format!(
+                "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 {page_w} {page_h}] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> /XObject << {xobjects}>> >> /Contents {content_id} 0 R >>"
+            )
+            .into_bytes(),
+        );
+        page_ids.push(objects.len());
+    }
+    finish(objects, &page_ids)
 }
 
 #[cfg(test)]
@@ -385,9 +571,39 @@ mod tests {
     }
 
     #[test]
+    fn poster_bleeds_and_picks_caption_colour() {
+        let dir = tempfile::tempdir().unwrap();
+        let dark = dir.path().join("dark.png");
+        let light = dir.path().join("light.png");
+        image::RgbImage::from_pixel(300, 600, image::Rgb([10, 10, 10])).save(&dark).unwrap();
+        image::RgbImage::from_pixel(600, 300, image::Rgb([250, 250, 250])).save(&light).unwrap();
+        let items = vec![
+            SheetItem { thumb: Some(dark), name: "vase with ears.jpg".into(), source: Some("380,00 €".into()), ..Default::default() },
+            SheetItem { thumb: Some(light), name: "stool.png".into(), ..Default::default() },
+            SheetItem { quote: Some("Weniger, aber besser.".into()), name: "Zitat".into(), ..Default::default() },
+        ];
+        let layout = Layout { cols: 4, rows: 4, portrait: true, captions: true, poster: true };
+        let pdf = contact_sheet("Shop", "3 Objekte", &items, layout);
+        let text = String::from_utf8_lossy(&pdf);
+        assert!(text.contains("/BaseFont /Courier"));
+        assert!(text.contains("(VASE WITH EARS)"));
+        assert!(text.contains("(STOOL)"));
+        // Feld 1 dunkel: weiße Schrift, Feld 2 hell: schwarze
+        let first = text.find("(VASE WITH EARS)").unwrap();
+        assert_eq!(&text[..first].rfind("1 g\n").map(|i| &text[i..i + 3]), &Some("1 g"));
+        assert!(text[first..text.find("(STOOL)").unwrap()].contains("0 g\n"));
+        // randlos: erstes Feld beginnt bei x = 0, Ausschnitt per Clip
+        assert!(text.contains("q 0.00 "));
+        assert!(text.contains("re W n"));
+        assert_eq!(text.matches("/Subtype /Image").count(), 2);
+        assert!(pdf.ends_with(b"%%EOF\n"));
+        std::fs::write("/tmp/poster-test.pdf", &pdf).ok();
+    }
+
+    #[test]
     fn portrait_grid_without_captions() {
         let items: Vec<SheetItem> = (0..13).map(|i| SheetItem { name: format!("x{i}"), label: "SVG".into(), ..Default::default() }).collect();
-        let layout = Layout { cols: 3, rows: 4, portrait: true, captions: false };
+        let layout = Layout { cols: 3, rows: 4, portrait: true, captions: false, poster: false };
         let pdf = contact_sheet("Hoch", "", &items, layout);
         let text = String::from_utf8_lossy(&pdf);
         assert!(text.contains("/MediaBox [0 0 595 842]"));

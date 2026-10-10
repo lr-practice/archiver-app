@@ -1,5 +1,9 @@
 # Changelog
 
+## App 0.18.2 (10.10.2026)
+
+- PDF-Ersteller: neuer Stil „Plakat“. Bilder randlos im Raster, angeschnitten, Name und Quelle klein in Schreibmaschinenschrift im Bild (hell oder dunkel je nach Untergrund). Dazu 16 pro Seite.
+
 ## App 0.18.1 · Extension 3.16.1 (10.10.2026)
 
 - Der Betrachter heißt jetzt Observer.

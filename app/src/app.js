@@ -3317,6 +3317,7 @@
     ["4", [2, 2], [2, 2]],
     ["6", [3, 2], [2, 3]],
     ["12", [4, 3], [3, 4]],
+    ["16", [4, 4], [4, 4]],
   ];
   const PDF_PAGE = { long: 842, short: 595, margin: 40, gap: 20, caption: 28 };
 
@@ -3342,12 +3343,36 @@
     };
   }
 
+  // Helligkeit unten links im Vorschaubild (wo die Plakat-Beschriftung steht).
+  // Klappt nur, wenn das Bild lesbar ist; sonst bleibt die Schrift dunkel.
+  function captionTone(img) {
+    try {
+      const c = document.createElement("canvas");
+      c.width = 32;
+      c.height = 32;
+      const x = c.getContext("2d", { willReadFrequently: true });
+      const box = img.parentElement.getBoundingClientRect();
+      const nw = img.naturalWidth, nh = img.naturalHeight;
+      const scale = Math.max(box.width / nw, box.height / nh);
+      const vw = box.width / scale, vh = box.height / scale;
+      const sx = (nw - vw) / 2, sy = (nh - vh) / 2;
+      x.drawImage(img, sx, sy, vw, vh, 0, 0, 32, 32);
+      const d = x.getImageData(1, 26, 16, 5).data;
+      let sum = 0;
+      for (let i = 0; i < d.length; i += 4) sum += 0.2126 * d[i] + 0.7152 * d[i + 1] + 0.0722 * d[i + 2];
+      return sum / (d.length / 4) / 255 < 0.5 ? "dark" : "light";
+    } catch {
+      return null;
+    }
+  }
+
   function openPdfMaker(items, title) {
     const opts = {
       title,
       layout: pref("pdfLayout", items.length === 1 ? "1" : items.length === 2 ? "2" : "6"),
       portrait: pref("pdfPortrait", false),
       captions: pref("pdfCaptions", true),
+      poster: pref("pdfPoster", false),
     };
     if (items.length <= 2 && !["1", "2"].includes(opts.layout)) opts.layout = items.length === 1 ? "1" : "2";
     const date = new Date().toLocaleDateString(lang === "de" ? "de-DE" : "en-GB", { day: "numeric", month: "long", year: "numeric" });
@@ -3374,6 +3399,8 @@
     });
     side.appendChild(field(t("pdfTitleLabel"), titleInput));
 
+    const styleRow = el("div", "pdf-chips");
+    side.appendChild(field(t("pdfStyleLabel"), styleRow));
     const layoutRow = el("div", "pdf-layouts");
     side.appendChild(field(t("pdfLayoutLabel"), layoutRow));
     const formatRow = el("div", "pdf-chips");
@@ -3421,6 +3448,20 @@
           return b;
         })
       );
+      styleRow.replaceChildren(
+        chip("(" + t("pdfStyleSheet") + ")", !opts.poster, () => setOpt("poster", false, "pdfPoster")),
+        chip("(" + t("pdfStylePoster") + ")", opts.poster, () => {
+          // Plakat lebt vom dichten Raster: beim ersten Wechsel hochkant mit 16 pro Seite
+          if (!opts.poster && pref("pdfPosterSet", false) === false) {
+            setPref("pdfPosterSet", true);
+            opts.portrait = true;
+            setPref("pdfPortrait", true);
+            opts.layout = "16";
+            setPref("pdfLayout", "16");
+          }
+          setOpt("poster", true, "pdfPoster");
+        })
+      );
       formatRow.replaceChildren(
         chip("(" + t("pdfLandscape") + ")", !opts.portrait, () => setOpt("portrait", false, "pdfPortrait")),
         chip("(" + t("pdfPortraitLabel") + ")", opts.portrait, () => setOpt("portrait", true, "pdfPortrait"))
@@ -3454,7 +3495,9 @@
         page.style.setProperty("--pad-x", (P.margin / w) * 100 + "%");
         page.style.setProperty("--pad-y", (P.margin / h) * 100 + "%");
         const head = el("div", "pdf-head");
-        head.append(el("b", null, opts.title), el("span", null, meta()));
+        const pageCount = Math.max(1, Math.ceil(items.length / per));
+        head.append(el("b", null, opts.title), el("span", null, opts.poster ? `${meta()}  ${p + 1} / ${pageCount}` : meta()));
+        page.classList.toggle("poster", opts.poster);
         const body = el("div", "pdf-grid");
         body.style.setProperty("--cols", cols);
         body.style.setProperty("--rows", rows);
@@ -3485,7 +3528,16 @@
       cell.appendChild(box);
       const s = sheetItem(item);
       const cap = el("div", "pdf-cap");
-      cap.append(el("span", null, s.name), el("span", "dim", s.source || ""));
+      const name = opts.poster ? s.name.replace(/\.[a-z0-9]{1,5}$/i, "") : s.name;
+      cap.append(el("span", null, name), el("span", "dim", s.source || ""));
+      if (opts.poster && !item.quote) {
+        // Wie im PDF: Schrift hell auf dunklem Grund, sonst dunkel
+        const img = box.querySelector("img");
+        img.addEventListener("load", () => {
+          const tone = captionTone(img);
+          if (tone) cell.classList.toggle("on-dark", tone === "dark");
+        });
+      }
       cell.appendChild(cap);
       const remove = button("pdf-remove", "×", (e) => {
         e.stopPropagation();
@@ -3561,7 +3613,7 @@
           meta: meta(),
           fileName: name,
           items: items.map(sheetItem),
-          layout: { cols, rows, portrait: opts.portrait, captions: opts.captions },
+          layout: { cols, rows, portrait: opts.portrait, captions: opts.captions, poster: opts.poster },
         });
         if (path) {
           toast(t("pdfDone", { name: path.split("/").pop() }));
