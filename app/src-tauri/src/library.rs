@@ -286,7 +286,7 @@ pub fn clean_segment(name: &str) -> String {
 }
 
 /// Freier Dateiname im Zielordner: "bild.jpg", "bild 2.jpg", "bild 3.jpg" …
-fn unique_path(dir: &Path, filename: &str) -> PathBuf {
+pub(crate) fn unique_path(dir: &Path, filename: &str) -> PathBuf {
     let candidate = dir.join(filename);
     if !candidate.exists() {
         return candidate;

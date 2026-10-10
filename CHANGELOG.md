@@ -1,5 +1,13 @@
 # Changelog
 
+## App 0.19.0 (10.10.2026)
+
+- Getting Started neu: neun Kapitel, fünf zum Mitmachen, im Vollbild. Auf Wunsch in einer Demo-Bibliothek (~/Archiver Demo/, 28 eigene Grafiken in fünf Zonen), getrennt von der eigenen Bibliothek. Am Ende wandert Selbstgesammeltes in die Inbox, die Demo in den Papierkorb.
+- Sammeln im Browser als Schema in der Tour: die Geste spielt dreimal von selbst, dann zieht man selbst.
+- Nach der Tour verlässt die App das Vollbild, Licht öffnet die Oberfläche (WebGL, Blau, synchron zum Startton). Form Welle oder Lid unter Einstellungen › Darstellung › Öffnung, dort auch zum Abspielen.
+- „Archiver“ in der Navigation: kein Hover mehr, auf der Startseite aktiv wie die anderen Einträge.
+- Neue Einstellung Navigation: oben oder unten, jeweils links, Mitte oder rechts. Unten weicht sie beim Ziehen den Active Zones aus.
+
 ## App 0.18.2 (10.10.2026)
 
 - PDF-Ersteller: neuer Stil „Plakat“. Bilder randlos im Raster, angeschnitten, Name und Quelle klein in Schreibmaschinenschrift im Bild (hell oder dunkel je nach Untergrund). Dazu 16 pro Seite.

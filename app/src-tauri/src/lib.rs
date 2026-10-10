@@ -241,6 +241,134 @@ async fn open_library(app: AppHandle, path: String) -> Result<(), String> {
     save_settings(&app, &Settings { library: Some(path) })
 }
 
+// ---- Demo-Bibliothek für die Einstiegstour ----
+// Eigener Ordner ~/Archiver Demo/ mit mitgelieferten Grafiken (src-tauri/demo).
+// Sie wird geöffnet, ohne die eigene Bibliothek in den Einstellungen zu ersetzen.
+
+const DEMO_ZONES: [(&str, &str); 5] = [
+    ("typografie", "Typografie"),
+    ("plakate", "Plakate"),
+    ("verpackung", "Verpackung"),
+    ("identitaet", "Identität"),
+    ("inbox", library::INBOX),
+];
+
+fn demo_root() -> PathBuf {
+    dirs::home_dir().unwrap_or_default().join("Archiver Demo")
+}
+
+/// Namen der mitgelieferten Demo-Dateien je Zone
+fn demo_seed(app: &AppHandle) -> Result<Vec<(PathBuf, String, String)>, String> {
+    let res = app.path().resource_dir().map_err(|e| e.to_string())?.join("demo");
+    let mut out = Vec::new();
+    for (dir, zone) in DEMO_ZONES {
+        let Ok(entries) = std::fs::read_dir(res.join(dir)) else { continue };
+        for e in entries.flatten() {
+            let name = e.file_name().to_string_lossy().into_owned();
+            if !name.starts_with('.') {
+                out.push((e.path(), zone.to_string(), name));
+            }
+        }
+    }
+    Ok(out)
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct DemoInfo {
+    root: String,
+    zones: Vec<String>,
+}
+
+#[tauri::command]
+async fn open_demo(app: AppHandle) -> Result<DemoInfo, String> {
+    let root = demo_root();
+    for (src, zone, name) in demo_seed(&app)? {
+        let dir = root.join(&zone);
+        std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+        let dest = dir.join(&name);
+        if !dest.exists() {
+            std::fs::copy(&src, &dest).map_err(|e| e.to_string())?;
+        }
+    }
+    activate(&app, &root)?;
+    Ok(DemoInfo {
+        root: root.to_string_lossy().into_owned(),
+        zones: DEMO_ZONES.iter().map(|(_, z)| z.to_string()).collect(),
+    })
+}
+
+/// Zurück zur eigenen Bibliothek. Was in der Demo selbst gesammelt wurde,
+/// wandert in deren Eingang; ohne `keep` geht der Demo-Ordner in den Papierkorb.
+#[tauri::command]
+async fn close_demo(app: AppHandle, keep: bool) -> Result<usize, String> {
+    let root = demo_root();
+    let own = load_settings(&app).library.map(PathBuf::from);
+    let seed: std::collections::HashSet<(String, String)> =
+        demo_seed(&app)?.into_iter().map(|(_, zone, name)| (zone, name)).collect();
+    let web: std::collections::HashSet<String> = std::fs::read_dir(demo_web(&app)?)
+        .map(|d| d.flatten().map(|e| e.file_name().to_string_lossy().into_owned()).collect())
+        .unwrap_or_default();
+    let mut moved = 0;
+    if let Some(own) = own.as_ref().filter(|o| o.is_dir() && root.is_dir()) {
+        let inbox = own.join(library::INBOX);
+        std::fs::create_dir_all(&inbox).map_err(|e| e.to_string())?;
+        for e in walkdir::WalkDir::new(&root)
+            .min_depth(1)
+            .into_iter()
+            .filter_entry(|e| !e.file_name().to_string_lossy().starts_with('.'))
+            .filter_map(|e| e.ok())
+            .filter(|e| e.file_type().is_file())
+        {
+            let rel = e.path().strip_prefix(&root).unwrap_or(e.path());
+            let zone = rel.parent().map(|p| p.to_string_lossy().into_owned()).unwrap_or_default();
+            let name = e.file_name().to_string_lossy().into_owned();
+            if seed.contains(&(zone, name.clone())) || web.contains(&name) {
+                continue;
+            }
+            let dest = library::unique_path(&inbox, &name);
+            if std::fs::rename(e.path(), &dest).is_err() {
+                std::fs::copy(e.path(), &dest).map_err(|e| e.to_string())?;
+                let _ = std::fs::remove_file(e.path());
+            }
+            moved += 1;
+        }
+    }
+    *app.state::<AppState>().watcher.lock().unwrap() = None;
+    if !keep && root.is_dir() {
+        trash::delete(&root).map_err(|e| e.to_string())?;
+    }
+    if let Some(own) = own.filter(|o| o.is_dir()) {
+        activate(&app, &own)?;
+    }
+    Ok(moved)
+}
+
+fn demo_web(app: &AppHandle) -> Result<PathBuf, String> {
+    Ok(app.path().resource_dir().map_err(|e| e.to_string())?.join("demo").join("web"))
+}
+
+/// Tour, Kapitel „Sammeln im Browser“: Ein Bild aus dem Schema landet wirklich in der Demo-Zone.
+#[tauri::command]
+async fn demo_collect(app: AppHandle, file: String, zone: String) -> Result<(), String> {
+    let name = Path::new(&file).file_name().ok_or("Ungültiger Name")?.to_owned();
+    let dir = demo_root().join(&zone);
+    if !dir.starts_with(demo_root()) || zone.contains("..") {
+        return Err("Ungültige Zone".into());
+    }
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let dest = dir.join(&name);
+    if !dest.exists() {
+        std::fs::copy(demo_web(&app)?.join(&name), &dest).map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+#[tauri::command]
+fn set_fullscreen(window: tauri::WebviewWindow, on: bool) -> Result<(), String> {
+    window.set_fullscreen(on).map_err(|e| e.to_string())
+}
+
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct Snapshot {
@@ -589,6 +717,10 @@ pub fn run() {
             pick_folder,
             pick_export_file,
             open_library,
+            open_demo,
+            close_demo,
+            demo_collect,
+            set_fullscreen,
             snapshot,
             move_items,
             trash_items,

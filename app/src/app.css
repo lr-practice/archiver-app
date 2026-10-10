@@ -3875,56 +3875,9 @@ html.light .pdf-maker {
   transition: background-color 0.18s ease-out, color 0.18s ease-out;
 }
 
-/* ---- „Archiver“: beim Hover wabert ein Blauverlauf langsam durch die Schrift ---- */
-
-.p-nav-brand {
-  --rainbow: linear-gradient(
-    100deg,
-    #7fd6ff 0%,
-    #3fa9ff 18%,
-    #b4e6ff 34%,
-    #2f6bff 52%,
-    #6fc4ff 70%,
-    #a9c8ff 86%,
-    #7fd6ff 100%
-  );
-}
-
-.p-nav .p-nav-brand:hover {
-  color: transparent;
-  background-image: var(--rainbow);
-  background-size: 180px 100%;
-  -webkit-background-clip: text;
-  background-clip: text;
-  animation: brand-flow 7s ease-in-out infinite alternate;
-}
-
-html.light .p-nav-brand {
-  --rainbow: linear-gradient(
-    100deg,
-    #1a9be6 0%,
-    #0a6fe0 18%,
-    #4cb6f2 34%,
-    #1f4fd8 52%,
-    #2a9df0 70%,
-    #5a8ef0 86%,
-    #1a9be6 100%
-  );
-}
-
-@keyframes brand-flow {
-  from {
-    background-position: 0 0;
-  }
-  to {
-    background-position: -180px 0;
-  }
-}
+/* „Archiver“: kein Hover, auf der Startseite aktiv wie die anderen Einträge */
 
 @media (prefers-reduced-motion: reduce) {
-  .p-nav-brand:hover {
-    animation: none;
-  }
   .p-nav > .p-nav-glide {
     transition: opacity 0.18s ease-out;
   }
@@ -4301,4 +4254,471 @@ html[data-scheme="sage"] .toast {
 .page-open .p-dropbar.preview {
   right: var(--sheet-w);
   pointer-events: none;
+}
+
+/* ---- 0.19: Position der Navigation (Einstellungen › Darstellung) ---- */
+
+.p-navpos {
+  display: inline-grid;
+  grid-template-columns: repeat(3, 22px);
+  grid-template-rows: repeat(2, 16px);
+  gap: 2px;
+  padding: 4px;
+  border-radius: var(--r-sm);
+  box-shadow: inset 0 0 0 1px rgba(var(--ink-rgb), 0.12);
+}
+
+.p-navpos-dot {
+  position: relative;
+  border: none;
+  padding: 0;
+  background: transparent;
+  border-radius: 3px;
+  cursor: pointer;
+}
+
+.p-navpos-dot::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 5px;
+  height: 5px;
+  margin: -2.5px 0 0 -2.5px;
+  border-radius: 50%;
+  background: rgba(var(--ink-rgb), 0.25);
+  transition: background-color 0.18s ease-out, transform 0.18s ease-out;
+}
+
+.p-navpos-dot:hover::after {
+  background: rgba(var(--ink-rgb), 0.6);
+}
+
+.p-navpos-dot.on::after {
+  background: var(--accent);
+  transform: scale(1.5);
+}
+
+html[data-nav="tc"] .p-top,
+html[data-nav="tr"] .p-top {
+  left: 0;
+  right: 0;
+  padding: 0 var(--p-pad) 0 84px;
+  justify-content: center;
+  pointer-events: none;
+}
+
+html[data-nav="tr"] .p-top {
+  justify-content: flex-end;
+}
+
+html[data-nav="tc"] .p-nav,
+html[data-nav="tr"] .p-nav,
+html[data-nav^="b"] .p-nav {
+  pointer-events: auto;
+}
+
+/* Unten schwebt die Leiste als Pille über dem Inhalt */
+html[data-nav^="b"] .p-top {
+  top: auto;
+  bottom: 18px;
+  left: 0;
+  right: 0;
+  height: auto;
+  padding: 0 var(--p-pad);
+  justify-content: flex-start;
+  pointer-events: none;
+  transition: opacity 0.22s ease-out, transform 0.22s ease-out;
+}
+
+html[data-nav="bc"] .p-top {
+  justify-content: center;
+}
+
+html[data-nav="br"] .p-top {
+  justify-content: flex-end;
+}
+
+html[data-nav^="b"] .p-nav {
+  background: var(--p-pill);
+  -webkit-backdrop-filter: blur(24px) saturate(1.4);
+  backdrop-filter: blur(24px) saturate(1.4);
+  box-shadow: 0 14px 44px rgba(0, 0, 0, 0.35), inset 0 0 0 1px rgba(var(--ink-rgb), 0.06);
+}
+
+html[data-nav^="b"] .p-page {
+  padding-bottom: 110px;
+}
+
+/* Beim Ziehen fahren unten die Active Zones ein, die Leiste weicht aus */
+html[data-nav^="b"] body.dragging .p-top {
+  opacity: 0;
+  transform: translateY(16px);
+}
+
+html[data-nav^="b"] .p-more-menu.zone-menu {
+  top: auto;
+  bottom: calc(100% + 8px);
+}
+
+html[data-nav$="r"] .p-more-menu.zone-menu {
+  left: auto;
+  right: -4px;
+}
+
+/* ---- 0.19: Getting Started ---- */
+
+.tour.away {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.tour-card {
+  width: min(380px, calc(100vw - 32px));
+  transition: left 0.25s, top 0.25s;
+}
+
+.tour-card.wide {
+  width: min(640px, calc(100vw - 32px));
+}
+
+.tour-progress {
+  display: flex;
+  gap: 3px;
+  margin-bottom: 14px;
+}
+
+.tour-progress i {
+  flex: 1;
+  height: 2px;
+  border-radius: 1px;
+  background: rgba(var(--ink-rgb), 0.12);
+}
+
+.tour-progress i.on {
+  background: var(--p-text);
+}
+
+.tour-title {
+  margin: 0 0 6px;
+}
+
+.tour-text kbd,
+.tour-keys kbd {
+  font-family: var(--p-mono);
+  font-size: 11px;
+  color: var(--p-text);
+  padding: 1px 5px;
+  border-radius: 3px;
+  box-shadow: inset 0 0 0 1px rgba(var(--ink-rgb), 0.25);
+}
+
+.tour-extra {
+  margin-top: 14px;
+}
+
+.tour-actions {
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.tour-actions-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.tour-mono {
+  font-family: var(--p-mono);
+  font-size: 11px;
+  color: var(--p-faint);
+}
+
+.tour-finder {
+  border-top: 1px solid rgba(var(--ink-rgb), 0.1);
+}
+
+.tour-finder-row {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  padding: 6px 0;
+  border-bottom: 1px solid rgba(var(--ink-rgb), 0.1);
+  font-size: 12px;
+  color: var(--p-text);
+}
+
+.tour-finder-row span:nth-child(2) {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tour-finder-row svg {
+  width: 14px;
+  height: 14px;
+  color: var(--p-dim);
+}
+
+.tour-keys {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 7px 14px;
+  font-size: 13px;
+}
+
+.tour-keys kbd {
+  justify-self: start;
+}
+
+.tour-keys span {
+  color: var(--p-dim);
+}
+
+.tour-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+/* Schema-Browser im Kapitel „Sammeln im Browser“ */
+.tour-schema {
+  position: relative;
+  height: 300px;
+  border-radius: var(--r-md);
+  background: var(--p-bg, rgba(var(--ink-rgb), 0.03));
+  box-shadow: inset 0 0 0 1px rgba(var(--ink-rgb), 0.1);
+  overflow: hidden;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.tour-schema-tag {
+  position: absolute;
+  right: 10px;
+  top: 8px;
+  z-index: 2;
+  font-family: var(--p-mono);
+  font-size: 11px;
+  color: var(--p-faint);
+}
+
+.tour-schema-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 30px;
+  padding: 0 10px;
+  border-bottom: 1px solid rgba(var(--ink-rgb), 0.1);
+}
+
+.tour-schema-dots {
+  width: 44px;
+  height: 10px;
+  background: radial-gradient(circle 5px at 5px 5px, rgba(var(--ink-rgb), 0.18) 98%, transparent),
+    radial-gradient(circle 5px at 22px 5px, rgba(var(--ink-rgb), 0.18) 98%, transparent),
+    radial-gradient(circle 5px at 39px 5px, rgba(var(--ink-rgb), 0.18) 98%, transparent);
+}
+
+.tour-schema-url {
+  flex: 1;
+  max-width: 260px;
+  margin: 0 auto;
+  height: 20px;
+  border-radius: 4px;
+  background: rgba(var(--ink-rgb), 0.08);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--p-mono);
+  font-size: 10px;
+  color: var(--p-dim);
+}
+
+.tour-schema-grid {
+  display: flex;
+  gap: 8px;
+  padding: 14px 12px;
+  flex-wrap: wrap;
+}
+
+.tour-schema-item {
+  height: 96px;
+  cursor: grab;
+  touch-action: none;
+}
+
+.tour-schema-item img {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+  pointer-events: none;
+}
+
+.tour-schema-item.lifted {
+  opacity: 0.3;
+}
+
+.tour-schema-item.taken {
+  opacity: 0.25;
+  pointer-events: none;
+}
+
+.tour-schema-drop {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  gap: 6px;
+  padding: 8px;
+  transform: translateY(105%);
+  transition: transform 0.22s cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
+.tour-schema.dragging .tour-schema-drop {
+  transform: none;
+}
+
+.tour-schema-zone {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 58px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 7px 9px;
+  border-radius: var(--r-md);
+  background: var(--p-pill);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25), inset 0 0 0 1px rgba(var(--ink-rgb), 0.06);
+  font-size: 13px;
+  color: var(--p-text);
+  transition: transform 0.12s, background-color 0.12s;
+}
+
+.tour-schema-zone span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tour-schema-zone.over {
+  background: rgba(var(--accent-rgb), 0.28);
+  transform: translateY(-4px);
+}
+
+.tour-schema-zone.flash {
+  animation: tour-flash 0.8s ease;
+}
+
+@keyframes tour-flash {
+  from {
+    background: rgba(var(--accent-rgb), 0.35);
+  }
+}
+
+.tour-schema-cursor {
+  position: absolute;
+  left: 0;
+  top: 0;
+  z-index: 5;
+  width: 22px;
+  height: 22px;
+  opacity: 0;
+  pointer-events: none;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.6));
+}
+
+.tour-schema-ghost {
+  position: fixed;
+  z-index: 200;
+  width: 80px;
+  pointer-events: none;
+  transform: translate(-50%, -55%) rotate(-3deg);
+  filter: drop-shadow(0 16px 30px rgba(0, 0, 0, 0.45));
+}
+
+.tour-schema-ghost.local {
+  position: absolute;
+  z-index: 4;
+}
+
+.tour-schema-ghost img {
+  display: block;
+  width: 100%;
+  border-radius: 3px;
+}
+
+/* Demo-Bibliothek: kleine Marke oben rechts */
+body.demo-lib::after {
+  content: "Demo";
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  z-index: 31;
+  height: 20px;
+  padding: 0 9px;
+  display: flex;
+  align-items: center;
+  border-radius: 99px;
+  background: rgba(var(--accent-rgb), 0.2);
+  box-shadow: inset 0 0 0 1px rgba(var(--accent-rgb), 0.8);
+  font-family: var(--p-mono);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--p-text);
+  pointer-events: none;
+}
+
+/* ---- Licht-Öffnung (reveal.js) ---- */
+
+.reveal-cover,
+.reveal {
+  position: fixed;
+  inset: 0;
+  z-index: 300;
+  pointer-events: none;
+}
+
+.reveal-cover {
+  background: #04060d;
+}
+
+.reveal canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.reveal-word {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  text-align: center;
+  font-weight: 400;
+  font-size: clamp(18px, 2.4vw, 30px);
+  letter-spacing: 0.32em;
+  text-transform: uppercase;
+  color: #e9eeff;
+  text-shadow: 0 0 6px #86a2ff, 0 0 28px #2d5aeb;
+  opacity: 0;
+}
+
+/* Offenes Blatt rechts: Navigation bleibt über dem Inhalt */
+html[data-nav="tr"] .page-open .p-top,
+html[data-nav^="b"] .page-open .p-top {
+  right: var(--sheet-w);
+}
+
+html[data-nav="tc"] .page-open .p-top {
+  right: var(--sheet-w);
+}
+
+.p-choice .p-link {
+  margin-left: 10px;
 }
