@@ -1,5 +1,11 @@
 # Changelog
 
+## App 0.17.6 (10.10.2026)
+
+- Zonen-Menü (⋯) auf Karten wird nicht mehr abgeschnitten, es schwebt über der Seite.
+- Einheitlich „Objekte“ statt „Bilder“ bei Zählern, leeren Zonen und Meldungen.
+- Einstellungen öffnen verschiebt die Navigation nicht mehr unter die Fensterknöpfe.
+
 ## App 0.17.5 (10.10.2026)
 
 - Objekte: Filter nach Art oben in der Filterleiste: Bilder, Tracks, Video, PDF.

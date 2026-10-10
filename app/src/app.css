@@ -2094,14 +2094,6 @@ body.lightbox-open .p-dropbar {
   margin-right: var(--sheet-w);
 }
 
-.p-nav {
-  transition: left 0.26s var(--sheet-ease);
-}
-
-.page-open .p-nav {
-  left: calc((100% - var(--sheet-w)) / 2);
-}
-
 .page-open .info-panel {
   display: none;
 }
