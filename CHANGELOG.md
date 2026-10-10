@@ -1,6 +1,6 @@
 # Changelog
 
-## Unveröffentlicht
+## App 0.18.1 · Extension 3.16.1 (10.10.2026)
 
 - Der Betrachter heißt jetzt Observer.
 - Neues App-Icon ohne gestrichelten Rahmen, als runde Mac-Kachel.
