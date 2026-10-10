@@ -121,6 +121,7 @@
   // Einpassen ↔ Originalgröße (bei kleinen Bildern doppelt)
   function toggleZoom(cx, cy) {
     if (mode === "pdf" && pdf) return pdf.setZoom(pdf.fitted() ? 2 : 1);
+    if (mode === "video" && vzoom) return vzoom.toggle(cx, cy);
     if (mode !== "image") return;
     if (!view.fitted) return fit(true);
     const target = fitScale() >= 1 ? 2 : 1;
@@ -153,11 +154,18 @@
     document.body.classList.toggle("has-player", !!player);
   }
 
+  // Video: Zoom-Knopf zeigt „Einpassen“ bzw. die Stufe, wie bei Bildern
+  let vzoom = null;
+  function videoZoomed(scale) {
+    $("zoom").textContent = "(" + (scale > 1 ? `${Math.round(scale * 100)} %` : t("viewerFit")) + ")";
+  }
+
   // PDF oder Video statt des Bildes zeigen; false = Bild
   function showMedia(path) {
     const k = Media.kind(path);
     const box = $("media");
     mode = k;
+    vzoom = null;
     setPlayer(null);
     document.body.classList.toggle("media", k !== "image");
     if (pdf) pdf.destroy();
@@ -193,8 +201,9 @@
         if (state.infoOpen) renderInfo();
       });
       box.appendChild(v);
+      vzoom = Media.zoomable(v, videoZoomed);
       setPlayer(v);
-      $("zoom").textContent = "";
+      videoZoomed(1);
     } else {
       pdf = new Media.PdfView(box, { padTop: PAD.top, padBottom: PAD.bottom, onChange: pdfChanged });
       pdf.open(fileSrc(path)).catch((e) => toast(t("error", { msg: String((e && e.message) || e) })));
@@ -630,6 +639,12 @@
       e.preventDefault();
       return;
     }
+    if ((e.metaKey || e.ctrlKey) && mode === "video" && vzoom && /^[=+\-0]$/.test(e.key)) {
+      if (e.key === "0") vzoom.reset();
+      else vzoom.zoomBy(e.key === "-" ? 1 / 1.25 : 1.25);
+      e.preventDefault();
+      return;
+    }
     if (e.metaKey || e.ctrlKey) {
       if (e.key === "=" || e.key === "+") zoomAt(view.scale * 1.25, cx, cy, true);
       else if (e.key === "-") zoomAt(view.scale / 1.25, cx, cy, true);
@@ -654,6 +669,7 @@
       if (!$("zones").hidden) closeZones();
       else if (mode === "pdf" && pdf && !pdf.fitted()) pdf.setZoom(1);
       else if (mode === "image" && !view.fitted) fit(true);
+      else if (mode === "video" && vzoom && vzoom.scale() > 1) vzoom.reset();
       else TAURI.window.getCurrentWindow().close();
     } else if (/^[1-4]$/.test(e.key) && state.library) {
       if (state.rel != null) return;

@@ -3107,8 +3107,10 @@ body.has-selection .card-text:not(.selected):hover .text-sheet {
   gap: 18px;
 }
 .lb-media .media-audio-cover {
-  max-width: min(100%, 560px);
-  max-height: calc(100% - 120px);
+  /* groß: füllt die Höhe, auch kleine Cover werden hochskaliert */
+  height: min(calc(100% - 70px), 760px);
+  width: auto;
+  max-width: 100%;
   min-height: 0;
   object-fit: contain;
   border-radius: var(--r-md);
@@ -3273,6 +3275,31 @@ body.has-selection .card-text:not(.selected):hover .text-sheet {
   transform: none;
 }
 
+/* Waveform statt Linie, sobald die Tonspur gelesen ist */
+.mp-wave {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: none;
+  pointer-events: none;
+}
+
+.mp-track.has-wave {
+  height: 24px;
+}
+
+.mp-track.has-wave .mp-wave {
+  display: block;
+}
+
+.mp-track.has-wave::before,
+.mp-track.has-wave .mp-fill,
+.mp-track.has-wave .mp-knob {
+  display: none;
+}
+
+
 .lb-zoom:empty {
   display: none;
 }
@@ -3287,9 +3314,7 @@ body.has-selection .card-text:not(.selected):hover .text-sheet {
   bottom: 128px;
 }
 
-.lightbox.has-player .lb-media .media-audio-cover {
-  max-height: calc(100% - 70px);
-}
+
 
 .lightbox.has-player .lb-zones {
   bottom: 114px;
@@ -3863,3 +3888,8 @@ html.light .p-nav-brand {
   min-width: 300px;
 }
 
+
+/* Gezoomtes Video: verschieben per Ziehen */
+.media-video.zoomed {
+  cursor: grab;
+}

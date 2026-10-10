@@ -107,7 +107,7 @@
     homeSizes: pref("homeSizes", null) || { index: pref("homeSize", 1), preview: pref("homeSize", 1), cards: pref("homeSize", 1) },
     // (Übersicht: Größe wie die Karten, solange nichts eigenes gespeichert ist)
     query: "",
-    filters: { color: null, orient: null, format: null, period: null, dup: false, label: null, site: null },
+    filters: { kind: null, color: null, orient: null, format: null, period: null, dup: false, label: null, site: null },
     found: null, // Seite „Finden“: Treffer nach Rangfolge, null ohne Suche und Filter
     view: pref("view", "grid"),
     size: pref("size", 120),
@@ -458,7 +458,7 @@
 
   function filtersActive() {
     const f = state.filters;
-    return filtersShown() && !!(f.color || f.orient || f.format || f.period || f.dup || f.label || f.site);
+    return filtersShown() && !!(f.kind || f.color || f.orient || f.format || f.period || f.dup || f.label || f.site);
   }
 
   function orientation(item) {
@@ -469,6 +469,7 @@
 
   function passesFilters(item, dupes) {
     const f = state.filters;
+    if (f.kind && kindOf(item) !== f.kind) return false;
     if (f.color && !((searchIndex(item).colors.get(f.color) || 0) >= COLOR_SHARE)) return false;
     if (f.label && !searchIndex(item).labels.includes(f.label)) return false;
     if (f.site && domainOf(item.pageUrl) !== f.site) return false;
@@ -499,6 +500,10 @@
     const f = state.filters;
     const bar = el("div", "p-bar p-filters");
     bar.appendChild(mono("(" + t("filterTitle") + ")", "dim p-facet-title"));
+    // Art zuerst: Bilder, Tracks, Video, PDF
+    for (const k of ["image", "audio", "video", "pdf"])
+      bar.appendChild(chip("(" + t("kind_" + k) + ")", f.kind === k, () => setFilter("kind", k)));
+    bar.appendChild(el("span", "p-filter-gap"));
     const dots = el("span", "p-colors");
     for (const [name, hex] of COLORS) {
       const b = button("p-color" + (f.color === name ? " active" : ""), "", () => setFilter("color", name));
@@ -522,7 +527,7 @@
       bar.appendChild(el("span", "p-flex"));
       bar.appendChild(
         chip("(" + t("filterReset") + ")", false, () => {
-          state.filters = { color: null, orient: null, format: null, period: null, dup: false, label: null, site: null };
+          state.filters = { kind: null, color: null, orient: null, format: null, period: null, dup: false, label: null, site: null };
           renderZones();
         })
       );
@@ -2373,6 +2378,7 @@
   // Einpassen ↔ Originalgröße (bei kleinen Bildern doppelt)
   function lbToggleZoom(cx, cy) {
     if (lbMode === "pdf" && lbPdf) return lbPdf.setZoom(lbPdf.fitted() ? 2 : 1);
+    if (lbMode === "video" && lbVZoom) return lbVZoom.toggle(cx, cy);
     if (lbMode !== "image") return;
     if (!lbView.fitted) return lbFit(true);
     const [mx, my] = lbCenter();
@@ -2459,12 +2465,21 @@
     $("lightbox").classList.toggle("has-player", !!lbPlayer);
   }
 
+  // Video: Zoom-Knopf zeigt „Einpassen“ bzw. die Stufe, wie bei Bildern
+  let lbVZoom = null;
+  function lbVideoZoomed(scale) {
+    $("lightboxZoom").textContent = "(" + (scale > 1 ? `${Math.round(scale * 100)} %` : t("viewerFit")) + ")";
+    $("lightbox").classList.toggle("zoomed", scale > 1);
+  }
+
   // Zeigt PDF oder Video statt des Bildes. false = normales Bild.
   function lbShowMedia(item) {
     const k = quoteOf(item) ? "text" : kindOf(item);
     const box = $("lbMedia");
     const img = $("lightboxImg");
     lbMode = k;
+    lbVZoom = null;
+    $("lightbox").classList.remove("zoomed");
     lbSetPlayer(null);
     $("lightbox").classList.toggle("media", k !== "image");
     $("lightbox").classList.toggle("is-video", k === "video");
@@ -2500,8 +2515,9 @@
     if (k === "video") {
       const v = Media.videoEl(fileSrc(item.abs), item.thumb ? fileSrc(item.thumb) : null);
       box.appendChild(v);
+      lbVZoom = Media.zoomable(v, lbVideoZoomed);
       lbSetPlayer(v);
-      $("lightboxZoom").textContent = "";
+      lbVideoZoomed(1);
       return true;
     }
     lbPdf = new Media.PdfView(box, { padTop: LB_PAD.top, padBottom: LB_PAD.bottom, onChange: lbPdfChanged });
@@ -2789,6 +2805,11 @@
       lbPdf.setZoom(e.key === "0" ? 1 : e.key === "-" ? lbPdf.zoom / 1.25 : lbPdf.zoom * 1.25);
       return true;
     }
+    if (mod && lbMode === "video" && lbVZoom && /^[=+\-0]$/.test(e.key)) {
+      if (e.key === "0") lbVZoom.reset();
+      else lbVZoom.zoomBy(e.key === "-" ? 1 / 1.25 : 1.25);
+      return true;
+    }
     if (mod) {
       if (e.key === "=" || e.key === "+") lbZoomAt(lbView.scale * 1.25, cx, cy, true);
       else if (e.key === "-") lbZoomAt(lbView.scale / 1.25, cx, cy, true);
@@ -2809,6 +2830,7 @@
     else if (e.key === "i" || e.key === "I") lbToggleInfo();
     else if (e.key === "Enter") $("lbZones").hidden ? lbOpenZones() : lbCloseZones();
     else if (e.key === "Escape" && !$("lbZones").hidden) lbCloseZones();
+    else if (e.key === "Escape" && lbMode === "video" && lbVZoom && lbVZoom.scale() > 1) lbVZoom.reset();
     else if (e.key === "Escape" && !lbView.fitted) lbFit(true);
     else if (e.key === " " && (lbMode === "video" || lbMode === "audio") && Media.togglePlay($("lbMedia"))) {}
     else if (e.key === "Escape" || e.key === " ") closeLightbox();

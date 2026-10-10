@@ -1,5 +1,13 @@
 # Changelog
 
+## App 0.17.5 (10.10.2026)
+
+- Objekte: Filter nach Art oben in der Filterleiste: Bilder, Tracks, Video, PDF.
+- Player: minimale Waveform statt Linie, gespielt in voller Farbe (Songs und Videos mit Ton).
+- Videos lassen sich zoomen wie Bilder: Z, Doppelklick, ⌘ +/−, Zwei-Finger-Zoom, Ziehen verschiebt.
+- Songs: Cover in Lightbox und Vorschau deutlich größer.
+- Lightbox: Leiste mit fester Breite, lange Namen gekürzt, kein Umbruch mehr bei Videos.
+
 ## App 0.17.4 · Extension 3.15.4 (10.10.2026)
 
 - Navigation: „Finden“ heißt jetzt „Objekte“. Der Zonen-Button entfällt, ein Klick auf „Archiver“ führt zur Übersicht.
