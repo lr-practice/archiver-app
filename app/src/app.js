@@ -4798,8 +4798,9 @@
 
   // ---- Updates (lib.rs: update_check / update_install) ----
   async function checkUpdate() {
+    if (document.querySelector(".p-update")) return;
     const info = await invoke("update_check").catch(() => null);
-    if (!info) return;
+    if (!info || document.querySelector(".p-update")) return;
     const bar = el("div", "p-update");
     bar.appendChild(el("span", null, t("updateAvailable", { version: info.version })));
     const go = button("p-update-btn", "(" + t("updateInstall") + ")", () => {
@@ -4830,6 +4831,14 @@
     } else showWelcome(info);
     hideSplash();
     setTimeout(checkUpdate, 3000);
+    // Auch im laufenden Betrieb: alle 30 Minuten und wenn das Fenster wieder nach vorne kommt
+    setInterval(checkUpdate, 30 * 60 * 1000);
+    let lastFocusCheck = Date.now();
+    window.addEventListener("focus", () => {
+      if (Date.now() - lastFocusCheck < 5 * 60 * 1000) return;
+      lastFocusCheck = Date.now();
+      checkUpdate();
+    });
   }
 
   boot().catch((e) => {
