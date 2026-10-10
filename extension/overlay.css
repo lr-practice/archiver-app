@@ -1,0 +1,317 @@
+/* overlay.css — Seiten-Overlay im Shadow DOM. Wird zusammen mit gallery.css
+   und panel.css in den Shadow Root geladen; Seiten-CSS kommt nicht hinein und
+   unsere Styles nicht hinaus, deshalb ohne Präfixe. Hier steht nur, was es
+   ausschließlich auf der Seite gibt: die Zonenleiste während eines Drags und
+   der halbtransparente Hintergrund. Alles andere ist identisch zur Vollansicht. */
+
+:host {
+  all: initial;
+}
+
+.root {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  color: #ffffff;
+  font-size: 13px;
+  line-height: normal;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+button,
+input {
+  font-family: inherit;
+}
+
+/* ---- Zonen während eines Drags: schwebende Karten wie in der App ---- */
+
+.zones-bar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 32vh;
+  z-index: 2;
+  display: flex;
+  gap: 10px;
+  padding: 0 14px 14px;
+  pointer-events: none;
+  animation: zones-in 0.16s ease-out;
+}
+
+@keyframes zones-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+}
+
+.zone {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 18px 20px;
+  border-radius: 8px;
+  background: rgba(22, 22, 22, 0.88);
+  backdrop-filter: blur(24px) saturate(1.4);
+  -webkit-backdrop-filter: blur(24px) saturate(1.4);
+  box-shadow: 0 14px 44px rgba(0, 0, 0, 0.45), inset 0 0 0 1px rgba(255, 255, 255, 0.07);
+  color: #ededed;
+  font-size: 17px;
+  font-weight: 400;
+  letter-spacing: -0.01em;
+  transition: background 0.12s ease, transform 0.12s ease;
+}
+
+/* Downloads-Zone etwas zurückgenommen */
+.zone.root {
+  background: rgba(14, 14, 14, 0.7);
+  color: #a9a9a9;
+}
+
+.zone.active {
+  background: rgba(31, 42, 77, 0.92);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.5), inset 0 0 0 1px #5b7cff;
+  color: #ffffff;
+  transform: translateY(-4px);
+}
+
+.zone.root.active {
+  background: rgba(60, 60, 60, 0.9);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.5), inset 0 0 0 1px rgba(255, 255, 255, 0.5);
+}
+
+.zone-label {
+  pointer-events: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.zone-parent {
+  color: #8c8c8c;
+}
+
+.zone-hint {
+  pointer-events: none;
+  font-size: 13px;
+  color: #c9d6ff;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+
+.zone.active .zone-hint {
+  opacity: 1;
+}
+
+/* ---- Overlay per Tastenkombination: wie die Vollansicht, halbtransparent ---- */
+
+.overlay-gallery {
+  position: fixed;
+  inset: 0;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  background: rgba(15, 15, 15, 0.85);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  --card-bg: rgba(20, 20, 20, 0.55);
+}
+
+
+/* ---- Ausschnitt sichern ---- */
+
+.area-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483647;
+  cursor: crosshair;
+  background: rgba(0, 0, 0, 0.18);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+.area-hint {
+  position: fixed;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 8px 14px;
+  border-radius: 6px;
+  background: rgba(22, 22, 22, 0.86);
+  color: #ededed;
+  font: 12px/1.2 ui-monospace, "SF Mono", Menlo, monospace;
+  letter-spacing: 0.02em;
+  pointer-events: none;
+}
+
+.area-box {
+  position: fixed;
+  display: none;
+  outline: 1.5px dashed #ffffff;
+  outline-offset: 0;
+  box-shadow: 0 0 0 100vmax rgba(0, 0, 0, 0.32);
+  background: transparent;
+  pointer-events: none;
+}
+
+.area-pick {
+  position: fixed;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  max-width: calc(100vw - 24px);
+  padding: 6px;
+  border-radius: 8px;
+  background: rgba(30, 30, 30, 0.72);
+  -webkit-backdrop-filter: blur(24px) saturate(1.4);
+  backdrop-filter: blur(24px) saturate(1.4);
+  box-shadow: 0 14px 44px rgba(0, 0, 0, 0.5), inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+  cursor: default;
+}
+
+.area-pick-label {
+  padding: 0 8px 0 6px;
+  color: #8c8c8c;
+  font: 11px ui-monospace, "SF Mono", Menlo, monospace;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.area-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border: 0;
+  border-radius: 6px;
+  outline: 1px dashed rgba(255, 255, 255, 0.22);
+  outline-offset: -1px;
+  background: transparent;
+  color: #ededed;
+  font: 500 13px -apple-system, BlinkMacSystemFont, sans-serif;
+  cursor: pointer;
+}
+
+.area-chip:hover {
+  background: rgba(45, 90, 235, 0.35);
+  outline-color: rgba(45, 90, 235, 0.9);
+}
+
+.area-key {
+  color: #8c8c8c;
+  font: 11px ui-monospace, "SF Mono", Menlo, monospace;
+}
+
+/* ---- Hell (erzeugt) ---- */
+/* Hell: Papierweiß, fast schwarze Schrift. Abgeleitet aus den Regeln oben. */
+
+html.light .root,
+:host(.light) .root {
+  color: #111111;
+}
+
+html.light .zone,
+:host(.light) .zone {
+  background: rgba(245, 245, 245, 0.88);
+  box-shadow: 0 14px 44px rgba(0, 0, 0, 0.135), inset 0 0 0 1px rgba(17, 17, 17, 0.07);
+  color: #111111;
+}
+
+html.light .zone.root,
+:host(.light) .zone.root {
+  background: rgba(245, 245, 245, 0.7);
+  color: #3a3a3a;
+}
+
+html.light .zone.active,
+:host(.light) .zone.active {
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.15), inset 0 0 0 1px #5b7cff;
+}
+
+html.light .zone.root.active,
+:host(.light) .zone.root.active {
+  background: rgba(245, 245, 245, 0.9);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.15), inset 0 0 0 1px rgba(17, 17, 17, 0.5);
+}
+
+html.light .zone-parent,
+:host(.light) .zone-parent {
+  color: #707070;
+}
+
+html.light .overlay-gallery,
+:host(.light) .overlay-gallery {
+  background: rgba(245, 245, 245, 0.85);
+  --card-bg: rgba(245, 245, 245, 0.55);
+}
+
+html.light .area-layer,
+:host(.light) .area-layer {
+  background: rgba(245, 245, 245, 0.18);
+}
+
+html.light .area-hint,
+:host(.light) .area-hint {
+  background: rgba(245, 245, 245, 0.86);
+  color: #111111;
+}
+
+html.light .area-box,
+:host(.light) .area-box {
+  outline: 1.5px dashed #111111;
+  box-shadow: 0 0 0 100vmax rgba(0, 0, 0, 0.096);
+}
+
+html.light .area-pick,
+:host(.light) .area-pick {
+  background: rgba(245, 245, 245, 0.72);
+  box-shadow: 0 14px 44px rgba(0, 0, 0, 0.15), inset 0 0 0 1px rgba(17, 17, 17, 0.08);
+}
+
+html.light .area-pick-label,
+:host(.light) .area-pick-label {
+  color: #707070;
+}
+
+html.light .area-chip,
+:host(.light) .area-chip {
+  outline: 1px dashed rgba(17, 17, 17, 0.22);
+  color: #111111;
+}
+
+html.light .area-key,
+:host(.light) .area-key {
+  color: #707070;
+}
+
+/* ---- Markierten Text ziehen: Vorschau am Mauszeiger ---- */
+
+.text-ghost {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 3;
+  max-width: 280px;
+  padding: 10px 12px;
+  border-radius: 6px;
+  background: rgba(22, 22, 22, 0.92);
+  backdrop-filter: blur(24px) saturate(1.4);
+  -webkit-backdrop-filter: blur(24px) saturate(1.4);
+  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.4), inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+  color: #ededed;
+  font-size: 12px;
+  line-height: 1.4;
+  pointer-events: none;
+}
+
+:host(.light) .text-ghost {
+  background: rgba(250, 250, 250, 0.94);
+  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.16), inset 0 0 0 1px rgba(0, 0, 0, 0.08);
+  color: #111111;
+}

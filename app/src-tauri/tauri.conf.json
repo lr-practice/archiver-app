@@ -1,0 +1,285 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Archiver",
+  "version": "0.17.3",
+  "identifier": "app.archiver.desktop",
+  "build": {
+    "frontendDist": "../src"
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "windows": [
+      {
+        "label": "main",
+        "title": "Archiver",
+        "width": 1320,
+        "height": 860,
+        "minWidth": 880,
+        "minHeight": 560,
+        "theme": "Dark",
+        "titleBarStyle": "Overlay",
+        "hiddenTitle": true,
+        "trafficLightPosition": {
+          "x": 18,
+          "y": 19
+        },
+        "dragDropEnabled": true,
+        "transparent": true,
+        "windowEffects": {
+          "effects": [
+            "hudWindow"
+          ],
+          "state": "active"
+        },
+        "visible": false
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; img-src 'self' asset: http://asset.localhost data: blob:; media-src 'self' asset: http://asset.localhost blob:; connect-src 'self' asset: http://asset.localhost ipc: http://ipc.localhost; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; script-src 'self'",
+      "assetProtocol": {
+        "enable": true,
+        "scope": {
+          "allow": [],
+          "requireLiteralLeadingDot": false
+        }
+      }
+    },
+    "macOSPrivateApi": true
+  },
+  "bundle": {
+    "active": true,
+    "targets": [
+      "app",
+      "dmg"
+    ],
+    "category": "public.app-category.graphics-design",
+    "copyright": "© 2026 Lukas Rudolph",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.png"
+    ],
+    "macOS": {
+      "minimumSystemVersion": "12.0",
+      "signingIdentity": "-"
+    },
+    "fileAssociations": [
+      {
+        "ext": [
+          "jpg",
+          "jpeg"
+        ],
+        "contentTypes": [
+          "public.jpeg"
+        ],
+        "name": "JPEG",
+        "role": "Viewer",
+        "rank": "Alternate"
+      },
+      {
+        "ext": [
+          "png"
+        ],
+        "contentTypes": [
+          "public.png"
+        ],
+        "name": "PNG",
+        "role": "Viewer",
+        "rank": "Alternate"
+      },
+      {
+        "ext": [
+          "gif"
+        ],
+        "contentTypes": [
+          "com.compuserve.gif"
+        ],
+        "name": "GIF",
+        "role": "Viewer",
+        "rank": "Alternate"
+      },
+      {
+        "ext": [
+          "webp"
+        ],
+        "contentTypes": [
+          "org.webmproject.webp"
+        ],
+        "name": "WebP",
+        "role": "Viewer",
+        "rank": "Alternate"
+      },
+      {
+        "ext": [
+          "tif",
+          "tiff"
+        ],
+        "contentTypes": [
+          "public.tiff"
+        ],
+        "name": "TIFF",
+        "role": "Viewer",
+        "rank": "Alternate"
+      },
+      {
+        "ext": [
+          "heic",
+          "heif"
+        ],
+        "contentTypes": [
+          "public.heic",
+          "public.heif"
+        ],
+        "name": "HEIC",
+        "role": "Viewer",
+        "rank": "Alternate"
+      },
+      {
+        "ext": [
+          "avif"
+        ],
+        "contentTypes": [
+          "public.avif"
+        ],
+        "name": "AVIF",
+        "role": "Viewer",
+        "rank": "Alternate"
+      },
+      {
+        "ext": [
+          "bmp"
+        ],
+        "contentTypes": [
+          "com.microsoft.bmp"
+        ],
+        "name": "BMP",
+        "role": "Viewer",
+        "rank": "Alternate"
+      },
+      {
+        "ext": [
+          "svg"
+        ],
+        "contentTypes": [
+          "public.svg-image"
+        ],
+        "name": "SVG",
+        "role": "Viewer",
+        "rank": "Alternate"
+      },
+      {
+        "ext": [
+          "pdf"
+        ],
+        "contentTypes": [
+          "com.adobe.pdf"
+        ],
+        "name": "PDF",
+        "role": "Viewer",
+        "rank": "Alternate"
+      },
+      {
+        "ext": [
+          "mp4",
+          "m4v"
+        ],
+        "contentTypes": [
+          "public.mpeg-4"
+        ],
+        "name": "MPEG-4",
+        "role": "Viewer",
+        "rank": "Alternate"
+      },
+      {
+        "ext": [
+          "mov"
+        ],
+        "contentTypes": [
+          "com.apple.quicktime-movie"
+        ],
+        "name": "QuickTime",
+        "role": "Viewer",
+        "rank": "Alternate"
+      },
+      {
+        "ext": [
+          "webm"
+        ],
+        "contentTypes": [
+          "org.webmproject.webm"
+        ],
+        "name": "WebM",
+        "role": "Viewer",
+        "rank": "Alternate"
+      },
+      {
+        "ext": [
+          "wav"
+        ],
+        "contentTypes": [
+          "com.microsoft.waveform-audio"
+        ],
+        "name": "WAVE",
+        "role": "Viewer",
+        "rank": "Alternate"
+      },
+      {
+        "ext": [
+          "mp3"
+        ],
+        "contentTypes": [
+          "public.mp3"
+        ],
+        "name": "MP3",
+        "role": "Viewer",
+        "rank": "Alternate"
+      },
+      {
+        "ext": [
+          "aif",
+          "aiff"
+        ],
+        "contentTypes": [
+          "public.aiff-audio",
+          "public.aifc-audio"
+        ],
+        "name": "AIFF",
+        "role": "Viewer",
+        "rank": "Alternate"
+      },
+      {
+        "ext": [
+          "m4a"
+        ],
+        "contentTypes": [
+          "com.apple.m4a-audio"
+        ],
+        "name": "MPEG-4 Audio",
+        "role": "Viewer",
+        "rank": "Alternate"
+      },
+      {
+        "ext": [
+          "flac"
+        ],
+        "contentTypes": [
+          "org.xiph.flac"
+        ],
+        "name": "FLAC",
+        "role": "Viewer",
+        "rank": "Alternate"
+      }
+    ],
+    "createUpdaterArtifacts": true
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEMwRjdCRTQ2QzEyMDM3Q0QKUldUTk55REJScjczd01Fbkk3YWl3SHZNYzRXMUN4U2l1MFh2RWdMTkFMcFhuUUJOSG5EOTJ2ME8K",
+      "endpoints": [
+        "https://github.com/lr-practice/Archiver-Releases/releases/latest/download/latest.json"
+      ]
+    }
+  }
+}

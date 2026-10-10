@@ -1,0 +1,23 @@
+{
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "Archiver",
+        "width": 1320,
+        "height": 860,
+        "minWidth": 880,
+        "minHeight": 560,
+        "theme": "Dark",
+        "dragDropEnabled": true,
+        "visible": false
+      }
+    ]
+  },
+  "bundle": {
+    "targets": ["nsis"],
+    "createUpdaterArtifacts": false,
+    "icon": ["icons/32x32.png", "icons/128x128.png", "icons/icon.ico"],
+    "fileAssociations": null
+  }
+}

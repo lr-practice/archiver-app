@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Archiver</title>
+    <link rel="stylesheet" href="viewer.css" />
+  </head>
+  <body>
+    <div class="v-drag" data-tauri-drag-region></div>
+    <main id="stage" class="v-stage">
+      <img id="img" alt="" draggable="false" />
+    </main>
+    <div id="media" class="v-media" hidden></div>
+    <aside id="info" class="v-info"></aside>
+    <div id="zones" class="v-zones" hidden></div>
+    <nav id="nav" class="v-nav">
+      <span id="browse" class="v-group">
+        <button type="button" id="prev" class="v-btn v-arrow" aria-label="Previous">‹</button>
+        <span id="count" class="v-count"></span>
+        <button type="button" id="next" class="v-btn v-arrow" aria-label="Next">›</button>
+        <span class="v-sep"></span>
+      </span>
+      <span id="name" class="v-name"></span>
+      <button type="button" id="zoom" class="v-btn v-zoom"></button>
+      <button type="button" id="infoBtn" class="v-btn"></button>
+      <button type="button" id="action" class="v-btn v-action"></button>
+    </nav>
+    <div id="toast" class="v-toast"></div>
+    <script src="i18n.js"></script>
+    <script src="media.js"></script>
+    <script src="viewer.js"></script>
+  </body>
+</html>

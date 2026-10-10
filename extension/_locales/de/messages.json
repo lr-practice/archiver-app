@@ -1,0 +1,307 @@
+{
+  "extName": {
+    "message": "Archiver"
+  },
+  "extDescription": {
+    "message": "Bilder sichern, indem du sie in Ablage-Zonen am unteren Bildschirmrand ziehst. Danach sortieren, sichten und wiederfinden."
+  },
+  "actionTitle": {
+    "message": "Archiver"
+  },
+  "commandToggle": {
+    "message": "Overlay ein- oder ausblenden"
+  },
+  "dashboardTitle": {
+    "message": "Archiver — Übersicht"
+  },
+  "fullView": {
+    "message": "Vollansicht"
+  },
+  "fullViewTitle": {
+    "message": "Alle Zonen in neuem Tab öffnen"
+  },
+  "showInformation": {
+    "message": "Information anzeigen"
+  },
+  "settings": {
+    "message": "Einstellungen"
+  },
+  "information": {
+    "message": "Information"
+  },
+  "close": {
+    "message": "Schließen"
+  },
+  "zones": {
+    "message": "Zonen"
+  },
+  "shortcut": {
+    "message": "Tastenkombination"
+  },
+  "addZone": {
+    "message": "+ Zone hinzufügen"
+  },
+  "zoneN": {
+    "message": "Zone $N$",
+    "placeholders": {
+      "n": {
+        "content": "$1"
+      }
+    }
+  },
+  "dragToReorder": {
+    "message": "Ziehen zum Verschieben"
+  },
+  "dragToReorderZone": {
+    "message": "Ziehen zum Verschieben der Zone"
+  },
+  "moveUp": {
+    "message": "Nach oben verschieben"
+  },
+  "moveDown": {
+    "message": "Nach unten verschieben"
+  },
+  "removeZone": {
+    "message": "Zone entfernen"
+  },
+  "change": {
+    "message": "Ändern"
+  },
+  "pressKeys": {
+    "message": "Taste(n) drücken…"
+  },
+  "save": {
+    "message": "Speichern"
+  },
+  "saved": {
+    "message": "Gespeichert"
+  },
+  "zonesHintHtml": {
+    "message": "Von oben nach unten = von links nach rechts am Bildschirmrand. Auch Pfade wie <code>Kunden/Projekt-A</code> möglich. Eine Zone namens <code>Downloads</code> legt ohne Unterordner ab (<a>Downloads-Ordner ändern</a>)."
+  },
+  "shortcutHintHtml": {
+    "message": "Blendet das Overlay auf der aktuellen Seite ein. Zusätzlich gilt Chromes eigene Archiver-Kombination, änderbar unter <a>Erweiterungen › Tastenkombinationen</a>."
+  },
+  "noImagesYet": {
+    "message": "Noch keine Bilder."
+  },
+  "imageUnavailable": {
+    "message": "Bild nicht verfügbar"
+  },
+  "showInFinder": {
+    "message": "Im Finder zeigen"
+  },
+  "selectionHint": {
+    "message": "$COUNT$ ausgewählt — zum Verschieben auf eine Zone ziehen (Esc zum Aufheben)",
+    "placeholders": {
+      "count": {
+        "content": "$1"
+      }
+    }
+  },
+  "savedIn": {
+    "message": "Abgelegt in $FOLDER$",
+    "placeholders": {
+      "folder": {
+        "content": "$1"
+      }
+    }
+  },
+  "downloadFailed": {
+    "message": "Download fehlgeschlagen"
+  },
+  "moveFailed": {
+    "message": "Verschieben fehlgeschlagen"
+  },
+  "moveNotInHistory": {
+    "message": "Nicht mehr im Download-Verlauf – bitte im Finder verschieben"
+  },
+  "moveSourceUnreachable": {
+    "message": "Quelle nicht erreichbar – Original bleibt erhalten"
+  },
+  "moveTimeout": {
+    "message": "Zeitüberschreitung – Original bleibt erhalten"
+  },
+  "allZones": {
+    "message": "‹ Alle Zonen"
+  },
+  "showAllZones": {
+    "message": "Alle Zonen zeigen"
+  },
+  "openZone": {
+    "message": "Nur diese Zone zeigen"
+  },
+  "desktopApp": {
+    "message": "Desktop-App"
+  },
+  "exportForApp": {
+    "message": "Für die App exportieren"
+  },
+  "exportDone": {
+    "message": "$COUNT$ Bilder exportiert",
+    "placeholders": {
+      "count": {
+        "content": "$1"
+      }
+    }
+  },
+  "exportFailed": {
+    "message": "Export fehlgeschlagen"
+  },
+  "exportHint": {
+    "message": "Legt archiver-export.json in deinen Downloads ab. Die Archiver-App übernimmt damit alle Bilder samt Quellen in ihre Bibliothek."
+  },
+  "appConnected": {
+    "message": "Mit der Archiver-App verbunden · $LIB$",
+    "placeholders": {
+      "lib": {
+        "content": "$1"
+      }
+    }
+  },
+  "appZonesHint": {
+    "message": "Das sind deine vier Active Zones, sie erscheinen beim Ziehen und hier im Overlay. Welche es sind, legst du in der App fest, dort liegt auch alles Weitere."
+  },
+  "appSaveFailed": {
+    "message": "Bild konnte nicht an die App übergeben werden"
+  },
+  "appZoneFailed": {
+    "message": "Zone konnte nicht angelegt werden"
+  },
+  "dropRelease": {
+    "message": "Loslassen zum Ablegen"
+  },
+  "imageCount": {
+    "message": "$COUNT$ Bilder",
+    "placeholders": {
+      "count": {
+        "content": "$1"
+      }
+    }
+  },
+  "imageCountOne": {
+    "message": "1 Bild"
+  },
+  "aboutClaim": {
+    "message": "Eine visuelle Bibliothek für Kreative. Referenzen sammeln, sortieren und ansehen, in Zonen statt Ordnern."
+  },
+  "settingsLead": {
+    "message": "Zonen, Tastenkombination und Verbindung zur App."
+  },
+  "infoHow": {
+    "message": "So funktioniert’s"
+  },
+  "infoSaveTitle": {
+    "message": "Sichern"
+  },
+  "infoSaveText": {
+    "message": "Bild auf einer Webseite ziehen und auf einer Zone loslassen. Archiver holt die größte verfügbare Version."
+  },
+  "infoStoreTitle": {
+    "message": "Ablegen"
+  },
+  "infoStoreText": {
+    "message": "Mit der Archiver-App landet das Bild in deiner Bibliothek, sonst in einem Ordner in deinen Downloads."
+  },
+  "infoViewTitle": {
+    "message": "Ansehen"
+  },
+  "infoViewText": {
+    "message": "Die Tastenkombination öffnet auf jeder Seite die Übersicht. Eine Karte öffnet die Zone, ein Bild zeigt es groß."
+  },
+  "infoSortTitle": {
+    "message": "Sortieren"
+  },
+  "infoSortText": {
+    "message": "Ein Bild ziehen, dann erscheinen unten alle Zonen als Ziel. Shift-Klick wählt mehrere aus."
+  },
+  "infoFullTitle": {
+    "message": "Vollansicht"
+  },
+  "infoFullText": {
+    "message": "Dasselbe in einem eigenen Tab, auch für Bilder aus anderen Fenstern."
+  },
+  "infoKeys": {
+    "message": "Tasten"
+  },
+  "infoKeyOverlay": {
+    "message": "Übersicht öffnen"
+  },
+  "infoKeyBrowse": {
+    "message": "Bilder durchblättern"
+  },
+  "infoKeyBack": {
+    "message": "Zurück und schließen"
+  },
+  "importBoard": {
+    "message": "Board importieren"
+  },
+  "more": {
+    "message": "Mehr"
+  },
+  "dropInto": {
+    "message": "Ablegen in"
+  },
+  "menuDropIn": {
+    "message": "Ablegen in"
+  },
+  "menuArea": {
+    "message": "Ausschnitt sichern …"
+  },
+  "commandCapture": {
+    "message": "Ausschnitt sichern"
+  },
+  "captureFailed": {
+    "message": "Bildschirmfoto nicht möglich"
+  },
+  "captureNameArea": {
+    "message": "Ausschnitt"
+  },
+  "duplicateIn": {
+    "message": "Schon in $ZONE$ abgelegt",
+    "placeholders": {
+      "zone": {
+        "content": "$1"
+      }
+    }
+  },
+  "areaHint": {
+    "message": "Rahmen aufziehen · Esc bricht ab"
+  },
+  "areaPick": {
+    "message": "Ablegen in"
+  },
+  "cardText": {
+    "message": "Text"
+  },
+  "cardLink": {
+    "message": "Link"
+  },
+  "theme": {
+    "message": "Erscheinungsbild"
+  },
+  "themeSystem": {
+    "message": "System"
+  },
+  "themeLight": {
+    "message": "Hell"
+  },
+  "themeDark": {
+    "message": "Dunkel"
+  },
+  "cardVideo": {
+    "message": "Video"
+  },
+  "hotTag": {
+    "message": "Active Zone"
+  },
+  "hotZones": {
+    "message": "Active Zones"
+  },
+  "openApp": {
+    "message": "Archiver öffnen"
+  },
+  "openAppTitle": {
+    "message": "Alles Weitere in der App: Zonen, Sortieren, Suche"
+  }
+}

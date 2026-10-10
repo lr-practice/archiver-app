@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <title>Archiver</title>
+  <link rel="stylesheet" href="popup.css" />
+  <link rel="stylesheet" href="panel.css" />
+</head>
+<body>
+  <div class="topbar">
+    <span class="topbar-title">Archiver</span>
+    <button type="button" class="icon-btn text-icon-btn" id="infoBtn" data-i18n="information" data-i18n-title="showInformation"></button>
+    <button type="button" class="icon-btn text-icon-btn" id="dashboardBtn" data-i18n="fullView" data-i18n-title="fullViewTitle"></button>
+    <button type="button" class="icon-btn" id="closeBtn" data-i18n-title="close">×</button>
+  </div>
+
+  <div id="tabSettings" class="tab-panel active"></div>
+  <div id="tabInfo" class="tab-panel"></div>
+
+  <script src="shared.js"></script>
+  <script src="ui.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>

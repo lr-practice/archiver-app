@@ -1,0 +1,113 @@
+# Baut die Archiver-App für den Mac (Apple Silicon) und legt sie als
+# Vorabversion "app-latest" unter Releases ab. Noch ohne Apple-Signatur
+# (kommt in Phase 4), deshalb nur ad-hoc signiert.
+name: App macOS
+
+# Nur von Hand: Mac-Minuten zählen bei GitHub zehnfach, daher kein Build bei jedem Push.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: app-macos-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: macos-14
+    env:
+      PUBLISH_UPDATE: ${{ secrets.RELEASES_TOKEN != '' && secrets.TAURI_SIGNING_PRIVATE_KEY != '' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: app/src-tauri
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Abhängigkeiten
+        working-directory: app
+        run: npm ci
+
+      - name: Rust-Tests
+        working-directory: app/src-tauri
+        run: cargo test --lib
+
+      - name: App bauen
+        working-directory: app
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          # Ohne Schlüssel keine Update-Pakete, die App baut trotzdem.
+          if [ -z "$TAURI_SIGNING_PRIVATE_KEY" ]; then
+            npx tauri build --bundles app,dmg --config '{"bundle":{"createUpdaterArtifacts":false}}'
+          else
+            npx tauri build --bundles app,dmg
+          fi
+
+      - name: Dateien einsammeln
+        id: out
+        run: |
+          VERSION=$(node -p "require('./app/src-tauri/tauri.conf.json').version")
+          BUNDLE=app/src-tauri/target/release/bundle
+          mkdir -p dist
+          NAME=Archiver
+          APP=$(ls -d "$BUNDLE"/macos/*.app | head -1)
+          ditto -c -k --keepParent "$APP" "dist/$NAME-$VERSION-mac-arm64.zip"
+          cp "$BUNDLE"/dmg/*.dmg "dist/$NAME-$VERSION-mac-arm64.dmg"
+          ls -la dist
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: archiver-mac
+          path: dist/*
+
+      - name: Vorabversion aktualisieren
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG=app-latest; TITLE="Archiver App (Testversion)"
+          NOTES="Testversion ${{ steps.out.outputs.version }} aus ${GITHUB_REF_NAME} (${GITHUB_SHA::7}). Nicht von Apple signiert: beim ersten Start unter Systemeinstellungen → Datenschutz & Sicherheit auf „Trotzdem öffnen“ klicken."
+          gh release view "$TAG" >/dev/null 2>&1 || gh release create "$TAG" --prerelease --title "$TITLE" --notes "$NOTES" --target "$GITHUB_SHA"
+          gh release edit "$TAG" --notes "$NOTES"
+          gh release upload "$TAG" dist/* --clobber
+
+      # Auto-Update: Paket, Signatur und latest.json ins öffentliche
+      # Repository Archiver-Releases. Nur mit beiden Secrets.
+      - name: Update veröffentlichen
+        env:
+          GH_TOKEN: ${{ secrets.RELEASES_TOKEN }}
+        if: env.PUBLISH_UPDATE == 'true'
+        run: |
+          VERSION=${{ steps.out.outputs.version }}
+          REPO=lr-practice/Archiver-Releases
+          TAG=v$VERSION
+          BUNDLE=app/src-tauri/target/release/bundle/macos
+          TGZ=$(ls "$BUNDLE"/*.app.tar.gz | head -1)
+          mkdir -p upd
+          cp "$TGZ" "upd/Archiver-$VERSION-mac-arm64.app.tar.gz"
+          cp "dist/Archiver-$VERSION-mac-arm64.dmg" upd/
+          # Erweiterung für Tester:innen, fester Name für einen stabilen Link.
+          (cd extension && zip -qr ../upd/Archiver-Extension.zip . -x '.*')
+          SIG=$(cat "$TGZ.sig")
+          URL="https://github.com/$REPO/releases/download/$TAG/Archiver-$VERSION-mac-arm64.app.tar.gz"
+          jq -n --arg v "$VERSION" --arg s "$SIG" --arg u "$URL" --arg d "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            '{version:$v, notes:"", pub_date:$d, platforms:{"darwin-aarch64":{signature:$s, url:$u}}}' > upd/latest.json
+          cat upd/latest.json
+          # Leeres Repository: erst eine README anlegen, sonst gibt es keine Releases.
+          if ! gh api "repos/$REPO/commits?per_page=1" >/dev/null 2>&1; then
+            printf '# Archiver Releases\n\nUpdates für die Archiver-App (signiert, automatisch geladen).\n' > README.md
+            gh api -X PUT "repos/$REPO/contents/README.md" -f message="README" -f content="$(base64 < README.md | tr -d '\n')"
+          fi
+          gh release view "$TAG" -R "$REPO" >/dev/null 2>&1 || gh release create "$TAG" -R "$REPO" --title "Archiver $VERSION" --notes-file docs/beta.md --latest
+          gh release upload "$TAG" upd/* -R "$REPO" --clobber
+          gh release edit "$TAG" -R "$REPO" --latest --notes-file docs/beta.md

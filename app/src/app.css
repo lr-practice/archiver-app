@@ -1,0 +1,3832 @@
+/* app.css — Archiver für den Mac. Dunkel, halbtransparent über dem Schreibtisch
+   (macOS-Unschärfe aus tauri.conf.json), Geist und Geist Mono, eine schwebende
+   Navigation unten. Zonen bleiben Ablageziele: Zeilen, Karten, Leiste beim Ziehen. */
+
+:root {
+  --bg: rgba(12, 12, 12, 0.42);
+  --card-bg: rgba(20, 20, 20, 0.28);
+  --panel: rgba(24, 24, 24, 0.96);
+  --line: rgba(var(--ink-rgb), 0.1);
+  --dash: rgba(var(--ink-rgb), 0.35);
+  --text: var(--ink);
+  --muted: #8a8a8e;
+  --accent: #2d5aeb;
+  --danger: #e5484d;
+  --thumb: 120px;
+  --ink: #ffffff;
+  --ink-rgb: 255, 255, 255;
+  --ink-inverse: #0f0f0f;
+  --thumb-bg: #262626;
+  --sheet-bg: #1c1c1c;
+  --lightbox-bg: rgba(0, 0, 0, 0.9);
+  --menu-bg: rgba(40, 40, 40, 0.97);
+  --menu-shadow: 0 14px 44px rgba(0, 0, 0, 0.5), inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+  color-scheme: dark;
+}
+
+
+/* Ohne Transparenz (z. B. Linux): solider Hintergrund wie die Vollansicht */
+html:not(.mac) {
+  --bg: #0f0f0f;
+  --card-bg: rgba(20, 20, 20, 0.85);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font: 13px/1.4 -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", sans-serif;
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+  -webkit-user-select: none;
+  overflow: hidden;
+}
+
+button,
+input,
+select {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+[hidden] {
+  display: none !important;
+}
+
+.muted {
+  color: var(--muted);
+}
+
+/* ---- Buttons ---- */
+
+.btn {
+  background: transparent;
+  border: 1px solid var(--dash);
+  padding: 9px 14px;
+  border-radius: 0;
+  text-align: left;
+}
+
+.btn:hover {
+  border-color: var(--ink);
+}
+
+.btn.primary {
+  background: var(--ink);
+  color: var(--ink-inverse);
+  border-color: var(--ink);
+}
+
+.btn.primary:hover {
+  background: #dcdcdc;
+}
+
+.btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* ---- Willkommen ---- */
+
+.welcome {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px;
+}
+
+.welcome-inner {
+  max-width: 520px;
+  outline: 1px dashed var(--dash);
+  outline-offset: -1px;
+  background: var(--card-bg);
+  padding: 44px 40px;
+}
+
+.welcome-mark {
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.welcome h1 {
+  font-size: 30px;
+  line-height: 1.12;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  margin: 18px 0 12px;
+}
+
+.welcome p {
+  color: var(--muted);
+  margin: 0 0 28px;
+  font-size: 14px;
+}
+
+.welcome .welcome-status {
+  font-family: "Geist Mono", ui-monospace, monospace;
+  font-size: 12px;
+  margin-top: -14px;
+}
+
+.welcome .welcome-status::before {
+  content: "○ ";
+}
+
+.welcome .welcome-status.ok {
+  color: var(--ink);
+}
+
+.welcome .welcome-status.ok::before {
+  content: "● ";
+}
+
+.welcome-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* ---- Grundlayout: Toolbar oben, darunter die Zonen-Kacheln ---- */
+
+.app {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ---- Zonen-Kacheln (wie die Vollansicht der Extension) ----
+   Spalten = Anzahl Zonen (max. 4), ab der fünften eine weitere Reihe.
+   --cols/--rows setzt app.js. Jede Kachel scrollt für sich. */
+
+.zones-grid {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: repeat(var(--cols, 4), minmax(0, 1fr));
+  grid-template-rows: repeat(var(--rows, 1), minmax(0, 1fr));
+  gap: 0;
+}
+
+.zone-card {
+  background: var(--card-bg);
+  outline: 1px dashed var(--dash);
+  outline-offset: -1px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+  transition: background 0.15s ease, outline-color 0.15s ease;
+}
+
+.zone-card.drop-active {
+  background: rgba(32, 48, 79, 0.85);
+  outline: 1px dashed var(--accent);
+}
+
+.zone-card-name {
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.zone-card-name .parent {
+  color: var(--muted);
+  font-weight: 400;
+}
+
+.zone-card-name input {
+  width: 100%;
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid var(--accent);
+  border-radius: 0;
+  padding: 2px 4px;
+  font-weight: 600;
+  outline: none;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.zone-card-grid {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 10px;
+  outline: none;
+}
+
+.zone-card-items {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(var(--thumb), 1fr));
+  gap: 6px;
+  align-content: start;
+}
+
+/* Originalformat: Spalten wie ein Moodboard */
+.original .zone-card-items {
+  display: block;
+  column-width: var(--thumb);
+  column-gap: 6px;
+}
+
+.card {
+  position: relative;
+  overflow: hidden;
+  background: var(--thumb-bg);
+  cursor: grab;
+}
+
+.original .card {
+  break-inside: avoid;
+  margin-bottom: 6px;
+}
+
+.card img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  pointer-events: none;
+  -webkit-user-drag: none;
+}
+
+.original .card img {
+  height: auto;
+}
+
+.card.selected {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.card-badge {
+  position: absolute;
+  left: 4px;
+  bottom: 4px;
+  padding: 2px 5px;
+  background: rgba(0, 0, 0, 0.65);
+  font-size: 10px;
+  color: #ddd;
+  max-width: calc(100% - 8px);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+
+.card:hover .card-badge {
+  opacity: 1;
+}
+
+/* PDF und Video: Seitenzahl bzw. Dauer, immer sichtbar */
+.card-media {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  padding: 2px 5px;
+  border-radius: min(3px, var(--r-sm));
+  background: rgba(0, 0, 0, 0.65);
+  color: #eee;
+  font-family: "Geist Mono", ui-monospace, monospace;
+  font-size: 10px;
+  letter-spacing: 0.02em;
+  pointer-events: none;
+}
+
+.zone-card-empty {
+  color: #6b6b6f;
+  font-size: 11px;
+  text-align: center;
+  padding: 20px 0;
+}
+
+/* ---- Infopanel: schwebt rechts unter der Toolbar (wie in der Extension) ---- */
+
+.info-panel {
+  position: fixed;
+  top: 60px;
+  right: 14px;
+  width: 320px;
+  max-height: calc(100vh - 78px);
+  overflow-y: auto;
+  z-index: 10;
+  background: var(--panel);
+  outline: 1px dashed var(--dash);
+  outline-offset: -1px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+  padding: 16px;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.info-preview {
+  background: rgba(0, 0, 0, 0.35);
+  aspect-ratio: 4 / 3;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 14px;
+}
+
+.info-preview img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  display: block;
+}
+
+.info-name {
+  font-size: 14px;
+  font-weight: 600;
+  word-break: break-word;
+  margin-bottom: 14px;
+}
+
+/* Textkarte: Zitat zum Markieren und Kopieren */
+.info-quote,
+.lb-quote {
+  padding: 10px 0 8px;
+  border-top: 1px solid var(--line);
+}
+
+.info-quote {
+  margin-bottom: 14px;
+  border-bottom: 1px solid var(--line);
+}
+
+.quote-text {
+  max-height: 240px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  line-height: 1.45;
+  user-select: text;
+  -webkit-user-select: text;
+  cursor: text;
+}
+
+.lb-link.quote-copy {
+  margin: 8px 0 0;
+}
+
+.info-panel dl {
+  margin: 0;
+  display: grid;
+  grid-template-columns: 92px minmax(0, 1fr);
+  gap: 7px 10px;
+}
+
+.info-panel dt {
+  color: var(--muted);
+}
+
+.info-panel dd {
+  margin: 0;
+  word-break: break-word;
+}
+
+.info-panel a {
+  color: var(--text);
+  text-decoration: underline;
+  text-decoration-color: var(--dash);
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.info-panel a:hover {
+  text-decoration-color: var(--ink);
+}
+
+.info-panel .domain {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.info-panel select {
+  width: 100%;
+  appearance: none;
+  -webkit-appearance: none;
+  background: rgba(0, 0, 0, 0.35)
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%238a8a8f'/%3E%3C/svg%3E")
+    no-repeat right 8px center;
+  border: 1px solid var(--line);
+  border-radius: 0;
+  padding: 5px 24px 5px 6px;
+}
+
+.info-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 18px;
+}
+
+.info-actions .btn.danger:hover {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.info-multi {
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 14px;
+}
+
+.info-hint {
+  white-space: pre-line;
+  margin: 0;
+  line-height: 1.7;
+}
+
+/* ---- Lightbox ---- */
+
+.lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  background: var(--lightbox-bg);
+  display: flex;
+  flex-direction: column;
+}
+
+/* Bild als Ebene wie im Betrachter: verschieben und zoomen per transform */
+.lightbox-stage {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  touch-action: none;
+}
+
+.lightbox-stage img {
+  position: absolute;
+  left: 0;
+  top: 0;
+  max-width: none;
+  transform-origin: 0 0;
+  transition: opacity 0.15s ease;
+  -webkit-user-drag: none;
+}
+
+.lightbox-stage img.anim {
+  transition: opacity 0.15s ease, transform 0.2s ease;
+}
+
+.lightbox-stage img.loading {
+  opacity: 0;
+}
+
+.lightbox.zoomed .lightbox-stage {
+  cursor: grab;
+}
+
+.lightbox-stage.dragging {
+  cursor: grabbing !important;
+}
+
+/* Leiste wie im Betrachter (viewer.css): ‹ 1 / 12 › | Name | Zoom | Info | ● Archiver */
+.lb-bar {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px;
+  border-radius: var(--r-lg);
+  background: var(--p-pill);
+  color: var(--p-text);
+  -webkit-backdrop-filter: blur(24px) saturate(1.4);
+  backdrop-filter: blur(24px) saturate(1.4);
+  box-shadow: 0 14px 44px rgba(0, 0, 0, 0.5), inset 0 0 0 1px rgba(var(--ink-rgb), 0.06);
+  max-width: calc(100% - 32px);
+  transition: left 0.26s ease;
+}
+
+html.light .lb-bar {
+  box-shadow: 0 10px 34px rgba(0, 0, 0, 0.12), inset 0 0 0 1px rgba(20, 20, 20, 0.08);
+}
+
+.lb-nav {
+  bottom: 22px;
+}
+
+.lightbox.info-open .lb-bar {
+  left: calc((100% - min(380px, 42vw)) / 2);
+}
+
+.lb-group {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.lb-btn {
+  height: 32px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 14px;
+  border: none;
+  border-radius: var(--r-sm);
+  background: transparent;
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: default;
+}
+
+.lb-btn:hover {
+  background: rgba(var(--ink-rgb), 0.07);
+}
+
+.lb-btn.active {
+  background: rgba(var(--ink-rgb), 0.15);
+}
+
+.lb-arrow {
+  padding: 0 10px;
+  font-size: 16px;
+}
+
+.lb-sep {
+  width: 1px;
+  height: 16px;
+  margin: 0 6px;
+  background: var(--line);
+}
+
+.lb-count {
+  min-width: 52px;
+  text-align: center;
+  color: var(--p-dim);
+  font-family: "Geist Mono", ui-monospace, monospace;
+  font-size: 12px;
+}
+
+.lb-name {
+  padding: 0 10px;
+  min-width: 0;
+  max-width: 320px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--p-dim);
+}
+
+.lb-zoom {
+  min-width: 64px;
+  justify-content: center;
+  color: var(--p-dim);
+  font-family: "Geist Mono", ui-monospace, monospace;
+  font-size: 11px;
+  font-weight: 400;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.lb-zoom:hover {
+  color: var(--p-text);
+}
+
+/* „● Archiver“: in der App ist das Bild immer schon abgelegt, also blau.
+   Klick klappt „Ablegen in“ auf (in eine andere Zone verschieben). */
+.lb-action {
+  margin-left: 2px;
+  background: var(--accent);
+  color: #fff;
+}
+
+.lb-action:hover,
+.lb-action.active {
+  background: #3d68f0;
+}
+
+.lb-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #fff;
+}
+
+/* ---- Ablegen in: Zonen über der Leiste ---- */
+
+.lb-zones {
+  bottom: 70px;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 4px;
+  padding: 6px;
+  max-width: calc(100% - 48px);
+}
+
+.lightbox.info-open .lb-zones {
+  max-width: calc(100% - min(380px, 42vw) - 48px);
+}
+
+.lb-mono {
+  padding: 0 8px 0 6px;
+  color: var(--p-dim);
+  font-family: "Geist Mono", ui-monospace, monospace;
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.lb-chip {
+  display: flex;
+  align-items: center;
+  padding: 9px 14px;
+  border: none;
+  border-radius: var(--r-md);
+  outline: 1px dashed rgba(var(--ink-rgb), 0.22);
+  outline-offset: -1px;
+  background: transparent;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: default;
+}
+
+.lb-chip:hover {
+  background: rgba(45, 90, 235, 0.2);
+  outline: 1px dashed var(--accent);
+}
+
+.lb-chip.current {
+  opacity: 0.4;
+  pointer-events: none;
+}
+
+.lb-chip .zone-card-name {
+  font-size: 13px;
+}
+
+.lb-chip .parent {
+  color: var(--p-dim);
+}
+
+.lb-key {
+  margin-right: 8px;
+  color: var(--p-dim);
+  font-family: "Geist Mono", ui-monospace, monospace;
+  font-size: 11px;
+  font-weight: 400;
+}
+
+/* ---- Info: Spalte rechts wie im Betrachter ---- */
+
+.lb-info {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 2;
+  width: min(380px, 42vw);
+  overflow-y: auto;
+  padding: 44px 20px 90px;
+  background: var(--sheet-bg);
+  color: var(--p-text);
+  transform: translateX(100%);
+  transition: transform 0.26s ease;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.lightbox.info-open .lb-info {
+  transform: none;
+}
+
+.lb-info-head {
+  margin: 0 4px 22px;
+  font-size: 22px;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+  word-break: break-word;
+}
+
+.lb-info-head .lead,
+.lb-block-title,
+.lb-row-label {
+  color: var(--p-dim);
+}
+
+.lb-block {
+  margin-bottom: 14px;
+  padding: 12px 14px 2px;
+  border-radius: var(--r-lg);
+  background: rgba(var(--ink-rgb), 0.04);
+}
+
+.lb-block-title {
+  padding-bottom: 8px;
+}
+
+.lb-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 0;
+  border-top: 1px solid var(--line);
+}
+
+.lb-row-label {
+  flex: none;
+}
+
+.lb-row-value {
+  min-width: 0;
+  text-align: right;
+  word-break: break-word;
+}
+
+.lb-link {
+  margin: 2px 4px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: inherit;
+  text-decoration: underline;
+  text-decoration-color: rgba(var(--ink-rgb), 0.3);
+  text-underline-offset: 3px;
+  cursor: default;
+}
+
+.lb-link:hover {
+  text-decoration-color: currentColor;
+}
+
+.lb-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 18px;
+}
+
+/* ---- Dialog ---- */
+
+.modal {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.dialog {
+  width: 520px;
+  max-width: calc(100% - 40px);
+  background: var(--panel);
+  outline: 1px dashed var(--dash);
+  outline-offset: -1px;
+  padding: 22px 24px 20px;
+}
+
+.dialog h3 {
+  margin: 0 0 16px;
+  font-size: 16px;
+}
+
+.dialog section {
+  padding: 14px 0;
+  border-top: 1px dashed var(--line);
+}
+
+.dialog h4 {
+  margin: 0 0 6px;
+  font-size: 13px;
+}
+
+.dialog p {
+  margin: 0 0 12px;
+  color: #b9b9be;
+}
+
+.dialog .row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.dialog .path {
+  font-size: 11px;
+  color: var(--muted);
+  margin-bottom: 10px;
+  word-break: break-all;
+}
+
+.dialog-foot {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 12px;
+  border-top: 1px dashed var(--line);
+}
+
+/* ---- Toasts ---- */
+
+.toasts {
+  position: fixed;
+  left: 50%;
+  bottom: 22px;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  z-index: 40;
+  pointer-events: none;
+}
+
+.toast {
+  background: rgba(45, 90, 235, 0.95);
+  color: var(--ink);
+  padding: 8px 16px;
+  font-size: 12px;
+  font-weight: 600;
+  opacity: 0;
+  transform: translateY(6px);
+  transition: opacity 0.18s ease, transform 0.18s ease;
+}
+
+.toast.visible {
+  opacity: 1;
+  transform: none;
+}
+
+.toast.error {
+  background: var(--danger);
+}
+
+/* ---- Übersicht: nur Zonen-Kacheln, ohne Bilder ---- */
+
+/* ---- Zonen-Menü (⋯) ---- */
+
+.zone-menu-wrap {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.zone-menu-btn {
+  width: 26px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-size: 16px;
+  line-height: 1;
+  opacity: 0;
+  transition: opacity 0.12s ease, color 0.12s ease;
+}
+
+.zone-menu-btn:hover {
+  color: var(--text);
+}
+
+.zone-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 20;
+  min-width: 190px;
+  display: flex;
+  flex-direction: column;
+  padding: 4px;
+  background: var(--panel);
+  outline: 1px dashed var(--dash);
+  outline-offset: -1px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+}
+
+.zone-menu-item {
+  padding: 7px 10px;
+  border: none;
+  background: transparent;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.zone-menu-item:hover {
+  background: rgba(var(--ink-rgb), 0.08);
+}
+
+.zone-menu-item.danger {
+  color: var(--danger);
+}
+
+.zone-menu-item.danger.armed {
+  background: var(--danger);
+  color: var(--ink);
+}
+
+/* ---- Startanimation: dunkle Fläche, „Archiver“ gleitet von links herein,
+   die Unterzeile folgt, der Text blendet aus, dann die Fläche ---- */
+
+.splash {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--splash-bg, #000);
+  transition: opacity 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.splash.done {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* Eine Zeile, eine Größe: „Archiver“ und rechts daneben die Unterzeile */
+.splash-text {
+  display: flex;
+  align-items: baseline;
+  gap: 0.45em;
+  font-size: 19px;
+}
+
+.splash-word,
+.splash-sub {
+  opacity: 0;
+}
+
+/* Startet erst, wenn das Fenster sichtbar ist (app.js, playSplash) */
+.splash.play .splash-text {
+  animation: splash-out 0.45s ease 2.05s forwards;
+}
+
+.splash.play .splash-word {
+  animation: splash-slide 1.05s cubic-bezier(0.16, 1, 0.3, 1) 0.15s both;
+}
+
+.splash.play .splash-sub {
+  animation: splash-rise 0.7s cubic-bezier(0.16, 1, 0.3, 1) 0.85s both;
+}
+
+.splash-word,
+.splash-sub {
+  font-family: "Geist", -apple-system, BlinkMacSystemFont, sans-serif;
+  font-size: 1em;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+}
+
+.splash-word {
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.splash-sub {
+  font-weight: 400;
+  color: rgba(var(--ink-rgb), 0.5);
+}
+
+@keyframes splash-slide {
+  from {
+    opacity: 0;
+    transform: translateX(-24px);
+    clip-path: inset(0 100% 0 0);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+    clip-path: inset(0 0 0 0);
+  }
+}
+
+@keyframes splash-rise {
+  from {
+    opacity: 0;
+    transform: translateX(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes splash-out {
+  to {
+    opacity: 0;
+    transform: translateX(14px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .splash.play .splash-text,
+  .splash.play .splash-word,
+  .splash.play .splash-sub {
+    animation-duration: 0.01s;
+    animation-delay: 0s;
+  }
+}
+
+/* ======================================================================
+   Layout: Startseite (Index, Vorschau, Karten), Zonenansicht, schwebende
+   Navigation. Inhalte scrollen als eine Seite.
+   ====================================================================== */
+
+.zones-grid:not(.original) .card {
+  aspect-ratio: 1 / 1;
+}
+
+.zone-menu-btn:focus-visible,
+.zone-menu-wrap:has(.zone-menu) .zone-menu-btn {
+  opacity: 1;
+}
+
+@font-face {
+  font-family: "Geist";
+  src: url("fonts/Geist-Variable.woff2") format("woff2");
+  font-weight: 100 900;
+  font-display: block;
+}
+
+@font-face {
+  font-family: "Geist Mono";
+  src: url("fonts/GeistMono-Regular.woff2") format("woff2");
+  font-weight: 400;
+  font-display: block;
+}
+
+:root {
+  --p-text: #ededed;
+  --p-dim: #8c8c8c;
+  --p-faint: #5e5e5e;
+  --p-rule: rgba(var(--ink-rgb), 0.1);
+  --p-rule-strong: rgba(var(--ink-rgb), 0.55);
+  --p-pill: rgba(52, 52, 52, 0.82);
+  --p-mono: "Geist Mono", ui-monospace, "SF Mono", monospace;
+  --p-pad: 40px;
+}
+
+html.mac {
+  --bg: rgba(16, 16, 16, 0.6);
+}
+
+html:not(.mac) {
+  --bg: #161616;
+}
+
+html,
+body {
+  font-family: "Geist", -apple-system, BlinkMacSystemFont, sans-serif;
+  font-size: 13px;
+  font-feature-settings: "ss01" 0;
+}
+
+.app {
+  display: block;
+  position: relative;
+}
+
+.p-drag {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 38px;
+  z-index: 6;
+}
+
+.zones-grid {
+  display: block;
+  height: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.p-page {
+  padding: 58px var(--p-pad) 140px;
+  min-height: 100%;
+}
+
+/* ---- Kopf: Titel weiß, Satz grau, eine Zeile Typografie ---- */
+
+.p-head {
+  margin: 0;
+  max-width: 780px;
+  font-size: 24px;
+  line-height: 1.18;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+}
+
+.p-head-title.zone-card-name {
+  display: inline;
+  font-size: inherit;
+  font-weight: inherit;
+}
+
+.p-head-title input {
+  font: inherit;
+  letter-spacing: inherit;
+  width: 12em;
+}
+
+.p-head-text {
+  color: var(--p-dim);
+}
+
+.p-mono {
+  font-family: var(--p-mono);
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--p-dim);
+  white-space: nowrap;
+}
+
+.p-mono.strong {
+  color: var(--p-text);
+}
+
+.p-mono.dim {
+  color: var(--p-faint);
+}
+
+.p-mono.right {
+  text-align: right;
+}
+
+.p-bar {
+  margin-top: 44px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding-bottom: 10px;
+}
+
+.p-flex {
+  flex: 1;
+}
+
+.p-chip {
+  padding: 2px 6px;
+  border: none;
+  background: transparent;
+  font-family: var(--p-mono);
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--p-faint);
+}
+
+.p-chip:hover {
+  color: var(--p-dim);
+}
+
+.p-chip.active {
+  color: var(--p-text);
+}
+
+.p-sizes {
+  display: flex;
+  margin-left: 10px;
+}
+
+/* ---- Filter: Farbpunkte und Chips unter der Ansichtsleiste ---- */
+
+.p-filters {
+  margin-top: 0;
+  flex-wrap: wrap;
+  row-gap: 6px;
+}
+
+.p-filter-gap {
+  width: 14px;
+}
+
+.p-colors {
+  display: flex;
+  gap: 5px;
+  padding-left: 6px;
+}
+
+.p-color {
+  width: 11px;
+  height: 11px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--dot);
+  box-shadow: inset 0 0 0 1px rgba(var(--ink-rgb), 0.18);
+  opacity: 0.55;
+  cursor: pointer;
+}
+
+.p-color:hover {
+  opacity: 1;
+}
+
+.p-color.active {
+  opacity: 1;
+  outline: 1px dashed var(--ink);
+  outline-offset: 2px;
+}
+
+/* ---- Finden: Filter, Motive und Quellen untereinander, Titel in einer Spalte ---- */
+
+.p-find-facets {
+  margin-top: 36px;
+  display: grid;
+  gap: 8px;
+}
+
+.p-find-facets .p-bar {
+  margin-top: 0;
+  padding-bottom: 0;
+  align-items: baseline;
+}
+
+.p-facet-title {
+  flex: 0 0 96px;
+}
+
+.p-facet-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+.p-find .p-find-facets + .p-bar {
+  margin-top: 28px;
+}
+
+/* ---- Index (D): Liste wie ein Werkverzeichnis ---- */
+
+.p-row {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr) 72px 96px minmax(210px, 46%) 26px;
+  column-gap: 16px;
+  align-items: center;
+  min-height: 42px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--p-rule);
+  font-size: 14px;
+  letter-spacing: -0.005em;
+  color: var(--p-text);
+}
+
+.p-index.compact .p-row {
+  grid-template-columns: 36px minmax(0, 1fr) 48px 26px;
+}
+
+.p-row-head {
+  min-height: 28px;
+  padding: 0;
+  align-items: end;
+  padding-bottom: 8px;
+  border-bottom-color: var(--p-rule);
+}
+
+.p-row.p-zone,
+.p-row.p-new {
+  cursor: default;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+
+.p-row.p-zone:hover {
+  background: rgba(var(--ink-rgb), 0.035);
+}
+
+.p-index.compact .p-row.p-zone {
+  color: var(--p-dim);
+}
+
+.p-index.compact .p-row.p-zone.current {
+  color: var(--p-text);
+  border-bottom-color: var(--p-rule-strong);
+}
+
+.p-row .zone-card-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: inherit;
+  font-weight: 400;
+}
+
+.p-row .zone-card-name .parent,
+.p-drop-chip .zone-card-name .parent,
+.p-section-head .zone-card-name .parent {
+  color: var(--p-faint);
+}
+
+.p-num {
+  font-variant-numeric: tabular-nums;
+  color: var(--p-dim);
+}
+
+.p-thumbs {
+  display: flex;
+  justify-content: flex-end;
+  gap: 3px;
+  height: var(--row-thumb, 26px);
+  overflow: hidden;
+}
+
+.p-thumbs img {
+  flex: 0 0 auto;
+  width: var(--row-thumb, 26px);
+  height: var(--row-thumb, 26px);
+  object-fit: cover;
+  background: var(--thumb-bg);
+}
+
+.p-row.p-new {
+  color: var(--p-faint);
+  border-bottom-style: dashed;
+}
+
+.p-row.p-new:hover,
+.p-row.p-new.editing {
+  color: var(--p-text);
+}
+
+.p-row .zone-menu-wrap {
+  justify-self: end;
+}
+
+.p-zone:hover .zone-menu-btn,
+.p-card:hover .zone-menu-btn,
+.p-card-row:hover .zone-menu-btn {
+  opacity: 1;
+}
+
+.p-new .zone-card-name input,
+.p-row .zone-card-name input {
+  width: 100%;
+  max-width: 320px;
+  padding: 3px 6px;
+  border: none;
+  outline: 1px dashed var(--dash);
+  background: rgba(var(--ink-rgb), 0.06);
+  font-size: inherit;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+/* Ablegen: gleiche Sprache wie die Zonen in der Extension */
+.drop-active {
+  background: rgba(45, 90, 235, 0.2) !important;
+  outline: 1px dashed var(--accent) !important;
+  outline-offset: -1px;
+  color: var(--ink) !important;
+}
+
+/* ---- Index + Vorschau (E) ---- */
+
+.p-split {
+  display: grid;
+  grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.25fr);
+  gap: 40px;
+  align-items: start;
+}
+
+.p-preview {
+  position: sticky;
+  top: 20px;
+  margin-top: -2px;
+}
+
+.p-preview-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  height: 28px;
+  padding-bottom: 8px;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.p-preview-title .p-head-text {
+  font-weight: 400;
+}
+
+.p-link {
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--p-dim);
+  font-size: 13px;
+}
+
+.p-link:hover {
+  color: var(--p-text);
+}
+
+.p-mosaic {
+  display: grid;
+  grid-template-columns: repeat(var(--mosaic-cols, 4), minmax(0, 1fr));
+  gap: 4px;
+  border-top: 1px solid var(--p-rule);
+  padding-top: 10px;
+}
+
+.p-mosaic-cell {
+  aspect-ratio: 1 / 1;
+  background: var(--thumb-bg);
+  overflow: hidden;
+}
+
+.p-mosaic-cell:first-child {
+  grid-column: span 2;
+  grid-row: span 2;
+  aspect-ratio: auto;
+}
+
+.p-mosaic-cell img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+}
+
+.p-empty {
+  grid-column: 1 / -1;
+  color: var(--p-faint);
+  padding: 40px 0;
+}
+
+/* ---- Karten (F) ---- */
+
+.p-cards {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.p-cards-col {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.p-card {
+  display: block;
+  border-radius: var(--r-lg);
+  background: rgba(var(--ink-rgb), 0.055);
+  overflow: hidden;
+  font-size: 15px;
+  letter-spacing: -0.01em;
+  transition: background 0.12s ease;
+}
+
+.p-card:hover {
+  background: rgba(var(--ink-rgb), 0.08);
+}
+
+/* Umsortieren: die gezogene Karte schwebt, die Zielkarte ist gestrichelt */
+.p-card[data-group] {
+  position: relative;
+  touch-action: none;
+}
+
+.p-card.lifted {
+  z-index: 40;
+  opacity: 0.85;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.55);
+  cursor: grabbing;
+  transition: none;
+}
+
+body.sorting,
+body.sorting * {
+  cursor: grabbing !important;
+  user-select: none;
+}
+
+/* Ziel beim Umsortieren: die ganze Karte gestrichelt und hervorgehoben */
+.p-card.drop-before,
+.p-card.drop-after {
+  outline: 1.5px dashed var(--ink);
+  outline-offset: 3px;
+  background: rgba(var(--ink-rgb), 0.08);
+}
+
+.p-card.drop-before::after,
+.p-card.drop-after::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  background: rgba(var(--ink-rgb), 0.14);
+  pointer-events: none;
+}
+
+.p-card-cover {
+  height: var(--cover, 170px);
+  display: grid;
+  gap: 2px;
+}
+
+.p-card-cover.trio {
+  grid-template-columns: 2fr 1fr;
+  grid-template-rows: 1fr 1fr;
+}
+
+.p-card-cover.trio img:first-child {
+  grid-row: span 2;
+}
+
+.p-card-cover img {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  display: block;
+  object-fit: cover;
+}
+
+.p-card-body {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 14px 16px 16px;
+}
+
+.p-card .zone-card-name {
+  font-size: inherit;
+  font-weight: 400;
+}
+
+.p-card-meta {
+  color: var(--p-dim);
+}
+
+.p-card-group {
+  padding: 14px 16px 4px;
+}
+
+.p-card-group:hover {
+  background: rgba(var(--ink-rgb), 0.055);
+}
+
+.p-card-group-title {
+  color: var(--p-dim);
+  padding-bottom: 12px;
+}
+
+.p-card-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 12px 6px 12px 0;
+  margin: 0 -6px 0 0;
+  border-top: 1px solid var(--p-rule);
+}
+
+.p-card-row:hover {
+  color: var(--ink);
+}
+
+.p-card-row-right {
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+}
+
+.p-card.p-new {
+  background: transparent;
+  outline: 1px dashed rgba(var(--ink-rgb), 0.18);
+  outline-offset: -1px;
+  padding: 14px 16px 16px;
+  color: var(--p-faint);
+}
+
+.p-card.p-new:hover,
+.p-card.p-new.editing {
+  color: var(--p-text);
+}
+
+/* ---- Zonenansicht (G), Alle Bilder, Suche ---- */
+
+.p-section.zone-card {
+  display: block;
+  background: transparent;
+  outline: none;
+  margin-top: 6px;
+}
+
+.p-section.zone-card.drop-active {
+  outline-offset: 4px;
+}
+
+.p-section-head {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  padding: 26px 0 10px;
+  font-size: 14px;
+  cursor: default;
+}
+
+.p-section-head:hover .zone-card-name {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.p-section-head .zone-card-name {
+  font-size: inherit;
+  font-weight: 400;
+}
+
+.p-section .zone-card-grid {
+  overflow: visible;
+  padding: 0;
+}
+
+.p-section .zone-card-items {
+  gap: 6px;
+}
+
+.p-section .card {
+  background: rgba(var(--ink-rgb), 0.05);
+}
+
+.p-section .card.selected {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+
+.p-section .zone-card-empty {
+  text-align: left;
+  font-size: 13px;
+  padding: 24px 0;
+  color: var(--p-faint);
+}
+
+/* ---- Schwebende Navigation ---- */
+
+.p-nav {
+  position: fixed;
+  left: 50%;
+  bottom: 22px;
+  transform: translateX(-50%);
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px;
+  border-radius: var(--r-lg);
+  background: var(--p-pill);
+  -webkit-backdrop-filter: blur(24px) saturate(1.4);
+  backdrop-filter: blur(24px) saturate(1.4);
+  box-shadow: 0 14px 44px rgba(0, 0, 0, 0.5), inset 0 0 0 1px rgba(var(--ink-rgb), 0.06);
+}
+
+.p-nav-main {
+  display: flex;
+  gap: 2px;
+}
+
+.p-nav-btn,
+.p-nav-search {
+  height: 32px;
+  display: flex;
+  align-items: center;
+  padding: 0 14px;
+  border: none;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--p-text);
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: -0.005em;
+  white-space: nowrap;
+}
+
+.p-nav-btn:hover,
+.p-nav-search:hover {
+  background: rgba(var(--ink-rgb), 0.07);
+}
+
+.p-nav-btn.active {
+  background: rgba(var(--ink-rgb), 0.15);
+}
+
+.p-nav-zone {
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: default;
+}
+
+.p-nav-search {
+  cursor: text;
+}
+
+.p-nav-search input {
+  display: none;
+  width: 200px;
+  padding: 0;
+  border: none;
+  outline: none;
+  background: transparent;
+  font-size: 13px;
+  font-weight: 400;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.p-nav-search input::-webkit-search-cancel-button {
+  display: none;
+}
+
+.p-nav-search.open {
+  background: rgba(var(--ink-rgb), 0.15);
+}
+
+.p-nav-search.open span {
+  display: none;
+}
+
+.p-nav-search.open input {
+  display: block;
+}
+
+.p-nav-more {
+  position: relative;
+}
+
+.p-more-menu.zone-menu {
+  top: auto;
+  bottom: calc(100% + 10px);
+  right: -4px;
+  border-radius: var(--r-md);
+  outline: none;
+  background: var(--menu-bg);
+  box-shadow: var(--menu-shadow);
+}
+
+.zone-menu {
+  border-radius: var(--r-md);
+  outline: none;
+  background: var(--menu-bg);
+  box-shadow: var(--menu-shadow);
+}
+
+.zone-menu-item {
+  border-radius: var(--r-sm);
+  font-size: 13px;
+}
+
+.zone-menu-item.on::after {
+  content: " ✓";
+  color: var(--p-dim);
+}
+
+.p-more-note {
+  margin-top: 4px;
+  padding: 8px 10px 4px;
+  border-top: 1px solid var(--p-rule);
+  font-family: var(--p-mono);
+  font-size: 10px;
+  color: var(--p-faint);
+  line-height: 1.6;
+}
+
+/* ---- Zonenleiste beim Ziehen ---- */
+
+.p-dropbar {
+  position: fixed;
+  left: 50%;
+  bottom: 70px;
+  transform: translateX(-50%);
+  z-index: 31;
+  max-width: calc(100vw - 48px);
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 4px;
+  padding: 6px;
+  border-radius: var(--r-lg);
+  background: var(--p-pill);
+  -webkit-backdrop-filter: blur(24px) saturate(1.4);
+  backdrop-filter: blur(24px) saturate(1.4);
+  box-shadow: 0 14px 44px rgba(0, 0, 0, 0.5), inset 0 0 0 1px rgba(var(--ink-rgb), 0.06);
+}
+
+.p-dropbar > .p-mono {
+  padding: 0 8px 0 6px;
+}
+
+.p-drop-chip {
+  padding: 9px 14px;
+  border-radius: var(--r-md);
+  outline: 1px dashed rgba(var(--ink-rgb), 0.22);
+  outline-offset: -1px;
+  font-size: 13px;
+}
+
+.p-drop-chip .zone-card-name {
+  font-size: inherit;
+  font-weight: 500;
+}
+
+/* ---- Übrige Teile an die neue Anordnung anpassen ---- */
+
+.info-panel {
+  top: 46px;
+  right: 16px;
+  max-height: calc(100vh - 130px);
+  border-radius: var(--r-lg);
+  outline: none;
+  box-shadow: 0 14px 44px rgba(0, 0, 0, 0.5), inset 0 0 0 1px rgba(var(--ink-rgb), 0.06);
+}
+
+.toasts {
+  top: 14px;
+  bottom: auto;
+}
+
+.toast {
+  border-radius: var(--r-sm);
+  font-weight: 500;
+}
+
+@media (max-width: 1080px) {
+  .p-row {
+    grid-template-columns: 40px minmax(0, 1fr) 64px 88px 26px;
+  }
+  .p-row > :nth-child(5) {
+    display: none;
+  }
+  .p-index.compact .p-row > :nth-child(5) {
+    display: initial;
+  }
+  .p-split {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 24px;
+  }
+}
+
+/* ---- Runde 2: Pfad, Größenstufen, höhere Navigation ---- */
+
+.p-crumbs {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  height: 18px;
+  margin-bottom: 10px;
+  font-family: var(--p-mono);
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  color: var(--p-dim);
+}
+
+.p-crumb {
+  padding: 0;
+  border: none;
+  background: transparent;
+  font: inherit;
+  letter-spacing: inherit;
+  color: var(--p-dim);
+}
+
+button.p-crumb:hover {
+  color: var(--p-text);
+}
+
+.p-crumb.dim,
+.p-crumb-sep {
+  color: var(--p-faint);
+}
+
+.p-sizes {
+  align-items: center;
+  margin-left: 14px;
+}
+
+.p-steps {
+  display: flex;
+  gap: 3px;
+  padding: 0 2px;
+}
+
+.p-step {
+  width: 7px;
+  height: 7px;
+  padding: 0;
+  border: 1px solid var(--p-faint);
+  background: transparent;
+}
+
+.p-step.on {
+  background: var(--p-dim);
+  border-color: var(--p-dim);
+}
+
+.p-step:hover {
+  border-color: var(--p-text);
+}
+
+.p-nav {
+  bottom: 24px;
+  gap: 4px;
+  padding: 6px;
+  border-radius: var(--r-lg);
+}
+
+.p-nav-main {
+  gap: 4px;
+}
+
+.p-nav-btn,
+.p-nav-search {
+  height: 40px;
+  padding: 0 20px;
+  border-radius: var(--r-sm);
+  font-size: 13.5px;
+}
+
+/* Menü: drei Linien, gezeichnet statt Schriftzeichen */
+#navMore {
+  padding: 0 15px;
+  font-size: 0;
+  line-height: 0;
+}
+
+#navMore::before {
+  content: "";
+  display: block;
+  width: 17px;
+  height: 1.5px;
+  margin: 0 auto;
+  background: currentColor;
+  box-shadow: 0 -5px 0 currentColor, 0 5px 0 currentColor;
+}
+
+.p-dropbar {
+  bottom: 86px;
+}
+
+.p-page {
+  padding-bottom: 160px;
+}
+
+body.lightbox-open .p-nav,
+body.lightbox-open .p-dropbar {
+  display: none;
+}
+
+/* Große Stufen: alle Bilder gleich groß statt eines Aufmacherbilds */
+.p-mosaic.even .p-mosaic-cell:first-child {
+  grid-column: auto;
+  grid-row: auto;
+  aspect-ratio: 1 / 1;
+}
+
+/* ---- Runde 3: Pfad in der Navigation, Bibliothek als Home ---- */
+
+.p-nav-main {
+  align-items: center;
+}
+
+.p-nav-sep {
+  color: var(--p-faint);
+  font-size: 13px;
+  padding: 0 1px;
+}
+
+.p-nav-home {
+  font-weight: 600;
+}
+
+.p-nav-btn.dim {
+  color: var(--p-dim);
+  cursor: default;
+}
+
+.p-nav-btn.dim:hover {
+  background: transparent;
+}
+
+.p-more-label {
+  padding: 6px 10px 4px;
+  font-family: var(--p-mono);
+  font-size: 10px;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--p-faint);
+}
+
+.p-more-rule {
+  height: 1px;
+  margin: 4px 0;
+  background: var(--p-rule);
+}
+
+.p-nav-main .p-nav-zone,
+.p-nav-main .p-nav-home {
+  padding: 0 14px;
+}
+
+/* ---- Seiten: Einstellungen und Info gleiten von rechts herein ----
+   Die Übersicht weicht nach links aus, die Navigation wandert mit.
+   Typografisch reduziert wie in der Extension. */
+
+:root {
+  --sheet-w: min(560px, 46vw);
+  --sheet-ease: cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
+.p-sheet {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 25;
+  width: var(--sheet-w);
+  overflow-y: auto;
+  padding: 44px 20px 40px;
+  background: var(--sheet-bg);
+  box-shadow: inset 1px 0 0 var(--p-rule);
+  transform: translateX(100%);
+  visibility: hidden;
+  transition: transform 0.26s var(--sheet-ease), visibility 0s linear 0.26s;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.page-open .p-sheet {
+  transform: none;
+  visibility: visible;
+  transition: transform 0.26s var(--sheet-ease);
+}
+
+.zones-grid {
+  transition: margin-right 0.26s var(--sheet-ease);
+}
+
+.page-open .zones-grid {
+  margin-right: var(--sheet-w);
+}
+
+.p-nav {
+  transition: left 0.26s var(--sheet-ease);
+}
+
+.page-open .p-nav {
+  left: calc((100% - var(--sheet-w)) / 2);
+}
+
+.page-open .info-panel {
+  display: none;
+}
+
+.p-sheet .p-head {
+  margin: 0 4px 40px;
+}
+
+.p-block {
+  margin-bottom: 6px;
+  padding: 14px 16px 4px;
+  border-radius: var(--r-lg);
+  background: rgba(var(--ink-rgb), 0.045);
+}
+
+.p-block-title {
+  padding-bottom: 6px;
+  color: var(--p-dim);
+}
+
+.p-block-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 24px;
+  padding: 11px 0;
+  border-top: 1px solid var(--p-rule);
+}
+
+.p-block-title + .p-block-row {
+  border-top: none;
+}
+
+.p-block-main {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.p-block-side {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: baseline;
+  gap: 16px;
+  color: var(--p-dim);
+  text-align: right;
+}
+
+.p-choice {
+  display: inline-flex;
+  gap: 4px;
+  margin-right: -6px;
+}
+
+.p-block-text {
+  color: var(--p-dim);
+}
+
+.p-sheet-foot {
+  padding: 14px 4px;
+  color: var(--p-faint);
+}
+
+.p-sheet {
+  font-size: 15px;
+  line-height: 1.35;
+  letter-spacing: -0.01em;
+  color: var(--p-text);
+}
+
+.p-sheet .p-head {
+  font-size: 28px;
+  line-height: 1.12;
+  letter-spacing: -0.025em;
+}
+
+/* Originalansicht: CSS-Spalten schneiden alles ab, was über eine Karte
+   hinausragt (oben in der ersten Reihe war der Auswahlrahmen weg). Der
+   Rahmen liegt deshalb im Innenabstand der Karte, die Abstände bleiben 6 px. */
+.original .zone-card-items {
+  column-gap: 0;
+  margin: -3px;
+}
+
+/* Eigene Spalten (app.js, layoutMasonry): Reihenfolge läuft zeilenweise */
+.original .zone-card-items.p-masonry {
+  display: flex;
+  align-items: flex-start;
+  column-width: auto;
+}
+
+.p-masonry-col {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.original .card,
+.p-section .original .card {
+  padding: 3px;
+  margin-bottom: 0;
+  overflow: visible;
+  background: transparent;
+}
+
+.original .card img {
+  aspect-ratio: var(--ar, auto);
+  background: rgba(var(--ink-rgb), 0.05);
+}
+
+.original .card.selected,
+.p-section .original .card.selected {
+  outline: none;
+}
+
+.original .card.selected img {
+  outline: 2px solid var(--ink);
+  outline-offset: 1px;
+}
+
+.original .card-badge {
+  left: 7px;
+  bottom: 7px;
+}
+
+/* ---- Einstellungen: einklappbare Blöcke ---- */
+
+.p-block-toggle {
+  display: flex;
+  justify-content: space-between;
+  width: 100%;
+  margin: 0;
+  padding: 0 0 6px;
+  border: none;
+  background: none;
+  font: inherit;
+  text-align: left;
+  cursor: default;
+}
+
+.p-block-toggle:hover {
+  color: var(--p-text);
+}
+
+.p-block-sign::before {
+  content: "−";
+}
+
+.p-collapsible.collapsed .p-block-sign::before {
+  content: "+";
+}
+
+.p-collapsible.collapsed {
+  padding-bottom: 8px;
+}
+
+.p-collapsible.collapsed > :not(.p-block-title) {
+  display: none !important;
+}
+
+/* ---- Einstellungen: Zonen ---- */
+
+.p-zone-list .p-block-row:first-child {
+  border-top: none;
+}
+
+.p-zone-row {
+  align-items: center;
+  padding: 8px 0;
+}
+
+.p-mono.p-zone-hot {
+  color: var(--p-text);
+}
+
+.p-block-hint {
+  margin: 10px 0 2px;
+  font-size: 12px;
+  color: var(--p-dim);
+}
+
+.p-zone-main {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.p-handle {
+  color: var(--p-faint);
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.p-zone-name.editable {
+  cursor: text;
+}
+
+.p-zone-name input,
+.p-zone-new input {
+  width: 100%;
+  padding: 0;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: var(--p-text);
+  font: inherit;
+}
+
+.p-zone-row .p-block-side {
+  align-items: center;
+  gap: 4px;
+}
+
+.p-zone-row .p-mono {
+  width: 22px;
+  text-align: center;
+}
+
+.p-arrow {
+  padding: 2px 6px;
+  border: none;
+  background: none;
+  color: var(--p-dim);
+  font-size: 10px;
+}
+
+.p-arrow:hover {
+  color: var(--p-text);
+}
+
+.p-arrow:disabled {
+  opacity: 0.25;
+}
+
+.p-zone-add {
+  display: block;
+  margin: 4px 0 10px;
+  color: var(--p-dim);
+}
+
+.p-zone-new {
+  padding: 11px 0;
+  border-top: 1px solid var(--p-rule);
+}
+
+.p-zone-del {
+  margin-left: 6px;
+  font-size: 11px;
+}
+
+.p-zone-del.armed {
+  color: #ff6b5e;
+  font-size: 13px;
+}
+
+/* ---- Auswahl: gestrichelt in Weiß, der Rest tritt zurück ----
+   Weiß heißt ausgewählt, Blau heißt Ablageziel. */
+
+.card.selected,
+.p-section .card.selected {
+  outline: 1px dashed var(--ink);
+  outline-offset: 2px;
+}
+
+.original .card.selected,
+.p-section .original .card.selected {
+  outline: none;
+}
+
+.original .card.selected img {
+  outline: 1px dashed var(--ink);
+  outline-offset: 1px;
+}
+
+.card img {
+  transition: opacity 0.18s ease, filter 0.18s ease;
+}
+
+body.has-selection .card:not(.selected) img {
+  opacity: 0.4;
+  filter: saturate(0.6);
+}
+
+body.has-selection .card:not(.selected):hover img {
+  opacity: 0.75;
+}
+
+/* Tastenzahlen in „Ablegen in“ (1–9 legt die Auswahl dort ab) */
+.p-drop-key {
+  margin-right: 8px;
+  color: var(--p-faint);
+  font-family: var(--p-mono);
+  font-size: 11px;
+}
+
+/* „Mehr“ als Wort statt ⋯ */
+/* ---- Erster Start, Schritt 3 ---- */
+
+.onb-drop {
+  position: fixed;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 40;
+  width: min(440px, 80vw);
+  padding: 32px 32px 30px;
+  outline: 1px dashed var(--dash);
+  outline-offset: -1px;
+  background: var(--p-pill);
+  -webkit-backdrop-filter: blur(24px);
+  backdrop-filter: blur(24px);
+  pointer-events: none;
+}
+
+.onb-drop-mark {
+  font-family: "Geist Mono", ui-monospace, monospace;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+}
+
+.onb-drop-title {
+  margin: 14px 0 8px;
+  font-size: 24px;
+  line-height: 1.15;
+}
+
+.onb-drop-text {
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.onb-drop-close {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 16px;
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+/* ---- Einstiegstour ---- */
+
+.tour {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  background: rgba(0, 0, 0, 0.18);
+}
+
+.tour-ring {
+  position: fixed;
+  outline: 1.5px dashed var(--ink);
+  outline-offset: 0;
+  border-radius: var(--r-lg);
+  box-shadow: 0 0 0 100vmax rgba(0, 0, 0, 0.28);
+  pointer-events: none;
+  transition: all 0.25s cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
+.tour-card {
+  position: fixed;
+  width: 360px;
+  padding: 22px 22px 14px;
+  border-radius: var(--r-lg);
+  background: var(--menu-bg);
+  box-shadow: var(--menu-shadow);
+  -webkit-backdrop-filter: blur(24px);
+  backdrop-filter: blur(24px);
+}
+
+.tour-card.center {
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+}
+
+.tour-count {
+  font-family: var(--p-mono);
+  font-size: 11px;
+  color: var(--p-faint);
+}
+
+.tour-title {
+  margin: 10px 0 6px;
+  font-size: 19px;
+  line-height: 1.2;
+  color: var(--p-text);
+}
+
+.tour-text {
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--p-dim);
+}
+
+.tour-actions {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 16px;
+}
+
+/* ---- Update-Hinweis ---- */
+
+.p-update {
+  position: fixed;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 6px 6px 14px;
+  border-radius: var(--r-lg);
+  background: var(--p-pill);
+  -webkit-backdrop-filter: blur(24px) saturate(1.4);
+  backdrop-filter: blur(24px) saturate(1.4);
+  box-shadow: 0 14px 44px rgba(0, 0, 0, 0.5), inset 0 0 0 1px rgba(var(--ink-rgb), 0.06);
+  font-size: 13px;
+}
+
+.p-update-btn,
+.p-update-close {
+  padding: 5px 8px;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: inherit;
+  font-family: "Geist Mono", ui-monospace, monospace;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.p-update-btn:hover,
+.p-update-close:hover {
+  background: rgba(var(--ink-rgb), 0.08);
+}
+
+/* ---- Hell (0.17.1): neutrales Hellgrau, deckend, kein reines Weiß ----
+   html.light setzt app.js je nach Einstellung (Hell / Dunkel / System). */
+
+html.light {
+  --ink: #111111;
+  --ink-rgb: 17, 17, 17;
+  --ink-inverse: #ebebeb;
+  --bg: #ebebeb;
+  --card-bg: rgba(0, 0, 0, 0.045);
+  --panel: #ebebeb;
+  --muted: #6e6e6e;
+  --thumb-bg: #dcdcdc;
+  --sheet-bg: #e2e2e2;
+  --lightbox-bg: rgba(235, 235, 235, 0.97);
+  --p-text: #111111;
+  --p-dim: #6e6e6e;
+  --p-faint: #a0a0a0;
+  --p-pill: rgba(226, 226, 226, 0.92);
+  --menu-bg: rgba(240, 240, 240, 0.98);
+  --menu-shadow: 0 12px 36px rgba(0, 0, 0, 0.14), inset 0 0 0 1px rgba(0, 0, 0, 0.08);
+  --splash-bg: #ebebeb;
+  color-scheme: light;
+}
+
+/* Auf dem Mac halbtransparent über dem Glas, aber grau getönt statt fast weiß */
+html.mac.light {
+  --bg: rgba(214, 214, 214, 0.62);
+  --sheet-bg: rgba(226, 226, 226, 0.9);
+}
+
+html.light .p-update,
+html.light .p-nav,
+html.light .p-dropbar {
+  box-shadow: 0 10px 34px rgba(0, 0, 0, 0.12), inset 0 0 0 1px rgba(20, 20, 20, 0.08);
+}
+
+/* ---- Navigation oben links (0.7.6): Titelzeile mit „Archiver“ und Leiste ---- */
+
+:root {
+  --top-h: 52px;
+}
+
+.p-top {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 30;
+  height: var(--top-h);
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding-left: 84px;
+}
+
+/* Im echten Vollbild gibt es keine Fensterknöpfe */
+html.fullscreen .p-top {
+  padding-left: var(--p-pad);
+}
+
+.p-nav-brand {
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+/* Trennlinie zwischen „Archiver“ und den Reitern */
+.p-nav-rule {
+  width: 1px;
+  height: 16px;
+  margin: 0 4px;
+  background: rgba(var(--ink-rgb), 0.18);
+}
+
+.p-nav {
+  position: relative;
+  left: auto;
+  bottom: auto;
+  transform: none;
+  gap: 2px;
+  padding: 4px;
+  border-radius: var(--r-md);
+  box-shadow: inset 0 0 0 1px rgba(var(--ink-rgb), 0.06);
+}
+
+.p-nav-main {
+  gap: 2px;
+}
+
+.p-nav-btn,
+.p-nav-search {
+  height: 28px;
+  padding: 0 12px;
+}
+
+.p-drag {
+  height: var(--top-h);
+}
+
+#zones {
+  height: calc(100% - var(--top-h));
+  margin-top: var(--top-h);
+}
+
+.p-page {
+  padding-top: 26px;
+  padding-bottom: 60px;
+}
+
+.p-more-menu.zone-menu {
+  top: calc(100% + 8px);
+  bottom: auto;
+  left: -4px;
+  right: auto;
+}
+
+.info-panel {
+  top: calc(var(--top-h) + 8px);
+}
+
+.toasts {
+  top: calc(var(--top-h) + 8px);
+}
+
+.p-update {
+  top: 12px;
+  left: auto;
+  right: 16px;
+  transform: none;
+}
+
+body.lightbox-open .p-top {
+  display: none;
+}
+
+/* ---- Hot Zones: beim Ziehen fahren unten die ersten vier Zonen ein ---- */
+
+.p-dropbar {
+  left: 0;
+  right: 0;
+  bottom: 0;
+  transform: none;
+  max-width: none;
+  height: 30vh;
+  max-height: 260px;
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: stretch;
+  gap: 10px;
+  padding: 0 14px 14px;
+  border-radius: 0;
+  background: none;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  box-shadow: none;
+  animation: hot-in 0.16s ease-out;
+}
+
+.p-dropbar[hidden] {
+  display: none;
+}
+
+@keyframes hot-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+}
+
+.p-hot {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 16px 18px;
+  border-radius: var(--r-lg);
+  outline: none;
+  background: var(--menu-bg);
+  -webkit-backdrop-filter: blur(24px) saturate(1.4);
+  backdrop-filter: blur(24px) saturate(1.4);
+  box-shadow: var(--menu-shadow), inset 0 0 0 1px rgba(var(--ink-rgb), 0.07);
+  color: var(--p-text);
+  transition: transform 0.12s ease, background 0.12s ease;
+}
+
+.p-hot .p-drop-key {
+  margin: 0;
+}
+
+.p-hot .zone-card-name {
+  font-size: 17px;
+  font-weight: 400;
+  letter-spacing: -0.01em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.p-hot-hint {
+  font-size: 12px;
+  color: var(--p-dim);
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+
+/* Ziel: gleiche Sprache wie alle Ablageziele (.drop-active), dazu leicht angehoben */
+.p-dropbar .p-hot.drop-active {
+  background: rgba(45, 90, 235, 0.28) !important;
+  outline: 1px solid var(--accent) !important;
+  outline-offset: -1px;
+  transform: translateY(-4px);
+}
+
+/* Zone, in der die Objekte schon liegen: zurückgenommen, kein Ziel */
+.p-hot.is-home {
+  opacity: 0.45;
+}
+
+.p-hot.drop-active .p-hot-hint {
+  opacity: 1;
+  color: var(--p-text);
+}
+
+html.light .p-dropbar {
+  box-shadow: none;
+}
+
+html.light .p-nav {
+  box-shadow: inset 0 0 0 1px rgba(20, 20, 20, 0.08);
+}
+
+/* ---- Tour zum Mitmachen: Oberfläche bleibt bedienbar ---- */
+
+.tour.live {
+  background: none;
+  pointer-events: none;
+}
+
+.tour.live .tour-ring {
+  box-shadow: none;
+}
+
+.tour.live .tour-card {
+  pointer-events: auto;
+}
+
+.tour-card.corner {
+  top: calc(var(--top-h) + 12px);
+  right: 16px;
+  left: auto;
+  bottom: auto;
+  transform: none;
+}
+
+.tour-status {
+  margin-top: 10px;
+  font-family: var(--p-mono);
+  font-size: 11px;
+  color: var(--p-faint);
+}
+
+.tour-status.ok {
+  color: var(--p-text);
+}
+
+/* ---- Lightbox: PDF und Video ---- */
+
+.lb-media {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 1;
+  transition: right 0.26s ease;
+}
+
+.lightbox.info-open .lb-media {
+  right: min(380px, 42vw);
+}
+
+.pdf-scroll {
+  position: absolute;
+  inset: 0;
+  overflow: auto;
+  scrollbar-width: none;
+}
+
+/* Keine Bildlaufleiste: sie stand als weiße Linie am rechten Rand */
+.pdf-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+.pdf-pages {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: min-content;
+  padding-left: 24px;
+  padding-right: 24px;
+}
+
+.pdf-page {
+  flex: none;
+  transition: filter 0.18s ease-out;
+  background: #fff;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.35);
+}
+
+.pdf-page canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.lb-media .media-video {
+  position: absolute;
+  left: 32px;
+  right: 32px;
+  top: 48px;
+  bottom: 84px;
+  width: calc(100% - 64px);
+  height: calc(100% - 132px);
+  object-fit: contain;
+  background: transparent;
+  outline: none;
+}
+
+/* ---- Startseite per Tastatur: gewählte Zone ---- */
+
+.p-home .kbd-focus {
+  outline: 1px dashed var(--ink);
+  outline-offset: 2px;
+}
+
+.p-home .p-card-row.kbd-focus,
+.p-home .p-row.kbd-focus {
+  outline-offset: -2px;
+}
+
+
+/* ---- Textkarten als Text (wie die Karte der Extension: Kennung, Zitat, Quelle · Datum) ---- */
+
+.text-sheet {
+  --ts-pad: 7.8cqw;
+  container-type: inline-size;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  background: #f4f3ef;
+  color: #141414;
+  font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
+}
+
+.card-text .text-sheet {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.original .card-text {
+  aspect-ratio: 4 / 3;
+}
+
+.text-sheet .ts-label,
+.text-sheet .ts-foot {
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  color: #8a8a85;
+  letter-spacing: 0.02em;
+}
+
+.card-text .ts-label,
+.card-text .ts-foot {
+  font-size: max(7px, 1.6cqw);
+}
+
+.card-text .text-sheet {
+  padding: 0;
+}
+
+.card-text .ts-label {
+  padding: 6cqw 6cqw 0;
+}
+
+.card-text .ts-body {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  padding: 4cqw 6cqw 0;
+  font-weight: 500;
+  line-height: 1.28;
+  white-space: pre-wrap;
+  word-break: break-word;
+  -webkit-mask-image: linear-gradient(#000 70%, transparent);
+  mask-image: linear-gradient(#000 70%, transparent);
+}
+
+.card-text .short .ts-body {
+  font-size: 5.6cqw;
+}
+
+.card-text .medium .ts-body {
+  font-size: 4cqw;
+}
+
+.card-text .long .ts-body {
+  font-size: 3.2cqw;
+}
+
+.card-text .ts-foot {
+  padding: 3cqw 6cqw 5cqw;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Originalansicht: gleicher Abstand und gleiche gestrichelte Auswahl wie bei Bildern */
+.original .card-text .text-sheet {
+  inset: 3px;
+}
+
+.original .card-text.selected .text-sheet {
+  outline: 1px dashed var(--ink);
+  outline-offset: 1px;
+}
+
+.card-text .text-sheet {
+  transition: opacity 0.18s ease;
+}
+
+body.has-selection .card-text:not(.selected) .text-sheet {
+  opacity: 0.4;
+}
+
+body.has-selection .card-text:not(.selected):hover .text-sheet {
+  opacity: 0.75;
+}
+
+/* Lightbox: groß, markierbar, scrollt bei langen Texten */
+.lb-text {
+  position: absolute;
+  inset: 0;
+  overflow-y: auto;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding: 48px 32px 84px;
+  box-sizing: border-box;
+}
+
+.text-sheet.large {
+  width: min(860px, 100%);
+  margin: auto 0;
+  padding: 64px 64px 52px;
+  user-select: text;
+  -webkit-user-select: text;
+  cursor: text;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+}
+
+.text-sheet.large .ts-label,
+.text-sheet.large .ts-foot {
+  font-size: 13px;
+}
+
+.text-sheet.large .ts-body {
+  margin: 36px 0 44px;
+  font-weight: 500;
+  line-height: 1.28;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.text-sheet.large.short .ts-body {
+  font-size: 38px;
+}
+
+.text-sheet.large.medium .ts-body {
+  font-size: 27px;
+}
+
+.text-sheet.large.long .ts-body {
+  font-size: 21px;
+}
+
+.text-sheet.large ::selection {
+  background: rgba(45, 90, 235, 0.25);
+}
+
+/* Quelle steht schon unten auf der Textkarte */
+.card-text .card-badge {
+  display: none;
+}
+
+/* Menü: Kürzel in Klammern, leiser als der Eintrag */
+.p-more-key {
+  color: var(--p-dim, rgba(127, 127, 127, 0.8));
+}
+
+/* Einstellungen › Startton */
+.p-volume {
+  width: 160px;
+  accent-color: var(--accent);
+  vertical-align: middle;
+}
+
+/* Eckenrundung (Einstellungen › Anzeige › Radien): groß / mittel / klein */
+:root {
+  --r-lg: 8px;
+  --r-md: 6px;
+  --r-sm: 5px;
+}
+:root[data-radius="square"] { --r-lg: 0px; --r-md: 0px; --r-sm: 0px; }
+:root[data-radius="soft"] { --r-lg: 4px; --r-md: 3px; --r-sm: 3px; }
+:root[data-radius="xl"] { --r-lg: 14px; --r-md: 10px; --r-sm: 9px; }
+
+/* Audio: Cover bzw. Wellenform, darunter Titel und Player */
+.lb-media .media-audio {
+  position: absolute;
+  left: 32px;
+  right: 32px;
+  top: 48px;
+  bottom: 84px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+}
+.lb-media .media-audio-cover {
+  max-width: min(100%, 560px);
+  max-height: calc(100% - 120px);
+  min-height: 0;
+  object-fit: contain;
+  border-radius: var(--r-md);
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.3);
+}
+.lb-media .media-audio-meta {
+  text-align: center;
+  max-width: min(100%, 560px);
+}
+.lb-media .media-audio-title {
+  font-size: 15px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.lb-media .media-audio-sub {
+  margin-top: 3px;
+  font-size: 13px;
+  opacity: 0.6;
+}
+.lb-media .media-audio-player {
+  display: none;
+  width: min(100%, 560px);
+  outline: none;
+}
+
+/* ---- Details-Panel: gleiche Gestalt wie die Info-Spalte der Lightbox ---- */
+.info-panel {
+  width: min(380px, 42vw);
+  padding: 22px 20px 20px;
+  background: var(--sheet-bg);
+  color: var(--p-text);
+}
+
+.info-panel .lb-info-head {
+  margin-bottom: 18px;
+}
+
+.info-panel .lb-block:last-of-type {
+  margin-bottom: 16px;
+}
+
+.info-panel .lb-row-value select {
+  width: auto;
+  max-width: 100%;
+  background-color: transparent;
+  border: none;
+  padding: 0 18px 0 0;
+  background-position: right 2px center;
+  text-align: right;
+  color: inherit;
+  font: inherit;
+  cursor: default;
+}
+
+.info-panel .lb-link.danger:hover {
+  color: var(--danger);
+  text-decoration-color: var(--danger);
+}
+
+/* ---- Eigener Player (Audio, Video): obere Reihe der Navigationsleiste ---- */
+.lightbox.has-player .lb-nav {
+  flex-wrap: wrap;
+  justify-content: center;
+  row-gap: 0;
+  width: min(600px, calc(100% - 32px));
+}
+
+.mp-row {
+  flex: 0 0 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 10px 4px 0;
+  margin-bottom: 4px;
+  border-bottom: 1px solid rgba(var(--ink-rgb), 0.08);
+  color: var(--p-text);
+}
+
+.mp-btn {
+  flex: none;
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: none;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--p-text);
+  cursor: default;
+}
+
+.mp-btn:hover {
+  background: rgba(var(--ink-rgb), 0.08);
+}
+
+.mp-vol {
+  color: var(--p-dim);
+}
+
+.mp-vol:hover,
+.mp-vol.muted {
+  color: var(--p-text);
+}
+
+.mp-time {
+  flex: none;
+  min-width: 34px;
+  font-family: "Geist Mono", ui-monospace, monospace;
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  color: var(--p-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+.mp-time:last-of-type {
+  text-align: right;
+}
+
+.mp-track {
+  position: relative;
+  flex: 1;
+  height: 20px;
+  touch-action: none;
+}
+
+.mp-track::before,
+.mp-fill {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 50%;
+  height: 3px;
+  margin-top: -1.5px;
+  border-radius: 2px;
+}
+
+.mp-track::before {
+  right: 0;
+  background: rgba(var(--ink-rgb), 0.16);
+}
+
+.mp-fill {
+  width: 0;
+  background: var(--p-text);
+}
+
+.mp-knob {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  width: 11px;
+  height: 11px;
+  margin: -5.5px 0 0 -5.5px;
+  border-radius: 50%;
+  background: var(--p-text);
+  transform: scale(0.8);
+  transition: transform 0.12s ease;
+}
+
+.mp-track:hover .mp-knob,
+.mp-row.seeking .mp-knob {
+  transform: none;
+}
+
+.lb-zoom:empty {
+  display: none;
+}
+
+/* Platz für die höhere Leiste */
+.lightbox.has-player .lb-media .media-video {
+  bottom: 128px;
+  height: calc(100% - 48px - 128px);
+}
+
+.lightbox.has-player .lb-media .media-audio {
+  bottom: 128px;
+}
+
+.lightbox.has-player .lb-media .media-audio-cover {
+  max-height: calc(100% - 70px);
+}
+
+.lightbox.has-player .lb-zones {
+  bottom: 114px;
+}
+
+/* ---- Übersicht: vier Hot Zones als Karten, darunter der Index ---- */
+
+.p-hotrow {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 4px;
+}
+
+@media (max-width: 760px) {
+  .p-hotrow {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.p-hot-card {
+  position: relative;
+  touch-action: none;
+}
+
+.p-hot-card .p-card-cover.empty {
+  background: rgba(var(--ink-rgb), 0.04);
+}
+
+.p-hot-key {
+  position: absolute;
+  top: 10px;
+  left: 12px;
+  right: 12px;
+  display: flex;
+  justify-content: space-between;
+  pointer-events: none;
+}
+
+.p-hot-key .p-mono {
+  padding: 2px 6px;
+  border-radius: var(--r-sm);
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+}
+
+.p-hot-free {
+  color: var(--p-dim);
+}
+
+.p-hot-free .p-hot-key .p-mono {
+  background: transparent;
+  color: var(--p-dim);
+}
+
+.p-hot-free .p-card-cover.empty {
+  background: transparent;
+}
+
+.p-overview-bar {
+  margin-top: 34px;
+}
+
+/* Ziehen zum Tauschen: gezogenes Element schwebt, Ziel gestrichelt */
+.p-hot-card.lifted,
+.p-row.lifted {
+  position: relative;
+  z-index: 40;
+  opacity: 0.88;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.45);
+  transition: none;
+}
+
+.p-row.lifted {
+  background: var(--sheet-bg);
+}
+
+.p-hot-card.swap-target,
+.p-row.swap-target {
+  outline: 1.5px dashed var(--ink);
+  outline-offset: 3px;
+  background: rgba(var(--ink-rgb), 0.08);
+}
+
+/* Lightbox „Ablegen in“: Hot Zones zuerst, dann eine feine Linie */
+.lb-chip-sep {
+  width: 1px;
+  align-self: stretch;
+  margin: 4px 6px;
+  background: rgba(var(--ink-rgb), 0.18);
+}
+
+/* ---- PDF-Ersteller: links Einstellungen, rechts die Seiten als Papier ---- */
+
+.pdf-maker {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  grid-template-columns: 290px minmax(0, 1fr);
+  background: #141414;
+}
+
+html.light .pdf-maker {
+  background: #dedede;
+}
+
+.pdf-side {
+  padding: 56px 26px 24px;
+  background: var(--sheet-bg);
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  overflow-y: auto;
+}
+
+.pdf-title {
+  margin: 0 0 6px;
+  font-size: 22px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+}
+
+.pdf-field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.pdf-input {
+  font: inherit;
+  font-size: 14px;
+  color: var(--text);
+  background: rgba(var(--ink-rgb), 0.06);
+  border: 0;
+  border-radius: 6px;
+  padding: 8px 10px;
+  outline: none;
+}
+
+.pdf-input:focus {
+  box-shadow: inset 0 0 0 1px rgba(var(--ink-rgb), 0.3);
+}
+
+.pdf-layouts {
+  display: flex;
+  gap: 2px;
+}
+
+.pdf-layout {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  padding: 7px 5px 5px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.pdf-layout:hover,
+.pdf-layout.active {
+  background: rgba(var(--ink-rgb), 0.08);
+  color: var(--text);
+}
+
+.pdf-mini {
+  display: grid;
+  grid-template-columns: repeat(var(--cols), 1fr);
+  grid-template-rows: repeat(var(--rows), 1fr);
+  gap: 2px;
+  width: 34px;
+  height: 24px;
+  padding: 3px;
+  border-radius: 2px;
+  box-shadow: inset 0 0 0 1px currentColor;
+}
+
+.pdf-mini.portrait {
+  width: 24px;
+  height: 34px;
+}
+
+.pdf-mini i {
+  background: currentColor;
+  opacity: 0.55;
+}
+
+.pdf-chips {
+  display: flex;
+  gap: 2px;
+}
+
+.pdf-hint,
+.pdf-count {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--muted);
+}
+
+.pdf-actions {
+  margin-top: auto;
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.pdf-stage {
+  overflow-y: auto;
+  padding: 56px 44px 60px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 560px), 1fr));
+  gap: 32px;
+  align-content: start;
+}
+
+.pdf-stage.portrait {
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 380px), 1fr));
+}
+
+/* Seite: Maße in PDF-Punkten, umgerechnet über die Seitenbreite */
+.pdf-page {
+  --w: 842;
+  container-type: inline-size;
+  background: #ffffff;
+  color: #111111;
+  box-shadow: 0 10px 34px rgba(0, 0, 0, 0.28);
+  display: flex;
+  flex-direction: column;
+}
+
+.pdf-stage.portrait .pdf-page {
+  --w: 595;
+}
+
+.pdf-page > * {
+  --u: calc(100cqw / var(--w));
+}
+
+.pdf-head,
+.pdf-foot {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.pdf-head {
+  font-size: calc(var(--u) * 9);
+  padding: calc(var(--u) * 40) calc(var(--u) * 40) 0;
+  height: calc(var(--u) * 70);
+}
+
+.pdf-head b {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pdf-head span,
+.pdf-foot {
+  color: #8c8c8c;
+}
+
+.pdf-foot {
+  font-size: calc(var(--u) * 7.5);
+  padding: 0 calc(var(--u) * 40) calc(var(--u) * 28);
+  height: calc(var(--u) * 58);
+  align-items: flex-end;
+}
+
+.pdf-grid {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: repeat(var(--cols), minmax(0, 1fr));
+  grid-template-rows: repeat(var(--rows), minmax(0, 1fr));
+  gap: calc(var(--u) * 20);
+  padding: 0 calc(var(--u) * 40);
+}
+
+.pdf-cell {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  cursor: grab;
+  border-radius: 2px;
+}
+
+.pdf-maker.moving,
+.pdf-maker.moving .pdf-cell {
+  cursor: grabbing;
+}
+
+.pdf-cell.lifted {
+  outline: 1px dashed var(--accent);
+  outline-offset: calc(var(--u) * 5);
+  opacity: 0.85;
+}
+
+.pdf-box {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+}
+
+/* Wie im PDF: eingepasst, unten links an der Bildunterschrift */
+.pdf-box img {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  max-width: 100%;
+  max-height: 100%;
+  user-select: none;
+}
+
+.pdf-quote {
+  align-self: flex-start;
+  font-size: calc(var(--u) * 11);
+  line-height: 1.3;
+  overflow: hidden;
+  max-height: 100%;
+}
+
+.pdf-cap {
+  height: calc(var(--u) * 28);
+  padding-top: calc(var(--u) * 5);
+  display: flex;
+  flex-direction: column;
+  font-size: calc(var(--u) * 7.5);
+  line-height: 1.3;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.pdf-cap span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pdf-cap .dim {
+  color: #8c8c8c;
+}
+
+.pdf-page.no-captions .pdf-cap {
+  display: none;
+}
+
+.pdf-remove {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 22px;
+  height: 22px;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(17, 17, 17, 0.75);
+  color: #ffffff;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+
+.pdf-cell:hover .pdf-remove {
+  opacity: 1;
+}
+
+.pdf-maker.moving .pdf-remove {
+  display: none;
+}
+
+/* ---- 0.17.1: Hover in der Navigation als gleitende Fläche ----
+   app.js legt .p-nav-glide in die Leiste und schiebt sie unter den Button
+   unter der Maus. Die Buttons selbst färben beim Hover nicht mehr. */
+
+.p-nav > *,
+.p-nav-main > * {
+  position: relative;
+  z-index: 1;
+}
+
+.p-nav > .p-nav-glide {
+  position: absolute;
+  z-index: 0;
+  left: 0;
+  top: 0;
+  width: 0;
+  height: 0;
+  border-radius: var(--r-sm);
+  background: rgba(var(--ink-rgb), 0.08);
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    transform 0.28s cubic-bezier(0.3, 0.9, 0.3, 1),
+    width 0.28s cubic-bezier(0.3, 0.9, 0.3, 1),
+    height 0.28s cubic-bezier(0.3, 0.9, 0.3, 1),
+    opacity 0.18s ease-out;
+}
+
+.p-nav > .p-nav-glide.on {
+  opacity: 1;
+}
+
+/* Erstes Auftauchen: an Ort und Stelle einblenden, nicht von links hereinfahren */
+.p-nav > .p-nav-glide.jump {
+  transition: opacity 0.18s ease-out;
+}
+
+.p-nav.has-glide .p-nav-btn:hover,
+.p-nav.has-glide .p-nav-search:hover {
+  background-color: transparent;
+}
+
+.p-nav.has-glide .p-nav-btn.active:hover {
+  background: rgba(var(--ink-rgb), 0.15);
+}
+
+.p-nav-btn,
+.p-nav-search {
+  transition: background-color 0.18s ease-out, color 0.18s ease-out;
+}
+
+/* ---- „Archiver“: beim Hover wabert ein Blauverlauf langsam durch die Schrift ---- */
+
+.p-nav-brand {
+  --rainbow: linear-gradient(
+    100deg,
+    #7fd6ff 0%,
+    #3fa9ff 18%,
+    #b4e6ff 34%,
+    #2f6bff 52%,
+    #6fc4ff 70%,
+    #a9c8ff 86%,
+    #7fd6ff 100%
+  );
+}
+
+.p-nav .p-nav-brand:hover {
+  color: transparent;
+  background-image: var(--rainbow);
+  background-size: 180px 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  animation: brand-flow 7s ease-in-out infinite alternate;
+}
+
+html.light .p-nav-brand {
+  --rainbow: linear-gradient(
+    100deg,
+    #1a9be6 0%,
+    #0a6fe0 18%,
+    #4cb6f2 34%,
+    #1f4fd8 52%,
+    #2a9df0 70%,
+    #5a8ef0 86%,
+    #1a9be6 100%
+  );
+}
+
+@keyframes brand-flow {
+  from {
+    background-position: 0 0;
+  }
+  to {
+    background-position: -180px 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .p-nav-brand:hover {
+    animation: none;
+  }
+  .p-nav > .p-nav-glide {
+    transition: opacity 0.18s ease-out;
+  }
+}
+
+/* ---- 0.17.2: Rechtsklick-Menü auf Bildern ---- */
+
+.zone-menu.p-ctx-menu {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: auto;
+  bottom: auto;
+  z-index: 60;
+  min-width: 220px;
+}
+
+.p-ctx-menu .zone-menu-item {
+  display: flex;
+  align-items: baseline;
+  gap: 16px;
+}
+
+.p-ctx-key {
+  margin-left: auto;
+  font-family: var(--p-mono);
+  font-size: 11px;
+  color: var(--p-faint);
+}
+
+.p-ctx-menu .zone-menu-item.on {
+  color: var(--p-dim);
+  cursor: default;
+}
+
+.p-ctx-menu .zone-menu-item.on:hover {
+  background: transparent;
+}
+
+.p-ctx-menu .zone-menu-item.on::after {
+  content: none;
+}
+
+.p-ctx-zones {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  padding: 2px 4px 4px;
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.p-ctx-zone {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+  padding: 9px 10px;
+  border: none;
+  border-radius: var(--r-sm);
+  background: rgba(var(--ink-rgb), 0.06);
+  font-size: 13px;
+  text-align: left;
+  transition: background-color 0.15s ease-out;
+}
+
+.p-ctx-zone:hover {
+  background: rgba(var(--ink-rgb), 0.14);
+}
+
+.p-ctx-zone.on {
+  color: var(--p-dim);
+  background: transparent;
+  outline: 1px dashed rgba(var(--ink-rgb), 0.2);
+  outline-offset: -1px;
+  cursor: default;
+}
+
+.p-ctx-zone-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.p-ctx-zone-parent {
+  color: var(--p-dim);
+}
+
+.zone-menu.p-ctx-menu {
+  min-width: 300px;
+}
+

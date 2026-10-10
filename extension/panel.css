@@ -1,0 +1,711 @@
+/* panel.css — gemeinsame Styles für den Einstellungen/Information-Inhalt,
+   damit Popup, Vollansicht und Seiten-Overlay exakt gleich aussehen. Wird von
+   popup.html und dashboard.html eingebunden und ins Shadow DOM des Overlays
+   geladen. */
+
+.section-label {
+  font-size: 12.5px;
+  font-weight: 500;
+  color: #8c8c8c;
+  padding: 14px 14px 6px;
+}
+
+.info-text {
+  padding: 14px;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: #cfcfcf;
+}
+
+.info-text p {
+  margin: 0 0 12px;
+}
+
+.info-text p:last-child {
+  margin-bottom: 0;
+}
+
+.info-text strong {
+  color: #ffffff;
+}
+
+.info-text code {
+  background: rgba(255, 255, 255, 0.1);
+  color: #dddddd;
+  padding: 1px 4px;
+  font-size: 11.5px;
+}
+
+.zone-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 0 14px;
+}
+
+.zone-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.06);
+  transition: transform 0.12s ease;
+}
+
+.zone-row.dragging {
+  transition: none;
+  position: relative;
+  z-index: 5;
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.drag-handle {
+  flex: 0 0 auto;
+  width: 14px;
+  text-align: center;
+  color: #5a5a5e;
+  font-size: 11px;
+  letter-spacing: -1px;
+  cursor: grab;
+  user-select: none;
+}
+
+.zone-row.dragging .drag-handle {
+  cursor: grabbing;
+}
+
+.zone-monogram {
+  flex: 0 0 auto;
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.12);
+  color: #cfcfcf;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.zone-row input[type="text"] {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: transparent;
+  padding: 4px 0;
+  font-size: 13px;
+  font-family: inherit;
+  color: #ffffff;
+}
+
+.zone-row input[type="text"]::placeholder {
+  color: #6b6b6f;
+}
+
+.zone-row input[type="text"]:focus {
+  outline: none;
+}
+
+.row-actions {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+/* Hot Zone: die vier Zonen, die beim Ziehen erscheinen (aus der App) */
+.hot-tag {
+  margin-right: 6px;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 10px;
+  letter-spacing: 0.02em;
+  color: #7a7a7e;
+}
+
+.mini-btn {
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: #7a7a7e;
+  font-size: 9px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.mini-btn.remove {
+  font-size: 13px;
+}
+
+.mini-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.12);
+  color: #ffffff;
+}
+
+.mini-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.add-row {
+  width: calc(100% - 28px);
+  margin: 8px 14px 4px;
+  padding: 9px;
+  border: none;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.06);
+  color: #9a9a9e;
+  font-size: 12.5px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.add-row:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #ffffff;
+}
+
+.hint {
+  font-size: 11.5px;
+  color: #8a8a8e;
+  line-height: 1.45;
+  padding: 10px 14px 4px;
+  margin: 0;
+}
+
+.hint code {
+  background: rgba(255, 255, 255, 0.1);
+  color: #dddddd;
+  padding: 1px 4px;
+  font-size: 10.5px;
+  border-radius: 3px;
+}
+
+.hint a {
+  color: #7c86ff;
+  text-decoration: none;
+}
+
+.hint a:hover {
+  text-decoration: underline;
+}
+
+.shortcut-row {
+  margin: 0 14px;
+}
+
+.shortcut-display {
+  flex: 1;
+  font-size: 13px;
+  font-weight: 600;
+  color: #ffffff;
+}
+
+.shortcut-display.listening {
+  color: #7c86ff;
+}
+
+.mini-action {
+  flex: 0 0 auto;
+  border: none;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.1);
+  color: #cfcfcf;
+  font-size: 12px;
+  font-weight: 500;
+  padding: 6px 12px;
+  cursor: pointer;
+}
+
+.mini-action:hover {
+  background: rgba(255, 255, 255, 0.16);
+  color: #ffffff;
+}
+
+.theme-row {
+  gap: 6px;
+}
+
+.mini-action.active {
+  outline: 1px dashed currentColor;
+  outline-offset: -1px;
+}
+
+.footer {
+  padding: 12px 14px 14px;
+}
+
+.save-btn {
+  width: 100%;
+  padding: 11px;
+  border: none;
+  border-radius: 5px;
+  background: #ffffff;
+  color: #161616;
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.save-btn:hover {
+  background: #e4e4e4;
+}
+
+.status-text {
+  margin-top: 6px;
+  font-size: 11px;
+  color: #8a8a8e;
+  text-align: center;
+  min-height: 13px;
+}
+
+/* ---- Blöcke (Popup, Vollansicht, Overlay) ----
+   Typografisch reduziert: eine Größe, Weiß und Grau, feine Linien. */
+
+.block {
+  margin: 0 0 6px;
+  padding: 14px 16px 4px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.045);
+}
+
+.block-title {
+  padding-bottom: 6px;
+  color: #8c8c8c;
+}
+
+.block-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 24px;
+  padding: 11px 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.block-title + .block-row {
+  border-top: none;
+}
+
+.block-row-main {
+  min-width: 0;
+}
+
+.block-row-title {
+  color: #ededed;
+}
+
+.block-row-text {
+  color: #8c8c8c;
+}
+
+.block-row-value {
+  flex: 0 0 auto;
+  color: #8c8c8c;
+  text-align: right;
+}
+
+/* Einstellungen in Blöcken: Zeilen mit Linien statt Flächen */
+.block .zone-list {
+  gap: 0;
+  padding: 0;
+}
+
+.block .zone-row {
+  padding: 8px 0;
+  border-radius: 0;
+  background: transparent;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.block .zone-list .zone-row:first-child,
+.block-title + .zone-row {
+  border-top: none;
+}
+
+.block .zone-row.dragging {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.block .zone-monogram {
+  display: none;
+}
+
+/* Mit App: Nummer der Active Zone (01–04) statt Monogramm, wie in der App */
+.block .zone-monogram.zone-no {
+  display: block;
+  width: auto;
+  height: auto;
+  background: none;
+  color: #8c8c8c;
+  font-size: inherit;
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+  margin-right: 10px;
+  line-height: inherit;
+}
+
+.block .zone-row input[type="text"],
+.block .shortcut-display {
+  font-size: inherit;
+  font-weight: 400;
+  color: #ededed;
+}
+
+.block .add-row {
+  width: 100%;
+  margin: 4px 0 0;
+  padding: 12px 0;
+  border-radius: 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  background: transparent;
+  color: #8c8c8c;
+  font-size: inherit;
+  font-weight: 400;
+  text-align: left;
+}
+
+.block .add-row:hover {
+  background: transparent;
+  color: #ffffff;
+}
+
+.block .hint {
+  padding: 0 0 16px;
+}
+
+.panel-host .block .hint {
+  font-size: inherit;
+  line-height: inherit;
+  color: #8c8c8c;
+}
+
+.block .save-btn {
+  width: auto;
+  padding: 10px 22px;
+}
+
+.block .shortcut-row {
+  margin: 0;
+}
+
+.block .footer {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 2px 0 12px;
+}
+
+.block .status-text {
+  margin: 0;
+  min-height: 0;
+}
+
+/* ---- Seite (Vollansicht + Overlay) ----
+   Einstellungen und Information ersetzen die Übersicht wie eine eigene
+   Seite; die Navigation zeigt Archiver › Seite. */
+
+.panel-host {
+  --page-w: min(600px, 50vw);
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 7;
+  width: var(--page-w);
+  overflow-y: auto;
+  padding: 28px 20px 40px;
+  background: #1c1c1c;
+  box-shadow: inset 1px 0 0 rgba(255, 255, 255, 0.07);
+  color: #ffffff;
+  font-size: 16px;
+  line-height: 1.35;
+  letter-spacing: -0.01em;
+  transform: translateX(100%);
+  visibility: hidden;
+  transition: transform 0.26s cubic-bezier(0.2, 0.7, 0.2, 1), visibility 0s linear 0.26s;
+}
+
+.panel-host.open {
+  transform: none;
+  visibility: visible;
+  transition: transform 0.26s cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
+/* Übersicht weicht nach links aus; das Raster bricht dabei neu um */
+.zones-grid {
+  transition: margin-right 0.26s cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
+.page-open .zones-grid {
+  margin-right: min(600px, 50vw);
+}
+
+.gallery-toolbar,
+.zone-strip {
+  transition: left 0.26s cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
+.page-open .gallery-toolbar,
+.page-open .zone-strip {
+  left: calc((100% - min(600px, 50vw)) / 2);
+}
+
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 24px;
+  margin: 0 4px 40px;
+}
+
+.page-title {
+  margin: 0;
+  max-width: 720px;
+  font-size: 28px;
+  font-weight: 500;
+  line-height: 1.08;
+  letter-spacing: -0.03em;
+}
+
+.page-title-main {
+  color: #ffffff;
+}
+
+.page-title-lead {
+  color: #8c8c8c;
+}
+
+.page-extras {
+  display: flex;
+  gap: 6px;
+  flex: 0 0 auto;
+  padding-top: 8px;
+}
+
+.page-foot {
+  padding: 14px 4px;
+  color: #6b6b6b;
+}
+
+.gallery-toolbar.page-open .nav-home {
+  background: transparent;
+}
+
+.block-title + [style*="display: none"] + *,
+.block-title + [style*="display: none"] + [style*="display: none"] + * {
+  border-top: none;
+}
+
+/* ---- Hell (erzeugt) ---- */
+/* Hell: Papierweiß, fast schwarze Schrift. Abgeleitet aus den Regeln oben. */
+
+html.light .section-label,
+:host(.light) .section-label {
+  color: #707070;
+}
+
+html.light .info-text,
+:host(.light) .info-text {
+  color: #111111;
+}
+
+html.light .info-text strong,
+:host(.light) .info-text strong {
+  color: #111111;
+}
+
+html.light .info-text code,
+:host(.light) .info-text code {
+  background: rgba(17, 17, 17, 0.1);
+  color: #111111;
+}
+
+html.light .zone-row,
+:host(.light) .zone-row {
+  background: rgba(17, 17, 17, 0.06);
+}
+
+html.light .zone-row.dragging,
+:host(.light) .zone-row.dragging {
+  background: rgba(17, 17, 17, 0.12);
+}
+
+html.light .drag-handle,
+:host(.light) .drag-handle {
+  color: #707070;
+}
+
+html.light .zone-monogram,
+:host(.light) .zone-monogram {
+  background: rgba(17, 17, 17, 0.12);
+  color: #111111;
+}
+
+html.light .zone-row input[type="text"],
+:host(.light) .zone-row input[type="text"] {
+  color: #111111;
+}
+
+html.light .zone-row input[type="text"]::placeholder,
+:host(.light) .zone-row input[type="text"]::placeholder {
+  color: #707070;
+}
+
+html.light .mini-btn,
+:host(.light) .mini-btn {
+  color: #707070;
+}
+
+html.light .mini-btn:hover:not(:disabled),
+:host(.light) .mini-btn:hover:not(:disabled) {
+  background: rgba(17, 17, 17, 0.12);
+  color: #111111;
+}
+
+html.light .add-row,
+:host(.light) .add-row {
+  background: rgba(17, 17, 17, 0.06);
+  color: #3a3a3a;
+}
+
+html.light .add-row:hover,
+:host(.light) .add-row:hover {
+  background: rgba(17, 17, 17, 0.1);
+  color: #111111;
+}
+
+html.light .hint,
+:host(.light) .hint {
+  color: #707070;
+}
+
+html.light .hint code,
+:host(.light) .hint code {
+  background: rgba(17, 17, 17, 0.1);
+  color: #111111;
+}
+
+html.light .shortcut-display,
+:host(.light) .shortcut-display {
+  color: #111111;
+}
+
+html.light .mini-action,
+:host(.light) .mini-action {
+  background: rgba(17, 17, 17, 0.1);
+  color: #111111;
+}
+
+html.light .mini-action:hover,
+:host(.light) .mini-action:hover {
+  background: rgba(17, 17, 17, 0.16);
+  color: #111111;
+}
+
+html.light .save-btn,
+:host(.light) .save-btn {
+  background: #111111;
+  color: #f5f5f5;
+}
+
+html.light .save-btn:hover,
+:host(.light) .save-btn:hover {
+  background: #111111;
+}
+
+html.light .status-text,
+:host(.light) .status-text {
+  color: #707070;
+}
+
+html.light .block,
+:host(.light) .block {
+  background: rgba(17, 17, 17, 0.045);
+}
+
+html.light .block-title,
+:host(.light) .block-title {
+  color: #707070;
+}
+
+html.light .block-row,
+:host(.light) .block-row {
+  border-top: 1px solid rgba(17, 17, 17, 0.1);
+}
+
+html.light .block-row-title,
+:host(.light) .block-row-title {
+  color: #111111;
+}
+
+html.light .block-row-text,
+:host(.light) .block-row-text {
+  color: #707070;
+}
+
+html.light .block-row-value,
+:host(.light) .block-row-value {
+  color: #707070;
+}
+
+html.light .block .zone-row,
+:host(.light) .block .zone-row {
+  background: transparent;
+  border-top: 1px solid rgba(17, 17, 17, 0.1);
+}
+
+html.light .block .zone-row.dragging,
+:host(.light) .block .zone-row.dragging {
+  background: rgba(17, 17, 17, 0.06);
+}
+
+html.light .block .zone-row input[type="text"],
+:host(.light) .block .zone-row input[type="text"],
+html.light .block .shortcut-display,
+:host(.light) .block .shortcut-display {
+  color: #111111;
+}
+
+html.light .block .add-row,
+:host(.light) .block .add-row {
+  border-top: 1px solid rgba(17, 17, 17, 0.1);
+  color: #707070;
+}
+
+html.light .block .add-row:hover,
+:host(.light) .block .add-row:hover {
+  color: #111111;
+}
+
+html.light .panel-host .block .hint,
+:host(.light) .panel-host .block .hint {
+  color: #707070;
+}
+
+html.light .panel-host,
+:host(.light) .panel-host {
+  background: #ededed;
+  box-shadow: inset 1px 0 0 rgba(17, 17, 17, 0.07);
+  color: #111111;
+}
+
+html.light .page-title-main,
+:host(.light) .page-title-main {
+  color: #111111;
+}
+
+html.light .page-title-lead,
+:host(.light) .page-title-lead {
+  color: #707070;
+}
+
+html.light .page-foot,
+:host(.light) .page-foot {
+  color: #707070;
+}

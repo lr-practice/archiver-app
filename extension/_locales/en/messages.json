@@ -1,0 +1,307 @@
+{
+  "extName": {
+    "message": "Archiver"
+  },
+  "extDescription": {
+    "message": "Save images by dragging them into drop zones at the bottom of the screen. Sort, browse and find them again."
+  },
+  "actionTitle": {
+    "message": "Archiver"
+  },
+  "commandToggle": {
+    "message": "Show or hide the overlay"
+  },
+  "dashboardTitle": {
+    "message": "Archiver — Overview"
+  },
+  "fullView": {
+    "message": "Full view"
+  },
+  "fullViewTitle": {
+    "message": "Open all zones in a new tab"
+  },
+  "showInformation": {
+    "message": "Show information"
+  },
+  "settings": {
+    "message": "Settings"
+  },
+  "information": {
+    "message": "Information"
+  },
+  "close": {
+    "message": "Close"
+  },
+  "zones": {
+    "message": "Zones"
+  },
+  "shortcut": {
+    "message": "Shortcut"
+  },
+  "addZone": {
+    "message": "+ Add zone"
+  },
+  "zoneN": {
+    "message": "Zone $N$",
+    "placeholders": {
+      "n": {
+        "content": "$1"
+      }
+    }
+  },
+  "dragToReorder": {
+    "message": "Drag to reorder"
+  },
+  "dragToReorderZone": {
+    "message": "Drag to reorder this zone"
+  },
+  "moveUp": {
+    "message": "Move up"
+  },
+  "moveDown": {
+    "message": "Move down"
+  },
+  "removeZone": {
+    "message": "Remove zone"
+  },
+  "change": {
+    "message": "Change"
+  },
+  "pressKeys": {
+    "message": "Press keys…"
+  },
+  "save": {
+    "message": "Save"
+  },
+  "saved": {
+    "message": "Saved"
+  },
+  "zonesHintHtml": {
+    "message": "Top to bottom = left to right along the screen edge. Paths like <code>Clients/Project-A</code> work too. A zone named <code>Downloads</code> saves without a subfolder (<a>change downloads folder</a>)."
+  },
+  "shortcutHintHtml": {
+    "message": "Shows the overlay on the current page. Chrome's own Archiver shortcut works as well, you can change it under <a>Extensions › Keyboard shortcuts</a>."
+  },
+  "noImagesYet": {
+    "message": "No images yet."
+  },
+  "imageUnavailable": {
+    "message": "Image not available"
+  },
+  "showInFinder": {
+    "message": "Show in Finder"
+  },
+  "selectionHint": {
+    "message": "$COUNT$ selected — drag onto a zone to move (Esc to clear)",
+    "placeholders": {
+      "count": {
+        "content": "$1"
+      }
+    }
+  },
+  "savedIn": {
+    "message": "Saved to $FOLDER$",
+    "placeholders": {
+      "folder": {
+        "content": "$1"
+      }
+    }
+  },
+  "downloadFailed": {
+    "message": "Download failed"
+  },
+  "moveFailed": {
+    "message": "Move failed"
+  },
+  "moveNotInHistory": {
+    "message": "No longer in the download history – please move it in Finder"
+  },
+  "moveSourceUnreachable": {
+    "message": "Source unreachable – original kept"
+  },
+  "moveTimeout": {
+    "message": "Timed out – original kept"
+  },
+  "allZones": {
+    "message": "‹ All zones"
+  },
+  "showAllZones": {
+    "message": "Show all zones"
+  },
+  "openZone": {
+    "message": "Show only this zone"
+  },
+  "desktopApp": {
+    "message": "Desktop app"
+  },
+  "exportForApp": {
+    "message": "Export for the app"
+  },
+  "exportDone": {
+    "message": "$COUNT$ images exported",
+    "placeholders": {
+      "count": {
+        "content": "$1"
+      }
+    }
+  },
+  "exportFailed": {
+    "message": "Export failed"
+  },
+  "exportHint": {
+    "message": "Saves archiver-export.json to your Downloads. The Archiver app uses it to import every image with its source into its library."
+  },
+  "appConnected": {
+    "message": "Connected to the Archiver app · $LIB$",
+    "placeholders": {
+      "lib": {
+        "content": "$1"
+      }
+    }
+  },
+  "appZonesHint": {
+    "message": "These are your four active zones, shown while dragging and here in the overlay. Pick them in the app, where everything else lives too."
+  },
+  "appSaveFailed": {
+    "message": "Could not hand the image to the app"
+  },
+  "appZoneFailed": {
+    "message": "Could not create the zone"
+  },
+  "dropRelease": {
+    "message": "Release to drop"
+  },
+  "imageCount": {
+    "message": "$COUNT$ images",
+    "placeholders": {
+      "count": {
+        "content": "$1"
+      }
+    }
+  },
+  "imageCountOne": {
+    "message": "1 image"
+  },
+  "aboutClaim": {
+    "message": "A visual library for creatives. Collect, sort and look at your references, in zones instead of folders."
+  },
+  "settingsLead": {
+    "message": "Zones, keyboard shortcut and the connection to the app."
+  },
+  "infoHow": {
+    "message": "How it works"
+  },
+  "infoSaveTitle": {
+    "message": "Save"
+  },
+  "infoSaveText": {
+    "message": "Drag an image on any web page and drop it on a zone. Archiver fetches the largest available version."
+  },
+  "infoStoreTitle": {
+    "message": "Store"
+  },
+  "infoStoreText": {
+    "message": "With the Archiver app the image goes into your library, otherwise into a folder in your Downloads."
+  },
+  "infoViewTitle": {
+    "message": "View"
+  },
+  "infoViewText": {
+    "message": "The keyboard shortcut opens the overview on any page. A card opens the zone, an image shows it large."
+  },
+  "infoSortTitle": {
+    "message": "Sort"
+  },
+  "infoSortText": {
+    "message": "Drag an image and all zones appear at the bottom as targets. Shift-click selects several."
+  },
+  "infoFullTitle": {
+    "message": "Full view"
+  },
+  "infoFullText": {
+    "message": "The same in its own tab, also for images from other windows."
+  },
+  "infoKeys": {
+    "message": "Keys"
+  },
+  "infoKeyOverlay": {
+    "message": "Open overview"
+  },
+  "infoKeyBrowse": {
+    "message": "Browse images"
+  },
+  "infoKeyBack": {
+    "message": "Back and close"
+  },
+  "importBoard": {
+    "message": "Import board"
+  },
+  "more": {
+    "message": "More"
+  },
+  "dropInto": {
+    "message": "Drop into"
+  },
+  "menuDropIn": {
+    "message": "Drop into"
+  },
+  "menuArea": {
+    "message": "Capture area …"
+  },
+  "commandCapture": {
+    "message": "Capture area"
+  },
+  "captureFailed": {
+    "message": "Screenshot not possible"
+  },
+  "captureNameArea": {
+    "message": "Area"
+  },
+  "duplicateIn": {
+    "message": "Already in $ZONE$",
+    "placeholders": {
+      "zone": {
+        "content": "$1"
+      }
+    }
+  },
+  "areaHint": {
+    "message": "Drag a frame · Esc cancels"
+  },
+  "areaPick": {
+    "message": "Drop into"
+  },
+  "cardText": {
+    "message": "Text"
+  },
+  "cardLink": {
+    "message": "Link"
+  },
+  "theme": {
+    "message": "Appearance"
+  },
+  "themeSystem": {
+    "message": "System"
+  },
+  "themeLight": {
+    "message": "Light"
+  },
+  "themeDark": {
+    "message": "Dark"
+  },
+  "cardVideo": {
+    "message": "Video"
+  },
+  "hotTag": {
+    "message": "Active zone"
+  },
+  "hotZones": {
+    "message": "Active zones"
+  },
+  "openApp": {
+    "message": "Open Archiver"
+  },
+  "openAppTitle": {
+    "message": "Everything else lives in the app: zones, sorting, search"
+  }
+}

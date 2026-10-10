@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Archiver</title>
+    <link rel="stylesheet" href="app.css" />
+  </head>
+  <body>
+    <div id="splash" class="splash">
+      <div class="splash-text">
+        <div class="splash-word">Archiver</div>
+        <div class="splash-sub">Visual Library for Creatives</div>
+      </div>
+    </div>
+
+    <div id="welcome" class="welcome" hidden>
+      <div class="welcome-inner">
+        <div id="welcomeMark" class="welcome-mark">Archiver</div>
+        <h1 id="welcomeTitle"></h1>
+        <p id="welcomeText"></p>
+        <p id="welcomeStatus" class="welcome-status" hidden></p>
+        <div class="welcome-actions">
+          <button type="button" id="welcomeCreate" class="btn primary"></button>
+          <button type="button" id="welcomeChoose" class="btn"></button>
+        </div>
+      </div>
+    </div>
+
+    <div id="app" class="app" hidden>
+      <div class="p-drag" data-tauri-drag-region></div>
+      <main id="zones" class="zones-grid"></main>
+      <aside id="info" class="info-panel" hidden></aside>
+      <aside id="sheet" class="p-sheet"></aside>
+      <div id="dropbar" class="p-dropbar" hidden></div>
+      <header id="top" class="p-top" data-tauri-drag-region>
+      <nav id="nav" class="p-nav">
+        <button type="button" id="navBrand" class="p-nav-btn p-nav-brand">Archiver</button>
+        <span class="p-nav-rule"></span>
+        <div id="navMain" class="p-nav-main"></div>
+        <label class="p-nav-search" id="navSearch">
+          <span id="navSearchLabel"></span>
+          <input id="search" type="search" spellcheck="false" autocomplete="off" />
+        </label>
+        <div class="p-nav-more">
+          <button type="button" id="navMore" class="p-nav-btn">⋯</button>
+        </div>
+      </nav>
+      </header>
+    </div>
+
+    <div id="lightbox" class="lightbox" hidden>
+      <div class="lightbox-stage" id="lightboxStage"><img id="lightboxImg" alt="" /></div>
+      <div id="lbMedia" class="lb-media" hidden></div>
+      <aside id="lbInfo" class="lb-info"></aside>
+      <div id="lbZones" class="lb-bar lb-zones" hidden></div>
+      <nav class="lb-bar lb-nav">
+        <span id="lbBrowse" class="lb-group">
+          <button type="button" id="lightboxPrev" class="lb-btn lb-arrow" aria-label="Previous">‹</button>
+          <span id="lbCount" class="lb-count"></span>
+          <button type="button" id="lightboxNext" class="lb-btn lb-arrow" aria-label="Next">›</button>
+          <span class="lb-sep"></span>
+        </span>
+        <span id="lbName" class="lb-name"></span>
+        <button type="button" id="lightboxZoom" class="lb-btn lb-zoom"></button>
+        <button type="button" id="lbInfoBtn" class="lb-btn"></button>
+        <button type="button" id="lbSourceBtn" class="lb-btn"></button>
+        <button type="button" id="lbAction" class="lb-btn lb-action"></button>
+      </nav>
+    </div>
+
+    <div id="modal" class="modal" hidden></div>
+    <div id="toasts" class="toasts"></div>
+
+    <script src="i18n.js"></script>
+    <script src="media.js"></script>
+    <script src="app.js"></script>
+  </body>
+</html>

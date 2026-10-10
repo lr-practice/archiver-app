@@ -1,0 +1,146 @@
+/* popup.css — Toolbar-Popup. Gleiche Grauwerte und Abstände wie die
+   Seiten in Vollansicht und Overlay; der Inhalt kommt aus panel.css. */
+
+* {
+  box-sizing: border-box;
+}
+
+button,
+input {
+  font-family: inherit;
+}
+
+html {
+  background: #161616;
+}
+
+body {
+  width: 440px;
+  min-height: 420px;
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-size: 14px;
+  line-height: 1.4;
+  letter-spacing: -0.005em;
+  color: #ffffff;
+  background: #161616;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ---- Kopfzeile wie die Navigation ---- */
+
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 12px 12px 12px 20px;
+}
+
+.topbar-title {
+  flex: 1;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.icon-btn {
+  height: 30px;
+  min-width: 30px;
+  padding: 0;
+  border: none;
+  border-radius: 5px;
+  background: transparent;
+  color: #8c8c8c;
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.icon-btn:hover {
+  background: rgba(255, 255, 255, 0.07);
+  color: #ffffff;
+}
+
+.text-icon-btn {
+  padding: 0 12px;
+  color: #ededed;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.text-icon-btn.active {
+  background: rgba(255, 255, 255, 0.15);
+  color: #ffffff;
+}
+
+/* ---- Inhalt ---- */
+
+.tab-panel {
+  display: none;
+  padding: 4px 12px 12px;
+}
+
+.tab-panel.active {
+  display: block;
+}
+
+.tab-panel .page-header {
+  margin: 12px 8px 28px;
+}
+
+.tab-panel .page-title {
+  font-size: 22px;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+}
+
+.tab-panel .block {
+  padding: 14px 16px 4px;
+}
+
+.tab-panel .block-row {
+  padding: 11px 0;
+}
+
+.tab-panel .page-foot {
+  padding: 12px 8px 4px;
+}
+
+/* Pinterest-Board: Name links, Knopf rechts auf einer Linie */
+.popup-board {
+  align-items: center;
+}
+
+/* ---- Hell (erzeugt) ---- */
+/* Hell: Papierweiß, fast schwarze Schrift. Abgeleitet aus den Regeln oben. */
+
+html.light {
+  background: #f5f5f5;
+}
+
+html.light body {
+  color: #111111;
+  background: #f5f5f5;
+}
+
+html.light .icon-btn,
+:host(.light) .icon-btn {
+  color: #707070;
+}
+
+html.light .icon-btn:hover,
+:host(.light) .icon-btn:hover {
+  background: rgba(17, 17, 17, 0.07);
+  color: #111111;
+}
+
+html.light .text-icon-btn,
+:host(.light) .text-icon-btn {
+  color: #111111;
+}
+
+html.light .text-icon-btn.active,
+:host(.light) .text-icon-btn.active {
+  background: rgba(17, 17, 17, 0.15);
+  color: #111111;
+}
