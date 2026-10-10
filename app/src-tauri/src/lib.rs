@@ -289,6 +289,17 @@ async fn rename_zone(app: AppHandle, state: State<'_, AppState>, zone: String, n
     Ok(z)
 }
 
+/// Deckkraft der Zonen beim Ziehen (App und Extension)
+#[tauri::command]
+async fn set_drag_alpha(state: State<'_, AppState>, alpha: f64) -> Result<(), String> {
+    current(&state)?.set_drag_alpha(alpha)
+}
+
+#[tauri::command]
+async fn get_drag_alpha(state: State<'_, AppState>) -> Result<Option<f64>, String> {
+    Ok(current(&state)?.drag_alpha())
+}
+
 /// Reihenfolge der Zonen und die vier Hot Zones (für die Extension)
 #[tauri::command]
 async fn set_zone_order(state: State<'_, AppState>, order: Vec<String>, hot: Vec<String>) -> Result<(), String> {
@@ -584,6 +595,8 @@ pub fn run() {
             create_zone,
             rename_zone,
             set_zone_order,
+            set_drag_alpha,
+            get_drag_alpha,
             trash_zone,
             reveal_zone,
             import_extension_export,

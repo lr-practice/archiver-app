@@ -245,6 +245,9 @@ async function getZones() {
       const zones = (r.zones || []).map((z) => z.path);
       const hot = Array.isArray(r.hot) ? r.hot.filter((n) => zones.includes(n)) : zones.slice(0, 4);
       await publishAppZones({ zones, hot });
+      const alpha = typeof r.alpha === "number" ? r.alpha : null;
+      const { appZoneAlpha } = await storageGet({ appZoneAlpha: null });
+      if (appZoneAlpha !== alpha) await storageSet({ appZoneAlpha: alpha });
       return { app: true, library: info.name, zones, hot };
     } catch {}
   }

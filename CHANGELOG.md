@@ -1,5 +1,12 @@
 # Changelog
 
+## App 0.18.0 · Extension 3.16.0 (10.10.2026)
+
+- Freischalt-Code: Archiver funktioniert erst nach Eingabe des Codes, unten in den Einstellungen.
+- Einstellungen aufgeräumt: Bibliothek, Darstellung, Extension & Betrachter, Startton und Allgemein als Untermenüs.
+- Zonen beim Ziehen: Deckkraft einstellbar (Darstellung), gilt in App und Extension.
+- Neues Farbschema „Salbei“ als Option: Periwinkle auf Grau-Grün. Standard bleibt wie bisher.
+
 ## App 0.17.6 (10.10.2026)
 
 - Zonen-Menü (⋯) auf Karten wird nicht mehr abgeschnitten, es schwebt über der Seite.

@@ -212,6 +212,27 @@
       search: "Search: motif, colour, text …",
       pdfExport: "Export as PDF",
       cancel: "Cancel",
+      setConnect: "Extension & viewer",
+      setConnectSummary: "Chrome, Preview",
+      setGeneral: "General",
+      setLibraryFolder: "Folder",
+      setObjects: "View",
+      setLook: "Look",
+      setScheme: "Colors",
+      schemeStandard: "Standard",
+      schemeSage: "Sage",
+      setDragZones: "Zones while dragging",
+      setDragZonesText: "How see-through the zones are that slide in when you drag something. Applies in the app and the extension.",
+      setDragAlpha: "Opacity",
+      keyExtend: "Extend selection",
+      lockText: "Enter your access code to start using Archiver.",
+      lockOpen: "Enter code",
+      unlockTitle: "Access code",
+      unlockText: "Archiver works once you've entered your code.",
+      unlockPlaceholder: "XXXX-XXXX-XXXX",
+      unlockButton: "Unlock",
+      unlockDone: "Archiver is unlocked.",
+      unlockOk: "Archiver unlocked",
       pdfSave: "Save PDF",
       pdfTitleLabel: "Title",
       pdfLayoutLabel: "Per page",
@@ -492,6 +513,27 @@
       search: "Suchen: Motiv, Farbe, Text …",
       pdfExport: "Als PDF ausgeben",
       cancel: "Abbrechen",
+      setConnect: "Extension & Betrachter",
+      setConnectSummary: "Chrome, Vorschau",
+      setGeneral: "Allgemein",
+      setLibraryFolder: "Ordner",
+      setObjects: "Ansicht",
+      setLook: "Aussehen",
+      setScheme: "Farben",
+      schemeStandard: "Standard",
+      schemeSage: "Salbei",
+      setDragZones: "Zonen beim Ziehen",
+      setDragZonesText: "Wie durchscheinend die Zonen sind, die beim Ziehen einfahren. Gilt in der App und in der Extension.",
+      setDragAlpha: "Deckkraft",
+      keyExtend: "Auswahl erweitern",
+      lockText: "Gib deinen Freischalt-Code ein, um Archiver zu nutzen.",
+      lockOpen: "Code eingeben",
+      unlockTitle: "Freischalt-Code",
+      unlockText: "Archiver funktioniert, sobald du deinen Code eingegeben hast.",
+      unlockPlaceholder: "XXXX-XXXX-XXXX",
+      unlockButton: "Freischalten",
+      unlockDone: "Archiver ist freigeschaltet.",
+      unlockOk: "Archiver freigeschaltet",
       pdfSave: "PDF sichern",
       pdfTitleLabel: "Titel",
       pdfLayoutLabel: "Pro Seite",
@@ -596,6 +638,25 @@
     const tauri = global.__TAURI__;
     if (tauri && tauri.core) tauri.core.invoke("set_appearance", { light }).catch(() => {});
   }
+  // Farbschema: "standard" oder "sage" (Periwinkle auf Grau-Grün)
+  function scheme() {
+    try {
+      return JSON.parse(localStorage.getItem("archiver.scheme")) === "sage" ? "sage" : "standard";
+    } catch (e) {
+      return "standard";
+    }
+  }
+  function applyScheme() {
+    if (scheme() === "sage") document.documentElement.dataset.scheme = "sage";
+    else delete document.documentElement.dataset.scheme;
+  }
+  function setScheme(v) {
+    try {
+      localStorage.setItem("archiver.scheme", JSON.stringify(v));
+    } catch (e) {}
+    applyScheme();
+  }
+  applyScheme();
   function setTheme(v) {
     try {
       localStorage.setItem("archiver.theme", JSON.stringify(v));
@@ -606,7 +667,8 @@
   if (darkQuery) darkQuery.addEventListener("change", applyTheme);
   global.addEventListener("storage", (e) => {
     if (e.key === "archiver.theme") applyTheme();
+    if (e.key === "archiver.scheme") applyScheme();
   });
 
-  global.ArchiverI18n = { t, lang, theme, setTheme };
+  global.ArchiverI18n = { t, lang, theme, setTheme, scheme, setScheme };
 })(window);

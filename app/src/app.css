@@ -11,6 +11,9 @@
   --text: var(--ink);
   --muted: #8a8a8e;
   --accent: #2d5aeb;
+  --accent-rgb: 45, 90, 235;
+  --accent-ink: #ffffff;
+  --glow-rgb: 91, 124, 255;
   --danger: #e5484d;
   --thumb: 120px;
   --ink: #ffffff;
@@ -613,7 +616,7 @@ html.light .lb-bar {
 .lb-action {
   margin-left: 2px;
   background: var(--accent);
-  color: #fff;
+  color: var(--accent-ink);
 }
 
 .lb-action:hover,
@@ -668,7 +671,7 @@ html.light .lb-bar {
 }
 
 .lb-chip:hover {
-  background: rgba(45, 90, 235, 0.2);
+  background: rgba(var(--accent-rgb), 0.2);
   outline: 1px dashed var(--accent);
 }
 
@@ -920,7 +923,7 @@ html.light .lb-bar {
 }
 
 .toast {
-  background: rgba(45, 90, 235, 0.95);
+  background: rgba(var(--accent-rgb), 0.95);
   color: var(--ink);
   padding: 8px 16px;
   font-size: 12px;
@@ -1456,7 +1459,7 @@ body {
 
 /* Ablegen: gleiche Sprache wie die Zonen in der Extension */
 .drop-active {
-  background: rgba(45, 90, 235, 0.2) !important;
+  background: rgba(var(--accent-rgb), 0.2) !important;
   outline: 1px dashed var(--accent) !important;
   outline-offset: -1px;
   color: var(--ink) !important;
@@ -2776,7 +2779,7 @@ body.lightbox-open .p-top {
   padding: 16px 18px;
   border-radius: var(--r-lg);
   outline: none;
-  background: var(--menu-bg);
+  background: color-mix(in srgb, var(--menu-bg) calc(var(--zone-alpha, 0.97) * 100%), transparent);
   -webkit-backdrop-filter: blur(24px) saturate(1.4);
   backdrop-filter: blur(24px) saturate(1.4);
   box-shadow: var(--menu-shadow), inset 0 0 0 1px rgba(var(--ink-rgb), 0.07);
@@ -2806,7 +2809,7 @@ body.lightbox-open .p-top {
 
 /* Ziel: gleiche Sprache wie alle Ablageziele (.drop-active), dazu leicht angehoben */
 .p-dropbar .p-hot.drop-active {
-  background: rgba(45, 90, 235, 0.28) !important;
+  background: rgba(var(--accent-rgb), 0.28) !important;
   outline: 1px solid var(--accent) !important;
   outline-offset: -1px;
   transform: translateY(-4px);
@@ -2823,13 +2826,13 @@ body.lightbox-open .p-top {
 
 @keyframes zone-landed {
   0% {
-    box-shadow: var(--landed-base, 0 0 0 transparent), 0 0 0 0 rgba(91, 124, 255, 0);
+    box-shadow: var(--landed-base, 0 0 0 transparent), 0 0 0 0 rgba(var(--glow-rgb), 0);
   }
   30% {
-    box-shadow: var(--landed-base, 0 0 0 transparent), 0 0 48px 6px rgba(91, 124, 255, 0.4);
+    box-shadow: var(--landed-base, 0 0 0 transparent), 0 0 48px 6px rgba(var(--glow-rgb), 0.4);
   }
   100% {
-    box-shadow: var(--landed-base, 0 0 0 transparent), 0 0 64px 14px rgba(91, 124, 255, 0);
+    box-shadow: var(--landed-base, 0 0 0 transparent), 0 0 64px 14px rgba(var(--glow-rgb), 0);
   }
 }
 
@@ -3118,7 +3121,7 @@ body.has-selection .card-text:not(.selected):hover .text-sheet {
 }
 
 .text-sheet.large ::selection {
-  background: rgba(45, 90, 235, 0.25);
+  background: rgba(var(--accent-rgb), 0.25);
 }
 
 /* Quelle steht schon unten auf der Textkarte */
@@ -3954,4 +3957,275 @@ html.light .p-nav-brand {
   position: fixed;
   right: auto;
   z-index: 60;
+}
+
+/* ---- Freischalten ---- */
+
+.p-lock {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg);
+  -webkit-backdrop-filter: blur(28px);
+  backdrop-filter: blur(28px);
+  transition: right 0.28s cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
+body.page-open .p-lock {
+  right: var(--sheet-w);
+}
+
+.p-lock-inner {
+  display: grid;
+  justify-items: center;
+  gap: 14px;
+  text-align: center;
+  max-width: 320px;
+  padding: 0 24px;
+}
+
+.p-lock-mark {
+  font-size: 22px;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+}
+
+.p-lock-inner p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.p-lock-btn {
+  margin-top: 6px;
+  border: none;
+  border-radius: 999px;
+  padding: 8px 18px;
+  background: var(--ink);
+  color: var(--ink-inverse);
+  font-size: 13px;
+}
+
+.p-lock-btn:hover {
+  opacity: 0.88;
+}
+
+.p-unlock .p-unlock-text {
+  padding: 11px 0 4px;
+  color: var(--p-dim);
+}
+
+.p-unlock-form {
+  display: flex;
+  gap: 8px;
+  padding: 10px 0 4px;
+}
+
+.p-unlock-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  background: rgba(var(--ink-rgb), 0.06);
+  border: 1px solid transparent;
+  border-radius: 999px;
+  padding: 8px 14px;
+  color: var(--ink);
+  font: 13px var(--p-mono);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  outline: none;
+}
+
+.p-unlock-input::placeholder {
+  color: var(--p-faint);
+}
+
+.p-unlock-input:focus {
+  border-color: rgba(var(--ink-rgb), 0.25);
+}
+
+.p-unlock-go {
+  border: none;
+  border-radius: 999px;
+  padding: 8px 16px;
+  background: var(--ink);
+  color: var(--ink-inverse);
+  font-size: 13px;
+}
+
+.p-unlock-form.wrong .p-unlock-input {
+  border-color: var(--danger);
+  animation: unlock-shake 0.36s;
+}
+
+@keyframes unlock-shake {
+  20%, 60% { transform: translateX(-4px); }
+  40%, 80% { transform: translateX(4px); }
+}
+
+.p-unlock-dot {
+  color: var(--ink);
+  font-size: 10px;
+}
+
+/* ---- Farbschema „Salbei“: Periwinkle auf Grau-Grün (Einstellungen → Darstellung) ---- */
+
+html[data-scheme="sage"]:not(.light) {
+  --splash-bg: #2b312e;
+  --bg: rgba(43, 49, 46, 0.9);
+  --card-bg: rgba(56, 63, 59, 0.42);
+  --panel: rgba(43, 49, 46, 0.97);
+  --sheet-bg: #2b312e;
+  --menu-bg: rgba(54, 61, 57, 0.97);
+  --thumb-bg: #353c38;
+  --muted: #8e938f;
+  --ink: #e4e7e5;
+  --ink-rgb: 228, 231, 229;
+  --ink-inverse: #1c211e;
+  --accent: #a6b5d6;
+  --accent-rgb: 166, 181, 214;
+  --accent-ink: #161b26;
+  --glow-rgb: 166, 181, 214;
+  --p-text: #e4e7e5;
+  --p-dim: #8e938f;
+  --p-faint: #646a66;
+  --p-pill: rgba(58, 66, 61, 0.86);
+}
+
+html[data-scheme="sage"]:not(.mac):not(.light) {
+  --bg: #2b312e;
+}
+
+html[data-scheme="sage"].light {
+  --splash-bg: #e9ece9;
+  --bg: rgba(233, 236, 233, 0.92);
+  --card-bg: rgba(0, 0, 0, 0.04);
+  --panel: #e9ece9;
+  --sheet-bg: #e9ece9;
+  --menu-bg: rgba(238, 241, 238, 0.98);
+  --thumb-bg: #d9ddd9;
+  --muted: #6c726d;
+  --ink: #1c211e;
+  --ink-rgb: 28, 33, 30;
+  --ink-inverse: #e9ece9;
+  --accent: #5f6f94;
+  --accent-rgb: 95, 111, 148;
+  --accent-ink: #ffffff;
+  --glow-rgb: 95, 111, 148;
+  --p-text: #1c211e;
+  --p-dim: #6c726d;
+  --p-faint: #a3a8a4;
+  --p-pill: rgba(222, 227, 222, 0.94);
+}
+
+/* Wortmarke und aktive Knöpfe im Akzent, Knopf-Schrift dunkel */
+html[data-scheme="sage"] .p-nav-brand,
+html[data-scheme="sage"] .splash-word {
+  color: var(--accent);
+}
+
+html[data-scheme="sage"] .p-nav-btn.active,
+html[data-scheme="sage"] .p-nav.has-glide .p-nav-btn.active:hover {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+html[data-scheme="sage"] .p-chip.active {
+  color: var(--accent);
+}
+
+html[data-scheme="sage"] .btn.primary,
+html[data-scheme="sage"] .p-unlock-go,
+html[data-scheme="sage"] .p-lock-btn {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-ink);
+}
+
+html[data-scheme="sage"] .toast {
+  color: var(--accent-ink);
+}
+
+/* ---- Einstellungen: Bereiche als Liste, Untermenüs mit Zurück ---- */
+
+.p-settings-nav {
+  padding: 4px 16px;
+}
+
+.p-settings-link {
+  display: flex;
+  align-items: baseline;
+  gap: 16px;
+  width: 100%;
+  padding: 13px 0;
+  border: none;
+  border-top: 1px solid var(--p-rule);
+  background: none;
+  color: var(--p-text);
+  font: inherit;
+  text-align: left;
+}
+
+.p-settings-link:first-child {
+  border-top: none;
+}
+
+.p-settings-link-title {
+  flex: 0 0 auto;
+}
+
+.p-settings-link-sum {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: right;
+  color: var(--p-faint);
+  font-size: 13px;
+}
+
+.p-settings-link-arrow {
+  color: var(--p-faint);
+  transition: transform 0.18s ease, color 0.18s ease;
+}
+
+.p-settings-link:hover .p-settings-link-arrow {
+  color: var(--p-text);
+  transform: translateX(2px);
+}
+
+.p-settings-back {
+  margin: 0 4px 14px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--p-dim);
+  font-size: 13px;
+}
+
+.p-settings-back:hover {
+  color: var(--p-text);
+}
+
+.p-sheet .p-settings-back + .p-head {
+  margin-bottom: 28px;
+}
+
+.p-unlock {
+  margin-top: 18px;
+}
+
+.p-alpha-value {
+  min-width: 40px;
+  text-align: right;
+  color: var(--p-dim);
+}
+
+.page-open .p-dropbar.preview {
+  right: var(--sheet-w);
+  pointer-events: none;
 }

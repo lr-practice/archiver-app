@@ -517,11 +517,42 @@ impl Library {
     }
 
     /// Speichert Reihenfolge und Hot Zones; schreibt nur bei Änderung.
+    /// Weitere Schlüssel in zones.json (z. B. "alpha") bleiben erhalten.
     pub fn set_zone_order(&self, order: &[String], hot: &[String]) -> Result<()> {
         if self.zone_order() == (order.to_vec(), hot.to_vec()) {
             return Ok(());
         }
-        let body = serde_json::to_vec_pretty(&serde_json::json!({ "order": order, "hot": hot })).map_err(err)?;
+        let mut v = self.zone_file();
+        v["order"] = serde_json::json!(order);
+        v["hot"] = serde_json::json!(hot);
+        self.write_zone_file(&v)
+    }
+
+    /// Deckkraft der Zonen beim Ziehen (0.3–1.0), gilt in App und Extension.
+    pub fn drag_alpha(&self) -> Option<f64> {
+        self.zone_file().get("alpha").and_then(|a| a.as_f64())
+    }
+
+    pub fn set_drag_alpha(&self, alpha: f64) -> Result<()> {
+        let mut v = self.zone_file();
+        v["alpha"] = serde_json::json!(alpha.clamp(0.3, 1.0));
+        self.write_zone_file(&v)
+    }
+
+    fn zone_file(&self) -> serde_json::Value {
+        let v: serde_json::Value = fs::read(self.zone_order_path())
+            .ok()
+            .and_then(|b| serde_json::from_slice(&b).ok())
+            .unwrap_or_default();
+        if v.is_object() {
+            v
+        } else {
+            serde_json::json!({})
+        }
+    }
+
+    fn write_zone_file(&self, v: &serde_json::Value) -> Result<()> {
+        let body = serde_json::to_vec_pretty(v).map_err(err)?;
         fs::write(self.zone_order_path(), body).map_err(err)
     }
 

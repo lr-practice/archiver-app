@@ -208,7 +208,7 @@ fn handle(msg: &Value, slot: &mut Option<(PathBuf, Library)>) -> Result<Value, S
             let rank = |p: &str| order.iter().position(|o| o == p).unwrap_or(order.len());
             zones.sort_by_key(|z| rank(&z.path));
             let hot: Vec<&String> = hot.iter().filter(|h| zones.iter().any(|z| &z.path == *h)).collect();
-            Ok(json!({ "zones": zones, "hot": hot }))
+            Ok(json!({ "zones": zones, "hot": hot, "alpha": lib.drag_alpha() }))
         }
         "create_zone" => {
             let lib = library(slot)?;

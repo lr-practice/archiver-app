@@ -77,6 +77,37 @@
     } catch {}
   }
 
+  // ---- Freischalten: ein gemeinsamer Code, nur sein Hash steht im Code ----
+
+  const UNLOCK_HASH = "4ffbc1224a6cd30617b443e4665695d19c63d76ba51f6b16bdcdc8b28a2d1e13";
+
+  function isUnlocked() {
+    return pref("unlock", null) === UNLOCK_HASH;
+  }
+
+  async function unlockHash(code) {
+    const clean = String(code).toUpperCase().replace(/[^A-Z0-9]/g, "");
+    const data = new TextEncoder().encode("archiver-unlock:" + clean);
+    const buf = await crypto.subtle.digest("SHA-256", data);
+    return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("");
+  }
+
+  function applyLock() {
+    const locked = !isUnlocked();
+    document.body.classList.toggle("locked", locked);
+    $("lock").hidden = !locked;
+  }
+
+  function openUnlock() {
+    if (state.page !== "settings") togglePage("settings");
+    setTimeout(() => {
+      const input = document.querySelector(".p-unlock-input");
+      if (!input) return;
+      input.scrollIntoView({ block: "center", behavior: "smooth" });
+      input.focus();
+    }, 320);
+  }
+
   // ---- Zustand ----
 
   const SIZES = [72, 96, 120, 160, 220, 300];
@@ -1315,10 +1346,12 @@
 
   function togglePage(name) {
     state.page = state.page === name ? null : name;
+    state.settingsSub = null;
     renderPage();
   }
 
   function closePage() {
+    previewDropbar(false);
     if (!state.page) return;
     state.page = null;
     renderPage();
@@ -1367,20 +1400,7 @@
 
   // Einklappbare Blöcke in den Einstellungen; der Zustand bleibt gemerkt.
   function collapsible(id, title) {
-    const b = el("section", "p-block p-collapsible");
-    const closed = new Set(pref("collapsed", ["viewer", "keys"]));
-    const head = button("p-block-title p-block-toggle", null, () => {
-      const set = new Set(pref("collapsed", ["viewer", "keys"]));
-      if (set.has(id)) set.delete(id);
-      else set.add(id);
-      setPref("collapsed", [...set]);
-      b.classList.toggle("collapsed", set.has(id));
-    });
-    head.appendChild(el("span", null, title));
-    head.appendChild(el("span", "p-block-sign"));
-    b.appendChild(head);
-    b.classList.toggle("collapsed", closed.has(id));
-    return b;
+    return block(title);
   }
 
   // Zonen: umbenennen, neu anlegen (die ersten vier sind die Hot Zones, Tasten 1–4)
@@ -1471,150 +1491,293 @@
   }
 
   // Zeile am Griff ziehen: wandert live mit, beim Loslassen wird gespeichert
+  // Einstellungen: oben eine ruhige Liste der Bereiche, jeder öffnet sein Untermenü.
+  // Ganz unten steht immer der Freischalt-Code.
+  const SETTINGS_SECTIONS = ["library", "look", "connect", "sound", "general"];
+
+  function sectionTitle(id) {
+    return t({ library: "setLibrary", look: "setView", connect: "setConnect", sound: "setSound", general: "setGeneral" }[id]);
+  }
+
+  function sectionSummary(id) {
+    if (id === "library") return shortPath(state.root);
+    if (id === "look") {
+      const th = window.ArchiverI18n.theme();
+      const scheme = window.ArchiverI18n.scheme() === "sage" ? t("schemeSage") : t("schemeStandard");
+      return t({ system: "themeSystem", light: "themeLight", dark: "themeDark" }[th]) + " · " + scheme;
+    }
+    if (id === "connect") return t("setConnectSummary");
+    if (id === "sound") return pref("startSound", true) ? t("setOn") : t("setOff");
+    return lang === "de" ? "Deutsch" : "English";
+  }
+
+  function openSettingsSection(id) {
+    previewDropbar(false);
+    state.settingsSub = id;
+    renderPage();
+  }
+
   function renderSettings() {
     const wrap = el("div", "p-sheet-inner");
-    wrap.appendChild(headline(t("settings"), t("settingsText")));
+    const sub = state.settingsSub;
+    if (!sub) {
+      wrap.appendChild(headline(t("settings"), t("settingsText")));
+      const list = el("section", "p-block p-settings-nav");
+      for (const id of SETTINGS_SECTIONS) {
+        const row = button("p-settings-link", null, () => openSettingsSection(id));
+        row.appendChild(el("span", "p-settings-link-title", sectionTitle(id)));
+        row.appendChild(el("span", "p-settings-link-sum", sectionSummary(id)));
+        row.appendChild(el("span", "p-settings-link-arrow", "›"));
+        list.appendChild(row);
+      }
+      wrap.appendChild(list);
+      wrap.appendChild(renderUnlock());
+      return wrap;
+    }
+    wrap.appendChild(button("p-settings-back", "‹ " + t("settings"), () => openSettingsSection(null)));
+    wrap.appendChild(headline(sectionTitle(sub)));
     const rerender = () => {
       renderZones();
       renderPage(true);
     };
 
-    const lib = collapsible("library", t("setLibrary"));
-    lib.appendChild(
-      blockRow(shortPath(state.root), [
-        button("p-link", t("reveal"), () => invoke("reveal_zone", { zone: "" }).catch(fail)),
-        button("p-link", t("libraryChange"), chooseLibrary),
-      ])
-    );
-    wrap.appendChild(lib);
-    wrap.appendChild(renderZoneSettings());
-    const later = [];
+    if (sub === "library") {
+      const lib = block(t("setLibraryFolder"));
+      lib.appendChild(
+        blockRow(shortPath(state.root), [
+          button("p-link", t("reveal"), () => invoke("reveal_zone", { zone: "" }).catch(fail)),
+          button("p-link", t("libraryChange"), chooseLibrary),
+        ])
+      );
+      wrap.appendChild(lib);
+      wrap.appendChild(renderZoneSettings());
+    }
 
-    const extBlock = collapsible("extension", t("setExtension"));
-    const ext = el("div", null, "…");
-    invoke("bridge_browsers")
-      .then((list) => (ext.textContent = list.length ? t("setBridgeOn", { list: list.join(", ") }) : t("setBridgeOff")))
-      .catch(() => (ext.textContent = t("setBridgeOff")));
-    extBlock.appendChild(blockRow(ext, [button("p-link", t("import"), openImportDialog)]));
-    later.push(extBlock);
+    if (sub === "look") {
+      const view = block(t("setObjects"));
+      view.appendChild(
+        blockRow(
+          t("setImages"),
+          choice([["grid", t("viewGrid")], ["original", t("viewOriginal")]], state.view, (id) => {
+            state.view = id;
+            setPref("view", id);
+            rerender();
+          })
+        )
+      );
+      view.appendChild(
+        blockRow(
+          t("sizeLabel"),
+          sizeChips(Math.max(0, SIZES.indexOf(state.size)), SIZES.length, (step) => {
+            state.size = SIZES[step];
+            setPref("size", state.size);
+            rerender();
+          })
+        )
+      );
+      view.appendChild(
+        blockRow(
+          t("setInfoPanel"),
+          choice([["on", t("setOn")], ["off", t("setOff")]], state.infoOpen ? "on" : "off", (id) => {
+            if ((id === "on") !== state.infoOpen) toggleInfo();
+            rerender();
+          })
+        )
+      );
+      wrap.appendChild(view);
 
-    if (isMac) {
-      const viewerBlock = collapsible("viewer", t("setViewer"));
-      viewerBlock.appendChild(blockRow(el("div", "p-block-text", t("setViewerText"))));
-      const rows = el("div");
-      const showFormats = (list) =>
-        rows.replaceChildren(
-          ...list.map((f) =>
-            blockRow(
-              f.name,
-              choice([["on", t("setOn")], ["off", t("setOff")]], f.active ? "on" : "off", (id) => {
-                if (id === "off" && f.active) return toast(t("setViewerOff", { format: f.name }), true, 8000);
-                if (id === "on" && !f.active)
-                  invoke("viewer_make_default", { format: f.name })
-                    .then(() => invoke("viewer_defaults"))
-                    .then(showFormats)
-                    .catch(fail);
-              })
-            )
+      const look = block(t("setLook"));
+      look.appendChild(
+        blockRow(
+          t("setTheme"),
+          choice(
+            [["system", t("themeSystem")], ["light", t("themeLight")], ["dark", t("themeDark")]],
+            window.ArchiverI18n.theme(),
+            (id) => {
+              window.ArchiverI18n.setTheme(id);
+              rerender();
+            }
           )
-        );
-      invoke("viewer_defaults").then(showFormats).catch(fail);
-      viewerBlock.appendChild(rows);
-      later.unshift(viewerBlock);
+        )
+      );
+      look.appendChild(
+        blockRow(
+          t("setScheme"),
+          choice([["standard", t("schemeStandard")], ["sage", t("schemeSage")]], window.ArchiverI18n.scheme(), (id) => {
+            window.ArchiverI18n.setScheme(id);
+            rerender();
+          })
+        )
+      );
+      look.appendChild(
+        blockRow(
+          t("setRadius"),
+          choice(
+            [["square", t("radiusSquare")], ["soft", t("radiusSoft")], ["round", t("radiusRound")], ["xl", t("radiusXl")]],
+            pref("radius", "round"),
+            (id) => {
+              setPref("radius", id);
+              applyRadius(id);
+              rerender();
+            }
+          )
+        )
+      );
+      wrap.appendChild(look);
+      wrap.appendChild(renderDragSettings());
     }
 
-    const view = collapsible("view", t("setView"));
-    view.appendChild(
-      blockRow(
-        t("setImages"),
-        choice([["grid", t("viewGrid")], ["original", t("viewOriginal")]], state.view, (id) => {
-          state.view = id;
-          setPref("view", id);
-          rerender();
-        })
-      )
-    );
-    view.appendChild(
-      blockRow(
-        t("sizeLabel"),
-        sizeChips(Math.max(0, SIZES.indexOf(state.size)), SIZES.length, (step) => {
-          state.size = SIZES[step];
-          setPref("size", state.size);
-          rerender();
-        })
-      )
-    );
-    view.appendChild(
-      blockRow(
-        t("setInfoPanel"),
-        choice([["on", t("setOn")], ["off", t("setOff")]], state.infoOpen ? "on" : "off", (id) => {
-          if ((id === "on") !== state.infoOpen) toggleInfo();
-          rerender();
-        })
-      )
-    );
-    view.appendChild(
-      blockRow(
-        t("setRadius"),
-        choice(
-          [["square", t("radiusSquare")], ["soft", t("radiusSoft")], ["round", t("radiusRound")], ["xl", t("radiusXl")]],
-          pref("radius", "round"),
-          (id) => {
-            setPref("radius", id);
-            applyRadius(id);
-            rerender();
-          }
-        )
-      )
-    );
-    view.appendChild(
-      blockRow(
-        t("setTheme"),
-        choice(
-          [["system", t("themeSystem")], ["light", t("themeLight")], ["dark", t("themeDark")]],
-          window.ArchiverI18n.theme(),
-          (id) => {
-            window.ArchiverI18n.setTheme(id);
-            rerender();
-          }
-        )
-      )
-    );
-    view.appendChild(
-      blockRow(
-        t("setLanguage"),
-        choice([["de", "Deutsch"], ["en", "English"]], lang, (id) => {
-          if (id === lang) return;
-          setPref("lang", id);
-          sessionStorage.setItem("archiver.reopen", "settings");
-          location.reload();
-        })
-      )
-    );
-    wrap.appendChild(view);
-    wrap.appendChild(renderSoundSettings());
-    for (const b of later) wrap.appendChild(b);
-
-    const feedback = collapsible("feedback", t("feedback"));
-    feedback.appendChild(blockRow(el("div", "p-block-text", t("feedbackText")), [button("p-link", t("feedback"), sendFeedback)]));
-    wrap.appendChild(feedback);
-
-    const keys = collapsible("keys", t("setKeys"));
-    for (const [k, v] of [
-      ["Space", t("keyPreview")],
-      ["1–4", t("keyMove")],
-      ["Del", t("trash")],
-      ["⌘F", t("navSearch")],
-      ["⌘D", t("infoPanel")],
-      ["⌘N", t("newZone")],
-      ["⌘P", t("pdfExport")],
-      ["⌘,", t("settings")],
-      ["Esc", t("keyBack")],
-    ]) {
-      keys.appendChild(blockRow(v, k));
+    if (sub === "connect") {
+      const extBlock = block(t("setExtension"));
+      const ext = el("div", null, "…");
+      invoke("bridge_browsers")
+        .then((list) => (ext.textContent = list.length ? t("setBridgeOn", { list: list.join(", ") }) : t("setBridgeOff")))
+        .catch(() => (ext.textContent = t("setBridgeOff")));
+      extBlock.appendChild(blockRow(ext, [button("p-link", t("import"), openImportDialog)]));
+      wrap.appendChild(extBlock);
+      if (isMac) {
+        const viewerBlock = block(t("setViewer"));
+        viewerBlock.appendChild(blockRow(el("div", "p-block-text", t("setViewerText"))));
+        const rows = el("div");
+        const showFormats = (list) =>
+          rows.replaceChildren(
+            ...list.map((f) =>
+              blockRow(
+                f.name,
+                choice([["on", t("setOn")], ["off", t("setOff")]], f.active ? "on" : "off", (id) => {
+                  if (id === "off" && f.active) return toast(t("setViewerOff", { format: f.name }), true, 8000);
+                  if (id === "on" && !f.active)
+                    invoke("viewer_make_default", { format: f.name })
+                      .then(() => invoke("viewer_defaults"))
+                      .then(showFormats)
+                      .catch(fail);
+                })
+              )
+            )
+          );
+        invoke("viewer_defaults").then(showFormats).catch(fail);
+        viewerBlock.appendChild(rows);
+        wrap.appendChild(viewerBlock);
+      }
     }
-    wrap.appendChild(keys);
+
+    if (sub === "sound") wrap.appendChild(renderSoundSettings());
+
+    if (sub === "general") {
+      const general = block(t("setLanguage"));
+      general.appendChild(
+        blockRow(
+          t("setLanguage"),
+          choice([["de", "Deutsch"], ["en", "English"]], lang, (id) => {
+            if (id === lang) return;
+            setPref("lang", id);
+            sessionStorage.setItem("archiver.reopen", "settings:general");
+            location.reload();
+          })
+        )
+      );
+      wrap.appendChild(general);
+
+      const feedback = block(t("feedback"));
+      feedback.appendChild(blockRow(el("div", "p-block-text", t("feedbackText")), [button("p-link", t("feedback"), sendFeedback)]));
+      wrap.appendChild(feedback);
+
+      const keys = block(t("setKeys"));
+      for (const [k, v] of [
+        ["Space", t("keyPreview")],
+        ["1–4", t("keyMove")],
+        ["⇧ ← →", t("keyExtend")],
+        ["Del", t("trash")],
+        ["⌘F", t("navSearch")],
+        ["⌘D", t("infoPanel")],
+        ["⌘N", t("newZone")],
+        ["⌘P", t("pdfExport")],
+        ["⌘,", t("settings")],
+        ["Esc", t("keyBack")],
+      ]) {
+        keys.appendChild(blockRow(v, k));
+      }
+      wrap.appendChild(keys);
+    }
     return wrap;
+  }
+
+  // Zonen beim Ziehen: Deckkraft, gilt in der App und (über die Bibliothek) in der Extension
+  function dragAlpha() {
+    const v = pref("zoneAlpha", null);
+    return typeof v === "number" ? v : null;
+  }
+
+  function applyDragAlpha() {
+    const v = dragAlpha();
+    if (v == null) document.documentElement.style.removeProperty("--zone-alpha");
+    else document.documentElement.style.setProperty("--zone-alpha", String(v));
+  }
+
+  function renderDragSettings() {
+    const b = block(t("setDragZones"));
+    b.appendChild(blockRow(el("div", "p-block-text", t("setDragZonesText"))));
+    const value = mono("", "p-alpha-value");
+    const slider = el("input", "p-volume p-alpha");
+    slider.type = "range";
+    slider.min = "30";
+    slider.max = "100";
+    slider.step = "5";
+    const show = (pct) => (value.textContent = pct + " %");
+    const start = Math.round((dragAlpha() ?? 0.9) * 100);
+    slider.value = String(start);
+    show(start);
+    slider.addEventListener("input", () => {
+      show(slider.value);
+      document.documentElement.style.setProperty("--zone-alpha", String(Number(slider.value) / 100));
+      previewDropbar(true);
+    });
+    slider.addEventListener("change", () => {
+      const v = Number(slider.value) / 100;
+      setPref("zoneAlpha", v);
+      invoke("set_drag_alpha", { alpha: v }).catch(() => {});
+      setTimeout(() => previewDropbar(false), 900);
+    });
+    b.appendChild(blockRow(t("setDragAlpha"), [slider, value]));
+    return b;
+  }
+
+  // Ganz unten: Freischalt-Code eingeben, danach nur noch ein ruhiges „Freigeschaltet“
+  function renderUnlock() {
+    const b = block(t("unlockTitle"));
+    b.classList.add("p-unlock");
+    if (isUnlocked()) {
+      b.appendChild(blockRow(el("div", "p-block-text", t("unlockDone")), mono("●", "p-unlock-dot")));
+      return b;
+    }
+    const form = el("form", "p-unlock-form");
+    const input = el("input", "p-unlock-input");
+    input.placeholder = t("unlockPlaceholder");
+    input.spellcheck = false;
+    input.autocomplete = "off";
+    input.setAttribute("autocapitalize", "characters");
+    const go = el("button", "p-unlock-go", t("unlockButton"));
+    go.type = "submit";
+    form.append(input, go);
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const hash = await unlockHash(input.value);
+      if (hash !== UNLOCK_HASH) {
+        form.classList.remove("wrong");
+        void form.offsetWidth;
+        form.classList.add("wrong");
+        input.select();
+        return;
+      }
+      setPref("unlock", hash);
+      applyLock();
+      renderPage(true);
+      toast(t("unlockOk"));
+    });
+    input.addEventListener("input", () => form.classList.remove("wrong"));
+    b.appendChild(el("div", "p-block-text p-unlock-text", t("unlockText")));
+    b.appendChild(form);
+    return b;
   }
 
   // Startton: Ein/Aus, Lautstärke mit Probehören, eigene Datei oder der Standard
@@ -2999,6 +3162,24 @@
     document.body.classList.add("dragging");
   }
 
+  // Vorschau beim Einstellen der Deckkraft: die Leiste steht, solange der Regler bewegt wird
+  let previewTimer = 0;
+  function previewDropbar(on) {
+    clearTimeout(previewTimer);
+    const bar = $("dropbar");
+    if (on) {
+      if (bar.hidden) {
+        showDropbar();
+        document.body.classList.remove("dragging");
+        bar.classList.add("preview");
+      }
+      previewTimer = setTimeout(() => previewDropbar(false), 1600);
+    } else if (bar.classList.contains("preview")) {
+      bar.classList.remove("preview");
+      hideDropbar();
+    }
+  }
+
   // Abgelegt: Die Zielkarte glüht kurz von hinten nach. Liegt sie in der
   // Leiste, bleibt die so lange stehen und blendet dann aus.
   let landingUntil = 0;
@@ -3063,6 +3244,7 @@
   let dropCount = 0; // für die Tour: wurde schon etwas abgelegt?
 
   function onDragDrop(event) {
+    if (!isUnlocked()) return;
     const p = event.payload;
     if (p.type === "leave") {
       dragPaths = [];
@@ -3511,6 +3693,9 @@
   // ---- Ereignisse ----
 
   function bindEvents() {
+    $("lockText").textContent = t("lockText");
+    $("lockOpen").textContent = t("lockOpen");
+    $("lockOpen").addEventListener("click", openUnlock);
     const zones = $("zones");
 
     zones.addEventListener("mousedown", (e) => {
@@ -3651,6 +3836,14 @@
     }
 
     const target = e.target;
+    if (!isUnlocked() && !(target && target.tagName === "INPUT")) {
+      if (mod && e.key === ",") togglePage("settings");
+      else if (e.key === "Escape") closePage();
+      else if (!mod) return;
+      if (mod && !["q", "w", "h", "m"].includes(e.key)) e.preventDefault();
+      return;
+    }
+
     if (target && (target.tagName === "INPUT" || target.tagName === "SELECT")) {
       if (target === $("search") && e.key === "Escape") {
         target.value = "";
@@ -3693,6 +3886,7 @@
         closeMenus();
         closeMoreMenu();
       }
+      else if (state.page === "settings" && state.settingsSub) openSettingsSection(null);
       else if (state.page) closePage();
       else if (state.selection.size) selectOnly(null);
       else if (state.focus != null) {
@@ -4011,12 +4205,22 @@
   function showApp() {
     $("welcome").hidden = true;
     $("app").hidden = false;
+    applyLock();
+    applyDragAlpha();
     return refresh().then(() => {
       // Nach dem Sprachwechsel wieder in den Einstellungen landen
-      if (sessionStorage.getItem("archiver.reopen") === "settings") {
+      const reopen = sessionStorage.getItem("archiver.reopen") || "";
+      if (reopen.startsWith("settings")) {
         sessionStorage.removeItem("archiver.reopen");
         togglePage("settings");
+        if (reopen.includes(":")) openSettingsSection(reopen.split(":")[1]);
       }
+      invoke("get_drag_alpha")
+        .then((a) => {
+          if (typeof a === "number") setPref("zoneAlpha", a);
+          applyDragAlpha();
+        })
+        .catch(() => {});
     });
   }
 

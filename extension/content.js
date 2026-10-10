@@ -81,6 +81,13 @@
   }
 
   loadShortcut((s) => (shortcut = s));
+  // Deckkraft der Zonen beim Ziehen, eingestellt in der App
+  let zoneAlpha = null;
+  const loadAlpha = () =>
+    chrome.storage &&
+    chrome.storage.local &&
+    chrome.storage.local.get({ appZoneAlpha: null }, (d) => (zoneAlpha = typeof d.appZoneAlpha === "number" ? d.appZoneAlpha : null));
+  loadAlpha();
   loadZones((list, info) => {
     zones = list;
     barZones = hotOf(list, info);
@@ -97,6 +104,7 @@
         });
       }
       if (area === "sync" && changes.shortcut) loadShortcut((s) => (shortcut = s));
+      if (area === "local" && changes.appZoneAlpha) loadAlpha();
     });
   }
 
@@ -650,6 +658,7 @@
       if (zonesBarEl || manualOpen || dragCounter <= 0) return; // schon da, Overlay offen oder Drag vorbei
 
       zonesBarEl = UI.el("div", "zones-bar");
+      if (zoneAlpha != null) zonesBarEl.style.setProperty("--zone-alpha", String(zoneAlpha));
       zoneEls = barZones.map((name, i) => {
         const zone = UI.el("div", "zone" + (isRootZoneName(name) ? " root" : ""));
         zone.dataset.index = String(i);
