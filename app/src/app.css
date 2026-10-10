@@ -842,6 +842,68 @@ html.light .lb-bar {
   border-top: 1px dashed var(--line);
 }
 
+/* Rückfrage: kompakt, ohne Rahmenlinien */
+.dialog.confirm {
+  width: 340px;
+  outline: none;
+  border-radius: 14px;
+  padding: 22px 22px 18px;
+  background: var(--menu-bg);
+  box-shadow: var(--menu-shadow);
+  -webkit-backdrop-filter: blur(24px);
+  backdrop-filter: blur(24px);
+  animation: confirm-in 0.18s cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
+.dialog.confirm h3 {
+  margin: 0 0 6px;
+  font-size: 15px;
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+
+.dialog.confirm p {
+  margin: 0 0 20px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.confirm-foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.confirm-foot .btn {
+  border-radius: 999px;
+  padding: 7px 16px;
+  border-color: rgba(var(--ink-rgb), 0.18);
+}
+
+.confirm-foot .btn.danger-fill {
+  background: var(--danger);
+  border-color: var(--danger);
+  color: #fff;
+}
+
+.confirm-foot .btn.danger-fill:hover {
+  filter: brightness(1.08);
+}
+
+.confirm-foot .btn:focus-visible {
+  outline: 2px solid rgba(var(--ink-rgb), 0.5);
+  outline-offset: 2px;
+}
+
+@keyframes confirm-in {
+  from { opacity: 0; transform: scale(0.97); }
+}
+
+.modal:has(.confirm) {
+  background: rgba(0, 0, 0, 0.35);
+}
+
 /* ---- Toasts ---- */
 
 .toasts {

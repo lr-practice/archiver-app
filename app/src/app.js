@@ -114,6 +114,7 @@
     infoOpen: pref("infoOpen", false),
     selection: new Set(),
     anchor: null,
+    lead: null, // bewegliches Ende einer Shift-Auswahl
     lists: new Map(), // Zone → sichtbare Einträge (nach Suche)
     lightbox: null, // { zone, index }
   };
@@ -890,6 +891,10 @@
       // Einblick: Lightbox mit den Bildern der gewählten Karte, ←→ blättert darin
       openLightbox((state.lists.get(state.homeCursor) || [])[0]);
       return true;
+    } else if (e.key === "Backspace" || e.key === "Delete") {
+      const hovered = document.querySelector(".p-home [data-zone]:hover");
+      const path = active ? state.homeCursor : hovered?.dataset.zone;
+      return path ? askTrashZone(path) : false;
     } else if (e.key === "Escape" && active) {
       state.homeKbd = false;
       applyHomeCursor(false);
@@ -1943,18 +1948,47 @@
           return;
         }
         closeMenus();
-        try {
-          await invoke("trash_zone", { zone: zone.path });
-          if (state.focus === zone.path) state.focus = null;
-          await refresh();
-          toast(t("zoneTrashed", { zone: zoneLabel(zone.path) }));
-        } catch (e) {
-          fail(e);
-        }
+        trashZone(zone);
       });
       menu.appendChild(del);
     }
     return menu;
+  }
+
+  async function trashZone(zone) {
+    try {
+      await invoke("trash_zone", { zone: zone.path });
+      if (state.focus === zone.path) state.focus = null;
+      await refresh();
+      toast(t("zoneTrashed", { zone: zoneLabel(zone.path) }));
+    } catch (e) {
+      fail(e);
+    }
+  }
+
+  // ⌫ auf der Startseite: gewählte oder überfahrene Zone löschen, nach Rückfrage.
+  function askTrashZone(path) {
+    const zone = state.zones.find((z) => z.path === path);
+    if (!zone || !canEdit(zone.path)) return false;
+    const dialog = el("div", "dialog confirm");
+    dialog.appendChild(el("h3", null, t("trashZoneAsk", { zone: zoneLabel(zone.path) })));
+    const count = zone.count === 1 ? t("countImage") : t("countImages", { n: zone.count });
+    dialog.appendChild(el("p", null, zone.count ? t("trashZoneAskText", { count }) : t("trashZoneAskEmpty")));
+    const foot = el("div", "confirm-foot");
+    const go = () => {
+      closeModal();
+      trashZone(zone);
+    };
+    foot.appendChild(button("btn", t("cancel"), closeModal));
+    const ok = button("btn danger-fill", t("trashZoneDo"), go);
+    foot.appendChild(ok);
+    dialog.appendChild(foot);
+    const modal = $("modal");
+    modal.replaceChildren(dialog);
+    modal.hidden = false;
+    modal.onEnter = go;
+    ok.focus();
+    return true;
   }
 
   // Originalansicht wie ein Moodboard: Bild 1 in Spalte 1, Bild 2 in Spalte 2 …
@@ -2106,27 +2140,33 @@
   function selectOnly(path) {
     state.selection = new Set(path ? [path] : []);
     state.anchor = path;
+    state.lead = path;
+    updateSelectionClasses();
+  }
+
+  // Shift: alles zwischen Anker und Ziel in sichtbarer Reihenfolge auswählen.
+  function extendTo(path, keep) {
+    const flat = allVisible().map((i) => i.path);
+    const a = flat.indexOf(state.anchor);
+    const b = flat.indexOf(path);
+    if (a < 0 || b < 0) return selectOnly(path);
+    const [from, to] = a < b ? [a, b] : [b, a];
+    if (!keep) state.selection.clear();
+    for (let i = from; i <= to; i++) state.selection.add(flat[i]);
+    state.lead = path;
     updateSelectionClasses();
   }
 
   function clickCard(path, e) {
-    const item = state.byPath.get(path);
-    if (e.shiftKey && state.anchor && state.byPath.get(state.anchor)?.zone === item.zone) {
-      const paths = (state.lists.get(item.zone) || []).map((i) => i.path);
-      const a = paths.indexOf(state.anchor);
-      const b = paths.indexOf(path);
-      if (a >= 0 && b >= 0) {
-        const [from, to] = a < b ? [a, b] : [b, a];
-        if (!(e.metaKey || e.ctrlKey)) state.selection.clear();
-        for (let i = from; i <= to; i++) state.selection.add(paths[i]);
-        updateSelectionClasses();
-        return;
-      }
+    if (e.shiftKey && state.anchor && state.byPath.has(state.anchor)) {
+      extendTo(path, e.metaKey || e.ctrlKey);
+      return;
     }
     if (e.metaKey || e.ctrlKey) {
       if (state.selection.has(path)) state.selection.delete(path);
       else state.selection.add(path);
       state.anchor = path;
+      state.lead = path;
       updateSelectionClasses();
       return;
     }
@@ -2145,28 +2185,31 @@
   }
 
   // Pfeiltasten: ←/→ durch alle sichtbaren Bilder, ↑/↓ innerhalb einer Kachel.
-  function moveCursor(dir) {
-    const anchor = state.anchor && state.byPath.get(state.anchor);
+  // Mit Shift wächst die Auswahl vom Anker aus mit.
+  function moveCursor(dir, extend) {
+    const cur = (extend && state.lead) || state.anchor;
+    const anchor = cur && state.byPath.get(cur);
+    const go = (p) => (extend && state.anchor ? (extendTo(p), scrollIntoView(p)) : selectAndShow(p));
     const flat = allVisible();
     if (!flat.length) return;
     if (!anchor) return selectAndShow(flat[0].path);
     if (dir === "left" || dir === "right") {
       const i = flat.findIndex((x) => x.path === anchor.path);
       const next = flat[Math.max(0, Math.min(flat.length - 1, i + (dir === "right" ? 1 : -1)))];
-      return selectAndShow(next.path);
+      return go(next.path);
     }
     const col = cardCache.get(anchor.path)?.parentElement;
     if (col && col.classList.contains("p-masonry-col")) {
       const card = cardCache.get(anchor.path);
       const next = dir === "down" ? card.nextElementSibling : card.previousElementSibling;
-      if (next) selectAndShow(next.dataset.path);
+      if (next) go(next.dataset.path);
       return;
     }
     const list = state.lists.get(anchor.zone) || [];
     const i = list.findIndex((x) => x.path === anchor.path);
     const step = columnsOf(anchor.zone) * (dir === "down" ? 1 : -1);
     const next = list[Math.max(0, Math.min(list.length - 1, i + step))];
-    if (next) selectAndShow(next.path);
+    if (next) go(next.path);
   }
 
   function selectAndShow(path) {
@@ -2923,6 +2966,7 @@
   }
 
   function closeModal() {
+    $("modal").onEnter = null;
     $("modal").hidden = true;
     $("modal").innerHTML = "";
   }
@@ -3594,6 +3638,10 @@
 
     if (!$("modal").hidden) {
       if (e.key === "Escape") closeModal();
+      else if (e.key === "Enter" && $("modal").onEnter) {
+        e.preventDefault();
+        $("modal").onEnter();
+      }
       return;
     }
 
@@ -3670,10 +3718,10 @@
       resize(1);
     } else if (e.key === "-" && !e.altKey) {
       resize(-1);
-    } else if (e.key === "ArrowRight") moveCursor("right");
-    else if (e.key === "ArrowLeft") moveCursor("left");
-    else if (e.key === "ArrowDown") moveCursor("down");
-    else if (e.key === "ArrowUp") moveCursor("up");
+    } else if (e.key === "ArrowRight") moveCursor("right", e.shiftKey);
+    else if (e.key === "ArrowLeft") moveCursor("left", e.shiftKey);
+    else if (e.key === "ArrowDown") moveCursor("down", e.shiftKey);
+    else if (e.key === "ArrowUp") moveCursor("up", e.shiftKey);
     else return;
     e.preventDefault();
   }

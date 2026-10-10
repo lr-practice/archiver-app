@@ -5,6 +5,8 @@
 - Zonen-Menü (⋯) auf Karten wird nicht mehr abgeschnitten, es schwebt über der Seite.
 - Einheitlich „Objekte“ statt „Bilder“ bei Zählern, leeren Zonen und Meldungen.
 - Einstellungen öffnen verschiebt die Navigation nicht mehr unter die Fensterknöpfe.
+- Mehrfachauswahl wie im Finder: Shift + Pfeiltasten erweitert die Auswahl, Shift-Klick wählt einen Bereich auch über Zonen hinweg.
+- Übersicht: ⌫ oder Entf löscht die gewählte bzw. überfahrene Zone, nach kurzer Rückfrage.
 
 ## App 0.17.5 (10.10.2026)
 
