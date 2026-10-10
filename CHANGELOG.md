@@ -1,5 +1,12 @@
 # Changelog
 
+## App 0.17.4 · Extension 3.15.4 (10.10.2026)
+
+- Navigation: „Finden“ heißt jetzt „Objekte“. Der Zonen-Button entfällt, ein Klick auf „Archiver“ führt zur Übersicht.
+- Ablegen: Die Zielkarte glüht kurz zart blau von hinten nach, dann blendet die Leiste aus (App und Extension).
+- Vorschau: Die Leiste unten hat eine feste Breite, lange Dateinamen werden gekürzt und bricht bei Videos nicht mehr um.
+- Instagram: Als Quelle wird der Beitrag gespeichert (instagram.com/p/… bzw. /reel/…), nicht mehr der Feed.
+
 ## App 0.17.3
 - Rechtsklick-Menü: alle Zonen direkt sichtbar als Kästchen in zwei Spalten, Active Zones zuerst mit Taste 1–4, kein Untermenü mehr.
 

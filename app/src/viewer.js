@@ -228,6 +228,7 @@
     };
     if (!showMedia(path)) img.src = fileSrc(path);
     $("name").textContent = baseName(path);
+    $("name").title = baseName(path);
     document.title = baseName(path);
     renderCount();
     closeZones();

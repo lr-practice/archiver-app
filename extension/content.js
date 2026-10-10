@@ -697,6 +697,20 @@
     dragCounter = 0;
   }
 
+  // Abgelegt: Die Zielkarte glüht kurz von hinten nach, dann blendet die Leiste aus.
+  function landZones(idx) {
+    const bar = zonesBarEl;
+    const zone = zoneEls[idx];
+    if (!bar || !zone) return removeZones();
+    zonesBarEl = null;
+    zoneEls = [];
+    dragCounter = 0;
+    zone.classList.remove("active");
+    zone.classList.add("landed");
+    bar.classList.add("leaving");
+    setTimeout(() => bar.remove(), 900);
+  }
+
   // Liefert den Zonen-Index unter x/y, oder -1 wenn außerhalb aller Zonen
   function getZoneIndex(x, y) {
     if (!barZones.length) return -1;
@@ -1023,6 +1037,7 @@
       const idx = getZoneIndex(e.clientX, e.clientY);
       if (idx !== -1) {
         const name = barZones[idx];
+        landZones(idx);
         const source = currentPageSource();
         saveCard(textCard(d.text, source), isRootZoneName(name) ? null : name, { ...source, quote: d.text });
       }
@@ -1213,6 +1228,7 @@
       { capture: true, once: true }
     );
     const idx = getZoneIndex(e.clientX, e.clientY);
+    if (idx !== -1) landZones(idx);
     endMediaDrag();
     if (idx === -1) return;
     const name = barZones[idx];
@@ -1315,13 +1331,23 @@
     return m && img(m) ? { url: img(m), ext: "jpg" } : null;
   }
 
+  // Quelle ist der Beitrag selbst, nicht der Feed, auf dem gezogen wurde.
+  function igSource(code, item) {
+    const reel = item ? item.product_type === "clips" : /\/reels?\//.test(location.pathname);
+    const user = item && item.user && item.user.username;
+    return {
+      pageUrl: `https://www.instagram.com/${reel ? "reel" : "p"}/${code}/`,
+      pageTitle: user ? `@${user} · Instagram` : "Instagram",
+    };
+  }
+
   async function dropInstagram(el, video, imageUrl, folder) {
     clearHiddenDrag();
     removeZones();
     fallbackImageUrl = null;
-    const source = currentPageSource();
     const code = el ? postCodeNear(el) : null;
     const item = code ? await igItem(code) : null;
+    const source = code ? igSource(code, item) : currentPageSource();
     const hit = item ? igPick(item, video, imageUrl) : null;
     if (hit) {
       chrome.runtime.sendMessage({ type: "download-image", url: hit.url, suggestedName: `instagram-${code}-${fileNameOf(hit.url).slice(0, 40)}`.replace(/\.(jpe?g|mp4|webp|heic)$/i, "") + "." + hit.ext, folder, ...source });
@@ -1407,6 +1433,7 @@
 
       const zoneName = barZones[zoneIdx];
       const folder = isRootZoneName(zoneName) ? null : zoneName;
+      landZones(zoneIdx);
 
       if (IG && (hiddenDrag || dragSource)) {
         const el = hiddenDrag ? hiddenDrag.el : dragSource;

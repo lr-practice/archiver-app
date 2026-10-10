@@ -68,6 +68,35 @@ input {
   transition: background 0.12s ease, transform 0.12s ease;
 }
 
+/* Abgelegt: zartes blaues Glühen hinter der Karte, dann blendet die Leiste aus */
+.zone.landed {
+  --zone-base: 0 14px 44px rgba(0, 0, 0, 0.45), inset 0 0 0 1px rgba(255, 255, 255, 0.07);
+  animation: zone-glow 0.9s ease-out;
+}
+
+@keyframes zone-glow {
+  0% {
+    box-shadow: var(--zone-base), 0 0 0 0 rgba(91, 124, 255, 0);
+  }
+  30% {
+    box-shadow: var(--zone-base), 0 0 48px 6px rgba(91, 124, 255, 0.42);
+  }
+  100% {
+    box-shadow: var(--zone-base), 0 0 64px 14px rgba(91, 124, 255, 0);
+  }
+}
+
+.zones-bar.leaving {
+  animation: zones-out 0.3s ease 0.55s forwards;
+}
+
+@keyframes zones-out {
+  to {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+
 /* Downloads-Zone etwas zurückgenommen */
 .zone.root {
   background: rgba(14, 14, 14, 0.7);
@@ -227,6 +256,11 @@ html.light .zone.root,
 :host(.light) .zone.root {
   background: rgba(245, 245, 245, 0.7);
   color: #3a3a3a;
+}
+
+html.light .zone.landed,
+:host(.light) .zone.landed {
+  --zone-base: 0 14px 44px rgba(0, 0, 0, 0.135), inset 0 0 0 1px rgba(17, 17, 17, 0.07);
 }
 
 html.light .zone.active,

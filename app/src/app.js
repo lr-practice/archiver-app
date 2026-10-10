@@ -601,18 +601,11 @@
     const main = $("navMain");
     const btns = [];
     const inZone = isZone(state.focus) && !state.query;
-    // Ganz links immer die Bibliothek als Home, in einer Zone folgt der Pfad.
-    const home = navButton(t("navZones"), state.focus == null && !state.query && !state.page, () => {
-      closePage();
-      setFocus(null);
-    });
-    home.classList.add("p-nav-home");
-    home.title = t("navZones");
-    btns.push(home);
+    // Zur Übersicht führt „Archiver“ links; in einer Zone folgt hier der Pfad.
     if (inZone) {
       const parts = state.focus.split("/");
       parts.forEach((part, i) => {
-        btns.push(el("span", "p-nav-sep", "›"));
+        if (i) btns.push(el("span", "p-nav-sep", "›"));
         const path = parts.slice(0, i + 1).join("/");
         const last = i === parts.length - 1;
         const exists = state.zones.some((z) => z.path === path);
@@ -2927,7 +2920,26 @@
     document.body.classList.add("dragging");
   }
 
+  // Abgelegt: Die Zielkarte glüht kurz von hinten nach. Liegt sie in der
+  // Leiste, bleibt die so lange stehen und blendet dann aus.
+  let landingUntil = 0;
+  function landOn(target) {
+    const bar = $("dropbar");
+    if (!target) return hideDropbar();
+    target.classList.add("landed");
+    setTimeout(() => target.classList.remove("landed"), 900);
+    if (bar.hidden || !bar.contains(target)) return hideDropbar();
+    bar.classList.add("leaving");
+    landingUntil = Date.now() + 850;
+    setTimeout(() => {
+      landingUntil = 0;
+      hideDropbar();
+    }, 850);
+  }
+
   function hideDropbar() {
+    if (Date.now() < landingUntil) return;
+    $("dropbar").classList.remove("leaving");
     dragHome = null;
     $("dropbar").hidden = true;
     document.body.classList.remove("dragging");
@@ -2999,7 +3011,7 @@
 
     if (p.type === "drop") {
       clearDropUi();
-      hideDropbar();
+      landOn(target && dragPaths.length && target.dataset.zone !== dragHome ? target : null);
       const paths = dragPaths;
       dragPaths = [];
       if (!target || !paths.length) return;
@@ -3727,7 +3739,7 @@
   // Neue Tour (0.7.6) startet auch für alle, die die alte schon gesehen haben.
   const TOUR_PREF = "tour2Done";
   const TOUR = [
-    { key: "Zones", target: () => document.querySelector(".p-nav-home") },
+    { key: "Zones", target: () => document.querySelector("#navBrand") },
     {
       key: "NewZone",
       live: true,
