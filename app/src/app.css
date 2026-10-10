@@ -525,6 +525,8 @@ html.light .lb-bar {
 
 .lb-nav {
   bottom: 22px;
+  /* Feste Breite: springt nicht mit dem Dateinamen, mit Player gleich breit */
+  width: min(600px, calc(100% - 32px));
 }
 
 .lightbox.info-open .lb-bar {
@@ -578,12 +580,13 @@ html.light .lb-bar {
   color: var(--p-dim);
   font-family: "Geist Mono", ui-monospace, monospace;
   font-size: 12px;
+  font-variant-numeric: tabular-nums;
 }
 
 .lb-name {
+  flex: 1 1 0;
   padding: 0 10px;
   min-width: 0;
-  max-width: 320px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -3169,9 +3172,7 @@ body.has-selection .card-text:not(.selected):hover .text-sheet {
 /* ---- Eigener Player (Audio, Video): obere Reihe der Navigationsleiste ---- */
 .lightbox.has-player .lb-nav {
   flex-wrap: wrap;
-  justify-content: center;
   row-gap: 0;
-  width: min(600px, calc(100% - 32px));
 }
 
 .mp-row {

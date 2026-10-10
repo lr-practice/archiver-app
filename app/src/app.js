@@ -2409,6 +2409,7 @@
     if (!item) return closeLightbox();
     lb.index = list.indexOf(item);
     $("lbName").textContent = item.filename;
+    $("lbName").title = item.filename;
     // Quelle nur, wenn es eine gibt; der blaue Knopf zeigt die Zone
     $("lbSourceBtn").hidden = !item.pageUrl;
     $("lbSourceBtn").title = item.pageUrl || "";
