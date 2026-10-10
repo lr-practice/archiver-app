@@ -1,5 +1,9 @@
 # Changelog
 
+## Unveröffentlicht
+
+- Der Betrachter heißt jetzt Observer.
+
 ## App 0.18.0 · Extension 3.16.0 (10.10.2026)
 
 - Freischalt-Code: Archiver funktioniert erst nach Eingabe des Codes, unten in den Einstellungen.
