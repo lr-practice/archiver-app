@@ -1052,6 +1052,7 @@ html.light .lb-bar {
 }
 
 .zone-menu-btn:focus-visible,
+.zone-menu-btn.open,
 .zone-menu-wrap:has(.zone-menu) .zone-menu-btn {
   opacity: 1;
 }
@@ -3892,4 +3893,11 @@ html.light .p-nav-brand {
 /* Gezoomtes Video: verschieben per Ziehen */
 .media-video.zoomed {
   cursor: grab;
+}
+
+/* Zonen-Menü (⋯) schwebt fest über der Seite, damit Karten es nicht abschneiden */
+.zone-menu.floating {
+  position: fixed;
+  right: auto;
+  z-index: 60;
 }

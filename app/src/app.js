@@ -1883,6 +1883,7 @@
 
   function closeMenus() {
     for (const m of document.querySelectorAll(".zone-menu")) m.remove();
+    for (const b of document.querySelectorAll(".zone-menu-btn.open")) b.classList.remove("open");
     if (pendingRender) {
       pendingRender = false;
       render();
@@ -1894,9 +1895,20 @@
     btn.title = t("zoneOptions");
     btn.addEventListener("click", (e) => {
       e.stopPropagation();
-      const open = btn.parentElement.querySelector(".zone-menu");
+      const open = btn.classList.contains("open");
       closeMenus();
-      if (!open) btn.parentElement.appendChild(zoneMenu(zone));
+      if (open) return;
+      // Schwebt über allem: Karten schneiden ihren Inhalt ab
+      const menu = zoneMenu(zone);
+      menu.classList.add("floating");
+      document.body.appendChild(menu);
+      const r = btn.getBoundingClientRect();
+      const h = menu.offsetHeight;
+      const w = menu.offsetWidth;
+      const below = r.bottom + 4 + h <= window.innerHeight - 8;
+      menu.style.top = (below ? r.bottom + 4 : Math.max(8, r.top - 4 - h)) + "px";
+      menu.style.left = Math.max(8, Math.min(window.innerWidth - w - 8, r.right - w)) + "px";
+      btn.classList.add("open");
     });
     return btn;
   }
@@ -3494,7 +3506,7 @@
     });
 
     zones.addEventListener("scroll", () => {
-      if (document.querySelector(".p-ctx-menu")) closeMenus();
+      if (document.querySelector(".p-ctx-menu, .zone-menu.floating")) closeMenus();
     }, { passive: true, capture: true });
 
     zones.addEventListener("contextmenu", (e) => {
