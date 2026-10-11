@@ -4159,8 +4159,6 @@
   }
   restoreAfterDemo();
 
-  const isFullscreen = () => document.documentElement.classList.contains("fullscreen");
-  const setFullscreen = (on) => invoke("set_fullscreen", { on }).catch(() => {});
 
   function finderList() {
     const list = el("div", "tour-finder");
@@ -4382,15 +4380,16 @@
           state.home = "overview";
           renderZones();
         }
-        // Die Leiste fährt einmal kurz ein, damit man sieht, wo sie auftaucht
+        // Die Leiste fährt ein und bleibt stehen, solange der Schritt offen ist
         ctx.peek = setTimeout(() => {
           showDropbar();
-          ctx.unpeek = setTimeout(hideDropbar, 1800);
+          document.body.classList.remove("dragging");
+          $("dropbar").classList.add("preview");
         }, 500);
       },
       teardown: (ctx) => {
         clearTimeout(ctx.peek);
-        clearTimeout(ctx.unpeek);
+        $("dropbar").classList.remove("preview");
         hideDropbar();
       },
       target: () => document.querySelector(".p-hotrow"),
@@ -4532,8 +4531,6 @@
     let ctx = {};
     let poll = 0;
     let ending = false;
-    const wasFull = isFullscreen();
-    if (!wasFull) setFullscreen(true);
     const layer = el("div", "tour");
     const ring = el("div", "tour-ring");
     const card = el("div", "tour-card");
@@ -4554,7 +4551,7 @@
       window.removeEventListener("resize", render);
       await layer.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 260, fill: "forwards" }).finished;
       layer.remove();
-      await finale(mode !== "keep", !wasFull);
+      await finale(mode !== "keep");
       if (done) done();
     };
     const go = (to) => {
@@ -4670,8 +4667,8 @@
     enter();
   }
 
-  // Abschluss: zurück zur eigenen Bibliothek, Vollbild verlassen, Licht-Öffnung
-  async function finale(own, leaveFull) {
+  // Abschluss: zurück zur eigenen Bibliothek, Licht-Öffnung
+  async function finale(own) {
     const cover = el("div", "reveal-cover");
     document.body.appendChild(cover);
     await cover.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 420, easing: "ease-in-out", fill: "forwards" }).finished;
@@ -4681,11 +4678,6 @@
       if (state.focus != null || state.query) setFocus(null);
       state.home = "cards";
       renderZones();
-    }
-    if (leaveFull) {
-      setFullscreen(false);
-      // macOS: das Fenster gleitet aus dem Vollbild in seine Größe
-      await new Promise((r) => setTimeout(r, 900));
     }
     await playReveal(cover);
     if (demo) toast(moved ? t("tourBackOwnMoved", { n: moved }) : t("tourBackOwn"));

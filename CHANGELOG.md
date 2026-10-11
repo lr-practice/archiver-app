@@ -1,5 +1,11 @@
 # Changelog
 
+## App 0.19.2 (11.10.2026)
+
+- Getting Started läuft im normalen Fenster, kein erzwungenes Vollbild mehr.
+- Im Kapitel zu den Active Zones bleibt die Leiste unten stehen, bis man weitergeht.
+- Neue Öffnung nach der Tour: Im Dunkel drückt blaues Licht von den Seiten herein, eine helle Linie teilt die Fläche quer, dann öffnet sich die Oberfläche (Welle oder Lid).
+
 ## App 0.19.1 · Extension 3.16.2 (10.10.2026)
 
 - Getting Started: Die Demo-Bibliothek füllt sich mit Kopien aus der eigenen Bibliothek (vier Active Zones, Inbox, Bilder für das Browser-Schema). Mitgelieferte Grafiken nur, wenn die eigene Bibliothek noch zu leer ist. Suchvorschläge kommen aus der Bildanalyse.

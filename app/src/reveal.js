@@ -1,9 +1,10 @@
 // reveal.js
 // Licht-Öffnung nach der Einstiegstour: ein WebGL-Shader über dem Fenster.
-// Aus dem Dunkel öffnet sich die Oberfläche, weich von der Mitte aus (Welle,
-// Standard) oder als Lid aus einer Lichtlinie.
+// Im Dunkel drückt Licht von den Seiten herein, eine helle Linie teilt die
+// Fläche quer. Dann öffnet sich die Oberfläche, weich von der Mitte aus
+// (Welle, Standard) oder als Lid entlang der Linie.
 // Elemente erscheinen, wenn das Licht sie erreicht. Zum Schluss leuchtet der
-// Fensterrand kurz von innen. Ruhig und langsam, zusammen etwa 3,5 s.
+// Fensterrand kurz von innen. Ruhig und langsam, zusammen etwa 5 s.
 
 (() => {
   const COLORS = {
@@ -30,11 +31,38 @@
     uniform float u_open;   // Lid: halbe Öffnung in px
     uniform float u_frame;  // Fensterrand
     uniform float u_time;
+    uniform float u_glow;   // Aufbau: Licht drückt von den Seiten herein
     uniform vec3 u_g1;
     uniform vec3 u_g2;
     uniform vec3 u_deep;
 
+    // satte Lichtfarbe an den Seiten
+    const vec3 EDGE = vec3(0.30, 0.52, 1.0);
+
     float hash(vec2 q) { return fract(sin(dot(q, vec2(12.9898, 78.233))) * 43758.5453); }
+
+    // Abstand zu einem abgerundeten Rechteck um die Mitte
+    float box(vec2 q, vec2 b, float r) {
+      vec2 d = abs(q) - b + r;
+      return length(max(d, 0.0)) + min(max(d.x, d.y), 0.0) - r;
+    }
+
+    // Das Dunkel als weiche, abgerundete Fläche, von den Seiten bedrängt
+    // vom Licht, quer geteilt von einer hellen Linie
+    vec3 field(vec2 px, vec2 res, vec2 c) {
+      vec2 q = px - c;
+      float g = u_glow;
+      vec2 b = vec2(mix(res.x * 0.5 + 260.0, res.x * 0.31, g), mix(res.y * 0.5 + 260.0, res.y * 0.5 - 30.0, g));
+      float soft = max(res.x, res.y) * 0.12;
+      float sd = box(q, b, min(b.x, b.y) * 0.55);
+      float o = smoothstep(-soft, soft * 1.4, sd);
+      // Querlinie: an den Seiten hell, zur Mitte hin verglimmend
+      float side = smoothstep(0.0, b.x * 1.1, abs(q.x));
+      float band = exp(-pow(q.y / (10.0 + 26.0 * g), 2.0)) * g * (0.35 + 0.65 * side);
+      o = clamp(o + band * (1.0 - o), 0.0, 1.0);
+      vec3 col = o < 0.5 ? mix(u_deep, u_g2 * 0.75, o * 2.0) : mix(u_g2 * 0.75, EDGE, (o - 0.5) * 2.0);
+      return col;
+    }
 
     void main() {
       vec2 px = gl_FragCoord.xy / u_scale;
@@ -70,7 +98,7 @@
 
       float la = clamp(max(max(add.r, add.g), add.b), 0.0, 1.0);
       float a = clamp(cover + la * (1.0 - cover), 0.0, 1.0);
-      vec3 col = u_deep * cover * (1.0 - la) + add;
+      vec3 col = field(px, res, c) * cover * (1.0 - la) + add;
       // vormultipliert: Farbe nie heller als die Deckkraft
       gl_FragColor = vec4(min(col, vec3(a)), a);
     }
@@ -114,7 +142,7 @@
     gl.enableVertexAttribArray(loc);
     gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
     const u = {};
-    for (const n of ["res", "scale", "mode", "r", "ring", "open", "frame", "time", "g1", "g2", "deep"])
+    for (const n of ["res", "scale", "mode", "r", "ring", "open", "frame", "time", "glow", "g1", "g2", "deep"])
       u[n] = gl.getUniformLocation(prog, "u_" + n);
     const rgb = (c) => c.map((v) => v / 255);
     gl.uniform3fv(u.g1, rgb(COLORS.g1));
@@ -181,7 +209,9 @@
     gl.uniform1f(u.mode, mode === "lid" ? 1 : 0);
 
     const lid = mode === "lid";
-    const START = lid ? 1000 : 300;
+    // Erst baut sich das Licht von den Seiten auf, dann öffnet sich die Fläche
+    const BUILD = 1600;
+    const START = BUILD + (lid ? 500 : 200);
     const DUR = lid ? 2000 : 2600;
     const TOTAL = START + DUR + 600;
     const Rmax = Math.hypot(W / 2, H / 2) + 120;
@@ -224,6 +254,7 @@
         const t = Math.max(0, Math.min(1, (ms - START) / DUR));
         const e = ease(t);
         gl.uniform1f(u.time, ms / 1000);
+        gl.uniform1f(u.glow, easeInOutCubic(Math.min(1, ms / BUILD)));
         if (lid) {
           gl.uniform1f(u.open, e * Omax);
           // Lichtlinie erscheint vor dem Öffnen, verglimmt zum Ende
