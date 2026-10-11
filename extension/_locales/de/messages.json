@@ -168,6 +168,9 @@
   "appZoneFailed": {
     "message": "Zone konnte nicht angelegt werden"
   },
+  "dropDownloads": {
+    "message": "In Downloads sichern"
+  },
   "dropRelease": {
     "message": "Loslassen zum Ablegen"
   },

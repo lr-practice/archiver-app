@@ -1359,11 +1359,11 @@
     const source = code ? igSource(code, item) : currentPageSource();
     const hit = item ? igPick(item, video, imageUrl) : null;
     if (hit) {
-      chrome.runtime.sendMessage({ type: "download-image", url: hit.url, suggestedName: `instagram-${code}-${fileNameOf(hit.url).slice(0, 40)}`.replace(/\.(jpe?g|mp4|webp|heic)$/i, "") + "." + hit.ext, folder, ...source });
+      chrome.runtime.sendMessage({ type: "download-image", url: hit.url, suggestedName: `instagram-${code}-${fileNameOf(hit.url).slice(0, 40)}`.replace(/\.(jpe?g|mp4|webp|heic)$/i, "") + "." + hit.ext, folder, toDownloads: shiftDrop, ...source });
     } else if (video) {
       photographVideo(video, folder);
     } else if (imageUrl) {
-      chrome.runtime.sendMessage({ type: "download-image", url: resolveUrl(imageUrl), folder, ...source });
+      chrome.runtime.sendMessage({ type: "download-image", url: resolveUrl(imageUrl), folder, toDownloads: shiftDrop, ...source });
     }
   }
 
@@ -1392,6 +1392,9 @@
     return typeof result === "string" ? resolveUrl(result) : result;
   }
 
+  // Shift beim Loslassen: Bild landet in ~/Downloads statt in der Zone
+  let shiftDrop = false;
+
   document.addEventListener(
     "dragenter",
     (e) => {
@@ -1408,6 +1411,12 @@
       if (!e.dataTransfer || manualOpen) return;
       e.preventDefault(); // notwendig, damit "drop" überhaupt feuert
       e.dataTransfer.dropEffect = "copy";
+      // Mit Shift geht das Bild am Archiv vorbei in den Download-Ordner
+      if (zonesBarEl && zonesBarEl.classList.contains("to-downloads") !== e.shiftKey) {
+        zonesBarEl.classList.toggle("to-downloads", e.shiftKey);
+        const hint = t(e.shiftKey ? "dropDownloads" : "dropRelease");
+        zoneEls.forEach((el) => (el.querySelector(".zone-hint").textContent = hint));
+      }
       if (zoneEls.length) {
         const activeIdx = getZoneIndex(e.clientX, e.clientY);
         zoneEls.forEach((el, i) => el.classList.toggle("active", i === activeIdx));
@@ -1431,6 +1440,7 @@
     (e) => {
       if (manualOpen) return;
       const zoneIdx = getZoneIndex(e.clientX, e.clientY);
+      shiftDrop = e.shiftKey;
       debugLog("drop, zoneIdx:", zoneIdx, "types:", e.dataTransfer.types);
 
       if (zoneIdx === -1) {
@@ -1495,11 +1505,11 @@
         if (result.file) {
           const reader = new FileReader();
           reader.onload = () => {
-            chrome.runtime.sendMessage({ type: "download-image", url: reader.result, suggestedName: result.file.name, folder });
+            chrome.runtime.sendMessage({ type: "download-image", url: reader.result, suggestedName: result.file.name, folder, toDownloads: shiftDrop });
           };
           reader.readAsDataURL(result.file);
         } else {
-          chrome.runtime.sendMessage({ type: "download-image", url: result, folder, ...currentPageSource() });
+          chrome.runtime.sendMessage({ type: "download-image", url: result, folder, toDownloads: shiftDrop, ...currentPageSource() });
         }
       }
       removeZones();

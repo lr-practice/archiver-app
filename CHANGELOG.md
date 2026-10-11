@@ -1,10 +1,11 @@
 # Changelog
 
-## App 0.19.2 (11.10.2026)
+## App 0.19.2 · Extension 3.16.3 (11.10.2026)
 
 - Getting Started läuft im normalen Fenster, kein erzwungenes Vollbild mehr.
 - Im Kapitel zu den Active Zones bleibt die Leiste unten stehen, bis man weitergeht.
 - Neue Öffnung nach der Tour: Im Dunkel drückt blaues Licht von den Seiten herein, eine helle Linie teilt die Fläche quer, dann öffnet sich die Oberfläche (Welle oder Lid).
+- Extension: Bild mit gedrückter Shift-Taste auf eine Zone ziehen legt es schlicht in den Download-Ordner, am Archiv vorbei. Die Zonen zeigen dabei „In Downloads sichern“.
 
 ## App 0.19.1 · Extension 3.16.2 (10.10.2026)
 

@@ -168,6 +168,9 @@
   "appZoneFailed": {
     "message": "Could not create the zone"
   },
+  "dropDownloads": {
+    "message": "Save to Downloads"
+  },
   "dropRelease": {
     "message": "Release to drop"
   },

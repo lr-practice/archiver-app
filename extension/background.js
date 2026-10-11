@@ -659,7 +659,31 @@ async function exportForApp() {
 
 // ---- Download ----
 
+// Mit Shift abgelegt: schlicht in den Download-Ordner, ohne Archiv und Galerie
+async function saveToDownloads(message, sender) {
+  const tabId = sender.tab && sender.tab.id;
+  const frameId = sender.frameId;
+  const filename = buildFilename(message.url, message.suggestedName, "");
+  let id;
+  try {
+    id = await startDownload({ url: message.url, filename, saveAs: false, conflictAction: "uniquify" });
+  } catch (err) {
+    console.warn("[Archiver] Download fehlgeschlagen:", err.message);
+    sendFeedback(tabId, frameId, t("downloadFailed"), false);
+    return { ok: false };
+  }
+  const { state } = await waitForDownload(id);
+  if (state !== "complete") {
+    if (state === "interrupted") await eraseDownload(id);
+    sendFeedback(tabId, frameId, t("downloadFailed"), false);
+    return { ok: false };
+  }
+  sendFeedback(tabId, frameId, t("savedIn", ["Downloads"]), true);
+  return { ok: true };
+}
+
 async function handleDownload(message, sender) {
+  if (message.toDownloads) return saveToDownloads(message, sender);
   if (await appBridge()) return saveToApp(message, sender);
   const folderKey = message.folder ? sanitizePath(message.folder) : "";
   const filename = buildFilename(message.url, message.suggestedName, folderKey);
