@@ -5365,7 +5365,7 @@ html[data-nav="tr"] .p-top {
   width: min(100%, calc(var(--fit-h) * 595 / 842));
 }
 
-/* ---- Vorschau 0.24.4: Inhalt läuft unter der Leiste weich aus ----
+/* ---- 0.24.4: Inhalt läuft unter der Leiste weich aus ----
    fade: der Inhalt selbst blendet oben nach transparent aus (weich gerechnet, ohne Knick)
    glass: Unschärfe über dem Inhalt, die nach unten ausläuft, dazu ein leichtes Ausblenden */
 html[data-topfade] #zones {

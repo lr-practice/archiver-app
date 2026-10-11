@@ -62,6 +62,11 @@
     else delete document.documentElement.dataset.radius;
   }
 
+  // Oben beim Scrollen: Inhalt läuft unter der Leiste aus, als Verlauf (Standard) oder Glas
+  function applyTopFade(id) {
+    document.documentElement.dataset.topfade = id === "glass" ? "glass" : "fade";
+  }
+
   // Position der Navigation: oben/unten, jeweils links, Mitte, rechts
   const NAV_POS = ["tl", "tc", "tr", "bl", "bc", "br"];
   function applyNavPos(id) {
@@ -131,6 +136,7 @@
   ]; // state.focus für „Alle Bilder“
 
   applyRadius(pref("radius", "round"));
+  applyTopFade(pref("topFade", "fade"));
   applyNavPos(pref("navPos", "tl"));
 
   const state = {
@@ -1853,6 +1859,16 @@
           sizeChips(Math.max(0, SIZES.indexOf(state.size)), SIZES.length, (step) => {
             state.size = SIZES[step];
             setPref("size", state.size);
+            rerender();
+          })
+        )
+      );
+      view.appendChild(
+        blockRow(
+          t("setTopFade"),
+          choice([["fade", t("setTopFadeFade")], ["glass", t("setTopFadeGlass")]], pref("topFade", "fade"), (id) => {
+            setPref("topFade", id);
+            applyTopFade(id);
             rerender();
           })
         )

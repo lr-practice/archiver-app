@@ -1,5 +1,10 @@
 # Changelog
 
+## App 0.24.4 (11.10.2026)
+
+- Ordnerkarten oben in der Zone: ein Sechstel breit, Bild im Verhältnis 2:1 wie die Zonenkarten, mehr Luft darüber. ↑ aus der obersten Bildreihe springt auf die Karten, ←→ wechselt, Enter filtert, ↓ oder Esc führt zurück.
+- Beim Scrollen läuft der Inhalt unter der Navigation weich aus, ohne Kante. Einstellungen › Darstellung › Oberkante beim Scrollen: Verlauf (Standard) oder Glas.
+
 ## App 0.24.3 (11.10.2026)
 
 - Navigation und Bibliotheks-Reiter beginnen auf der Oberkante der Fensterknöpfe. Der Abstand vom grünen Knopf zur Leiste entspricht dem Abstand vom Fensterrand zum roten Knopf.
