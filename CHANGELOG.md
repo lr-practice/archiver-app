@@ -1,5 +1,11 @@
 # Changelog
 
+## App 0.24.3 (11.10.2026)
+
+- Navigation und Bibliotheks-Reiter beginnen auf der Oberkante der Fensterknöpfe. Der Abstand vom grünen Knopf zur Leiste entspricht dem Abstand vom Fensterrand zum roten Knopf.
+- Zonen mit Unterordnern zeigen oben die Ordner als Karten (Vorschau, Name, Anzahl). Ein Klick filtert auf den Ordner, ein zweiter hebt den Filter auf.
+- PDF-Ersteller: Jede Seite passt in der Vorschau ganz ins Fenster und sitzt mittig, für Kontaktbogen, Plakat und Moodboard, quer und hoch.
+
 ## App 0.24.2 (11.10.2026)
 
 - Navigation etwas kompakter (Knöpfe 36 px, Rand 5 px, Innenabstand 14 px). Fensterknöpfe, Leiste und Bibliotheks-Reiter liegen auf einer Mittellinie.

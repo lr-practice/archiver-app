@@ -851,6 +851,29 @@
     return wrap;
   }
 
+  // Ordner als Karten oben in der Zone: Vorschau, Name, Anzahl. Klick filtert wie die Chips.
+  function folderCards(zone, folders, items) {
+    const named = folders.filter(([f]) => f);
+    const wrap = el("div", "p-cards p-cards-grid p-folder-cards");
+    wrap.style.setProperty("--card-cols", String(Math.min(4, Math.max(3, named.length))));
+    for (const [f, n] of named) {
+      const card = el("article", "p-card p-folder-card" + (state.folder === f ? " active" : ""));
+      card.appendChild(cardCover(applyItemOrder(zone.path, items.filter((i) => i.folder === f))));
+      const body = el("div", "p-card-body");
+      const text = el("div");
+      text.appendChild(el("div", "zone-card-name", f));
+      text.appendChild(el("div", "p-card-meta", n === 1 ? t("countImage") : t("countImages", { n })));
+      body.appendChild(text);
+      card.appendChild(body);
+      card.addEventListener("click", () => {
+        state.folder = state.folder === f ? null : f;
+        renderZones();
+      });
+      wrap.appendChild(card);
+    }
+    return wrap;
+  }
+
   // Vorschaubild für Startseite und Karten; fehlt das Thumbnail noch, das Original nehmen.
   function previewImg(item) {
     if (quoteOf(item)) return textSheet(item, "text-sheet mini");
@@ -2303,6 +2326,7 @@
       renderToolbar();
       renderZones();
     }));
+    if (single && shown[0] && hasFolders) wrap.appendChild(folderCards(shown[0], folders, all));
     wrap.appendChild(bar);
     if (filtersShown()) wrap.insertBefore(filterBar(), bar);
 

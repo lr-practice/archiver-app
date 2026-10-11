@@ -5216,9 +5216,17 @@ body.lightbox-open .p-lib-tab,
 
 /* ---- 0.24.2: Navigation kompakt, Fensterknöpfe, Leiste und Bibliotheks-Reiter auf einer Mittellinie ---- */
 :root {
-  --top-h: 58px;
+  --top-h: 72px;
   --nav-h: 36px;
   --nav-rim: 5px;
+  /* Oberkante der Leiste = Oberkante der Fensterknöpfe (0.24.3) */
+  --nav-top: 17px;
+}
+
+.p-top {
+  align-items: flex-start;
+  padding-top: var(--nav-top);
+  padding-left: 88px;
 }
 
 .p-nav {
@@ -5249,7 +5257,7 @@ body.lightbox-open .p-lib-tab,
 }
 
 .p-lib-tab {
-  top: calc((var(--top-h) - var(--nav-h) - 2 * var(--nav-rim)) / 2);
+  top: var(--nav-top);
   padding: var(--nav-rim);
 }
 
@@ -5294,4 +5302,44 @@ html[data-nav^="b"] .p-more-menu.zone-menu {
 
 .p-ctx-zone {
   padding: 8px 10px;
+}
+
+/* ---- 0.24.3: Ordner als Karten oben in der Zone ---- */
+.p-folder-cards {
+  margin: 8px 0 28px;
+}
+.p-folder-card {
+  cursor: pointer;
+}
+.p-folder-card .p-card-cover {
+  aspect-ratio: 16 / 7;
+}
+.p-folder-card.active {
+  outline: 1px dashed var(--p-text);
+  outline-offset: 3px;
+}
+
+html[data-nav="tc"] .p-top,
+html[data-nav="tr"] .p-top {
+  padding-top: var(--nav-top);
+}
+
+/* ---- 0.24.3: PDF-Vorschau passt jede Seite ganz ins Fenster, mittig, Seiten untereinander ---- */
+.pdf-stage,
+.pdf-stage.portrait,
+.pdf-stage.board,
+.pdf-stage.board.portrait {
+  --fit-h: calc(100vh - 116px);
+  grid-template-columns: minmax(0, 1fr);
+  justify-items: center;
+  max-width: none;
+  margin: 0;
+}
+
+.pdf-stage .pdf-page {
+  width: min(100%, calc(var(--fit-h) * 842 / 595));
+}
+
+.pdf-stage.portrait .pdf-page {
+  width: min(100%, calc(var(--fit-h) * 595 / 842));
 }
