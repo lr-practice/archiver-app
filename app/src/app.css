@@ -5306,14 +5306,35 @@ html[data-nav^="b"] .p-more-menu.zone-menu {
 
 /* ---- 0.24.3: Ordner als Karten oben in der Zone ---- */
 .p-folder-cards {
-  margin: 8px 0 28px;
+  --card-cols: 6;
+  margin: 36px 0 28px;
 }
 .p-folder-card {
   cursor: pointer;
 }
 .p-folder-card .p-card-cover {
-  aspect-ratio: 16 / 7;
+  height: auto;
+  aspect-ratio: 2 / 1;
+  overflow: hidden;
+  grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
 }
+.p-folder-card .p-card-cover:not(.trio) {
+  grid-template-rows: minmax(0, 1fr);
+}
+.p-folder-card .p-card-cover > * {
+  min-height: 0;
+  min-width: 0;
+}
+.p-folder-card .p-card-body {
+  padding: 10px 12px 12px;
+}
+.p-folder-card .zone-card-name {
+  font-size: 13px;
+}
+.p-folder-card .p-card-meta {
+  font-size: 12px;
+}
+.p-folder-card.kbd-focus,
 .p-folder-card.active {
   outline: 1px dashed var(--p-text);
   outline-offset: 3px;

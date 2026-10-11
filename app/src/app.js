@@ -855,9 +855,9 @@
   function folderCards(zone, folders, items) {
     const named = folders.filter(([f]) => f);
     const wrap = el("div", "p-cards p-cards-grid p-folder-cards");
-    wrap.style.setProperty("--card-cols", String(Math.min(4, Math.max(3, named.length))));
     for (const [f, n] of named) {
-      const card = el("article", "p-card p-folder-card" + (state.folder === f ? " active" : ""));
+      const idx = wrap.children.length;
+      const card = el("article", "p-card p-folder-card" + (state.folder === f ? " active" : "") + (state.folderKbd === idx ? " kbd-focus" : ""));
       card.appendChild(cardCover(applyItemOrder(zone.path, items.filter((i) => i.folder === f))));
       const body = el("div", "p-card-body");
       const text = el("div");
@@ -869,6 +869,7 @@
         state.folder = state.folder === f ? null : f;
         renderZones();
       });
+      card.dataset.folder = f;
       wrap.appendChild(card);
     }
     return wrap;
@@ -2698,7 +2699,10 @@
   }
 
   function setFocus(path) {
-    if (path !== state.focus) state.folder = null;
+    if (path !== state.focus) {
+      state.folder = null;
+      state.folderKbd = null;
+    }
     state.focus = path;
     setPref("focus", path);
     if (state.query) {
@@ -2858,6 +2862,43 @@
     const step = columnsOf(anchor.zone) * (dir === "down" ? 1 : -1);
     const next = list[Math.max(0, Math.min(list.length - 1, i + step))];
     if (next) go(next.path);
+  }
+
+  // Ordnerkarten per Tastatur: ↑ aus der obersten Bildreihe springt auf die Karten,
+  // ←→ wechselt, Enter/Leertaste filtert, ↓ und Esc führen zurück zu den Bildern.
+  function folderKey(e) {
+    const cards = [...document.querySelectorAll(".p-folder-card")];
+    if (!cards.length) return false;
+    const mark = (i) => {
+      state.folderKbd = i;
+      cards.forEach((c, n) => c.classList.toggle("kbd-focus", n === i));
+      if (i != null) cards[i].scrollIntoView({ block: "nearest", behavior: "smooth" });
+    };
+    if (state.folderKbd != null && cards[state.folderKbd]) {
+      const i = state.folderKbd;
+      if (e.key === "ArrowRight" || e.key === "ArrowLeft") mark(Math.max(0, Math.min(cards.length - 1, i + (e.key === "ArrowRight" ? 1 : -1))));
+      else if (e.key === "Enter" || e.key === " ") cards[i].click();
+      else if (e.key === "ArrowDown" || e.key === "Escape") {
+        mark(null);
+        const first = allVisible()[0];
+        if (e.key === "ArrowDown" && first) selectAndShow(first.path);
+      } else return false;
+      return true;
+    }
+    if (e.key !== "ArrowUp" || e.shiftKey) return false;
+    const flat = allVisible();
+    const anchor = state.anchor && cardCache.get(state.anchor);
+    const top = flat[0] && cardCache.get(flat[0].path);
+    if (anchor && top && anchor.getBoundingClientRect().top > top.getBoundingClientRect().top + 4) return false;
+    const x = anchor ? anchor.getBoundingClientRect().left + anchor.offsetWidth / 2 : 0;
+    let best = 0;
+    cards.forEach((c, n) => {
+      const r = c.getBoundingClientRect();
+      if (Math.abs(r.left + r.width / 2 - x) < Math.abs(cards[best].getBoundingClientRect().left + cards[best].offsetWidth / 2 - x)) best = n;
+    });
+    selectOnly(null);
+    mark(best);
+    return true;
   }
 
   function selectAndShow(path) {
@@ -4869,6 +4910,11 @@
     }
 
     if (!mod && !e.altKey && document.body.classList.contains("at-home") && !state.page && homeKey(e)) {
+      e.preventDefault();
+      return;
+    }
+
+    if (!mod && !e.altKey && !state.page && isZone(state.focus) && folderKey(e)) {
       e.preventDefault();
       return;
     }
