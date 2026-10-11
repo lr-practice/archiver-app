@@ -14,6 +14,8 @@ const GAP: f64 = 20.0;
 const CAPTION: f64 = 28.0;
 const SMALL: f64 = 7.5;
 const GREY: &str = "0.55 g";
+const NOTE_LINES: usize = 2;
+const NOTE_LEAD: f64 = 9.5;
 
 #[derive(Clone, Debug, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -28,6 +30,9 @@ pub struct SheetItem {
     pub quote: Option<String>,
     /// Format für den Platzhalter, z. B. "SVG"
     pub label: String,
+    /// Notiz zum Objekt, steht unter der Quelle (Layout.notes)
+    #[serde(default)]
+    pub note: Option<String>,
 }
 
 /// Raster je Seite, Ausrichtung und Bildunterschriften, wie im PDF-Ersteller gewählt.
@@ -43,6 +48,9 @@ pub struct Layout {
     /// Plakat: Bilder randlos im Raster, angeschnitten, Beschriftung im Bild
     #[serde(default)]
     pub poster: bool,
+    /// Notizen unter der Bildunterschrift (nur Kontaktbogen)
+    #[serde(default)]
+    pub notes: bool,
 }
 
 fn yes() -> bool {
@@ -57,7 +65,7 @@ impl Layout {
             2 => (2, 1),
             _ => (3, 2),
         };
-        Layout { cols, rows, portrait: false, captions: true, poster: false }
+        Layout { cols, rows, portrait: false, captions: true, poster: false, notes: false }
     }
 }
 
@@ -222,7 +230,11 @@ pub fn contact_sheet(title: &str, meta: &str, items: &[SheetItem], layout: Layou
     let cols = layout.cols.clamp(1, 6);
     let rows = layout.rows.clamp(1, 6);
     let (page_w, page_h) = if layout.portrait { (A4_SHORT, A4_LONG) } else { (A4_LONG, A4_SHORT) };
-    let caption = if layout.captions { CAPTION } else { 0.0 };
+    let caption = match (layout.captions, layout.notes) {
+        (false, _) => 0.0,
+        (true, false) => CAPTION,
+        (true, true) => CAPTION + NOTE_LINES as f64 * NOTE_LEAD,
+    };
     let per_page = cols * rows;
     let pages = items.len().div_ceil(per_page).max(1);
     // Große Felder bekommen das Original statt des Vorschaubilds
@@ -316,6 +328,15 @@ pub fn contact_sheet(title: &str, meta: &str, items: &[SheetItem], layout: Layou
             if let Some(source) = item.source.as_deref().filter(|s| !s.is_empty()) {
                 content.extend_from_slice(format!("{GREY}\n").as_bytes());
                 text_op(&mut content, "F1", SMALL, x, name_y - 10.0, &fit(source, SMALL, cell_w));
+                content.extend_from_slice(b"0 g\n");
+            }
+            if let Some(note) = item.note.as_deref().filter(|n| layout.notes && !n.trim().is_empty()) {
+                let mut y = name_y - 10.0 - NOTE_LEAD - 2.0;
+                content.extend_from_slice(b"0.3 g\n");
+                for line in wrap(note, SMALL, cell_w, NOTE_LINES) {
+                    text_op(&mut content, "F1", SMALL, x, y, &line);
+                    y -= NOTE_LEAD;
+                }
                 content.extend_from_slice(b"0 g\n");
             }
         }
@@ -510,6 +531,126 @@ fn poster_sheet(title: &str, meta: &str, items: &[SheetItem], layout: Layout) ->
     finish(objects, &page_ids)
 }
 
+/// Moodboard: ein Objekt frei auf der Fläche, Lage und Größe als Anteile
+/// (0–1) der Fläche zwischen Kopf und Fuß. Spätere Objekte liegen oben.
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BoardItem {
+    #[serde(flatten)]
+    pub item: SheetItem,
+    pub x: f64,
+    pub y: f64,
+    pub w: f64,
+    pub h: f64,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Board {
+    #[serde(default)]
+    pub portrait: bool,
+    /// Notizen klein unter dem Bild
+    #[serde(default)]
+    pub notes: bool,
+    /// Hintergrund: weiß oder schwarz
+    #[serde(default)]
+    pub dark: bool,
+    pub items: Vec<BoardItem>,
+}
+
+/// Fläche des Moodboards auf der Seite: (x, y unten, Breite, Höhe).
+pub fn board_area(portrait: bool) -> (f64, f64, f64, f64) {
+    let (page_w, page_h) = if portrait { (A4_SHORT, A4_LONG) } else { (A4_LONG, A4_SHORT) };
+    let top = page_h - MARGIN - 30.0;
+    let bottom = MARGIN + 18.0;
+    (MARGIN, bottom, page_w - 2.0 * MARGIN, top - bottom)
+}
+
+/// Eine Seite, Bilder frei gesetzt wie im Moodboard-Layouter.
+pub fn moodboard(title: &str, meta: &str, board: &Board) -> Vec<u8> {
+    let (page_w, page_h) = if board.portrait { (A4_SHORT, A4_LONG) } else { (A4_LONG, A4_SHORT) };
+    let (ax, ay, aw, ah) = board_area(board.portrait);
+    let (ink, dim) = if board.dark { ("1 g", "0.6 g") } else { ("0 g", GREY) };
+
+    let mut objects: Vec<Vec<u8>> = Vec::new();
+    objects.push(b"<< /Type /Catalog /Pages 2 0 R >>".to_vec());
+    objects.push(Vec::new());
+    objects.push(b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>".to_vec());
+    objects.push(b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>".to_vec());
+
+    let mut content = Vec::new();
+    let mut xobjects = String::new();
+    if board.dark {
+        content.extend_from_slice(format!("0.07 g 0 0 {page_w} {page_h} re f\n").as_bytes());
+    }
+    content.extend_from_slice(format!("{ink}\n").as_bytes());
+    text_op(&mut content, "F2", 9.0, MARGIN, page_h - MARGIN - 9.0, &fit(title, 9.0, page_w / 2.0));
+    let meta_bytes = fit(meta, 9.0, page_w / 2.0 - MARGIN);
+    content.extend_from_slice(format!("{dim}\n").as_bytes());
+    text_op(&mut content, "F1", 9.0, page_w - MARGIN - text_width(&meta_bytes, 9.0), page_h - MARGIN - 9.0, &meta_bytes);
+    text_op(&mut content, "F1", SMALL, MARGIN, MARGIN - 4.0, b"Archiver");
+
+    for b in &board.items {
+        let w = (b.w.clamp(0.01, 1.0)) * aw;
+        let h = (b.h.clamp(0.01, 1.0)) * ah;
+        let x = ax + b.x.clamp(-0.5, 1.0) * aw;
+        let top = ay + ah - b.y.clamp(-0.5, 1.0) * ah;
+        let bottom = top - h;
+        let item = &b.item;
+        // Große Felder bekommen das Original
+        let max = if w.max(h) > 300.0 { 2400 } else { 1200 };
+        let pic = if item.quote.is_some() {
+            None
+        } else {
+            item.file
+                .as_deref()
+                .filter(|_| max > 1200)
+                .and_then(|f| picture(f, max))
+                .or_else(|| item.thumb.as_deref().and_then(|t| picture(t, 1200)))
+                .or_else(|| item.file.as_deref().and_then(|f| picture(f, 1200)))
+        };
+        if let Some(pic) = pic {
+            let id = image_object(&mut objects, &mut xobjects, &pic);
+            // Bild füllt das Feld; Lage und Seitenverhältnis kommen aus dem Layouter
+            content.extend_from_slice(format!("q {w:.2} 0 0 {h:.2} {x:.2} {bottom:.2} cm /Im{id} Do Q\n").as_bytes());
+        } else if let Some(quote) = &item.quote {
+            let size = (h / 10.0).clamp(7.0, 18.0);
+            let lead = size * 1.3;
+            let lines = (h / lead).floor().max(1.0) as usize;
+            let mut y = top - size;
+            content.extend_from_slice(format!("{ink}\n").as_bytes());
+            for line in wrap(&format!("„{}“", quote.trim()), size, w, lines) {
+                text_op(&mut content, "F1", size, x, y, &line);
+                y -= lead;
+            }
+        } else {
+            content.extend_from_slice(format!("0.93 g {x:.2} {bottom:.2} {w:.2} {h:.2} re f\n").as_bytes());
+        }
+        if let Some(note) = item.note.as_deref().filter(|n| board.notes && !n.trim().is_empty()) {
+            content.extend_from_slice(format!("{dim}\n").as_bytes());
+            let mut y = bottom - SMALL - 3.0;
+            for line in wrap(note, SMALL, w.max(60.0), 3) {
+                text_op(&mut content, "F1", SMALL, x, y, &line);
+                y -= NOTE_LEAD;
+            }
+        }
+    }
+
+    let mut stream = format!("<< /Length {} >>\nstream\n", content.len()).into_bytes();
+    stream.extend_from_slice(&content);
+    stream.extend_from_slice(b"\nendstream");
+    objects.push(stream);
+    let content_id = objects.len();
+    objects.push(
+        format!(
+            "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 {page_w} {page_h}] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> /XObject << {xobjects}>> >> /Contents {content_id} 0 R >>"
+        )
+        .into_bytes(),
+    );
+    let page = objects.len();
+    finish(objects, &[page])
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -582,7 +723,7 @@ mod tests {
             SheetItem { thumb: Some(light), name: "stool.png".into(), ..Default::default() },
             SheetItem { quote: Some("Weniger, aber besser.".into()), name: "Zitat".into(), ..Default::default() },
         ];
-        let layout = Layout { cols: 4, rows: 4, portrait: true, captions: true, poster: true };
+        let layout = Layout { cols: 4, rows: 4, portrait: true, captions: true, poster: true, notes: false };
         let pdf = contact_sheet("Shop", "3 Objekte", &items, layout);
         let text = String::from_utf8_lossy(&pdf);
         assert!(text.contains("/BaseFont /Courier"));
@@ -603,11 +744,49 @@ mod tests {
     #[test]
     fn portrait_grid_without_captions() {
         let items: Vec<SheetItem> = (0..13).map(|i| SheetItem { name: format!("x{i}"), label: "SVG".into(), ..Default::default() }).collect();
-        let layout = Layout { cols: 3, rows: 4, portrait: true, captions: false, poster: false };
+        let layout = Layout { cols: 3, rows: 4, portrait: true, captions: false, poster: false, notes: false };
         let pdf = contact_sheet("Hoch", "", &items, layout);
         let text = String::from_utf8_lossy(&pdf);
         assert!(text.contains("/MediaBox [0 0 595 842]"));
         assert!(text.contains("/Count 2"));
         assert!(!text.contains("(x0)"));
+    }
+
+    #[test]
+    fn moodboard_places_items_and_notes() {
+        let tmp = tempfile::tempdir().unwrap();
+        let file = tmp.path().join("a.png");
+        image::RgbImage::from_pixel(40, 20, image::Rgb([200, 0, 0])).save(&file).unwrap();
+        let item = |note: Option<&str>| SheetItem { file: Some(file.clone()), name: "a.png".into(), note: note.map(String::from), ..Default::default() };
+        let board = Board {
+            portrait: false,
+            notes: true,
+            dark: true,
+            items: vec![
+                BoardItem { item: item(Some("Warum: Kontrast")), x: 0.1, y: 0.1, w: 0.5, h: 0.4 },
+                BoardItem { item: SheetItem { quote: Some("Weniger ist mehr".into()), ..Default::default() }, x: 0.6, y: 0.6, w: 0.3, h: 0.2 },
+            ],
+        };
+        let pdf = moodboard("Board", "2 Objekte", &board);
+        let text = String::from_utf8_lossy(&pdf);
+        assert!(text.starts_with("%PDF"));
+        assert_eq!(text.matches("/Type /Page ").count(), 1);
+        assert!(text.contains("(Warum: Kontrast)"));
+        assert!(text.contains("Weniger ist mehr"));
+        assert!(text.contains("0.07 g 0 0 842 595 re f"));
+        // Bild an der gesetzten Stelle: x = 40 + 0.1 * 762
+        assert!(text.contains(" 116.20 "), "x-Position");
+    }
+
+    #[test]
+    fn sheet_with_notes() {
+        let item = SheetItem { name: "a".into(), label: "PNG".into(), note: Some("Notiz zum Bild".into()), ..Default::default() };
+        let mut layout = Layout::auto(1);
+        layout.notes = true;
+        let text = String::from_utf8_lossy(&contact_sheet("T", "M", &[item.clone()], layout)).into_owned();
+        assert!(text.contains("(Notiz zum Bild)"));
+        layout.notes = false;
+        let text = String::from_utf8_lossy(&contact_sheet("T", "M", &[item], layout)).into_owned();
+        assert!(!text.contains("Notiz zum Bild"));
     }
 }

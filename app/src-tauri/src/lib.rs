@@ -9,6 +9,7 @@
 pub mod bridge;
 pub mod library;
 pub mod pdf;
+pub mod studio;
 mod viewer;
 #[cfg(target_os = "macos")]
 mod macos;
@@ -36,6 +37,9 @@ struct AppState {
 #[derive(Serialize, Deserialize, Default)]
 struct Settings {
     library: Option<String>,
+    /// Name oder Kürzel für „abgelegt von“ und die geteilte Bibliothek
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    user: Option<String>,
 }
 
 fn settings_path(app: &AppHandle) -> Option<PathBuf> {
@@ -152,6 +156,7 @@ fn start_analysis_worker(app: AppHandle, lib: Arc<Library>) -> mpsc::Sender<()> 
 /// Öffnet eine Bibliothek, startet Watcher und Vorschau-Worker und liest den Bestand ein.
 fn activate(app: &AppHandle, root: &Path) -> Result<(), String> {
     let lib = Arc::new(Library::open(root)?);
+    lib.set_user(load_settings(app).user);
     let state = app.state::<AppState>();
     *state.watcher.lock().unwrap() = None;
 
@@ -189,6 +194,26 @@ fn activate(app: &AppHandle, root: &Path) -> Result<(), String> {
     .map_err(|e| e.to_string())?;
     debouncer.watch(root, notify::RecursiveMode::Recursive).map_err(|e| e.to_string())?;
     *state.watcher.lock().unwrap() = Some(debouncer);
+
+    // Geteilt: Änderungen der anderen kommen übers Netz oft ohne Ereignis an,
+    // darum regelmäßig nachsehen, solange diese Bibliothek offen ist.
+    if lib.shared {
+        let poll_app = app.clone();
+        let poll_lib = Arc::downgrade(&lib);
+        std::thread::spawn(move || loop {
+            std::thread::sleep(Duration::from_secs(15));
+            let Some(lib) = poll_lib.upgrade() else { break };
+            let current = poll_app.state::<AppState>().library.lock().unwrap().clone();
+            if !current.map(|c| Arc::ptr_eq(&c, &lib)).unwrap_or(false) {
+                break;
+            }
+            let before = lib.signature();
+            if lib.scan().unwrap_or(false) || lib.signature() != before {
+                let _ = poll_app.emit("library-changed", ());
+                kick_thumbs(&poll_app);
+            }
+        });
+    }
 
     let scan_app = app.clone();
     std::thread::spawn(move || rescan(&scan_app, &lib));
@@ -238,7 +263,7 @@ async fn pick_export_file(app: AppHandle) -> Option<String> {
 #[tauri::command]
 async fn open_library(app: AppHandle, path: String) -> Result<(), String> {
     activate(&app, Path::new(&path))?;
-    save_settings(&app, &Settings { library: Some(path) })
+    save_settings(&app, &Settings { library: Some(path), ..load_settings(&app) })
 }
 
 // ---- Demo-Bibliothek für die Einstiegstour ----
@@ -471,17 +496,110 @@ struct Snapshot {
     name: String,
     zones: Vec<Zone>,
     items: Vec<Item>,
+    /// Eigene Reihenfolge je Zone (Hashes), per Ziehen in der Zone gesetzt
+    order: std::collections::HashMap<String, Vec<String>>,
+    shared: bool,
+    user: Option<String>,
 }
 
 #[tauri::command]
 async fn snapshot(state: State<'_, AppState>) -> Result<Snapshot, String> {
     let lib = current(&state)?;
+    let user = lib.user.lock().unwrap().clone();
     Ok(Snapshot {
         root: lib.root.to_string_lossy().into_owned(),
         name: lib.root.file_name().and_then(|n| n.to_str()).unwrap_or("Archiver").to_string(),
         zones: lib.zones()?,
         items: lib.items()?,
+        order: lib.item_order(),
+        shared: lib.shared,
+        user,
     })
+}
+
+// ---- Notiz, Rechte, geteilte Bibliothek, Reihenfolge, Paket, Moodboard (studio.rs) ----
+
+#[tauri::command]
+async fn set_note(app: AppHandle, state: State<'_, AppState>, hashes: Vec<String>, patch: studio::NotePatch) -> Result<(), String> {
+    let lib = current(&state)?;
+    tauri::async_runtime::spawn_blocking(move || lib.set_note(&hashes, &patch)).await.map_err(|e| e.to_string())??;
+    let _ = app.emit("library-changed", ());
+    Ok(())
+}
+
+#[tauri::command]
+async fn set_item_order(state: State<'_, AppState>, zone: String, hashes: Vec<String>) -> Result<(), String> {
+    current(&state)?.set_item_order(&zone, &hashes)
+}
+
+/// Name merken und die Bibliothek als geteilt markieren (oder zurück).
+/// Wechselt der Modus, öffnet die App die Bibliothek neu: die Datenbank zieht
+/// dabei vom Bibliotheksordner auf den Mac (geteilt) bzw. zurück.
+#[tauri::command]
+async fn set_sharing(app: AppHandle, state: State<'_, AppState>, shared: bool, user: Option<String>) -> Result<(), String> {
+    let user = user.map(|u| u.trim().to_string()).filter(|u| !u.is_empty());
+    let settings = load_settings(&app);
+    save_settings(&app, &Settings { user: user.clone(), ..settings })?;
+    let lib = current(&state)?;
+    lib.set_user(user);
+    if lib.shared == shared {
+        return Ok(());
+    }
+    let root = lib.root.clone();
+    // Aktuellen Stand sichern, damit die neue Datenbank ihn wiederfindet
+    lib.write_metadata_to(&lib.metadata_path())?;
+    if shared {
+        lib.write_metadata_to(&lib.person_file())?;
+    }
+    studio::set_shared(&root, shared)?;
+    drop(lib);
+    activate(&app, &root)?;
+    let _ = app.emit("library-changed", ());
+    Ok(())
+}
+
+/// Zone oder Auswahl als Paket: Ordner wählen, Dateien, Quellen.csv/.md und
+/// Kontaktbogen hineinlegen, dann im Finder zeigen.
+#[tauri::command]
+async fn export_package(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    paths: Vec<String>,
+    title: String,
+    meta: String,
+    sheet: bool,
+) -> Result<Option<studio::PackageReport>, String> {
+    let lib = current(&state)?;
+    let mut dialog = app.dialog().file();
+    if let Some(dir) = dirs::desktop_dir() {
+        dialog = dialog.set_directory(dir);
+    }
+    let Some(dest) = dialog.blocking_pick_folder().and_then(|p| p.into_path().ok()) else {
+        return Ok(None);
+    };
+    let report = tauri::async_runtime::spawn_blocking(move || lib.export_package(&paths, &title, &meta, &dest, sheet))
+        .await
+        .map_err(|e| e.to_string())??;
+    let _ = app.opener().reveal_item_in_dir(&report.path);
+    Ok(Some(report))
+}
+
+#[tauri::command]
+async fn export_moodboard(app: AppHandle, title: String, meta: String, file_name: String, board: pdf::Board) -> Result<Option<String>, String> {
+    let mut dialog = app.dialog().file().add_filter("PDF", &["pdf"]).set_file_name(&file_name);
+    if let Some(dir) = dirs::download_dir() {
+        dialog = dialog.set_directory(dir);
+    }
+    let Some(path) = dialog.blocking_save_file().and_then(|p| p.into_path().ok()) else {
+        return Ok(None);
+    };
+    let target = path.clone();
+    tauri::async_runtime::spawn_blocking(move || std::fs::write(&target, pdf::moodboard(&title, &meta, &board)))
+        .await
+        .map_err(|e| e.to_string())?
+        .map_err(|e| e.to_string())?;
+    let _ = app.opener().open_path(path.to_string_lossy(), None::<&str>);
+    Ok(Some(path.to_string_lossy().into_owned()))
 }
 
 #[tauri::command]
@@ -834,6 +952,11 @@ pub fn run() {
             open_url,
             open_file,
             export_pdf,
+            export_moodboard,
+            export_package,
+            set_note,
+            set_item_order,
+            set_sharing,
             copy_images,
             startup_sound_name,
             play_startup_sound,

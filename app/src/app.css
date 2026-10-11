@@ -2987,8 +2987,9 @@ html.light .p-nav {
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
-  background: #f4f3ef;
-  color: #141414;
+  /* Farbe pro Karte (app.js quoteTone): naive Grundfarben, Schrift Ton in Ton */
+  background: var(--ts-bg, #f4f3ef);
+  color: var(--ts-fg, #141414);
   font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
 }
 
@@ -3006,7 +3007,8 @@ html.light .p-nav {
 .text-sheet .ts-label,
 .text-sheet .ts-foot {
   font-family: ui-monospace, "SF Mono", Menlo, monospace;
-  color: #8a8a85;
+  color: var(--ts-fg, #8a8a85);
+  opacity: var(--ts-dim, 1);
   letter-spacing: 0.02em;
 }
 
@@ -4716,4 +4718,235 @@ html[data-nav="tc"] .page-open .p-top {
 
 .p-choice .p-link {
   margin-left: 10px;
+}
+
+/* ---- Studio (0.20): Notiz, Rechte, eigene Reihenfolge ---- */
+
+/* Notiz und Rechte im Infopanel: ruhige Felder ohne Rahmen, Linie erst beim Schreiben */
+.note-field {
+  width: 100%;
+  min-width: 0;
+  padding: 2px 0;
+  border: none;
+  border-bottom: 1px dashed transparent;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: inherit;
+  outline: none;
+  user-select: text;
+  -webkit-user-select: text;
+  transition: border-color 0.15s ease;
+}
+
+.note-field::placeholder {
+  color: var(--muted);
+}
+
+.note-field:hover {
+  border-bottom-color: var(--line);
+}
+
+.note-field:focus {
+  border-bottom-color: var(--dash);
+}
+
+.note-text {
+  display: block;
+  padding: 9px 0;
+  border-top: 1px solid var(--line);
+  resize: none;
+  overflow: hidden;
+  line-height: 1.45;
+  text-align: left;
+}
+
+.lb-row-value .note-field {
+  text-align: right;
+}
+
+.p-block-side .note-field {
+  width: 200px;
+  text-align: right;
+}
+
+.p-studio-lead {
+  margin: -6px 0 18px;
+}
+
+/* „nur intern“: kleiner Punkt oben rechts auf der Karte */
+.card-internal::after {
+  content: "";
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--danger);
+  box-shadow: 0 0 0 1.5px rgba(0, 0, 0, 0.5);
+}
+
+/* Umsortieren in der Zone: gestrichelte Einfügelinie vor bzw. hinter der Karte */
+.card.drop-before::before,
+.card.drop-after::before {
+  content: "";
+  position: absolute;
+  z-index: 3;
+  top: 0;
+  bottom: 0;
+  width: 0;
+  border-left: 2px dashed var(--accent);
+}
+
+.card.drop-before::before {
+  left: 0;
+}
+
+.card.drop-after::before {
+  right: 0;
+}
+
+.original .card.drop-before::before,
+.original .card.drop-after::before {
+  top: auto;
+  bottom: auto;
+  left: 0;
+  right: 0;
+  width: auto;
+  height: 0;
+  border-left: none;
+  border-top: 2px dashed var(--accent);
+}
+
+.original .card.drop-before::before {
+  top: 0;
+}
+
+.original .card.drop-after::before {
+  bottom: 0;
+}
+
+/* PDF-Ersteller: Notiz unter der Bildunterschrift (wie pdf.rs NOTE_LINES) */
+.pdf-page.with-notes .pdf-cap {
+  height: calc(var(--u) * 47);
+}
+
+.pdf-cap .pdf-note {
+  color: #4d4d4d;
+  white-space: normal;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  margin-top: calc(var(--u) * 2);
+}
+
+/* Moodboard: eine Seite, Objekte frei gesetzt */
+.pdf-stage.board {
+  grid-template-columns: minmax(0, 1fr);
+  max-width: 1100px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.pdf-stage.board.portrait {
+  max-width: 640px;
+}
+
+.pdf-page.board.dark {
+  background: #121212;
+  color: #ffffff;
+}
+
+.pdf-page.board.dark .pdf-head span,
+.pdf-page.board.dark .pdf-foot,
+.pdf-page.board.dark .pdf-bnote {
+  color: #999999;
+}
+
+.pdf-board {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  margin: 0 calc(var(--u) * 40);
+}
+
+.pdf-bcell {
+  position: absolute;
+  cursor: grab;
+}
+
+.pdf-bcell img,
+.pdf-bcell .pdf-bquote {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  user-select: none;
+  pointer-events: none;
+}
+
+.pdf-bquote {
+  position: relative;
+  overflow: hidden;
+  container-type: size;
+  padding: 6cqw;
+}
+
+.pdf-bquote .ts-label,
+.pdf-bquote .ts-foot {
+  font-size: max(5px, 4cqw);
+}
+
+.pdf-bquote .ts-body {
+  flex: 1;
+  margin-top: 4cqw;
+  font-size: 8cqw;
+  font-weight: 500;
+  line-height: 1.25;
+  overflow: hidden;
+}
+
+.pdf-bnote {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  padding-top: calc(var(--u) * 3);
+  font-size: calc(var(--u) * 7.5);
+  line-height: 1.25;
+  color: #4d4d4d;
+  pointer-events: none;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.pdf-bcell.lifted {
+  outline: 1px dashed var(--accent);
+  outline-offset: 2px;
+  z-index: 5;
+}
+
+.pdf-grip {
+  position: absolute;
+  right: -5px;
+  bottom: -5px;
+  width: 12px;
+  height: 12px;
+  border: 1px solid var(--accent);
+  background: #ffffff;
+  cursor: nwse-resize;
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+
+.pdf-bcell:hover .pdf-grip,
+.pdf-bcell:hover .pdf-remove {
+  opacity: 1;
+}
+
+.pdf-maker.moving .pdf-grip {
+  opacity: 0;
 }

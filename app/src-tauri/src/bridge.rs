@@ -114,14 +114,20 @@ pub fn install_manifests() -> Vec<PathBuf> {
 
 /// Bibliotheksordner aus den Einstellungen der App.
 fn library_root() -> Option<PathBuf> {
-    #[derive(Deserialize)]
-    struct Settings {
-        library: Option<String>,
-    }
-    let file = dirs::config_dir()?.join(APP_IDENTIFIER).join("settings.json");
-    let settings: Settings = serde_json::from_str(&std::fs::read_to_string(file).ok()?).ok()?;
-    let root = PathBuf::from(settings.library?);
+    let root = PathBuf::from(app_settings()?.library?);
     root.is_dir().then_some(root)
+}
+
+#[derive(Deserialize)]
+struct AppSettings {
+    library: Option<String>,
+    #[serde(default)]
+    user: Option<String>,
+}
+
+fn app_settings() -> Option<AppSettings> {
+    let file = dirs::config_dir()?.join(APP_IDENTIFIER).join("settings.json");
+    serde_json::from_str(&std::fs::read_to_string(file).ok()?).ok()
 }
 
 fn read_message(input: &mut impl Read) -> Option<Value> {
@@ -170,6 +176,8 @@ fn library<'a>(slot: &'a mut Option<(PathBuf, Library)>) -> Result<&'a Library, 
     if slot.as_ref().map(|(r, _)| r != &root).unwrap_or(true) {
         *slot = Some((root.clone(), Library::open(&root)?));
     }
+    // Name für „abgelegt von“ kann sich in der App jederzeit ändern
+    slot.as_ref().unwrap().1.set_user(app_settings().and_then(|s| s.user));
     Ok(&slot.as_ref().unwrap().1)
 }
 

@@ -84,6 +84,13 @@
     } catch {}
   }
 
+  // Studio-Funktionen (Einstellungen › Studio): jede einzeln abschaltbar, Standard an.
+  // Die geteilte Bibliothek ist kein Schalter hier, sie hängt an der Bibliothek selbst.
+  const FEATURES = ["notes", "moodboard", "order", "rights", "package"];
+  function feat(id) {
+    return pref("feat." + id, true) !== false;
+  }
+
   // ---- Freischalten: ein gemeinsamer Code, nur sein Hash steht im Code ----
 
   const UNLOCK_HASH = "4ffbc1224a6cd30617b443e4665695d19c63d76ba51f6b16bdcdc8b28a2d1e13";
@@ -156,6 +163,9 @@
     lead: null, // bewegliches Ende einer Shift-Auswahl
     lists: new Map(), // Zone → sichtbare Einträge (nach Suche)
     lightbox: null, // { zone, index }
+    order: {}, // Zone → Hashes in eigener Reihenfolge (zones.json, Schlüssel "sort")
+    shared: false, // geteilte Bibliothek (studio.rs)
+    user: "", // Name für „abgelegt von“
   };
 
   // ---- Helfer ----
@@ -217,10 +227,30 @@
     return m ? m[1].trim() : "";
   }
 
+  // Naive Grundfarben (Rot, Grün, Violett, Cyan, Gelb), Schrift Ton in Ton.
+  // Die Farbe hängt am Hash: dieselbe Karte bleibt immer gleich.
+  const QUOTE_TONES = [
+    ["#ff0000", "#7a0000", 0.7],
+    ["#00b050", "#004d23", 0.7],
+    ["#7030a0", "#d4b0f0", 0.75],
+    ["#00b0f0", "#004e6b", 0.7],
+    ["#ffff00", "#7a7a00", 0.75],
+  ];
+  function quoteTone(item) {
+    const key = String(item.hash || item.path || "");
+    let h = 0;
+    for (let i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) >>> 0;
+    return QUOTE_TONES[h % QUOTE_TONES.length];
+  }
+
   // Textkarte als Text statt Bild: Kennung, Zitat, Quelle und Datum
   function textSheet(item, cls) {
     const len = quoteOf(item).length;
     const sheet = el("div", cls + (len < 140 ? " short" : len < 400 ? " medium" : " long"));
+    const [bg, fg, dim] = quoteTone(item);
+    sheet.style.setProperty("--ts-bg", bg);
+    sheet.style.setProperty("--ts-fg", fg);
+    sheet.style.setProperty("--ts-dim", dim);
     sheet.appendChild(el("div", "ts-label", "TEXT"));
     sheet.appendChild(el("div", "ts-body", quoteOf(item)));
     const date = new Date(item.capturedAt || item.addedAt || 0).toLocaleDateString(lang === "de" ? "de-DE" : "en-GB");
@@ -331,6 +361,9 @@
     syncZoneOrder();
     state.items = snap.items;
     state.byPath = new Map(snap.items.map((i) => [i.path, i]));
+    state.order = snap.order || {};
+    state.shared = !!snap.shared;
+    state.user = snap.user || "";
     if (isZone(state.focus) && !state.zones.some((z) => z.path === state.focus)) state.focus = null;
     for (const p of [...state.selection]) if (!state.byPath.has(p)) state.selection.delete(p);
     // Offenes Menü nicht unter der Maus wegzeichnen (z. B. während „Wirklich löschen?“)
@@ -440,7 +473,7 @@
       zone: tokens(item.zone),
       site: tokens(domainOf(item.pageUrl) + " " + domainOf(item.imageUrl)),
       labels: String(item.labels || "").toLowerCase().split(",").map((l) => l.trim()).filter(Boolean),
-      text: tokens([item.text, item.quote].join(" ")),
+      text: tokens([item.text, item.quote, feat("notes") ? item.note : "", feat("rights") ? item.credit : "", item.addedBy].join(" ")),
       colors,
     };
     return item._idx;
@@ -801,6 +834,8 @@
         found.push([score, itemTime(item) || 0, item]);
       }
     }
+    // Eigene Reihenfolge je Zone (per Ziehen gesetzt); Neues ohne Platz steht vorn
+    if (feat("order")) for (const [zone, list] of state.lists) applyItemOrder(zone, list);
     // Finden: eine Liste nach Relevanz, bei gleicher Punktzahl das Neueste zuerst
     state.found = words.length || filtering ? found.sort((a, b) => b[0] - a[0] || b[1] - a[1]).map((x) => x[2]) : null;
 
@@ -817,6 +852,35 @@
     layoutMasonry(true);
     grid.scrollTop = scroll;
     for (const path of [...cardCache.keys()]) if (!state.byPath.has(path)) cardCache.delete(path);
+  }
+
+  function applyItemOrder(zone, list) {
+    const order = state.order && state.order[zone];
+    if (!order || !order.length) return list;
+    const pos = new Map(order.map((h, i) => [h, i]));
+    const at = (item) => (pos.has(item.hash) ? pos.get(item.hash) : -1);
+    return list.sort((a, b) => at(a) - at(b));
+  }
+
+  // Objekte in einer Zone umstellen: `moved` (Pfade) vor bzw. hinter `ref` (Pfad)
+  async function reorderInZone(zone, moved, ref, after) {
+    const list = (state.lists.get(zone) || []).slice();
+    const movedSet = new Set(moved);
+    const picked = list.filter((i) => movedSet.has(i.path));
+    const rest = list.filter((i) => !movedSet.has(i.path));
+    let at = rest.findIndex((i) => i.path === ref);
+    if (at < 0) return;
+    if (after) at++;
+    rest.splice(at, 0, ...picked);
+    const hashes = [];
+    for (const i of rest) if (!hashes.includes(i.hash)) hashes.push(i.hash);
+    state.order = { ...state.order, [zone]: hashes };
+    renderZones();
+    try {
+      await invoke("set_item_order", { zone, hashes });
+    } catch (e) {
+      fail(e);
+    }
   }
 
   // ---- Startseite: Index (D), Index mit Vorschau (E) oder Karten (F) ----
@@ -1519,10 +1583,10 @@
   // Zeile am Griff ziehen: wandert live mit, beim Loslassen wird gespeichert
   // Einstellungen: oben eine ruhige Liste der Bereiche, jeder öffnet sein Untermenü.
   // Ganz unten steht immer der Freischalt-Code.
-  const SETTINGS_SECTIONS = ["library", "look", "connect", "sound", "general"];
+  const SETTINGS_SECTIONS = ["library", "look", "studio", "connect", "sound", "general"];
 
   function sectionTitle(id) {
-    return t({ library: "setLibrary", look: "setView", connect: "setConnect", sound: "setSound", general: "setGeneral" }[id]);
+    return t({ library: "setLibrary", look: "setView", studio: "setStudio", connect: "setConnect", sound: "setSound", general: "setGeneral" }[id]);
   }
 
   function sectionSummary(id) {
@@ -1533,6 +1597,10 @@
       return t({ system: "themeSystem", light: "themeLight", dark: "themeDark" }[th]) + " · " + scheme;
     }
     if (id === "connect") return t("setConnectSummary");
+    if (id === "studio") {
+      const on = FEATURES.filter(feat).length;
+      return on + " / " + FEATURES.length + (state.shared ? " · " + t("featSharedOn") : "");
+    }
     if (id === "sound") return pref("startSound", true) ? t("setOn") : t("setOff");
     return lang === "de" ? "Deutsch" : "English";
   }
@@ -1702,6 +1770,8 @@
 
     if (sub === "sound") wrap.appendChild(renderSoundSettings());
 
+    if (sub === "studio") renderStudioSettings(wrap, rerender);
+
     if (sub === "general") {
       const general = block(t("setLanguage"));
       general.appendChild(
@@ -1739,6 +1809,76 @@
       wrap.appendChild(keys);
     }
     return wrap;
+  }
+
+  // Studio: Schalter je Funktion, dazu Name und geteilte Bibliothek
+  function renderStudioSettings(wrap, rerender) {
+    wrap.appendChild(el("p", "p-block-hint p-studio-lead", t("setStudioText")));
+    const tools = block(null);
+    for (const [id, title, text] of [
+      ["notes", "featNotes", "featNotesText"],
+      ["moodboard", "featMoodboard", "featMoodboardText"],
+      ["order", "featOrder", "featOrderText"],
+      ["rights", "featRights", "featRightsText"],
+      ["package", "featPackage", "featPackageText"],
+    ]) {
+      tools.appendChild(
+        blockRow(
+          [el("div", null, t(title)), el("div", "p-block-text dim", t(text))],
+          choice([["on", t("setOn")], ["off", t("setOff")]], feat(id) ? "on" : "off", (v) => {
+            setPref("feat." + id, v === "on");
+            for (const item of state.items) item._idx = null;
+            cardCache.clear();
+            rerender();
+            renderInfo();
+          })
+        )
+      );
+    }
+    wrap.appendChild(tools);
+
+    const team = block(t("featShared"));
+    team.appendChild(blockRow(el("div", "p-block-text", t("featSharedText"))));
+    const name = el("input", "p-input note-field");
+    name.value = state.user || "";
+    name.placeholder = t("featUserPlaceholder");
+    name.spellcheck = false;
+    const saveName = () => {
+      const v = name.value.trim();
+      if (v === (state.user || "")) return;
+      state.user = v;
+      invoke("set_sharing", { shared: state.shared, user: v || null }).catch(fail);
+    };
+    name.addEventListener("blur", saveName);
+    name.addEventListener("keydown", (e) => {
+      e.stopPropagation();
+      if (e.key === "Enter" || e.key === "Escape") name.blur();
+    });
+    team.appendChild(blockRow([el("div", null, t("featUser")), el("div", "p-block-text dim", t("featUserText"))], name));
+    team.appendChild(
+      blockRow(
+        t("featShared"),
+        choice([["off", t("featSharedOff")], ["on", t("featSharedOn")]], state.shared ? "on" : "off", async (v) => {
+          const shared = v === "on";
+          if (shared === state.shared) return;
+          const user = name.value.trim();
+          if (shared && !user) {
+            name.focus();
+            return toast(t("featSharedNeedsName"), false);
+          }
+          try {
+            await invoke("set_sharing", { shared, user: user || null });
+            state.user = user;
+            await refresh();
+            toast(t(shared ? "featSharedDone" : "featSharedOffDone"));
+          } catch (e) {
+            fail(e);
+          }
+          rerender();
+        })
+      )
+    );
+    wrap.appendChild(team);
   }
 
   // Zonen beim Ziehen: Deckkraft, gilt in der App und (über die Bibliothek) in der Extension
@@ -2139,6 +2279,25 @@
         invoke("reveal_zone", { zone: zone.path }).catch(fail);
       })
     );
+    if (feat("package") && zone.count) {
+      menu.appendChild(
+        button("zone-menu-item", t("packageExport"), () => {
+          closeMenus();
+          exportPackage(applyItemOrder(zone.path, state.items.filter((i) => i.zone === zone.path)), lastSegment(zone.path) || state.name);
+        })
+      );
+    }
+    if (feat("order") && state.order[zone.path]) {
+      menu.appendChild(
+        button("zone-menu-item", t("orderReset"), () => {
+          closeMenus();
+          const { [zone.path]: _, ...rest } = state.order;
+          state.order = rest;
+          renderZones();
+          invoke("set_item_order", { zone: zone.path, hashes: [] }).catch(fail);
+        })
+      );
+    }
     if (canEdit(zone.path)) {
       const del = button("zone-menu-item danger", t("trashZone"));
       let armed = false;
@@ -2248,7 +2407,9 @@
       const src = thumbSrc(item);
       if (img.getAttribute("src") !== src) img.src = src;
     }
-    card.querySelector(".card-badge").textContent = domainOf(item.pageUrl) || item.filename;
+    card.querySelector(".card-badge").textContent =
+      (feat("rights") && item.internal ? t("internalBadge") + " · " : "") + (domainOf(item.pageUrl) || item.filename);
+    card.classList.toggle("card-internal", feat("rights") && !!item.internal);
     // Seitenverhältnis fürs Bild, damit die Spalten vor dem Laden stehen
     if (state.view === "original" && item.width && item.height) card.style.setProperty("--ar", `${item.width} / ${item.height}`);
     else card.style.removeProperty("--ar");
@@ -2310,6 +2471,9 @@
     const panel = $("info");
     panel.hidden = !state.infoOpen;
     if (!state.infoOpen) return;
+    // Nicht unter den Fingern neu zeichnen, solange Notiz oder Rechte bearbeitet werden
+    const active = document.activeElement;
+    if (active && panel.contains(active) && active.matches("textarea, input")) return;
     panel.innerHTML = "";
     const items = selectedItems();
 
@@ -2322,6 +2486,7 @@
       panel.appendChild(el("div", "info-multi", t("selected", { n: items.length })));
       panel.appendChild(zoneSelect(null, (zone) => moveSelection(zone)));
       const actions = el("div", "info-actions");
+      if (feat("package")) actions.appendChild(button("btn", t("packageExport"), () => exportPackage(items, t("pdfSelection"))));
       actions.appendChild(button("btn danger", t("trash"), trashSelection));
       panel.appendChild(actions);
       return;
@@ -2829,6 +2994,7 @@
     head.appendChild(el("span", "lead", lead + "."));
     inner.appendChild(head);
     if (quoteOf(item)) inner.appendChild(lbBlock(t("quote"), [quoteBox(item, "lb-quote")]));
+    if (feat("notes")) inner.appendChild(lbBlock(t("note"), [noteField(item, "note", t("notePlaceholder"), true)]));
 
     let source = null;
     if (item.pageUrl) {
@@ -2852,8 +3018,23 @@
         source || lbRow(t("source"), t("noSource")),
         imageUrl,
         lbRow(t("savedAt"), formatDate(item.capturedAt || item.addedAt)),
+        item.addedBy ? lbRow(t("addedBy"), item.addedBy) : null,
       ])
     );
+    if (feat("rights")) {
+      const internal = chip("(" + t("internal") + ")", !!item.internal, () => {
+        item.internal = !item.internal;
+        internal.classList.toggle("active", item.internal);
+        saveNote(item, { internal: item.internal });
+      });
+      inner.appendChild(
+        lbBlock(t("rights"), [
+          lbRow(t("credit"), noteField(item, "credit", t("creditPlaceholder"))),
+          lbRow(t("license"), noteField(item, "license", t("licensePlaceholder"))),
+          lbRow("", internal),
+        ])
+      );
+    }
     inner.appendChild(
       lbBlock(t("viewerFile"), [
         item.pages ? lbRow(t("pages"), String(item.pages)) : null,
@@ -2881,6 +3062,57 @@
     }
     inner.appendChild(links);
     return inner;
+  }
+
+  // Notiz, Urheber, Lizenz: speichert beim Verlassen des Felds (⌘↩ ebenso)
+  function noteField(item, key, placeholder, multi) {
+    const f = el(multi ? "textarea" : "input", "note-field" + (multi ? " note-text" : ""));
+    f.value = item[key] || "";
+    f.placeholder = placeholder;
+    f.spellcheck = multi;
+    if (multi) {
+      f.rows = 1;
+      const grow = () => {
+        f.style.height = "auto";
+        f.style.height = f.scrollHeight + "px";
+      };
+      f.addEventListener("input", grow);
+      requestAnimationFrame(grow);
+    }
+    const commit = () => {
+      const value = f.value.trim();
+      if (value === (item[key] || "")) return;
+      item[key] = value || null;
+      item._idx = null;
+      saveNote(item, { [key]: value });
+    };
+    f.addEventListener("blur", commit);
+    f.addEventListener("keydown", (e) => {
+      e.stopPropagation(); // Leertaste, Pfeile, 1–4 gehören hier dem Text
+      if (e.key === "Escape" || (e.key === "Enter" && (e.metaKey || !multi))) {
+        e.preventDefault();
+        f.blur();
+      }
+    });
+    return f;
+  }
+
+  function saveNote(item, patch) {
+    invoke("set_note", { hashes: [item.hash], patch }).catch(fail);
+  }
+
+  // ---- Zone oder Auswahl als Paket (Dateien, Quellen.csv/.md, Kontaktbogen) ----
+  async function exportPackage(items, title) {
+    if (!items.length) return toast(t("pdfNothing"));
+    const date = new Date().toLocaleDateString(lang === "de" ? "de-DE" : "en-GB", { day: "numeric", month: "long", year: "numeric" });
+    const meta = t(items.length === 1 ? "pdfCount1" : "pdfCount", { n: items.length }) + " · " + date;
+    try {
+      const r = await invoke("export_package", { paths: items.map((i) => i.path), title, meta, sheet: true });
+      if (!r) return;
+      toast(t("packageDone", { n: r.count }) + (r.internal ? " " + t("packageInternal", { n: r.internal }) : ""), true, r.internal ? 6000 : 2600);
+    } catch (e) {
+      fail(e);
+    }
   }
 
   // Maße: Bilder und Videos in Pixeln, PDF-Seiten in Millimetern
@@ -3322,10 +3554,28 @@
 
   function clearDropUi() {
     for (const n of document.querySelectorAll(".drop-active")) n.classList.remove("drop-active");
+    for (const n of document.querySelectorAll(".drop-before, .drop-after")) n.classList.remove("drop-before", "drop-after");
+  }
+
+  // Umsortieren: alle gezogenen Objekte liegen in der gerade offenen Zone,
+  // die Maus steht über einer anderen Karte dieser Zone. Davor oder dahinter
+  // je nach Hälfte (Raster: links/rechts, Original-Ansicht: oben/unten).
+  function reorderTarget(x, y) {
+    if (!feat("order") || !isZone(state.focus) || state.query.trim() || filtersActive()) return null;
+    if (!dragPaths.length || dragHome !== state.focus) return null;
+    const rels = dragPaths.filter(insideLibrary).map((p) => p.slice(state.root.length + 1));
+    if (rels.length !== dragPaths.length || rels.some((r) => (state.byPath.get(r) || {}).zone !== state.focus)) return null;
+    const hit = document.elementFromPoint(x, y);
+    const card = hit && !hit.closest("#dropbar") ? hit.closest("#zones .card") : null;
+    if (!card || rels.includes(card.dataset.path)) return null;
+    const r = card.getBoundingClientRect();
+    const after = state.view === "original" ? y > r.top + r.height / 2 : x > r.left + r.width / 2;
+    return { card, ref: card.dataset.path, after, moved: rels };
   }
 
   let dragPaths = [];
   let lastTarget = null;
+  let lastReorder = null;
   let dropCount = 0; // für die Tour: wurde schon etwas abgelegt?
 
   function onDragDrop(event) {
@@ -3334,6 +3584,7 @@
     if (p.type === "leave") {
       dragPaths = [];
       lastTarget = null;
+      lastReorder = null;
       return clearDropUi();
     }
     if (p.type === "enter" && !document.body.classList.contains("at-home")) showDropbar();
@@ -3347,6 +3598,8 @@
     if (p.type === "enter" || p.type === "over") {
       clearDropUi();
       lastTarget = target;
+      lastReorder = target && target.dataset.zone !== dragHome ? null : reorderTarget(x, y);
+      if (lastReorder) lastReorder.card.classList.add(lastReorder.after ? "drop-after" : "drop-before");
       if (target && target.dataset.zone !== dragHome) target.classList.add("drop-active");
       return;
     }
@@ -3354,6 +3607,15 @@
     // läge an derselben Stelle sonst die eigene Zone darunter.
     if (lastTarget) target = lastTarget;
     lastTarget = null;
+    const reorder = lastReorder;
+    lastReorder = null;
+
+    if (p.type === "drop" && reorder && (!target || target.dataset.zone === dragHome)) {
+      clearDropUi();
+      hideDropbar();
+      dragPaths = [];
+      return reorderInZone(state.focus, reorder.moved, reorder.ref, reorder.after);
+    }
 
     if (p.type === "drop") {
       clearDropUi();
@@ -3429,7 +3691,74 @@
       source: i.quote ? i.pageTitle || null : [i.artist, i.album].filter(Boolean).join(" · ") || domainOf(i.pageUrl) || null,
       quote: i.quote || null,
       label: String(i.format || "").toUpperCase(),
+      note: feat("notes") ? i.note || null : null,
     };
+  }
+
+  // ---- Moodboard: Objekte frei auf einer Seite (PDF-Ersteller, Stil „Moodboard“) ----
+  // Lage und Größe als Anteile (0–1) der Fläche zwischen Kopf und Fuß, wie
+  // pdf.rs board_area. Gemerkt je Auswahl (über die Hashes), damit ein
+  // Moodboard beim nächsten Öffnen so aussieht wie verlassen.
+
+  const BOARD_GAP = 8; // Punkte
+  function boardArea(portrait) {
+    const P = PDF_PAGE;
+    const [w, h] = portrait ? [P.short, P.long] : [P.long, P.short];
+    return { w: w - 2 * P.margin, h: h - P.margin - 30 - (P.margin + 18) };
+  }
+
+  function boardRatio(item) {
+    if (item.quote || quoteOf(item)) return 4 / 3;
+    return item.width && item.height ? item.width / item.height : 1;
+  }
+
+  // Erste Anordnung: Zeilen im Blocksatz, so viele, dass die Fläche am besten gefüllt ist
+  function boardAuto(items, portrait, notes) {
+    const A = boardArea(portrait);
+    const cap = notes ? 22 : 0;
+    const ratios = items.map(boardRatio);
+    let best = null;
+    for (let rows = 1; rows <= Math.max(1, items.length); rows++) {
+      // Zeilen mit möglichst gleicher Summe der Seitenverhältnisse
+      const total = ratios.reduce((a, b) => a + b, 0);
+      const lines = [];
+      let line = [];
+      let sum = 0;
+      ratios.forEach((r, i) => {
+        line.push(i);
+        sum += r;
+        if (sum >= (total / rows) * (lines.length + 1) - r / 2 && lines.length < rows - 1) {
+          lines.push(line);
+          line = [];
+        }
+      });
+      if (line.length) lines.push(line);
+      const heights = lines.map((l) => (A.w - BOARD_GAP * (l.length - 1)) / l.reduce((a, i) => a + ratios[i], 0));
+      const used = heights.reduce((a, b) => a + b + cap, 0) + BOARD_GAP * (lines.length - 1);
+      const scale = Math.min(1, A.h / used);
+      const fill = used * scale * (A.w * scale) / (A.w * A.h);
+      if (!best || fill > best.fill) best = { lines, heights, scale, used, fill };
+    }
+    const pos = new Map();
+    let y = (A.h - best.used * best.scale) / 2;
+    best.lines.forEach((l, li) => {
+      const h = best.heights[li] * best.scale;
+      const width = l.reduce((a, i) => a + ratios[i] * h, 0) + BOARD_GAP * best.scale * (l.length - 1);
+      let x = (A.w - width) / 2;
+      for (const i of l) {
+        const w = ratios[i] * h;
+        pos.set(items[i].path, { x: x / A.w, y: y / A.h, w: w / A.w, h: h / A.h });
+        x += w + BOARD_GAP * best.scale;
+      }
+      y += h + (cap + BOARD_GAP) * best.scale;
+    });
+    return pos;
+  }
+
+  function boardKey(items) {
+    let h = 0;
+    for (const s of items.map((i) => i.hash).sort().join("")) h = (h * 31 + s.charCodeAt(0)) >>> 0;
+    return "board." + h.toString(36);
   }
 
   // Helligkeit unten links im Vorschaubild (wo die Plakat-Beschriftung steht).
@@ -3462,7 +3791,20 @@
       portrait: pref("pdfPortrait", false),
       captions: pref("pdfCaptions", true),
       poster: pref("pdfPoster", false),
+      board: feat("moodboard") && pref("pdfBoard", false),
+      notes: feat("notes") && pref("pdfNotes", false),
+      dark: pref("pdfBoardDark", false),
     };
+    if (preset && preset.poster) opts.board = false;
+    // Moodboard: Lage je Objekt (Pfad → x, y, w, h), Reihenfolge der Liste = Stapel
+    const saved = pref(boardKey(items), null);
+    let board = saved && saved.portrait === opts.portrait ? new Map(Object.entries(saved.pos)) : null;
+    const boardFit = () => {
+      board = boardAuto(items, opts.portrait, opts.notes);
+      saveBoard();
+    };
+    const saveBoard = () => setPref(boardKey(items), { portrait: opts.portrait, pos: Object.fromEntries(board) });
+    if (board && items.some((i) => !board.has(i.path))) board = null;
     // Tour, Kapitel Plakat: gleich im Plakat-Stil, hoch, 16 pro Seite
     if (preset && preset.poster && !opts.poster) Object.assign(opts, { poster: true, portrait: true, layout: "16" });
     if (items.length <= 2 && !["1", "2"].includes(opts.layout)) opts.layout = items.length === 1 ? "1" : "2";
@@ -3498,7 +3840,12 @@
     side.appendChild(field(t("pdfFormatLabel"), formatRow));
     const captionRow = el("div", "pdf-chips");
     side.appendChild(field(t("pdfCaptionsLabel"), captionRow));
-    side.appendChild(el("p", "pdf-hint", t("pdfHint")));
+    const bgRow = el("div", "pdf-chips");
+    const bgField = field(t("pdfBoardBg"), bgRow);
+    side.appendChild(bgField);
+    const layoutField = layoutRow.parentElement;
+    const hint = el("p", "pdf-hint", t("pdfHint"));
+    side.appendChild(hint);
     const count = el("div", "pdf-count");
     side.appendChild(count);
 
@@ -3539,9 +3886,17 @@
           return b;
         })
       );
+      const sheetStyle = () => {
+        opts.board = false;
+        setPref("pdfBoard", false);
+      };
       styleRow.replaceChildren(
-        chip("(" + t("pdfStyleSheet") + ")", !opts.poster, () => setOpt("poster", false, "pdfPoster")),
-        chip("(" + t("pdfStylePoster") + ")", opts.poster, () => {
+        chip("(" + t("pdfStyleSheet") + ")", !opts.poster && !opts.board, () => {
+          sheetStyle();
+          setOpt("poster", false, "pdfPoster");
+        }),
+        chip("(" + t("pdfStylePoster") + ")", opts.poster && !opts.board, () => {
+          sheetStyle();
           // Plakat lebt vom dichten Raster: beim ersten Wechsel hochkant mit 16 pro Seite
           if (!opts.poster && pref("pdfPosterSet", false) === false) {
             setPref("pdfPosterSet", true);
@@ -3553,16 +3908,43 @@
           setOpt("poster", true, "pdfPoster");
         })
       );
+      if (feat("moodboard"))
+        styleRow.appendChild(
+          chip("(" + t("pdfStyleMoodboard") + ")", opts.board, () => {
+            opts.poster = false;
+            setPref("pdfPoster", false);
+            setOpt("board", true, "pdfBoard");
+          })
+        );
+      layoutField.hidden = opts.board;
+      bgField.hidden = !opts.board;
+      bgRow.replaceChildren(
+        chip("(" + t("pdfBoardLight") + ")", !opts.dark, () => setOpt("dark", false, "pdfBoardDark")),
+        chip("(" + t("pdfBoardDark") + ")", opts.dark, () => setOpt("dark", true, "pdfBoardDark")),
+        chip("(" + t("pdfBoardArrange") + ")", false, () => {
+          boardFit();
+          renderPages();
+        })
+      );
       formatRow.replaceChildren(
         chip("(" + t("pdfLandscape") + ")", !opts.portrait, () => setOpt("portrait", false, "pdfPortrait")),
         chip("(" + t("pdfPortraitLabel") + ")", opts.portrait, () => setOpt("portrait", true, "pdfPortrait"))
       );
-      captionRow.replaceChildren(
-        chip("(" + t("setOn") + ")", opts.captions, () => setOpt("captions", true, "pdfCaptions")),
-        chip("(" + t("setOff") + ")", !opts.captions, () => setOpt("captions", false, "pdfCaptions"))
-      );
+      // Bildunterschrift: aus, Name, Name mit Notiz (Moodboard: nur Notiz an/aus)
+      const capMode = opts.board ? (opts.notes ? "note" : "off") : !opts.captions ? "off" : opts.notes ? "note" : "on";
+      const setCaps = (captions, notes) => {
+        opts.notes = notes;
+        setPref("pdfNotes", notes);
+        if (opts.board) return renderAll();
+        setOpt("captions", captions, "pdfCaptions");
+      };
+      const capChips = [];
+      if (!opts.board) capChips.push(chip("(" + t("setOn") + ")", capMode === "on", () => setCaps(true, false)));
+      capChips.push(chip("(" + t("setOff") + ")", capMode === "off", () => setCaps(false, false)));
+      if (feat("notes") && !opts.poster) capChips.push(chip("(" + t("pdfCaptionsNotes") + ")", capMode === "note", () => setCaps(true, true)));
+      captionRow.replaceChildren(...capChips);
       const { cols, rows } = grid();
-      const pages = Math.max(1, Math.ceil(items.length / (cols * rows)));
+      const pages = opts.board ? 1 : Math.max(1, Math.ceil(items.length / (cols * rows)));
       count.textContent = meta() + " · " + t(pages === 1 ? "pdfPages1" : "pdfPagesN", { n: pages });
       save.disabled = !items.length;
     }
@@ -3570,11 +3952,16 @@
     function setOpt(key, value, prefKey) {
       opts[key] = value;
       setPref(prefKey, value);
+      // Neues Format: Moodboard neu anordnen
+      if (key === "portrait" && board) board = null;
       renderAll();
     }
 
     // ---- Vorschau: Seiten in A4-Proportion, Felder wie im PDF ----
     function renderPages() {
+      hint.textContent = t(opts.board ? "pdfBoardHint" : "pdfHint");
+      if (opts.board) return renderBoard();
+      stage.classList.remove("board");
       const { cols, rows } = grid();
       const per = cols * rows;
       const P = PDF_PAGE;
@@ -3598,6 +3985,7 @@
         foot.append(el("span", null, "Archiver"), el("span", null, `${p + 1} / ${Math.max(1, Math.ceil(items.length / per))}`));
         page.append(head, body, foot);
         page.classList.toggle("no-captions", !opts.captions);
+        page.classList.toggle("with-notes", opts.captions && opts.notes && !opts.poster);
         pages.push(page);
       }
       stage.replaceChildren(...pages);
@@ -3621,6 +4009,7 @@
       const cap = el("div", "pdf-cap");
       const name = opts.poster ? s.name.replace(/\.[a-z0-9]{1,5}$/i, "") : s.name;
       cap.append(el("span", null, name), el("span", "dim", s.source || ""));
+      if (opts.notes && !opts.poster && s.note) cap.appendChild(el("span", "pdf-note", s.note));
       if (opts.poster && !item.quote) {
         // Wie im PDF: Schrift hell auf dunklem Grund, sonst dunkel
         const img = box.querySelector("img");
@@ -3677,6 +4066,109 @@
       renderPages();
     }
 
+    // ---- Moodboard: eine Seite, Objekte frei verschieben und skalieren ----
+    function renderBoard() {
+      if (!board) boardFit();
+      const P = PDF_PAGE;
+      const [w, h] = opts.portrait ? [P.short, P.long] : [P.long, P.short];
+      const page = el("div", "pdf-page board" + (opts.dark ? " dark" : ""));
+      page.style.aspectRatio = `${w} / ${h}`;
+      const head = el("div", "pdf-head");
+      head.append(el("b", null, opts.title), el("span", null, meta()));
+      const area = el("div", "pdf-board");
+      items.forEach((item) => area.appendChild(boardCell(item, area)));
+      const foot = el("div", "pdf-foot");
+      foot.append(el("span", null, "Archiver"), el("span"));
+      page.append(head, area, foot);
+      stage.replaceChildren(page);
+      stage.classList.toggle("portrait", opts.portrait);
+      stage.classList.add("board");
+    }
+
+    function placeCell(cell, p) {
+      cell.style.left = p.x * 100 + "%";
+      cell.style.top = p.y * 100 + "%";
+      cell.style.width = p.w * 100 + "%";
+      cell.style.height = p.h * 100 + "%";
+    }
+
+    function boardCell(item, area) {
+      const cell = el("div", "pdf-bcell");
+      const p = board.get(item.path);
+      placeCell(cell, p);
+      if (quoteOf(item)) {
+        const q = textSheet(item, "text-sheet pdf-bquote");
+        cell.appendChild(q);
+      } else {
+        const img = el("img");
+        img.src = thumbSrc(item);
+        img.draggable = false;
+        cell.appendChild(img);
+      }
+      const s = sheetItem(item);
+      if (opts.notes && s.note) cell.appendChild(el("div", "pdf-bnote", s.note));
+      const grip = el("span", "pdf-grip");
+      cell.appendChild(grip);
+      const remove = button("pdf-remove", "×", (e) => {
+        e.stopPropagation();
+        items.splice(items.indexOf(item), 1);
+        board.delete(item.path);
+        saveBoard();
+        renderAll();
+      });
+      remove.title = t("pdfRemove");
+      cell.appendChild(remove);
+      // Doppelklick: nach vorn (zuletzt gezeichnet)
+      cell.addEventListener("dblclick", () => {
+        items.splice(items.indexOf(item), 1);
+        items.push(item);
+        renderPages();
+      });
+      cell.addEventListener("pointerdown", (e) => {
+        if (e.button !== 0 || e.target.closest(".pdf-remove")) return;
+        e.preventDefault();
+        const box = area.getBoundingClientRect();
+        const start = { ...board.get(item.path) };
+        const scaling = e.target === grip;
+        const ratio = (start.w * box.width) / (start.h * box.height);
+        root.classList.add("moving");
+        cell.classList.add("lifted");
+        let moved = false;
+        const move = (ev) => {
+          moved = true;
+          const dx = (ev.clientX - e.clientX) / box.width;
+          const dy = (ev.clientY - e.clientY) / box.height;
+          const next = { ...start };
+          if (scaling) {
+            // Ecke unten rechts: Seitenverhältnis bleibt
+            next.w = Math.max(0.04, Math.min(1.2, start.w + dx));
+            next.h = (next.w * box.width) / ratio / box.height;
+          } else {
+            next.x = Math.max(-next.w / 2, Math.min(1 - next.w / 2, start.x + dx));
+            next.y = Math.max(-next.h / 2, Math.min(1 - next.h / 2, start.y + dy));
+          }
+          board.set(item.path, next);
+          placeCell(cell, next);
+        };
+        const up = () => {
+          window.removeEventListener("pointermove", move);
+          root.classList.remove("moving");
+          cell.classList.remove("lifted");
+          saveBoard();
+          // Bewegtes liegt danach oben
+          const at = items.indexOf(item);
+          if (moved && at !== items.length - 1) {
+            items.splice(at, 1);
+            items.push(item);
+            renderPages();
+          }
+        };
+        window.addEventListener("pointermove", move);
+        window.addEventListener("pointerup", up, { once: true });
+      });
+      return cell;
+    }
+
     function onKey(e) {
       if (e.key === "Escape" && document.activeElement !== titleInput) close();
       else if (e.key === "Escape") titleInput.blur();
@@ -3699,13 +4191,25 @@
       save.disabled = true;
       save.textContent = t("pdfWorking");
       try {
-        const path = await invoke("export_pdf", {
-          title: opts.title,
-          meta: meta(),
-          fileName: name,
-          items: items.map(sheetItem),
-          layout: { cols, rows, portrait: opts.portrait, captions: opts.captions, poster: opts.poster },
-        });
+        const path = opts.board
+          ? await invoke("export_moodboard", {
+              title: opts.title,
+              meta: meta(),
+              fileName: name,
+              board: {
+                portrait: opts.portrait,
+                notes: opts.notes,
+                dark: opts.dark,
+                items: items.map((i) => ({ ...sheetItem(i), ...board.get(i.path) })),
+              },
+            })
+          : await invoke("export_pdf", {
+              title: opts.title,
+              meta: meta(),
+              fileName: name,
+              items: items.map(sheetItem),
+              layout: { cols, rows, portrait: opts.portrait, captions: opts.captions, poster: opts.poster, notes: opts.captions && opts.notes && !opts.poster },
+            });
         if (path) {
           tourStats.pdfs++;
           toast(t("pdfDone", { name: path.split("/").pop() }));

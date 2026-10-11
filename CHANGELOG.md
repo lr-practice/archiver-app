@@ -1,5 +1,17 @@
 # Changelog
 
+## App 0.20.0 (11.10.2026)
+
+Neu: Einstellungen › Studio. Jede Funktion lässt sich dort einzeln abschalten.
+
+- **Notiz:** Im Infopanel steht oben ein Feld „Warum diese Referenz?“. Notizen sind durchsuchbar und landen auf Wunsch im PDF (Bildunterschrift „Mit Notiz“).
+- **Moodboard:** Dritter Stil im PDF-Ersteller (⌘P). Die Objekte liegen frei auf einer Seite: ziehen verschiebt, die Ecke skaliert, ein Doppelklick holt nach vorn, „Anordnen“ setzt neu. Hintergrund hell oder dunkel. Die Anordnung bleibt je Auswahl gemerkt.
+- **Eigene Reihenfolge:** Objekte in einer Zone lassen sich per Ziehen umsortieren. Eine gestrichelte Linie zeigt, wo sie landen. Zurück zur Standardreihenfolge über ⋯ › „Reihenfolge zurücksetzen“.
+- **Rechte:** Urheber, Lizenz und „nur intern“ pro Objekt. Interne Objekte tragen einen roten Punkt.
+- **Zone als Paket:** ⋯ › „Als Paket exportieren …“ (auch für eine Auswahl). Erzeugt einen Ordner mit den Dateien, Quellen.csv, Quellen.md und Kontaktbogen.pdf.
+- **Geteilte Bibliothek:** Die Bibliothek kann auf einem Server, NAS oder in Dropbox liegen. Die Datenbank bleibt dabei auf jedem Mac, jede Person schreibt ihre Angaben in eine eigene Datei (.archiver/people/), es wird also nichts überschrieben. Bei Änderungen gewinnt die neuere Fassung. Neue Objekte merken sich, wer sie abgelegt hat („Abgelegt von“).
+- Text- und Zitatkarten bekommen je eine naive Grundfarbe (Rot, Grün, Violett, Cyan, Gelb), die Schrift Ton in Ton.
+
 ## App 0.19.4 (11.10.2026)
 
 - Lightbox „Ablegen in“: Passen nicht alle Zonen in eine Zeile, verteilen sie sich auf gleich lange Zeilen statt eines einzelnen Rests.

@@ -42,7 +42,7 @@ pub const AUDIO_EXTS: &[&str] = &["wav", "mp3", "aif", "aiff", "m4a", "flac"];
 
 pub type Result<T> = std::result::Result<T, String>;
 
-fn err<E: std::fmt::Display>(e: E) -> String {
+pub(crate) fn err<E: std::fmt::Display>(e: E) -> String {
     e.to_string()
 }
 
@@ -93,6 +93,14 @@ pub struct Item {
     pub sample_rate: Option<i64>,
     pub bit_depth: Option<i64>,
     pub channels: Option<i64>,
+    /// Notiz zum Objekt (das Warum einer Referenz)
+    pub note: Option<String>,
+    /// Rechte: Urheber, Lizenz, nur intern verwenden
+    pub credit: Option<String>,
+    pub license: Option<String>,
+    pub internal: bool,
+    /// Wer das Objekt abgelegt hat (geteilte Bibliothek)
+    pub added_by: Option<String>,
 }
 
 /// Seitenzahl, Dauer und Maße eines PDFs oder Videos, bei Audio dazu Titel und Format.
@@ -143,9 +151,16 @@ pub struct ImportReport {
 
 pub struct Library {
     pub root: PathBuf,
-    conn: Mutex<Connection>,
+    pub(crate) conn: Mutex<Connection>,
     scan_lock: Mutex<()>,
     failed_thumbs: Mutex<HashSet<String>>,
+    /// Geteilte Bibliothek (Server, NAS, Dropbox): Datenbank liegt lokal,
+    /// Angaben gehen über eine Datei pro Person in .archiver/people/.
+    pub shared: bool,
+    /// Name oder Kürzel dieser Person; wird bei neuen Objekten als „abgelegt von“ gemerkt.
+    pub(crate) user: Mutex<Option<String>>,
+    /// Stand der Personen-Dateien beim letzten Abgleich
+    pub(crate) people_sig: Mutex<u64>,
 }
 
 pub fn now_ms() -> i64 {
@@ -410,7 +425,7 @@ pub fn hash_file(path: &Path) -> Result<String> {
     Ok(hasher.finalize().to_hex()[..32].to_string())
 }
 
-const SCHEMA: &str = "
+pub(crate) const SCHEMA: &str = "
 CREATE TABLE IF NOT EXISTS item (
   path     TEXT PRIMARY KEY,
   hash     TEXT NOT NULL,
@@ -452,6 +467,15 @@ CREATE TABLE IF NOT EXISTS analysis (
   text   TEXT NOT NULL,
   colors TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS note (
+  hash       TEXT PRIMARY KEY,
+  note       TEXT,
+  credit     TEXT,
+  license    TEXT,
+  internal   INTEGER,
+  added_by   TEXT,
+  updated_at INTEGER NOT NULL DEFAULT 0
+);
 ";
 
 impl Library {
@@ -459,7 +483,10 @@ impl Library {
     pub fn open(root: &Path) -> Result<Library> {
         fs::create_dir_all(root.join(META_DIR).join("thumbs")).map_err(err)?;
         fs::create_dir_all(root.join(INBOX)).map_err(err)?;
-        let conn = Connection::open(root.join(META_DIR).join("library.db")).map_err(err)?;
+        let shared = crate::studio::is_shared(root);
+        // Geteilt: SQLite gehört nicht auf ein Netzlaufwerk, jede Person hat ihren eigenen Cache.
+        let db = if shared { crate::studio::local_db(root)? } else { root.join(META_DIR).join("library.db") };
+        let conn = Connection::open(db).map_err(err)?;
         // Die Brücke zur Extension öffnet dieselbe Datenbank parallel zur App.
         conn.busy_timeout(std::time::Duration::from_secs(5)).map_err(err)?;
         conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL;").map_err(err)?;
@@ -486,12 +513,16 @@ impl Library {
             conn: Mutex::new(conn),
             scan_lock: Mutex::new(()),
             failed_thumbs: Mutex::new(HashSet::new()),
+            shared,
+            user: Mutex::new(None),
+            people_sig: Mutex::new(0),
         };
         lib.restore_metadata()?;
+        lib.merge_people()?;
         Ok(lib)
     }
 
-    fn metadata_path(&self) -> PathBuf {
+    pub(crate) fn metadata_path(&self) -> PathBuf {
         self.root.join(META_DIR).join("metadata.json")
     }
 
@@ -539,7 +570,7 @@ impl Library {
         self.write_zone_file(&v)
     }
 
-    fn zone_file(&self) -> serde_json::Value {
+    pub(crate) fn zone_file(&self) -> serde_json::Value {
         let v: serde_json::Value = fs::read(self.zone_order_path())
             .ok()
             .and_then(|b| serde_json::from_slice(&b).ok())
@@ -551,7 +582,7 @@ impl Library {
         }
     }
 
-    fn write_zone_file(&self, v: &serde_json::Value) -> Result<()> {
+    pub(crate) fn write_zone_file(&self, v: &serde_json::Value) -> Result<()> {
         let body = serde_json::to_vec_pretty(v).map_err(err)?;
         fs::write(self.zone_order_path(), body).map_err(err)
     }
@@ -561,31 +592,39 @@ impl Library {
     }
 
     /// Neue oder geleerte Datenbank: Quellen aus metadata.json zurückholen.
+    /// Notizen und Rechte werden immer abgeglichen (neuere gewinnt).
     fn restore_metadata(&self) -> Result<()> {
-        let conn = self.conn.lock().unwrap();
-        let count: i64 = conn.query_row("SELECT COUNT(*) FROM source", [], |r| r.get(0)).map_err(err)?;
-        if count > 0 {
-            return Ok(());
-        }
         let Ok(text) = fs::read_to_string(self.metadata_path()) else { return Ok(()) };
-        #[derive(Deserialize)]
-        struct Meta {
-            #[serde(default)]
-            sources: HashMap<String, Source>,
-        }
-        let Ok(meta) = serde_json::from_str::<Meta>(&text) else { return Ok(()) };
+        let Ok(meta) = serde_json::from_str::<crate::studio::MetaDoc>(&text) else { return Ok(()) };
+        self.merge_notes(&meta.notes)?;
+        // Fehlende Quellen ergänzen (z. B. nach dem Wechsel zurück von einer geteilten Bibliothek)
+        let mut conn = self.conn.lock().unwrap();
+        let tx = conn.transaction().map_err(err)?;
         for (hash, s) in meta.sources {
-            conn.execute(
-                "INSERT OR REPLACE INTO source (hash, image_url, page_url, page_title, captured_at, quote) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            tx.execute(
+                "INSERT INTO source (hash, image_url, page_url, page_title, captured_at, quote) VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+                 ON CONFLICT(hash) DO UPDATE SET
+                   image_url = COALESCE(source.image_url, ?2),
+                   page_url = COALESCE(source.page_url, ?3),
+                   page_title = COALESCE(source.page_title, ?4),
+                   captured_at = COALESCE(source.captured_at, ?5),
+                   quote = COALESCE(source.quote, ?6)",
                 params![hash, s.image_url, s.page_url, s.page_title, s.captured_at, s.quote],
             )
             .map_err(err)?;
         }
-        Ok(())
+        tx.commit().map_err(err)
     }
 
     /// Schreibt alle Quellen nach .archiver/metadata.json, damit nichts an der DB hängt.
+    /// Geteilt: in die eigene Datei unter .archiver/people/.
     pub fn write_metadata(&self) -> Result<()> {
+        let target = if self.shared { self.person_file() } else { self.metadata_path() };
+        self.write_metadata_to(&target)
+    }
+
+    /// Wie write_metadata, aber in eine bestimmte Datei (Wechsel geteilt ↔ allein).
+    pub fn write_metadata_to(&self, target: &Path) -> Result<()> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn
             .prepare("SELECT hash, image_url, page_url, page_title, captured_at, quote FROM source ORDER BY hash")
@@ -609,10 +648,20 @@ impl Library {
             let (hash, s) = row.map_err(err)?;
             sources.insert(hash, serde_json::to_value(s).map_err(err)?);
         }
-        let doc = serde_json::json!({ "version": 1, "sources": sources });
-        let tmp = self.metadata_path().with_extension("json.tmp");
+        drop(stmt);
+        drop(conn);
+        let notes = self.all_notes()?;
+        let doc = serde_json::json!({ "version": 1, "sources": sources, "notes": notes });
+        // Geteilt: jede Person schreibt nur ihre eigene Datei, so überschreibt niemand den anderen.
+        if let Some(dir) = target.parent() {
+            fs::create_dir_all(dir).map_err(err)?;
+        }
+        let tmp = target.with_extension("json.tmp");
         fs::write(&tmp, serde_json::to_vec_pretty(&doc).map_err(err)?).map_err(err)?;
-        fs::rename(tmp, self.metadata_path()).map_err(err)?;
+        fs::rename(tmp, target).map_err(err)?;
+        if self.shared {
+            *self.people_sig.lock().unwrap() = self.people_signature();
+        }
         Ok(())
     }
 
@@ -661,6 +710,10 @@ impl Library {
             }
             changed = true;
         }
+        // Geteilt: Angaben der anderen übernehmen, sobald sich ihre Dateien ändern
+        if self.merge_people()? {
+            changed = true;
+        }
         Ok(changed)
     }
 
@@ -687,9 +740,10 @@ impl Library {
         let conn = self.conn.lock().unwrap();
         conn.query_row(
             "SELECT (SELECT COUNT(*) FROM item), (SELECT TOTAL(LENGTH(path)) FROM item),
-                    (SELECT TOTAL(mtime % 1000003) FROM item), (SELECT COUNT(*) FROM source)",
+                    (SELECT TOTAL(mtime % 1000003) FROM item),
+                    (SELECT COUNT(*) FROM source) + (SELECT TOTAL(updated_at % 1000003) FROM note)",
             [],
-            |r| Ok((r.get(0)?, r.get::<_, f64>(1)? as i64, r.get::<_, f64>(2)? as i64, r.get(3)?)),
+            |r| Ok((r.get(0)?, r.get::<_, f64>(1)? as i64, r.get::<_, f64>(2)? as i64, r.get::<_, f64>(3)? as i64)),
         )
         .unwrap_or_default()
     }
@@ -737,8 +791,10 @@ impl Library {
                         COALESCE(i.width, m.width), COALESCE(i.height, m.height), i.format,
                         s.image_url, s.page_url, s.page_title, s.captured_at, t.file,
                         a.labels, a.text, a.colors, m.pages, m.duration, s.quote,
-                        m.title, m.artist, m.album, m.sample_rate, m.bit_depth, m.channels
+                        m.title, m.artist, m.album, m.sample_rate, m.bit_depth, m.channels,
+                        n.note, n.credit, n.license, n.internal, n.added_by
                  FROM item i
+                 LEFT JOIN note n ON n.hash = i.hash
                  LEFT JOIN source s ON s.hash = i.hash
                  LEFT JOIN thumb t ON t.hash = i.hash
                  LEFT JOIN analysis a ON a.hash = i.hash
@@ -779,6 +835,11 @@ impl Library {
                     sample_rate: r.get(22)?,
                     bit_depth: r.get(23)?,
                     channels: r.get(24)?,
+                    note: r.get(25)?,
+                    credit: r.get(26)?,
+                    license: r.get(27)?,
+                    internal: r.get::<_, Option<i64>>(28)?.unwrap_or(0) != 0,
+                    added_by: r.get(29)?,
                     path,
                 })
             })
@@ -1142,6 +1203,8 @@ impl Library {
             params![zone, new_zone],
         )
         .map_err(err)?;
+        drop(conn);
+        self.rename_item_order(zone, &new_zone)?;
         Ok(new_zone)
     }
 
@@ -1233,6 +1296,7 @@ impl Library {
         let mtime = time_ms(meta.modified()).unwrap_or(0);
         let added = source.and_then(|s| s.captured_at).unwrap_or_else(now_ms);
         self.upsert_item(&rel_path(&self.root, &dst), &hash, meta.len() as i64, mtime, added, &dst)?;
+        self.mark_added_by(&hash)?;
         report.imported += 1;
         Ok(())
     }
@@ -1273,6 +1337,7 @@ impl Library {
         let added = source.captured_at.unwrap_or_else(now_ms);
         let rel = rel_path(&self.root, &dst);
         self.upsert_item(&rel, &hash, meta.len() as i64, mtime, added, &dst)?;
+        self.mark_added_by(&hash)?;
         self.write_metadata()?;
         Ok((rel, false))
     }
@@ -1282,6 +1347,9 @@ impl Library {
         let mut report = ImportReport::default();
         for f in files.iter().filter(|f| is_media(f)) {
             self.import_one(f, zone, None, &mut report)?;
+        }
+        if report.imported > 0 && self.user.lock().unwrap().is_some() {
+            self.write_metadata()?;
         }
         Ok(report)
     }
