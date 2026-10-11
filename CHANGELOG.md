@@ -1,5 +1,14 @@
 # Changelog
 
+## App 0.21.0 · Extension 3.17.0 (11.10.2026)
+
+- Drei Bibliotheken: In Einstellungen › Bibliothek gibt es drei Plätze mit Name und Ordner. Umschalten mit ⌘1, ⌘2, ⌘3 oder im Menü. Zonen und Hot Zones gehören jeweils zur Bibliothek, die Extension sammelt in die aktive.
+- Startschutz: Das Fenster erscheint sofort, die Bibliothek lädt im Hintergrund. Benutzerordner, Laufwerke und Systemordner werden als Bibliothek abgelehnt, ebenso Ordner mit mehr als 20.000 Dateien oder solche, die sich nicht innerhalb von 10 Sekunden lesen lassen. Archiver zeigt dann einen Hinweis statt zu hängen.
+- Textkarten liegen als Textdatei (.txt) im Zonenordner und sind im Finder lesbar. Archiver zeigt sie weiter als farbige Karte. Auch im Finder angelegte .txt-Dateien erscheinen als Textkarte.
+- Kartenfarben wieder kräftiger.
+- Extension: Beim Ziehen von markiertem Text hängt die spätere Textkarte am Zeiger, in ihrer Farbe.
+- Zonen ruhiger: kein blaues Glühen beim Ablegen, kein Hochfahren und Anheben, die Leiste blendet nur ein und aus.
+
 ## App 0.20.1 · Extension 3.16.5 (11.10.2026)
 
 - Textkarten: Die Farbe wird zu Beginn jeder Markierung im Web zufällig bestimmt, die Markierung zeigt sie sofort (Hintergrund und Schrift wie in der App). Kein Abdunkeln, kein Rahmen mehr. Die gesicherte Karte hat dieselbe Farbe.

@@ -211,17 +211,18 @@
   }
 
   function saveCard(card, folder, source) {
-    chrome.runtime.sendMessage({ type: "download-image", url: card.dataUrl, suggestedName: card.name, folder, tone: card.tone, ...source });
+    // Textkarten (mit Farbe) landen bei laufender App als .txt in der Zone (background.js asTextFile)
+    chrome.runtime.sendMessage({ type: "download-image", url: card.dataUrl, suggestedName: card.name, folder, tone: card.tone, textCard: !!card.tone, ...source });
   }
 
   // Farben der Textkarten, gleiche Werte wie in der App (app.js QUOTE_TONES):
   // Hintergrund, Schrift Ton in Ton, Deckkraft für Kennung und Fuß
   const CARD_TONES = {
-    red: ["#e0594b", "#4d120b", 0.62],
-    green: ["#4ea56f", "#0f3420", 0.62],
-    violet: ["#8c69c3", "#22103e", 0.62],
-    cyan: ["#4db3dd", "#0b3447", 0.62],
-    yellow: ["#ecd552", "#403807", 0.62],
+    red: ["#f2483a", "#420a04", 0.62],
+    green: ["#2db567", "#06301a", 0.62],
+    violet: ["#8b5cf0", "#1c0a44", 0.62],
+    cyan: ["#1fb2ec", "#042d42", 0.62],
+    yellow: ["#f6da2e", "#3b3200", 0.62],
   };
   // Die Farbe wird zu Beginn jeder Markierung zufällig bestimmt (nie zweimal
   // dieselbe hintereinander) und gilt, bis neu markiert wird
@@ -743,7 +744,7 @@
     dragCounter = 0;
   }
 
-  // Abgelegt: Die Zielkarte glüht kurz von hinten nach, dann blendet die Leiste aus.
+  // Abgelegt: Die Zielkarte bleibt kurz hervorgehoben, dann blendet die Leiste ruhig aus.
   function landZones(idx) {
     const bar = zonesBarEl;
     const zone = zoneEls[idx];
@@ -751,10 +752,9 @@
     zonesBarEl = null;
     zoneEls = [];
     dragCounter = 0;
-    zone.classList.remove("active");
-    zone.classList.add("landed");
+    zone.classList.add("active");
     bar.classList.add("leaving");
-    setTimeout(() => bar.remove(), 900);
+    setTimeout(() => bar.remove(), 520);
   }
 
   // Liefert den Zonen-Index unter x/y, oder -1 wenn außerhalb aller Zonen
@@ -974,44 +974,6 @@
     );
   }
 
-  // Abbild des Blocks am Zeiger: dieselbe Größe, dieselbe Outline, darin der
-  // markierte Inhalt in der Schrift der Seite.
-  function blockGhost(rect) {
-    const ghost = document.createElement("div");
-    ghost.setAttribute("data-archiver-spotlight", "");
-    const w = Math.round(rect.right - rect.left);
-    const h = Math.round(rect.bottom - rect.top);
-    const sel = window.getSelection();
-    const range = sel.rangeCount ? sel.getRangeAt(0) : null;
-    let host = range && range.commonAncestorContainer;
-    if (host && host.nodeType !== 1) host = host.parentElement;
-    const cs = host ? getComputedStyle(host) : null;
-    let bg = "#fff";
-    for (let n = host; n; n = n.parentElement) {
-      const c = getComputedStyle(n).backgroundColor;
-      if (c && c !== "transparent" && !/rgba\(.*,\s*0\)$/.test(c)) {
-        bg = c;
-        break;
-      }
-    }
-    ghost.style.cssText =
-      `position:fixed;left:0;top:0;z-index:2147483647;pointer-events:none;width:${w}px;height:${h}px;` +
-      `box-sizing:border-box;padding:${SPOT_PAD}px;overflow:hidden;outline:1.5px dashed #fff;` +
-      `background:${bg};opacity:.92;box-shadow:0 18px 50px rgba(0,0,0,.45);` +
-      `transform-origin:0 0;transition:scale .18s ease;` +
-      (cs ? `font:${cs.font};color:${cs.color};line-height:${cs.lineHeight};text-align:${cs.textAlign};` : "");
-    if (range) {
-      const inner = document.createElement("div");
-      // erste Zeile beginnt dort, wo die Markierung beginnt
-      const first = range.getClientRects()[0];
-      const indent = first ? Math.max(0, Math.round(first.left - rect.left - SPOT_PAD)) : 0;
-      inner.style.cssText = `pointer-events:none;text-indent:${indent}px;`;
-      inner.appendChild(range.cloneContents());
-      ghost.appendChild(inner);
-    }
-    return ghost;
-  }
-
   function endTextDrag() {
     if (!textDrag) return;
     if (textDrag.ghost) textDrag.ghost.remove();
@@ -1030,11 +992,10 @@
       d.moving = true;
       dragCounter = 1;
       showZones();
-      const block = d.rect ? blockGhost(d.rect) : null; // jetzt, solange die Markierung steht
       ensureOverlay().then(() => {
         if (textDrag !== d) return;
-        // in der Überlagerung, damit der Block über den Zonen liegt
-        d.ghost = block || UI.el("div", "text-ghost", d.text.length > 80 ? d.text.slice(0, 80) + " …" : d.text);
+        // in der Überlagerung, damit die Karte über den Zonen liegt
+        d.ghost = cardGhost(d.text);
         rootEl.appendChild(d.ghost);
         moveGhost(d, d.lastX ?? e.clientX, d.lastY ?? e.clientY);
       });
@@ -1047,19 +1008,22 @@
     zoneEls.forEach((el, i) => el.classList.toggle("active", i === active));
   }
 
+  // Am Zeiger hängt schon die spätere Textkarte: Farbe der Markierung,
+  // Text in Kartenschrift, unten die Quelle.
+  function cardGhost(text) {
+    const [bg, fg, dim] = CARD_TONES[toneFor()];
+    const g = UI.el("div", "text-ghost card");
+    g.style.background = bg;
+    g.style.color = fg;
+    g.appendChild(UI.el("div", "text-ghost-text", text.length > 220 ? text.slice(0, 220).trim() + " …" : text));
+    const foot = UI.el("div", "text-ghost-foot", hostOf(location.href));
+    foot.style.opacity = String(dim);
+    g.appendChild(foot);
+    return g;
+  }
+
   function moveGhost(d, x, y) {
     if (!d.ghost) return;
-    if (d.rect) {
-      // Block bleibt dort gegriffen, wo man ihn angefasst hat, und schrumpft
-      // bei großen Blöcken, damit die Zonen sichtbar bleiben
-      const w = d.rect.right - d.rect.left;
-      const h = d.rect.bottom - d.rect.top;
-      const k = Math.min(1, 420 / w, 260 / h);
-      const ox = (d.x - d.rect.left) * k;
-      const oy = (d.y - d.rect.top) * k;
-      d.ghost.style.transform = `translate(${x - ox}px, ${y - oy}px) scale(${k})`;
-      return;
-    }
     // am rechten und unteren Rand auf die andere Seite des Zeigers
     const w = d.ghost.offsetWidth;
     const h = d.ghost.offsetHeight;

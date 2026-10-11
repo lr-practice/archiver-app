@@ -16,7 +16,7 @@ pub const LABEL: &str = "viewer";
 
 /// Öffnet ein Bild im Betrachter (neues Fenster oder das vorhandene).
 pub fn open(app: &AppHandle, path: PathBuf) {
-    if !path.is_file() || !library::is_media(&path) {
+    if !path.is_file() || !(library::is_media(&path) && !library::is_text(&path)) {
         return;
     }
     if let Some(dir) = path.parent() {
@@ -46,7 +46,7 @@ pub fn open(app: &AppHandle, path: PathBuf) {
 
 /// Bilder, die beim Start übergeben wurden (Linux/Windows: als Argumente).
 pub fn from_args() -> Option<PathBuf> {
-    std::env::args_os().skip(1).map(PathBuf::from).find(|p| p.is_file() && library::is_media(p))
+    std::env::args_os().skip(1).map(PathBuf::from).find(|p| p.is_file() && library::is_media(p) && !library::is_text(p))
 }
 
 fn file_name(path: &Path) -> String {
@@ -85,7 +85,7 @@ pub async fn viewer_siblings(path: String) -> Result<Siblings, String> {
         let files: Vec<PathBuf> = entries
             .filter_map(|e| e.ok())
             .map(|e| e.path())
-            .filter(|p| !file_name(p).starts_with('.') && library::is_media(p) && p.is_file())
+            .filter(|p| !file_name(p).starts_with('.') && library::is_media(p) && !library::is_text(p) && p.is_file())
             .collect();
         let current = files
             .iter()

@@ -312,7 +312,7 @@ async function listAppFolder(zone) {
   const items = await Promise.all(
     (r.items || []).map(async (it) => ({
       id: it.path,
-      url: (await appPreview(it)) || it.imageUrl || "",
+      url: it.quote ? textPreview(it.quote, it.tone, it.hash) : (await appPreview(it)) || it.imageUrl || "",
       filename: it.path,
       inHistory: true,
       pageUrl: it.pageUrl || null,
@@ -320,6 +320,40 @@ async function listAppFolder(zone) {
     }))
   );
   return { items };
+}
+
+// Textkarte (.txt) für die Galerie: kleines SVG in der Kartenfarbe (content.js CARD_TONES)
+const PREVIEW_TONES = {
+  red: ["#f2483a", "#420a04"],
+  green: ["#2db567", "#06301a"],
+  violet: ["#8b5cf0", "#1c0a44"],
+  cyan: ["#1fb2ec", "#042d42"],
+  yellow: ["#f6da2e", "#3b3200"],
+  white: ["#f4f3ef", "#141414"],
+};
+function textPreview(quote, tone, hash) {
+  const keys = Object.keys(PREVIEW_TONES).slice(0, 5);
+  let h = 0;
+  for (const c of String(hash || quote)) h = (h * 31 + c.charCodeAt(0)) >>> 0;
+  const [bg, fg] = PREVIEW_TONES[tone] || PREVIEW_TONES[keys[h % keys.length]];
+  const esc = (s) => s.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c]);
+  const words = String(quote).trim().split(/\s+/);
+  const lines = [];
+  let line = "";
+  for (const w of words) {
+    if ((line + " " + w).trim().length > 22) {
+      lines.push(line.trim());
+      line = w;
+      if (lines.length === 7) break;
+    } else line += " " + w;
+  }
+  if (lines.length < 7 && line.trim()) lines.push(line.trim());
+  const text = lines.map((l, i) => `<tspan x="24" dy="${i ? 30 : 0}">${esc(l)}</tspan>`).join("");
+  const svg =
+    `<svg xmlns="http://www.w3.org/2000/svg" width="300" height="300" viewBox="0 0 300 300">` +
+    `<rect width="300" height="300" fill="${bg}"/>` +
+    `<text x="24" y="52" fill="${fg}" font-family="-apple-system, Helvetica, Arial, sans-serif" font-size="24" font-weight="500">${text}</text></svg>`;
+  return "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg);
 }
 
 async function appPreview(it) {
@@ -683,9 +717,17 @@ async function saveToDownloads(message, sender) {
   return { ok: true };
 }
 
+// Textkarte als reine Textdatei: im Finder lesbar, Archiver zeigt sie als farbige Karte.
+// Ohne App bleibt es die Bildkarte, damit die Galerie der Extension sie zeigen kann.
+function asTextFile(message) {
+  if (!message.textCard || !message.quote) return message;
+  const base = String(message.suggestedName || "Text").replace(/\.png$/i, "");
+  return { ...message, url: "data:text/plain;charset=utf-8," + encodeURIComponent(String(message.quote).trim() + "\n"), suggestedName: base + ".txt" };
+}
+
 async function handleDownload(message, sender) {
   if (message.toDownloads) return saveToDownloads(message, sender);
-  if (await appBridge()) return saveToApp(message, sender);
+  if (await appBridge()) return saveToApp(asTextFile(message), sender);
   const folderKey = message.folder ? sanitizePath(message.folder) : "";
   const filename = buildFilename(message.url, message.suggestedName, folderKey);
   const tabId = sender.tab && sender.tab.id;

@@ -39,6 +39,10 @@ pub const VIDEO_EXTS: &[&str] = &["mp4", "m4v", "mov", "webm"];
 /// Audio: Vorschau ist das eingebettete Cover oder eine Wellenform,
 /// Dauer, Titel und Format kommen aus AVFoundation (macos.rs).
 pub const AUDIO_EXTS: &[&str] = &["wav", "mp3", "aif", "aiff", "m4a", "flac"];
+/// Textkarten liegen als reine Textdatei in der Zone; die Oberfläche zeigt
+/// sie als farbige Karte (Text aus der Quelle oder aus der Datei selbst).
+pub const TEXT_EXTS: &[&str] = &["txt"];
+const TEXT_MAX_CHARS: usize = 20_000;
 
 pub type Result<T> = std::result::Result<T, String>;
 
@@ -198,9 +202,13 @@ fn is_av(path: &Path) -> bool {
     is_pdf(path) || is_video(path) || is_audio(path)
 }
 
-/// Alles, was in die Bibliothek gehört: Bilder, PDFs, Videos, Audio.
+pub fn is_text(path: &Path) -> bool {
+    TEXT_EXTS.contains(&ext_of(path).as_str())
+}
+
+/// Alles, was in die Bibliothek gehört: Bilder, PDFs, Videos, Audio, Textkarten.
 pub fn is_media(path: &Path) -> bool {
-    is_image(path) || is_pdf(path) || is_video(path) || is_audio(path)
+    is_image(path) || is_pdf(path) || is_video(path) || is_audio(path) || is_text(path)
 }
 
 /// Endung aus den ersten Bytes, wenn der Name keine passende hat (PDF, Video, Bild).
@@ -850,7 +858,17 @@ impl Library {
                 })
             })
             .map_err(err)?;
-        rows.collect::<std::result::Result<_, _>>().map_err(err)
+        let mut items: Vec<Item> = rows.collect::<std::result::Result<_, _>>().map_err(err)?;
+        // Textdatei ohne gespeicherten Text (z. B. im Finder angelegt): Inhalt lesen
+        for item in items.iter_mut().filter(|i| i.quote.is_none() && TEXT_EXTS.contains(&i.format.as_str())) {
+            if let Ok(text) = fs::read_to_string(&item.abs) {
+                let text: String = text.trim().chars().take(TEXT_MAX_CHARS).collect();
+                if !text.is_empty() {
+                    item.quote = Some(text);
+                }
+            }
+        }
+        Ok(items)
     }
 
     // ---- Vorschaubilder ----
@@ -1051,10 +1069,28 @@ impl Library {
 
     /// Kleines Bild für den Drag-Cursor (max. 96 px), damit beim Ziehen die Zonen sichtbar bleiben.
     pub fn drag_icon(&self, hash: &str, src: &Path) -> Option<String> {
+        if is_text(src) {
+            return None;
+        }
         let out = self.thumbs_dir().join(format!("{hash}-drag.png"));
         if !out.is_file() {
             let img = image::open(src).ok()?;
             img.thumbnail(DRAG_ICON_SIZE, DRAG_ICON_SIZE).to_rgba8().save(&out).ok()?;
+        }
+        Some(out.to_string_lossy().into_owned())
+    }
+
+    /// Ziehbild einer Textkarte: Fläche in der Kartenfarbe (#rrggbb)
+    pub fn color_icon(&self, color: &str) -> Option<String> {
+        let hex = color.trim_start_matches('#');
+        if hex.len() != 6 || !hex.chars().all(|c| c.is_ascii_hexdigit()) {
+            return None;
+        }
+        let out = self.thumbs_dir().join(format!("tone-{}.png", hex.to_lowercase()));
+        if !out.is_file() {
+            let c = |i: usize| u8::from_str_radix(&hex[i..i + 2], 16).unwrap_or(0);
+            let (w, h) = (DRAG_ICON_SIZE, DRAG_ICON_SIZE * 3 / 4);
+            image::RgbaImage::from_pixel(w, h, image::Rgba([c(0), c(2), c(4), 255])).save(&out).ok()?;
         }
         Some(out.to_string_lossy().into_owned())
     }
@@ -1657,5 +1693,25 @@ mod tests {
         assert_eq!(mime, "image/jpeg");
         let img = image::load_from_memory(&bytes).unwrap();
         assert_eq!((img.width(), img.height()), (400, 222));
+    }
+
+    #[test]
+    fn text_cards_as_files() {
+        let tmp = tempfile::tempdir().unwrap();
+        let lib = Library::open(&tmp.path().join("Bib")).unwrap();
+        let dl = tmp.path().join("dl");
+        std::fs::create_dir_all(&dl).unwrap();
+        std::fs::write(dl.join("x"), "Weniger, aber besser\n").unwrap();
+        let source = Source { quote: Some("Weniger, aber besser".into()), ..Default::default() };
+        let (rel, _) = lib.adopt_file(&dl.join("x"), Some("Weniger aber besser.txt"), "Zitate", &source).unwrap();
+        assert_eq!(rel, "Zitate/Weniger aber besser.txt");
+        // im Finder angelegt: Text kommt aus der Datei
+        std::fs::write(lib.root.join("Zitate/notiz.txt"), "  Gute Form  ").unwrap();
+        lib.scan().unwrap();
+        let items = lib.items().unwrap();
+        assert_eq!(items.len(), 2);
+        let own = items.iter().find(|i| i.path == "Zitate/notiz.txt").unwrap();
+        assert_eq!(own.quote.as_deref(), Some("Gute Form"));
+        assert!(lib.missing_thumbs().unwrap().is_empty(), "keine Vorschaubilder für Text");
     }
 }

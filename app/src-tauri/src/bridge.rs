@@ -263,6 +263,8 @@ fn handle(msg: &Value, slot: &mut Option<(PathBuf, Library)>) -> Result<Value, S
                         "pageUrl": i.page_url,
                         "pageTitle": i.page_title,
                         "ts": i.captured_at.unwrap_or(i.added_at),
+                        "quote": i.quote.as_ref().map(|q| q.chars().take(400).collect::<String>()),
+                        "tone": i.tone,
                     })
                 })
                 .collect();

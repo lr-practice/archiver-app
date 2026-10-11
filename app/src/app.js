@@ -232,11 +232,11 @@
   // Farben der Textkarten: Hintergrund, Schrift Ton in Ton, Deckkraft für Kennung und Fuß.
   // Gleiche Werte in der Extension (content.js CARD_TONES).
   const QUOTE_TONES = {
-    red: ["#e0594b", "#4d120b", 0.62],
-    green: ["#4ea56f", "#0f3420", 0.62],
-    violet: ["#8c69c3", "#22103e", 0.62],
-    cyan: ["#4db3dd", "#0b3447", 0.62],
-    yellow: ["#ecd552", "#403807", 0.62],
+    red: ["#f2483a", "#420a04", 0.62],
+    green: ["#2db567", "#06301a", 0.62],
+    violet: ["#8b5cf0", "#1c0a44", 0.62],
+    cyan: ["#1fb2ec", "#042d42", 0.62],
+    yellow: ["#f6da2e", "#3b3200", 0.62],
     white: ["#f4f3ef", "#141414", 0.5],
   };
   const RANDOM_TONES = ["red", "green", "violet", "cyan", "yellow"];
@@ -1602,7 +1602,11 @@
   }
 
   function sectionSummary(id) {
-    if (id === "library") return shortPath(state.root);
+    if (id === "library") {
+      const slots = state.libraries || [];
+      const i = slots.findIndex((l) => l.active);
+      return i >= 0 ? libraryName(slots[i], i) : shortPath(state.root);
+    }
     if (id === "look") {
       const th = window.ArchiverI18n.theme();
       const scheme = window.ArchiverI18n.scheme() === "sage" ? t("schemeSage") : t("schemeStandard");
@@ -1648,14 +1652,7 @@
     };
 
     if (sub === "library") {
-      const lib = block(t("setLibraryFolder"));
-      lib.appendChild(
-        blockRow(shortPath(state.root), [
-          button("p-link", t("reveal"), () => invoke("reveal_zone", { zone: "" }).catch(fail)),
-          button("p-link", t("libraryChange"), chooseLibrary),
-        ])
-      );
-      wrap.appendChild(lib);
+      wrap.appendChild(renderLibrarySlots());
       wrap.appendChild(renderZoneSettings());
     }
 
@@ -3530,21 +3527,19 @@
     }
   }
 
-  // Abgelegt: Die Zielkarte glüht kurz von hinten nach. Liegt sie in der
-  // Leiste, bleibt die so lange stehen und blendet dann aus.
+  // Abgelegt: Liegt das Ziel in der Leiste, bleibt sie kurz stehen und
+  // blendet dann ruhig aus (kein Glühen, keine Bewegung).
   let landingUntil = 0;
   function landOn(target) {
     const bar = $("dropbar");
     if (!target) return hideDropbar();
-    target.classList.add("landed");
-    setTimeout(() => target.classList.remove("landed"), 900);
     if (bar.hidden || !bar.contains(target)) return hideDropbar();
     bar.classList.add("leaving");
-    landingUntil = Date.now() + 850;
+    landingUntil = Date.now() + 500;
     setTimeout(() => {
       landingUntil = 0;
       hideDropbar();
-    }, 850);
+    }, 500);
   }
 
   function hideDropbar() {
@@ -3569,7 +3564,7 @@
     const first = items[0];
     // kleines Drag-Bild, damit die Zonen beim Ziehen sichtbar bleiben
     const icon =
-      (await invoke("drag_icon", { hash: first.hash, path: first.thumb || first.abs }).catch(() => null)) ||
+      (await invoke("drag_icon", { hash: first.hash, path: first.thumb || first.abs, color: quoteOf(first) && !first.thumb ? quoteTone(first)[0] : null }).catch(() => null)) ||
       first.thumb ||
       first.abs;
     invoke("plugin:drag|start_drag", {
@@ -4364,6 +4359,10 @@
     item(t("infoPanel"), toggleInfo, state.infoOpen, "⌘D");
     item(t("pdfExport"), exportPdf, false, "⌘P");
     menu.appendChild(el("div", "p-more-rule"));
+    (state.libraries || []).forEach((slot, i) => {
+      if (slot.path) item(libraryName(slot, i), () => switchLibrary(i), slot.active, "⌘" + (i + 1));
+    });
+    if ((state.libraries || []).some((l) => l.path)) menu.appendChild(el("div", "p-more-rule"));
     item(t("settings"), () => togglePage("settings"), state.page === "settings", "⌘,");
     item(t("about"), () => togglePage("about"), state.page === "about");
     item(t("tour"), () => startTour());
@@ -4555,6 +4554,8 @@
       toggleInfo();
     } else if (mod && e.key === ",") {
       togglePage("settings");
+    } else if (mod && !e.shiftKey && !e.altKey && /^[1-3]$/.test(e.key)) {
+      switchLibrary(Number(e.key) - 1);
     } else if (mod && (e.key === "p" || e.key === "P")) {
       exportPdf();
     } else if (mod && e.key === "c") {
@@ -4606,17 +4607,115 @@
 
   // ---- Start ----
 
-  async function chooseLibrary() {
-    const path = await invoke("pick_folder");
-    if (!path) return;
-    try {
-      await invoke("open_library", { path });
-      state.focus = null;
-      cardCache.clear();
-      showApp();
-    } catch (e) {
-      fail(e);
+  // ---- Bibliotheken: drei feste Plätze (lib.rs: libraries, set_library_slot) ----
+  // Hot Zones und Zonenreihenfolge liegen in der Bibliothek selbst,
+  // die Extension sammelt immer in die gerade aktive.
+
+  async function loadLibraries() {
+    state.libraries = await invoke("libraries").catch(() => state.libraries || []);
+    return state.libraries;
+  }
+
+  function libraryName(slot, i) {
+    return (slot && slot.name) || t("libSlot", { n: i + 1 });
+  }
+
+  // Fehler des Ordner-Schutzes (lib.rs: check_library) verständlich machen
+  function libraryFail(e) {
+    const msg = String(e && e.message ? e.message : e);
+    const key = { "library-system": "libSystem", "library-large": "libLarge", "library-slow": "libSlow", "library-active": "libActive", "library-missing": "libMissing" }[msg];
+    if (key) toast(t(key), false, 5200);
+    else fail(e);
+  }
+
+  function afterLibrarySwitch() {
+    state.focus = null;
+    state.selection = new Set();
+    cardCache.clear();
+    return showApp();
+  }
+
+  async function switchLibrary(i) {
+    const slots = await loadLibraries();
+    const slot = slots[i];
+    if (!slot || !slot.path) {
+      togglePage("settings");
+      openSettingsSection("library");
+      return;
     }
+    if (slot.active) return;
+    document.body.classList.add("lib-loading");
+    try {
+      await invoke("open_library", { path: slot.path });
+      if (state.page) closePage();
+      await afterLibrarySwitch();
+      toast(libraryName(slot, i));
+    } catch (e) {
+      libraryFail(e);
+    } finally {
+      document.body.classList.remove("lib-loading");
+    }
+  }
+
+  function renderLibrarySlots() {
+    const b = block(t("setLibraries"));
+    const slots = state.libraries && state.libraries.length ? state.libraries : [{}, {}, {}];
+    slots.forEach((slot, i) => {
+      const name = el("div", "p-lib-name" + (slot.path ? "" : " empty"), libraryName(slot, i));
+      name.title = t("libRename");
+      name.addEventListener("click", () => {
+        inlineInput(
+          name,
+          slot.name || "",
+          async (value) => {
+            await invoke("set_library_slot", { index: i, name: value }).catch(libraryFail);
+            await loadLibraries();
+            renderPage(true);
+          },
+          () => renderPage(true)
+        );
+      });
+      const main = [name, el("div", "p-lib-path", slot.path ? shortPath(slot.path) : t("libEmpty"))];
+      const side = [];
+      if (slot.active) {
+        side.push(el("span", "p-lib-active", t("libActiveLabel")));
+        side.push(button("p-link", t("reveal"), () => invoke("reveal_zone", { zone: "" }).catch(fail)));
+      }
+      else if (slot.path) side.push(button("p-link", t("libOpen") + " (⌘" + (i + 1) + ")", () => switchLibrary(i)));
+      side.push(
+        button("p-link", slot.path ? t("libChoose") : t("libAssign"), async () => {
+          const path = await invoke("pick_folder");
+          if (!path) return;
+          try {
+            await invoke("set_library_slot", { index: i, path });
+            // aktiver Platz bekommt einen neuen Ordner: gleich öffnen
+            if (slot.active) {
+              await invoke("open_library", { path });
+              await afterLibrarySwitch();
+            }
+          } catch (e) {
+            libraryFail(e);
+          }
+          await loadLibraries();
+          renderPage(true);
+        })
+      );
+      if (slot.path && !slot.active) {
+        side.push(
+          button("p-link p-lib-clear", "✕", async () => {
+            await invoke("set_library_slot", { index: i, clear: true }).catch(libraryFail);
+            await loadLibraries();
+            renderPage(true);
+          })
+        );
+      }
+      const row = blockRow(main, side);
+      row.classList.add("p-lib-row");
+      if (slot.active) row.classList.add("active");
+      b.appendChild(row);
+    });
+    b.appendChild(el("p", "p-block-hint", t("libHint")));
+    return b;
   }
 
   // ---- Erster Start: 1 Bibliothek, 2 Extension, 3 erstes Bild ----
@@ -4639,7 +4738,7 @@
         await invoke("open_library", { path: info.suggestedLibrary });
         showExtensionStep();
       } catch (e) {
-        fail(e);
+        libraryFail(e);
       }
     };
     $("welcomeChoose").textContent = t("welcomeChoose");
@@ -4650,7 +4749,7 @@
         await invoke("open_library", { path });
         showExtensionStep();
       } catch (e) {
-        fail(e);
+        libraryFail(e);
       }
     };
   }
@@ -5324,6 +5423,7 @@
     $("app").hidden = false;
     applyLock();
     applyDragAlpha();
+    loadLibraries();
     return refresh().then(() => {
       // Nach dem Sprachwechsel wieder in den Einstellungen landen
       const reopen = sessionStorage.getItem("archiver.reopen") || "";
@@ -5427,6 +5527,16 @@
     TAURI.event.listen("analysis-ready", (e) => applyAnalysis(e.payload));
     TAURI.event.listen("reveal-in-app", (e) => revealFromViewer(e.payload));
     const info = await invoke("start_info");
+    // Die Bibliothek wird erst hier geöffnet (im Hintergrund, mit Ordner-Schutz),
+    // damit das Fenster nie hängt.
+    if (!info.library && info.pending) {
+      try {
+        await invoke("open_library", { path: info.pending });
+        info.library = info.pending;
+      } catch (e) {
+        setTimeout(() => libraryFail(e), 2600);
+      }
+    }
     if (info.library) {
       await showApp();
       // Einmal für alle, die vor der Tour schon eingerichtet waren

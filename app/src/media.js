@@ -19,6 +19,7 @@
     if (PDF_EXTS.includes(ext)) return "pdf";
     if (VIDEO_EXTS.includes(ext)) return "video";
     if (AUDIO_EXTS.includes(ext)) return "audio";
+    if (ext === "txt") return "text";
     return "image";
   }
 

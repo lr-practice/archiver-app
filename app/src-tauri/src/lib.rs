@@ -40,6 +40,87 @@ struct Settings {
     /// Name oder Kürzel für „abgelegt von“ und die geteilte Bibliothek
     #[serde(default, skip_serializing_if = "Option::is_none")]
     user: Option<String>,
+    /// Drei feste Plätze für Bibliotheken, zwischen denen man umschaltet
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    libraries: Vec<LibrarySlot>,
+}
+
+#[derive(Serialize, Deserialize, Default, Clone)]
+struct LibrarySlot {
+    #[serde(default)]
+    name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    path: Option<String>,
+}
+
+const LIBRARY_SLOTS: usize = 3;
+
+fn folder_name(path: &str) -> String {
+    Path::new(path).file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default()
+}
+
+/// Immer drei Plätze. Ältere Einstellungen: die bisherige Bibliothek wird Platz 1.
+fn library_slots(s: &Settings) -> Vec<LibrarySlot> {
+    let mut slots = s.libraries.clone();
+    slots.resize(LIBRARY_SLOTS, LibrarySlot::default());
+    slots.truncate(LIBRARY_SLOTS);
+    if slots.iter().all(|l| l.path.is_none()) {
+        if let Some(path) = &s.library {
+            slots[0] = LibrarySlot { name: folder_name(path), path: Some(path.clone()) };
+        }
+    }
+    slots
+}
+
+// ---- Schutz vor Ordnern, die keine Bibliothek sein können ----
+// Archiver liest und beobachtet den ganzen Ordner. Der Benutzerordner, ein
+// Laufwerk oder ein Systemordner würde den Start minutenlang blockieren.
+
+const LIBRARY_MAX_FILES: usize = 20_000;
+const LIBRARY_COUNT_SECS: u64 = 10;
+
+fn check_library(root: &Path) -> Result<(), String> {
+    let root = root.canonicalize().map_err(|e| e.to_string())?;
+    if !root.is_dir() {
+        return Err("library-missing".into());
+    }
+    let mut blocked: Vec<PathBuf> = ["/", "/Users", "/Volumes", "/home", "/private", "/usr", "/opt", "/bin", "/etc"]
+        .iter()
+        .map(PathBuf::from)
+        .collect();
+    let mut system: Vec<PathBuf> = ["/System", "/Library", "/Applications"].iter().map(PathBuf::from).collect();
+    if let Some(home) = dirs::home_dir().and_then(|h| h.canonicalize().ok()) {
+        for d in ["Desktop", "Documents", "Downloads", "Pictures", "Movies", "Music", "Public"] {
+            blocked.push(home.join(d));
+        }
+        system.push(home.join("Library"));
+        system.push(home.join("Applications"));
+        blocked.push(home);
+    }
+    // ein ganzes Laufwerk (/Volumes/Name) ist ebenfalls zu groß
+    let is_volume = root.parent() == Some(Path::new("/Volumes"));
+    if blocked.contains(&root) || is_volume || system.iter().any(|s| root.starts_with(s)) {
+        return Err("library-system".into());
+    }
+    // Vorab zählen: zu viele Dateien oder zu langsam → ablehnen.
+    // Geteilte Bibliotheken liegen oft im Netz, dort zählt nur die Menge.
+    let shared = studio::is_shared(&root);
+    let deadline = std::time::Instant::now() + Duration::from_secs(LIBRARY_COUNT_SECS);
+    let mut count = 0usize;
+    let walk = walkdir::WalkDir::new(&root)
+        .min_depth(1)
+        .into_iter()
+        .filter_entry(|e| e.file_name() != library::META_DIR);
+    for _ in walk.filter_map(|e| e.ok()) {
+        count += 1;
+        if count > LIBRARY_MAX_FILES {
+            return Err("library-large".into());
+        }
+        if !shared && count % 256 == 0 && std::time::Instant::now() > deadline {
+            return Err("library-slow".into());
+        }
+    }
+    Ok(())
 }
 
 fn settings_path(app: &AppHandle) -> Option<PathBuf> {
@@ -226,16 +307,19 @@ fn activate(app: &AppHandle, root: &Path) -> Result<(), String> {
 #[serde(rename_all = "camelCase")]
 struct StartInfo {
     library: Option<String>,
+    /// Bibliothek aus den Einstellungen, noch nicht geöffnet
+    pending: Option<String>,
     suggested_library: String,
     extension_export: Option<String>,
 }
 
 #[tauri::command]
-async fn start_info(state: State<'_, AppState>) -> Result<StartInfo, String> {
+async fn start_info(app: AppHandle, state: State<'_, AppState>) -> Result<StartInfo, String> {
     let home = dirs::home_dir().unwrap_or_default();
     let export = dirs::download_dir().unwrap_or_else(|| home.join("Downloads")).join("archiver-export.json");
     Ok(StartInfo {
         library: state.library.lock().unwrap().as_ref().map(|l| l.root.to_string_lossy().into_owned()),
+        pending: load_settings(&app).library.filter(|p| Path::new(p).is_dir()),
         suggested_library: home.join("Archiver").to_string_lossy().into_owned(),
         extension_export: export.is_file().then(|| export.to_string_lossy().into_owned()),
     })
@@ -262,8 +346,75 @@ async fn pick_export_file(app: AppHandle) -> Option<String> {
 
 #[tauri::command]
 async fn open_library(app: AppHandle, path: String) -> Result<(), String> {
-    activate(&app, Path::new(&path))?;
-    save_settings(&app, &Settings { library: Some(path), ..load_settings(&app) })
+    let worker = app.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        check_library(Path::new(&path))?;
+        activate(&worker, Path::new(&path))?;
+        let mut settings = load_settings(&worker);
+        let mut slots = library_slots(&settings);
+        // Neue Bibliothek bekommt einen Platz: den ersten freien, sonst den bisher aktiven
+        if !slots.iter().any(|l| l.path.as_deref() == Some(path.as_str())) {
+            let i = slots
+                .iter()
+                .position(|l| l.path.is_none())
+                .or_else(|| slots.iter().position(|l| l.path.is_some() && l.path == settings.library))
+                .unwrap_or(0);
+            slots[i] = LibrarySlot { name: folder_name(&path), path: Some(path.clone()) };
+        }
+        settings.libraries = slots;
+        settings.library = Some(path);
+        save_settings(&worker, &settings)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct LibrarySlotInfo {
+    name: String,
+    path: Option<String>,
+    active: bool,
+}
+
+#[tauri::command]
+fn libraries(app: AppHandle) -> Vec<LibrarySlotInfo> {
+    let settings = load_settings(&app);
+    library_slots(&settings)
+        .into_iter()
+        .map(|l| LibrarySlotInfo { active: l.path.is_some() && l.path == settings.library, name: l.name, path: l.path })
+        .collect()
+}
+
+/// Platz umbenennen, neuen Ordner zuweisen (wird vorher geprüft) oder leeren.
+#[tauri::command]
+async fn set_library_slot(app: AppHandle, index: usize, name: Option<String>, path: Option<String>, clear: Option<bool>) -> Result<(), String> {
+    if index >= LIBRARY_SLOTS {
+        return Err("Unbekannter Platz".into());
+    }
+    if let Some(p) = path.clone() {
+        tauri::async_runtime::spawn_blocking(move || check_library(Path::new(&p))).await.map_err(|e| e.to_string())??;
+    }
+    let mut settings = load_settings(&app);
+    let mut slots = library_slots(&settings);
+    let slot = &mut slots[index];
+    if clear.unwrap_or(false) {
+        if slot.path.is_some() && slot.path == settings.library {
+            return Err("library-active".into());
+        }
+        *slot = LibrarySlot::default();
+    }
+    if let Some(p) = path {
+        if slot.name.trim().is_empty() || slot.path.as_deref().map(folder_name).as_deref() == Some(slot.name.as_str()) {
+            slot.name = folder_name(&p);
+        }
+        slot.path = Some(p);
+    }
+    if let Some(n) = name {
+        slot.name = n.trim().to_string();
+    }
+    settings.libraries = slots;
+    save_settings(&app, &settings)
 }
 
 // ---- Demo-Bibliothek für die Einstiegstour ----
@@ -696,8 +847,12 @@ async fn import_files(app: AppHandle, state: State<'_, AppState>, paths: Vec<Str
 }
 
 #[tauri::command]
-async fn drag_icon(state: State<'_, AppState>, hash: String, path: String) -> Result<Option<String>, String> {
-    Ok(current(&state)?.drag_icon(&hash, Path::new(&path)))
+async fn drag_icon(state: State<'_, AppState>, hash: String, path: String, color: Option<String>) -> Result<Option<String>, String> {
+    let lib = current(&state)?;
+    Ok(match color {
+        Some(c) => lib.color_icon(&c),
+        None => lib.drag_icon(&hash, Path::new(&path)),
+    })
 }
 
 #[tauri::command]
@@ -904,11 +1059,8 @@ pub fn run() {
             let handle = app.handle().clone();
             // Brücke zur Chrome-Extension anmelden (bei jedem Start, falls die App verschoben wurde).
             std::thread::spawn(bridge::install_manifests);
-            if let Some(path) = load_settings(&handle).library {
-                if Path::new(&path).is_dir() {
-                    let _ = activate(&handle, Path::new(&path));
-                }
-            }
+            // Die Bibliothek öffnet die Oberfläche selbst (open_library), damit das
+            // Fenster sofort erscheint, auch wenn das Einlesen dauert.
             if let Some(path) = viewer::from_args() {
                 viewer::open(&handle, path);
             }
@@ -930,6 +1082,8 @@ pub fn run() {
             pick_folder,
             pick_export_file,
             open_library,
+            libraries,
+            set_library_slot,
             open_demo,
             close_demo,
             demo_collect,
@@ -1008,4 +1162,38 @@ pub fn run() {
             }
             _ => {}
         });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn library_guard() {
+        let home = dirs::home_dir().unwrap();
+        assert_eq!(check_library(&home).unwrap_err(), "library-system");
+        assert_eq!(check_library(Path::new("/")).unwrap_err(), "library-system");
+        let dir = std::env::temp_dir().join(format!("archiver-guard-{}", std::process::id()));
+        std::fs::create_dir_all(dir.join(".archiver")).unwrap();
+        for i in 0..20 {
+            std::fs::write(dir.join(format!("{i}.txt")), "x").unwrap();
+        }
+        assert!(check_library(&dir).is_ok());
+        let big = dir.join("big");
+        std::fs::create_dir_all(&big).unwrap();
+        for i in 0..=LIBRARY_MAX_FILES {
+            std::fs::write(big.join(format!("{i}")), "").unwrap();
+        }
+        assert_eq!(check_library(&dir).unwrap_err(), "library-large");
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn slots_from_old_settings() {
+        let s = Settings { library: Some("/x/Referenzen".into()), ..Default::default() };
+        let slots = library_slots(&s);
+        assert_eq!(slots.len(), 3);
+        assert_eq!(slots[0].name, "Referenzen");
+        assert!(slots[1].path.is_none());
+    }
 }
