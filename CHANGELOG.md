@@ -1,5 +1,10 @@
 # Changelog
 
+## App 0.24.1 (11.10.2026)
+
+- Navigation wieder in der großen Fassung wie die Extension-Leiste: Knöpfe 40 px hoch, 16 px Innenabstand, 6 px Rand, Schrift 13,5 px, Menü-Zeichen 20 px. Titelzeile und Fensterknöpfe entsprechend tiefer, Bibliotheks-Reiter gleich hoch.
+- Reiter „Objekte“ heißt „Alle Objekte“ (EN „All objects“).
+
 ## App 0.24.0 · Extension 3.19.0 (11.10.2026)
 
 Zonen und Ordner:

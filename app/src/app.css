@@ -5213,3 +5213,48 @@ body.lightbox-open .p-lib-tab,
 .p-lock-form .p-unlock-form {
   padding: 6px 0 0;
 }
+
+/* ---- 0.24.1: Navigation wieder in der großen Fassung (wie die Extension-Leiste) ---- */
+:root {
+  --top-h: 64px;
+}
+
+.p-nav {
+  gap: 4px;
+  padding: 6px;
+}
+
+.p-nav-main {
+  gap: 4px;
+}
+
+.p-nav-btn,
+.p-nav-search {
+  height: 40px;
+  padding: 0 16px;
+  font-size: 13.5px;
+}
+
+.p-nav-main .p-nav-zone,
+.p-nav-main .p-nav-home {
+  padding: 0 16px;
+}
+
+#navMore {
+  padding: 0 16px;
+}
+
+#navMore::before {
+  width: 20px;
+  box-shadow: 0 -6px 0 currentColor, 0 6px 0 currentColor;
+}
+
+.p-lib-tab {
+  top: calc((var(--top-h) - 52px) / 2);
+  padding: 6px;
+}
+
+.p-lib-tab .p-nav-btn {
+  height: 40px;
+  padding: 0 16px;
+}
