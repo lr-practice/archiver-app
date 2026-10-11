@@ -223,16 +223,28 @@
     cyan: ["#4db3dd", "#0b3447", 0.62],
     yellow: ["#ecd552", "#403807", 0.62],
   };
-  // Die Farbe wird beim Markieren zufällig bestimmt und gilt, bis sich der Text ändert
-  let markText = "";
+  // Die Farbe wird zu Beginn jeder Markierung zufällig bestimmt (nie zweimal
+  // dieselbe hintereinander) und gilt, bis neu markiert wird
   let markTone = null;
-  function toneFor(text) {
-    if (text !== markText || !markTone) {
-      const keys = Object.keys(CARD_TONES).filter((k) => k !== markTone);
-      markTone = keys[Math.floor(Math.random() * keys.length)];
-      markText = text;
-    }
+  function newTone() {
+    const keys = Object.keys(CARD_TONES).filter((k) => k !== markTone);
+    markTone = keys[Math.floor(Math.random() * keys.length)];
     return markTone;
+  }
+  function toneFor() {
+    return markTone || newTone();
+  }
+
+  // Markierung in der Farbe der späteren Textkarte, schon während des Markierens
+  let toneStyle = null;
+  function showTone() {
+    if (!toneStyle) {
+      toneStyle = document.createElement("style");
+      toneStyle.setAttribute("data-archiver-tone", "");
+      (document.head || document.documentElement).appendChild(toneStyle);
+    }
+    const [bg, fg] = CARD_TONES[toneFor()];
+    toneStyle.textContent = `::selection{background:${bg}!important;color:${fg}!important}`;
   }
 
   // ---- PDF, Video und Audio ----
@@ -379,7 +391,7 @@
   }
 
   function textCard(text, source) {
-    const tone = toneFor(text);
+    const tone = toneFor();
     const [bg, fg, dim] = CARD_TONES[tone];
     const measure = document.createElement("canvas").getContext("2d");
     const size = text.length < 140 ? 64 : text.length < 400 ? 46 : 36;
@@ -870,7 +882,6 @@
 
   const SPOT_PAD = 8;
   let spotEl = null;
-  let spotStyle = null;
   let spotFrame = 0;
   let spotRect = null; // sichtbarer Block, für das Ziehen
 
@@ -897,7 +908,6 @@
   function hideSpotlight() {
     spotRect = null;
     if (spotEl) spotEl.style.opacity = "0";
-    if (spotStyle) spotStyle.disabled = true;
   }
 
   function updateSpotlight() {
@@ -910,20 +920,10 @@
       spotEl.setAttribute("data-archiver-spotlight", "");
       spotEl.style.cssText =
         "position:fixed;left:0;top:0;z-index:2147483000;pointer-events:none;" +
-        "outline:1.5px dashed #fff;box-shadow:0 0 0 100vmax rgba(0,0,0,.42);" +
-        "opacity:0;transition:opacity .2s ease;";
+"opacity:0;";
       document.documentElement.appendChild(spotEl);
       spotEl.getBoundingClientRect();
     }
-    if (!spotStyle) {
-      // Markierungsfarbe: Farbe der späteren Textkarte, solange die Outline steht
-      spotStyle = document.createElement("style");
-      (document.head || document.documentElement).appendChild(spotStyle);
-    }
-    // Markierung zeigt schon die Farbe der späteren Textkarte
-    const [bg, fg] = CARD_TONES[toneFor(selectedText())];
-    spotStyle.textContent = `::selection{background:${bg}!important;color:${fg}!important}`;
-    spotStyle.disabled = false;
     spotEl.style.transform = `translate(${Math.round(box.left)}px, ${Math.round(box.top)}px)`;
     spotEl.style.width = Math.round(box.right - box.left) + "px";
     spotEl.style.height = Math.round(box.bottom - box.top) + "px";
@@ -941,7 +941,13 @@
     if (e.button === 0 && spotRect && insideBlock(e.clientX, e.clientY)) return; // Ziehen des Blocks
     selecting = true;
     hideSpotlight();
+    // Neue Markierung beginnt: neue Farbe, sofort sichtbar
+    if (e.button === 0) {
+      newTone();
+      showTone();
+    }
   }, true);
+  showTone();
   document.addEventListener("mouseup", () => {
     selecting = false;
     setTimeout(scheduleSpotlight, 0);

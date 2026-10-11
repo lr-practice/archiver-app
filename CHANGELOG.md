@@ -1,8 +1,8 @@
 # Changelog
 
-## App 0.20.1 · Extension 3.16.4 (11.10.2026)
+## App 0.20.1 · Extension 3.16.5 (11.10.2026)
 
-- Textkarten: Die Farbe wird schon beim Markieren im Web zufällig bestimmt und direkt an der Markierung gezeigt. Die gesicherte Karte hat dieselbe Farbe.
+- Textkarten: Die Farbe wird zu Beginn jeder Markierung im Web zufällig bestimmt, die Markierung zeigt sie sofort (Hintergrund und Schrift wie in der App). Kein Abdunkeln, kein Rahmen mehr. Die gesicherte Karte hat dieselbe Farbe.
 - In den Details (Info) lässt sich die Farbe einer Textkarte umstellen: Rot, Grün, Violett, Cyan, Gelb oder Weiß.
 - Farben angeglichen und ruhiger (das Rot war zu grell), Schrift im Farbton dunkler.
 - Textkarten in der Lightbox größer.
