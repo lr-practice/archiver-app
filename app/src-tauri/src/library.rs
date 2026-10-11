@@ -101,6 +101,8 @@ pub struct Item {
     pub internal: bool,
     /// Wer das Objekt abgelegt hat (geteilte Bibliothek)
     pub added_by: Option<String>,
+    /// Farbe der Textkarte, falls gewählt
+    pub tone: Option<String>,
 }
 
 /// Seitenzahl, Dauer und Maße eines PDFs oder Videos, bei Audio dazu Titel und Format.
@@ -474,7 +476,8 @@ CREATE TABLE IF NOT EXISTS note (
   license    TEXT,
   internal   INTEGER,
   added_by   TEXT,
-  updated_at INTEGER NOT NULL DEFAULT 0
+  updated_at INTEGER NOT NULL DEFAULT 0,
+  tone       TEXT
 );
 ";
 
@@ -493,6 +496,8 @@ impl Library {
         conn.execute_batch(SCHEMA).map_err(err)?;
         // ab 0.9: Text der Zitat-Karten (ältere Datenbanken bekommen die Spalte nachgereicht)
         let _ = conn.execute("ALTER TABLE source ADD COLUMN quote TEXT", []);
+        // ab 0.20.1: Farbe der Textkarten
+        let _ = conn.execute("ALTER TABLE note ADD COLUMN tone TEXT", []);
         // ab 0.12: Audio-Eckdaten (ältere Datenbanken bekommen die Spalten nachgereicht)
         for col in ["title TEXT", "artist TEXT", "album TEXT", "sample_rate INTEGER", "bit_depth INTEGER", "channels INTEGER"] {
             let _ = conn.execute(&format!("ALTER TABLE media ADD COLUMN {col}"), []);
@@ -792,7 +797,7 @@ impl Library {
                         s.image_url, s.page_url, s.page_title, s.captured_at, t.file,
                         a.labels, a.text, a.colors, m.pages, m.duration, s.quote,
                         m.title, m.artist, m.album, m.sample_rate, m.bit_depth, m.channels,
-                        n.note, n.credit, n.license, n.internal, n.added_by
+                        n.note, n.credit, n.license, n.internal, n.added_by, n.tone
                  FROM item i
                  LEFT JOIN note n ON n.hash = i.hash
                  LEFT JOIN source s ON s.hash = i.hash
@@ -840,6 +845,7 @@ impl Library {
                     license: r.get(27)?,
                     internal: r.get::<_, Option<i64>>(28)?.unwrap_or(0) != 0,
                     added_by: r.get(29)?,
+                    tone: r.get(30)?,
                     path,
                 })
             })

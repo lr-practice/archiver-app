@@ -229,18 +229,29 @@
 
   // Naive Grundfarben (Rot, Grün, Violett, Cyan, Gelb), Schrift Ton in Ton.
   // Die Farbe hängt am Hash: dieselbe Karte bleibt immer gleich.
-  const QUOTE_TONES = [
-    ["#ff0000", "#7a0000", 0.7],
-    ["#00b050", "#004d23", 0.7],
-    ["#7030a0", "#d4b0f0", 0.75],
-    ["#00b0f0", "#004e6b", 0.7],
-    ["#ffff00", "#7a7a00", 0.75],
-  ];
+  // Farben der Textkarten: Hintergrund, Schrift Ton in Ton, Deckkraft für Kennung und Fuß.
+  // Gleiche Werte in der Extension (content.js CARD_TONES).
+  const QUOTE_TONES = {
+    red: ["#e0594b", "#4d120b", 0.62],
+    green: ["#4ea56f", "#0f3420", 0.62],
+    violet: ["#8c69c3", "#22103e", 0.62],
+    cyan: ["#4db3dd", "#0b3447", 0.62],
+    yellow: ["#ecd552", "#403807", 0.62],
+    white: ["#f4f3ef", "#141414", 0.5],
+  };
+  const RANDOM_TONES = ["red", "green", "violet", "cyan", "yellow"];
+  // Eigene Farbe (beim Markieren im Web bestimmt oder in den Details gewählt),
+  // sonst fest aus dem Inhalt abgeleitet
   function quoteTone(item) {
+    if (QUOTE_TONES[item.tone]) return QUOTE_TONES[item.tone];
     const key = String(item.hash || item.path || "");
     let h = 0;
     for (let i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) >>> 0;
-    return QUOTE_TONES[h % QUOTE_TONES.length];
+    return QUOTE_TONES[RANDOM_TONES[h % RANDOM_TONES.length]];
+  }
+  function toneKey(item) {
+    if (QUOTE_TONES[item.tone]) return item.tone;
+    return RANDOM_TONES.find((k) => QUOTE_TONES[k] === quoteTone(item));
   }
 
   // Textkarte als Text statt Bild: Kennung, Zitat, Quelle und Datum
@@ -790,6 +801,7 @@
 
   // Vorschaubild für Startseite und Karten; fehlt das Thumbnail noch, das Original nehmen.
   function previewImg(item) {
+    if (quoteOf(item)) return textSheet(item, "text-sheet mini");
     const img = el("img");
     img.alt = "";
     img.decoding = "async";
@@ -2394,10 +2406,12 @@
     card.classList.toggle("card-text", !!quote);
     let sheet = card.querySelector(".text-sheet");
     if (quote) {
-      if (!sheet || sheet.dataset.quote !== quote) {
+      const tone = toneKey(item);
+      if (!sheet || sheet.dataset.quote !== quote || sheet.dataset.tone !== tone) {
         if (sheet) sheet.remove();
         sheet = textSheet(item, "text-sheet");
         sheet.dataset.quote = quote;
+        sheet.dataset.tone = tone;
         card.insertBefore(sheet, img);
       }
       img.hidden = true;
@@ -2993,7 +3007,7 @@
     const lead = [size, formatBytes(item.bytes)].filter(Boolean).join(", ");
     head.appendChild(el("span", "lead", lead + "."));
     inner.appendChild(head);
-    if (quoteOf(item)) inner.appendChild(lbBlock(t("quote"), [quoteBox(item, "lb-quote")]));
+    if (quoteOf(item)) inner.appendChild(lbBlock(t("quote"), [quoteBox(item, "lb-quote"), lbRow(t("toneLabel"), tonePicker(item))]));
     if (feat("notes")) inner.appendChild(lbBlock(t("note"), [noteField(item, "note", t("notePlaceholder"), true)]));
 
     let source = null;
@@ -3095,6 +3109,28 @@
       }
     });
     return f;
+  }
+
+  // Farbe einer Textkarte: fünf Töne und Weiß
+  function tonePicker(item) {
+    const row = el("div", "tone-picker");
+    const current = toneKey(item);
+    for (const key of [...RANDOM_TONES, "white"]) {
+      const b = el("button", "tone-dot" + (key === current ? " active" : ""));
+      b.type = "button";
+      b.title = t("tone_" + key);
+      b.style.setProperty("--dot", QUOTE_TONES[key][0]);
+      b.addEventListener("click", () => {
+        if (key === toneKey(item)) return;
+        item.tone = key;
+        saveNote(item, { tone: key });
+        for (const d of row.children) d.classList.toggle("active", d === b);
+        render();
+        if (state.lightbox && lightboxItem() === item) showLightboxItem();
+      });
+      row.appendChild(b);
+    }
+    return row;
   }
 
   function saveNote(item, patch) {

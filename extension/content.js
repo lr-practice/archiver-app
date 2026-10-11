@@ -211,7 +211,28 @@
   }
 
   function saveCard(card, folder, source) {
-    chrome.runtime.sendMessage({ type: "download-image", url: card.dataUrl, suggestedName: card.name, folder, ...source });
+    chrome.runtime.sendMessage({ type: "download-image", url: card.dataUrl, suggestedName: card.name, folder, tone: card.tone, ...source });
+  }
+
+  // Farben der Textkarten, gleiche Werte wie in der App (app.js QUOTE_TONES):
+  // Hintergrund, Schrift Ton in Ton, Deckkraft für Kennung und Fuß
+  const CARD_TONES = {
+    red: ["#e0594b", "#4d120b", 0.62],
+    green: ["#4ea56f", "#0f3420", 0.62],
+    violet: ["#8c69c3", "#22103e", 0.62],
+    cyan: ["#4db3dd", "#0b3447", 0.62],
+    yellow: ["#ecd552", "#403807", 0.62],
+  };
+  // Die Farbe wird beim Markieren zufällig bestimmt und gilt, bis sich der Text ändert
+  let markText = "";
+  let markTone = null;
+  function toneFor(text) {
+    if (text !== markText || !markTone) {
+      const keys = Object.keys(CARD_TONES).filter((k) => k !== markTone);
+      markTone = keys[Math.floor(Math.random() * keys.length)];
+      markText = text;
+    }
+    return markTone;
   }
 
   // ---- PDF, Video und Audio ----
@@ -339,12 +360,12 @@
     }
   }
 
-  function renderCard(draw, height) {
+  function renderCard(draw, height, bg) {
     const canvas = document.createElement("canvas");
     canvas.width = CARD_W;
     canvas.height = height;
     const ctx = canvas.getContext("2d");
-    ctx.fillStyle = "#f4f3ef";
+    ctx.fillStyle = bg || "#f4f3ef";
     ctx.fillRect(0, 0, CARD_W, height);
     ctx.fillStyle = "#141414";
     ctx.textBaseline = "top";
@@ -358,6 +379,8 @@
   }
 
   function textCard(text, source) {
+    const tone = toneFor(text);
+    const [bg, fg, dim] = CARD_TONES[tone];
     const measure = document.createElement("canvas").getContext("2d");
     const size = text.length < 140 ? 64 : text.length < 400 ? 46 : 36;
     measure.font = `500 ${size}px ${SANS}`;
@@ -366,17 +389,19 @@
     const height = CARD_PAD * 2 + 80 + lines.length * lh + 60;
     const date = new Date().toLocaleDateString(document.documentElement.lang || undefined);
     const dataUrl = renderCard((ctx) => {
+      ctx.fillStyle = fg;
       ctx.font = `400 22px ${MONO}`;
-      ctx.fillStyle = "#8a8a85";
+      ctx.globalAlpha = dim;
       ctx.fillText(t("cardText").toUpperCase(), CARD_PAD, CARD_PAD);
-      ctx.fillStyle = "#141414";
+      ctx.globalAlpha = 1;
       ctx.font = `500 ${size}px ${SANS}`;
       lines.forEach((l, i) => ctx.fillText(l, CARD_PAD, CARD_PAD + 80 + i * lh));
       ctx.font = `400 22px ${MONO}`;
-      ctx.fillStyle = "#8a8a85";
+      ctx.globalAlpha = dim;
       ctx.fillText([hostOf(source.pageUrl), date].filter(Boolean).join("  ·  "), CARD_PAD, height - CARD_PAD + 10);
-    }, height);
-    return { dataUrl, name: cardName(text, "Text") };
+      ctx.globalAlpha = 1;
+    }, height, bg);
+    return { dataUrl, name: cardName(text, "Text"), tone };
   }
 
   function linkCard(title, url) {
@@ -891,11 +916,13 @@
       spotEl.getBoundingClientRect();
     }
     if (!spotStyle) {
-      // Markierungsfarbe ausblenden, solange die Outline steht
+      // Markierungsfarbe: Farbe der späteren Textkarte, solange die Outline steht
       spotStyle = document.createElement("style");
-      spotStyle.textContent = "::selection{background:transparent!important}";
       (document.head || document.documentElement).appendChild(spotStyle);
     }
+    // Markierung zeigt schon die Farbe der späteren Textkarte
+    const [bg, fg] = CARD_TONES[toneFor(selectedText())];
+    spotStyle.textContent = `::selection{background:${bg}!important;color:${fg}!important}`;
     spotStyle.disabled = false;
     spotEl.style.transform = `translate(${Math.round(box.left)}px, ${Math.round(box.top)}px)`;
     spotEl.style.width = Math.round(box.right - box.left) + "px";

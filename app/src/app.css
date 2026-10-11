@@ -2981,13 +2981,80 @@ html.light .p-nav {
 
 /* ---- Textkarten als Text (wie die Karte der Extension: Kennung, Zitat, Quelle · Datum) ---- */
 
+/* Vorschau in Zonen-Karten, Mosaik und Zeilen: farbige Fläche mit dem Anfang des Texts */
+.text-sheet.mini {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  padding: 9%;
+}
+
+.text-sheet.mini .ts-label,
+.text-sheet.mini .ts-foot {
+  display: none;
+}
+
+.text-sheet.mini .ts-body {
+  flex: 1;
+  min-height: 0;
+  font-size: max(7px, 6.5cqw);
+  font-weight: 500;
+  line-height: 1.24;
+  overflow: hidden;
+  word-break: break-word;
+  -webkit-mask-image: linear-gradient(#000 65%, transparent);
+  mask-image: linear-gradient(#000 65%, transparent);
+}
+
+.p-thumbs .text-sheet.mini {
+  flex: 0 0 auto;
+  width: var(--row-thumb, 26px);
+  height: var(--row-thumb, 26px);
+  padding: 0;
+}
+
+.p-thumbs .text-sheet.mini .ts-body {
+  display: none;
+}
+
+.p-card-cover .text-sheet.mini {
+  padding-top: 52px; /* unter Nummer und „Active Zone“ */
+}
+
+.p-card-cover.trio .text-sheet.mini:first-child {
+  grid-row: span 2;
+}
+
+/* Farbwahl in den Details */
+.tone-picker {
+  display: flex;
+  gap: 8px;
+}
+
+.tone-dot {
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: var(--dot);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.12);
+  cursor: default;
+}
+
+.tone-dot.active {
+  outline: 1px dashed rgba(var(--ink-rgb), 0.7);
+  outline-offset: 3px;
+}
+
 .text-sheet {
   --ts-pad: 7.8cqw;
   container-type: inline-size;
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
-  /* Farbe pro Karte (app.js quoteTone): naive Grundfarben, Schrift Ton in Ton */
+  /* Farbe pro Karte (app.js quoteTone): Grundfarben, Schrift Ton in Ton */
   background: var(--ts-bg, #f4f3ef);
   color: var(--ts-fg, #141414);
   font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
@@ -3092,9 +3159,9 @@ body.has-selection .card-text:not(.selected):hover .text-sheet {
 }
 
 .text-sheet.large {
-  width: min(860px, 100%);
+  width: min(1100px, 100%);
   margin: auto 0;
-  padding: 64px 64px 52px;
+  padding: 80px 80px 64px;
   user-select: text;
   -webkit-user-select: text;
   cursor: text;
@@ -3103,7 +3170,7 @@ body.has-selection .card-text:not(.selected):hover .text-sheet {
 
 .text-sheet.large .ts-label,
 .text-sheet.large .ts-foot {
-  font-size: 13px;
+  font-size: 14px;
 }
 
 .text-sheet.large .ts-body {
@@ -3115,15 +3182,15 @@ body.has-selection .card-text:not(.selected):hover .text-sheet {
 }
 
 .text-sheet.large.short .ts-body {
-  font-size: 38px;
+  font-size: 50px;
 }
 
 .text-sheet.large.medium .ts-body {
-  font-size: 27px;
+  font-size: 34px;
 }
 
 .text-sheet.large.long .ts-body {
-  font-size: 21px;
+  font-size: 25px;
 }
 
 .text-sheet.large ::selection {

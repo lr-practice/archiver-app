@@ -290,6 +290,7 @@ async function saveToApp(message, sender) {
       pageUrl: cleanPageUrl(message.pageUrl),
       pageTitle: message.pageTitle ? String(message.pageTitle).slice(0, 300) : null,
       quote: message.quote ? String(message.quote).slice(0, 20000) : null,
+      tone: message.tone || null,
       capturedAt: Date.now(),
     });
     await eraseDownload(id); // Datei liegt jetzt in der Bibliothek, Eintrag im Verlauf wäre tot

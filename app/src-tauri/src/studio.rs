@@ -34,6 +34,9 @@ pub struct Note {
     pub internal: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub added_by: Option<String>,
+    /// Farbe einer Textkarte (red, green, violet, cyan, yellow, white)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tone: Option<String>,
     #[serde(default)]
     pub updated_at: i64,
 }
@@ -46,6 +49,14 @@ pub struct NotePatch {
     pub credit: Option<String>,
     pub license: Option<String>,
     pub internal: Option<bool>,
+    pub tone: Option<String>,
+}
+
+/// Erlaubte Farben einer Textkarte; alles andere heißt „keine eigene Farbe“.
+pub const TONES: [&str; 6] = ["red", "green", "violet", "cyan", "yellow", "white"];
+
+pub fn clean_tone(t: Option<&str>) -> Option<String> {
+    t.filter(|t| TONES.contains(t)).map(String::from)
 }
 
 /// Inhalt von metadata.json und den Personen-Dateien.
@@ -168,12 +179,12 @@ impl Library {
         for (hash, n) in notes {
             let rows = conn
                 .execute(
-                    "INSERT INTO note (hash, note, credit, license, internal, added_by, updated_at)
-                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+                    "INSERT INTO note (hash, note, credit, license, internal, added_by, updated_at, tone)
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
                      ON CONFLICT(hash) DO UPDATE SET note=?2, credit=?3, license=?4,
-                       internal=?5, added_by=COALESCE(?6, note.added_by), updated_at=?7
+                       internal=?5, added_by=COALESCE(?6, note.added_by), updated_at=?7, tone=?8
                      WHERE ?7 > note.updated_at",
-                    params![hash, n.note, n.credit, n.license, n.internal as i64, n.added_by, n.updated_at],
+                    params![hash, n.note, n.credit, n.license, n.internal as i64, n.added_by, n.updated_at, n.tone],
                 )
                 .map_err(err)?;
             changed |= rows > 0;
@@ -184,7 +195,7 @@ impl Library {
     pub(crate) fn all_notes(&self) -> Result<serde_json::Map<String, serde_json::Value>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn
-            .prepare("SELECT hash, note, credit, license, internal, added_by, updated_at FROM note ORDER BY hash")
+            .prepare("SELECT hash, note, credit, license, internal, added_by, updated_at, tone FROM note ORDER BY hash")
             .map_err(err)?;
         let rows = stmt
             .query_map([], |r| {
@@ -197,6 +208,7 @@ impl Library {
                         internal: r.get::<_, Option<i64>>(4)?.unwrap_or(0) != 0,
                         added_by: r.get(5)?,
                         updated_at: r.get(6)?,
+                        tone: r.get(7)?,
                     },
                 ))
             })
@@ -213,7 +225,7 @@ impl Library {
         let conn = self.conn.lock().unwrap();
         let n = conn
             .query_row(
-                "SELECT note, credit, license, internal, added_by, updated_at FROM note WHERE hash = ?1",
+                "SELECT note, credit, license, internal, added_by, updated_at, tone FROM note WHERE hash = ?1",
                 params![hash],
                 |r| {
                     Ok(Note {
@@ -223,6 +235,7 @@ impl Library {
                         internal: r.get::<_, Option<i64>>(3)?.unwrap_or(0) != 0,
                         added_by: r.get(4)?,
                         updated_at: r.get(5)?,
+                        tone: r.get(6)?,
                     })
                 },
             )
@@ -246,6 +259,9 @@ impl Library {
             }
             if let Some(v) = patch.internal {
                 n.internal = v;
+            }
+            if let Some(v) = &patch.tone {
+                n.tone = clean_tone(Some(v));
             }
             // Immer neuer als alles Bisherige, auch bei schiefer Uhr eines anderen Macs
             n.updated_at = now.max(n.updated_at + 1);

@@ -236,6 +236,13 @@ fn handle(msg: &Value, slot: &mut Option<(PathBuf, Library)>) -> Result<Value, S
             };
             let (path, duplicate) = lib.adopt_file(&file, str_arg(msg, "name"), zone, &source)?;
             remove_if_empty(file.parent());
+            // Textkarte: Farbe, die schon beim Markieren gezeigt wurde
+            if let (false, Some(tone)) = (duplicate, crate::studio::clean_tone(str_arg(msg, "tone"))) {
+                if let Ok((_, hash)) = lib.locate(&path) {
+                    let patch = crate::studio::NotePatch { tone: Some(tone), ..Default::default() };
+                    let _ = lib.set_note(&[hash], &patch);
+                }
+            }
             Ok(json!({ "path": path, "duplicate": duplicate }))
         }
         "list" => {

@@ -1,5 +1,13 @@
 # Changelog
 
+## App 0.20.1 · Extension 3.16.4 (11.10.2026)
+
+- Textkarten: Die Farbe wird schon beim Markieren im Web zufällig bestimmt und direkt an der Markierung gezeigt. Die gesicherte Karte hat dieselbe Farbe.
+- In den Details (Info) lässt sich die Farbe einer Textkarte umstellen: Rot, Grün, Violett, Cyan, Gelb oder Weiß.
+- Farben angeglichen und ruhiger (das Rot war zu grell), Schrift im Farbton dunkler.
+- Textkarten in der Lightbox größer.
+- Zonen-Karten, Mosaik und Index zeigen Textkarten farbig statt weiß.
+
 ## App 0.20.0 (11.10.2026)
 
 Neu: Einstellungen › Studio, jede Funktion einzeln abschaltbar.
