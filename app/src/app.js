@@ -2538,6 +2538,38 @@
     return menu;
   }
 
+  // Rechtsklick auf eine Zone der Übersicht (Karte oder Index-Zeile): Öffnen,
+  // Active Zone, PDF und dieselben Einträge wie im ⋯-Menü
+  function openZoneContext(path, x, y) {
+    const zone = state.zones.find((z) => z.path === path);
+    if (!zone) return;
+    closeMenus();
+    const menu = zoneMenu(zone);
+    menu.classList.add("floating", "p-zone-ctx");
+    const first = menu.firstChild;
+    const add = (label, fn) => menu.insertBefore(button("zone-menu-item", label, () => (closeMenus(), fn())), first);
+    add(t("openFile"), () => setFocus(zone.path));
+    const order = state.zones.map((z) => z.path);
+    const at = order.indexOf(zone.path);
+    if (at >= HOT_ZONES && order.length > HOT_ZONES) {
+      add(t("makeHot"), () => {
+        const slot = HOT_ZONES - 1;
+        [order[at], order[slot]] = [order[slot], order[at]];
+        setZoneOrder(order);
+        renderZones();
+        toast(t("hotSwapped", { zone: zoneLabel(zone.path) }));
+      });
+    }
+    if (zone.count) {
+      add(t("zonePdf"), () => openPdfMaker(applyItemOrder(zone.path, state.items.filter((i) => i.zone === zone.path)), zoneLabel(zone.path)));
+    }
+    document.body.appendChild(menu);
+    const w = menu.offsetWidth;
+    const h = menu.offsetHeight;
+    menu.style.left = Math.max(8, Math.min(window.innerWidth - w - 8, x)) + "px";
+    menu.style.top = Math.max(8, Math.min(window.innerHeight - h - 8, y)) + "px";
+  }
+
   async function trashZone(zone) {
     try {
       await invoke("trash_zone", { zone: zone.path });
@@ -4685,6 +4717,12 @@
     }, { passive: true, capture: true });
 
     zones.addEventListener("contextmenu", (e) => {
+      const zoneEl = e.target.closest(".p-home [data-zone]");
+      if (zoneEl && !e.target.closest(".card")) {
+        e.preventDefault();
+        openZoneContext(zoneEl.dataset.zone, e.clientX, e.clientY);
+        return;
+      }
       const card = e.target.closest(".card");
       if (!card) return;
       e.preventDefault();

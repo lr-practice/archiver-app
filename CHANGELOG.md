@@ -1,5 +1,12 @@
 # Changelog
 
+## App 0.24.2 (11.10.2026)
+
+- Navigation etwas kompakter (Knöpfe 36 px, Rand 5 px, Innenabstand 14 px). Fensterknöpfe, Leiste und Bibliotheks-Reiter liegen auf einer Mittellinie.
+- ≡-Menü hängt an der ganzen Leiste: bündig mit ihrer Kante, mindestens so breit wie sie.
+- Rechtsklick auf ein Objekt: „Ablegen in“ als eine Spalte untereinander.
+- Rechtsklick auf eine Zone in der Übersicht (Karte oder Index-Zeile): Öffnen, Zur Active Zone machen, Als PDF ausgeben, dazu die Einträge aus dem ⋯-Menü.
+
 ## App 0.24.1 (11.10.2026)
 
 - Navigation wieder in der großen Fassung wie die Extension-Leiste: Knöpfe 40 px hoch, 16 px Innenabstand, 6 px Rand, Schrift 13,5 px, Menü-Zeichen 20 px. Titelzeile und Fensterknöpfe entsprechend tiefer, Bibliotheks-Reiter gleich hoch.

@@ -5214,47 +5214,84 @@ body.lightbox-open .p-lib-tab,
   padding: 6px 0 0;
 }
 
-/* ---- 0.24.1: Navigation wieder in der großen Fassung (wie die Extension-Leiste) ---- */
+/* ---- 0.24.2: Navigation kompakt, Fensterknöpfe, Leiste und Bibliotheks-Reiter auf einer Mittellinie ---- */
 :root {
-  --top-h: 64px;
+  --top-h: 58px;
+  --nav-h: 36px;
+  --nav-rim: 5px;
 }
 
 .p-nav {
-  gap: 4px;
-  padding: 6px;
+  gap: 3px;
+  padding: var(--nav-rim);
 }
 
 .p-nav-main {
-  gap: 4px;
+  gap: 3px;
 }
 
 .p-nav-btn,
 .p-nav-search {
-  height: 40px;
-  padding: 0 16px;
+  height: var(--nav-h);
+  padding: 0 14px;
   font-size: 13.5px;
 }
 
 .p-nav-main .p-nav-zone,
-.p-nav-main .p-nav-home {
-  padding: 0 16px;
-}
-
+.p-nav-main .p-nav-home,
 #navMore {
-  padding: 0 16px;
+  padding: 0 14px;
 }
 
 #navMore::before {
-  width: 20px;
-  box-shadow: 0 -6px 0 currentColor, 0 6px 0 currentColor;
+  width: 18px;
+  box-shadow: 0 -5.5px 0 currentColor, 0 5.5px 0 currentColor;
 }
 
 .p-lib-tab {
-  top: calc((var(--top-h) - 52px) / 2);
-  padding: 6px;
+  top: calc((var(--top-h) - var(--nav-h) - 2 * var(--nav-rim)) / 2);
+  padding: var(--nav-rim);
 }
 
 .p-lib-tab .p-nav-btn {
-  height: 40px;
-  padding: 0 16px;
+  height: var(--nav-h);
+  padding: 0 14px;
+}
+
+/* ≡-Menü: hängt an der ganzen Leiste, bündig mit ihrer Kante, so breit wie sie */
+.p-nav-more {
+  position: static;
+}
+
+.p-more-menu.zone-menu {
+  top: calc(100% + 6px);
+  bottom: auto;
+  left: 0;
+  right: auto;
+  min-width: max(100%, 240px);
+}
+
+html[data-nav$="r"] .p-more-menu.zone-menu {
+  left: auto;
+  right: 0;
+}
+
+html[data-nav^="b"] .p-more-menu.zone-menu {
+  top: auto;
+  bottom: calc(100% + 6px);
+}
+
+/* Rechtsklick „Ablegen in“: eine Spalte untereinander */
+.p-ctx-zones {
+  grid-template-columns: 1fr;
+  gap: 2px;
+  max-height: 340px;
+}
+
+.zone-menu.p-ctx-menu {
+  min-width: 240px;
+}
+
+.p-ctx-zone {
+  padding: 8px 10px;
 }
