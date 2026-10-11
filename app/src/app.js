@@ -93,10 +93,11 @@
 
   // ---- Freischalten: ein gemeinsamer Code, nur sein Hash steht im Code ----
 
-  const UNLOCK_HASH = "12004fa6495855edcff5595961e8da1e62e9eed6502338060283a8bb0efa5646";
+  // Gültige Codes (nur Hashes): der aktuelle und der bisherige, damit niemand gesperrt wird
+  const UNLOCK_HASHES = ["12004fa6495855edcff5595961e8da1e62e9eed6502338060283a8bb0efa5646", "4ffbc1224a6cd30617b443e4665695d19c63d76ba51f6b16bdcdc8b28a2d1e13"];
 
   function isUnlocked() {
-    return pref("unlock", null) === UNLOCK_HASH;
+    return UNLOCK_HASHES.includes(pref("unlock", null));
   }
 
   async function unlockHash(code) {
@@ -218,6 +219,18 @@
     return fileSrc(item.abs);
   }
 
+  // Quelle öffnen. Bei Textkarten springt der Browser zur zitierten Stelle und
+  // markiert sie (Text-Fragment #:~:text=Anfang,Ende; Chrome, Safari, Edge).
+  function sourceUrl(item) {
+    const url = item.pageUrl;
+    const quote = (item.quote || "").replace(/\s+/g, " ").trim();
+    if (!url || !quote || /#:~:/.test(url)) return url;
+    const enc = (t) => encodeURIComponent(t).replace(/-/g, "%2D").replace(/,/g, "%2C").replace(/&/g, "%26");
+    const words = quote.split(" ");
+    const frag = words.length <= 10 ? enc(quote) : enc(words.slice(0, 5).join(" ")) + "," + enc(words.slice(-5).join(" "));
+    return url.replace(/#.*$/, "") + "#:~:text=" + frag;
+  }
+
   // Textkarte: der gespeicherte Text. Ältere Karten (vor 0.9.0) haben ihn
   // nur als Bild; dann aus der Texterkennung („TEXT … domain · Datum“).
   function quoteOf(item) {
@@ -232,11 +245,11 @@
   // Farben der Textkarten: Hintergrund, Schrift Ton in Ton, Deckkraft für Kennung und Fuß.
   // Gleiche Werte in der Extension (content.js CARD_TONES).
   const QUOTE_TONES = {
-    red: ["#f2483a", "#420a04", 0.62],
-    green: ["#2db567", "#06301a", 0.62],
-    violet: ["#8b5cf0", "#1c0a44", 0.62],
-    cyan: ["#1fb2ec", "#042d42", 0.62],
-    yellow: ["#f6da2e", "#3b3200", 0.62],
+    red: ["#ff0000", "#5c0000", 0.7],
+    green: ["#00b050", "#003d1c", 0.7],
+    violet: ["#7030a0", "#e2c8f5", 0.75],
+    cyan: ["#00b0f0", "#003d54", 0.7],
+    yellow: ["#ffff00", "#5c5c00", 0.75],
     white: ["#f4f3ef", "#141414", 0.5],
   };
   const RANDOM_TONES = ["red", "green", "violet", "cyan", "yellow"];
@@ -374,6 +387,7 @@
     state.byPath = new Map(snap.items.map((i) => [i.path, i]));
     state.order = snap.order || {};
     state.shared = !!snap.shared;
+    state.defaultZone = snap.defaultZone || "Inbox";
     state.user = snap.user || "";
     if (isZone(state.focus) && !state.zones.some((z) => z.path === state.focus)) state.focus = null;
     for (const p of [...state.selection]) if (!state.byPath.has(p)) state.selection.delete(p);
@@ -1505,6 +1519,30 @@
     return block(title);
   }
 
+  // Standard-Zone: wohin alles kommt, was ohne Ziel gesammelt wird (sonst Inbox)
+  function renderDefaultZone() {
+    const b = block(t("setDefaultZone"));
+    const select = el("select", "p-select");
+    for (const z of state.zones.filter((z) => z.path !== "")) {
+      const opt = el("option", null, zoneLabel(z.path));
+      opt.value = z.path;
+      if (z.path === state.defaultZone) opt.selected = true;
+      select.appendChild(opt);
+    }
+    select.addEventListener("change", async () => {
+      try {
+        await invoke("set_default_zone", { zone: select.value });
+        await refresh();
+        renderPage(true);
+      } catch (e) {
+        fail(e);
+      }
+    });
+    b.appendChild(blockRow(t("setDefaultZoneLabel"), select));
+    b.appendChild(el("p", "p-block-hint", t("setDefaultZoneHint")));
+    return b;
+  }
+
   // Zonen: umbenennen, neu anlegen (die ersten vier sind die Hot Zones, Tasten 1–4)
   function renderZoneSettings() {
     const b = collapsible("zones", t("setZones"));
@@ -1522,6 +1560,7 @@
             async (value) => {
               try {
                 const newPath = await invoke("rename_zone", { zone: zone.path, name: value });
+                undoRename(zone.path, newPath);
                 renameInOrder(zone.path, newPath);
                 if (state.focus === zone.path) state.focus = newPath;
                 await refresh();
@@ -1653,6 +1692,7 @@
 
     if (sub === "library") {
       wrap.appendChild(renderLibrarySlots());
+      wrap.appendChild(renderDefaultZone());
       wrap.appendChild(renderZoneSettings());
     }
 
@@ -1950,7 +1990,7 @@
     form.addEventListener("submit", async (e) => {
       e.preventDefault();
       const hash = await unlockHash(input.value);
-      if (hash !== UNLOCK_HASH) {
+      if (!UNLOCK_HASHES.includes(hash)) {
         form.classList.remove("wrong");
         void form.offsetWidth;
         form.classList.add("wrong");
@@ -2232,7 +2272,7 @@
   }
 
   function canEdit(path) {
-    return path !== "" && path !== "Inbox";
+    return path !== "" && path !== (state.defaultZone || "Inbox");
   }
 
   // ---- Zonen-Menü (⋯): Umbenennen, im Finder zeigen, löschen ----
@@ -2611,12 +2651,41 @@
     selectAndShow(list[Math.min(pos.index, list.length - 1)].path);
   }
 
+  // ---- ⌘Z: Verschieben, Löschen und Umbenennen rückgängig ----
+  const undoStack = [];
+  const UNDO_MAX = 30;
+
+  function pushUndo(label, run) {
+    undoStack.push({ label, run });
+    if (undoStack.length > UNDO_MAX) undoStack.shift();
+  }
+
+  async function undo() {
+    const step = undoStack.pop();
+    if (!step) return toast(t("undoNothing"));
+    try {
+      await step.run();
+      await refresh();
+      toast(t("undone", { what: step.label }));
+    } catch (e) {
+      fail(e);
+    }
+  }
+
   async function moveSelection(zone) {
     const items = selectedItems().filter((i) => i.zone !== zone);
     if (!items.length) return;
     const pos = rememberPosition(items);
     try {
-      await invoke("move_items", { paths: items.map((i) => i.path), zone });
+      const moved = await invoke("move_items", { paths: items.map((i) => i.path), zone });
+      if (Array.isArray(moved) && moved.length === items.length) {
+        const back = items.map((i, k) => [moved[k], i.zone]);
+        pushUndo(t("undoMove"), async () => {
+          for (const z of new Set(back.map(([, z]) => z))) {
+            await invoke("move_items", { paths: back.filter(([, b]) => b === z).map(([p]) => p), zone: z });
+          }
+        });
+      }
       await refresh();
       selectNextAt(pos);
       tourStats.drops++;
@@ -2658,7 +2727,8 @@
     if (!items.length) return;
     const pos = rememberPosition(items);
     try {
-      await invoke("trash_items", { paths: items.map((i) => i.path) });
+      const trashed = await invoke("trash_items", { paths: items.map((i) => i.path) });
+      if (Array.isArray(trashed) && trashed.length) pushUndo(t("undoTrash"), () => invoke("restore_items", { items: trashed }));
       await refresh();
       selectNextAt(pos);
       toast(t("trashed", { n: items.length }));
@@ -2668,6 +2738,15 @@
   }
 
   // ---- Zonen anlegen und umbenennen ----
+
+  function undoRename(oldPath, newPath) {
+    if (!newPath || newPath === oldPath) return;
+    pushUndo(t("undoRename"), async () => {
+      const back = await invoke("rename_zone", { zone: newPath, name: lastSegment(oldPath) });
+      renameInOrder(newPath, back);
+      if (state.focus === newPath) state.focus = back;
+    });
+  }
 
   function inlineInput(container, value, onCommit, onCancel) {
     const input = el("input");
@@ -2701,6 +2780,7 @@
       async (name) => {
         try {
           const newPath = await invoke("rename_zone", { zone: path, name });
+          undoRename(path, newPath);
           renameInOrder(path, newPath);
           if (state.focus === path) state.focus = newPath;
           await refresh();
@@ -3012,7 +3092,7 @@
       const link = el("button", "lb-link", item.pageTitle || domainOf(item.pageUrl));
       link.type = "button";
       link.title = item.pageUrl;
-      link.addEventListener("click", () => invoke("open_url", { url: item.pageUrl }).catch(fail));
+      link.addEventListener("click", () => invoke("open_url", { url: sourceUrl(item) }).catch(fail));
       source = lbRow(t("source"), link);
     }
     let imageUrl = null;
@@ -3254,7 +3334,7 @@
     $("lbSourceBtn").textContent = t("source");
     $("lbSourceBtn").addEventListener("click", () => {
       const item = lightboxItem();
-      if (item && item.pageUrl) invoke("open_url", { url: item.pageUrl }).catch(fail);
+      if (item && item.pageUrl) invoke("open_url", { url: sourceUrl(item) }).catch(fail);
     });
     const action = $("lbAction");
     action.replaceChildren(el("span", "lb-dot"), el("span", "lb-action-zone", "Archiver"));
@@ -4285,7 +4365,7 @@
     if (one) {
       entry(menu, t("ctxPreview"), () => openLightbox(one), "␣");
       entry(menu, t("openFile"), () => invoke("open_file", { path: one.abs }).catch(fail));
-      if (one.pageUrl) entry(menu, t("ctxSource"), () => invoke("open_url", { url: one.pageUrl }).catch(fail));
+      if (one.pageUrl) entry(menu, t("ctxSource"), () => invoke("open_url", { url: sourceUrl(one) }).catch(fail));
       rule();
     }
     // Ablegen in: alle Zonen als Kästchen in zwei Spalten, Active Zones zuerst mit Taste
@@ -4554,6 +4634,8 @@
       toggleInfo();
     } else if (mod && e.key === ",") {
       togglePage("settings");
+    } else if (mod && (e.key === "z" || e.key === "Z") && !e.shiftKey) {
+      undo();
     } else if (mod && !e.shiftKey && !e.altKey && /^[1-3]$/.test(e.key)) {
       switchLibrary(Number(e.key) - 1);
     } else if (mod && (e.key === "p" || e.key === "P")) {

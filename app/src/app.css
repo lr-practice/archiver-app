@@ -5023,3 +5023,21 @@ html[data-nav="tc"] .page-open .p-top {
 body.lib-loading {
   cursor: progress;
 }
+
+/* Standard-Zone (Einstellungen › Bibliothek) */
+.p-select {
+  appearance: none;
+  -webkit-appearance: none;
+  min-width: 160px;
+  padding: 3px 22px 3px 0;
+  border: none;
+  border-bottom: 1px solid var(--p-rule);
+  border-radius: 0;
+  background: transparent
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%238a8a8f'/%3E%3C/svg%3E")
+    no-repeat right 2px center;
+  color: var(--p-text);
+  text-align: right;
+  outline: none;
+  cursor: pointer;
+}

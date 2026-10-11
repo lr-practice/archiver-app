@@ -651,6 +651,15 @@ struct Snapshot {
     order: std::collections::HashMap<String, Vec<String>>,
     shared: bool,
     user: Option<String>,
+    /// Zone für alles ohne Ziel (Standard: Inbox)
+    default_zone: String,
+}
+
+#[tauri::command]
+async fn set_default_zone(app: AppHandle, state: State<'_, AppState>, zone: String) -> Result<(), String> {
+    current(&state)?.set_default_zone(&zone)?;
+    let _ = app.emit("library-changed", ());
+    Ok(())
 }
 
 #[tauri::command]
@@ -665,6 +674,7 @@ async fn snapshot(state: State<'_, AppState>) -> Result<Snapshot, String> {
         order: lib.item_order(),
         shared: lib.shared,
         user,
+        default_zone: lib.default_zone(),
     })
 }
 
@@ -761,7 +771,7 @@ async fn move_items(app: AppHandle, state: State<'_, AppState>, paths: Vec<Strin
 }
 
 #[tauri::command]
-async fn trash_items(app: AppHandle, state: State<'_, AppState>, paths: Vec<String>) -> Result<usize, String> {
+async fn trash_items(app: AppHandle, state: State<'_, AppState>, paths: Vec<String>) -> Result<Vec<(String, String)>, String> {
     let n = current(&state)?.trash_items(&paths)?;
     let _ = app.emit("library-changed", ());
     Ok(n)
@@ -796,6 +806,14 @@ async fn get_drag_alpha(state: State<'_, AppState>) -> Result<Option<f64>, Strin
 #[tauri::command]
 async fn set_zone_order(state: State<'_, AppState>, order: Vec<String>, hot: Vec<String>) -> Result<(), String> {
     current(&state)?.set_zone_order(&order, &hot)
+}
+
+#[tauri::command]
+async fn restore_items(app: AppHandle, state: State<'_, AppState>, items: Vec<(String, String)>) -> Result<usize, String> {
+    let n = current(&state)?.restore_items(&items)?;
+    let _ = app.emit("library-changed", ());
+    kick_thumbs(&app);
+    Ok(n)
 }
 
 #[tauri::command]
@@ -1091,9 +1109,11 @@ pub fn run() {
             snapshot,
             move_items,
             trash_items,
+            restore_items,
             create_zone,
             rename_zone,
             set_zone_order,
+            set_default_zone,
             set_drag_alpha,
             get_drag_alpha,
             trash_zone,

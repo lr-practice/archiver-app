@@ -237,12 +237,15 @@ async function appBridge() {
 // legt die Übersicht der App fest; nur sie erscheinen beim Ziehen.
 // Das Ergebnis liegt zusätzlich in storage.local "appZones", damit offene
 // Oberflächen neu zeichnen, wenn sich etwas ändert.
+let bridgeDefaultZone = null; // Standard-Zone der App (statt Inbox)
+
 async function getZones() {
   const info = await appBridge();
   if (info) {
     try {
       const r = await hostCall("zones");
       const zones = (r.zones || []).map((z) => z.path);
+      bridgeDefaultZone = r.default || null;
       const hot = Array.isArray(r.hot) ? r.hot.filter((n) => zones.includes(n)) : zones.slice(0, 4);
       await publishAppZones({ zones, hot });
       const alpha = typeof r.alpha === "number" ? r.alpha : null;
@@ -263,8 +266,8 @@ async function publishAppZones(zones) {
 async function saveToApp(message, sender) {
   const tabId = sender.tab && sender.tab.id;
   const frameId = sender.frameId;
-  const zone = message.folder ? sanitizePath(message.folder) : "Inbox";
-  const label = zone.split("/").pop();
+  // ohne Zone entscheidet die App (Standard-Zone, sonst Inbox)
+  const zone = message.folder ? sanitizePath(message.folder) : null;
   const filename = buildFilename(message.url, message.suggestedName, TRANSFER_DIR);
 
   let id;
@@ -297,7 +300,7 @@ async function saveToApp(message, sender) {
     // Gleiches Bild schon in der Bibliothek: nicht doppelt ablegen, sagen wo es liegt
     const where = String(r.path || "").split("/").slice(0, -1).pop() || "Inbox";
     if (r.duplicate) sendFeedback(tabId, frameId, t("duplicateIn", [where]), true);
-    else if (!message.quiet) sendFeedback(tabId, frameId, t("savedIn", [label]), true);
+    else if (!message.quiet) sendFeedback(tabId, frameId, t("savedIn", [where]), true);
     return { ok: true, id: r.path };
   } catch (err) {
     console.warn("[Archiver] Übergabe an die App fehlgeschlagen:", err.message);
@@ -308,7 +311,7 @@ async function saveToApp(message, sender) {
 }
 
 async function listAppFolder(zone) {
-  const r = await hostCall("list", { zone: zone || "Inbox" });
+  const r = await hostCall("list", { zone: zone || null });
   const items = await Promise.all(
     (r.items || []).map(async (it) => ({
       id: it.path,
@@ -324,11 +327,11 @@ async function listAppFolder(zone) {
 
 // Textkarte (.txt) für die Galerie: kleines SVG in der Kartenfarbe (content.js CARD_TONES)
 const PREVIEW_TONES = {
-  red: ["#f2483a", "#420a04"],
-  green: ["#2db567", "#06301a"],
-  violet: ["#8b5cf0", "#1c0a44"],
-  cyan: ["#1fb2ec", "#042d42"],
-  yellow: ["#f6da2e", "#3b3200"],
+  red: ["#ff0000", "#5c0000"],
+  green: ["#00b050", "#003d1c"],
+  violet: ["#7030a0", "#e2c8f5"],
+  cyan: ["#00b0f0", "#003d54"],
+  yellow: ["#ffff00", "#5c5c00"],
   white: ["#f4f3ef", "#141414"],
 };
 function textPreview(quote, tone, hash) {
@@ -370,7 +373,7 @@ async function appPreview(it) {
 
 async function moveInApp(path, targetZone) {
   try {
-    const r = await hostCall("move", { paths: [path], zone: targetZone || "Inbox" });
+    const r = await hostCall("move", { paths: [path], zone: targetZone || bridgeDefaultZone || "Inbox" });
     return { ok: true, newId: (r.moved || [])[0] || path };
   } catch (err) {
     return { ok: false, error: err.message || t("moveFailed") };

@@ -493,7 +493,6 @@ impl Library {
     /// Öffnet (und legt bei Bedarf an) eine Bibliothek in `root`.
     pub fn open(root: &Path) -> Result<Library> {
         fs::create_dir_all(root.join(META_DIR).join("thumbs")).map_err(err)?;
-        fs::create_dir_all(root.join(INBOX)).map_err(err)?;
         let shared = crate::studio::is_shared(root);
         // Geteilt: SQLite gehört nicht auf ein Netzlaufwerk, jede Person hat ihren eigenen Cache.
         let db = if shared { crate::studio::local_db(root)? } else { root.join(META_DIR).join("library.db") };
@@ -530,6 +529,8 @@ impl Library {
             user: Mutex::new(None),
             people_sig: Mutex::new(0),
         };
+        // Inbox nur, solange keine andere Standard-Zone gewählt ist
+        fs::create_dir_all(root.join(lib.default_zone())).map_err(err)?;
         lib.restore_metadata()?;
         lib.merge_people()?;
         Ok(lib)
@@ -569,6 +570,27 @@ impl Library {
         let mut v = self.zone_file();
         v["order"] = serde_json::json!(order);
         v["hot"] = serde_json::json!(hot);
+        self.write_zone_file(&v)
+    }
+
+    /// Standard-Zone: hierhin kommt alles, was ohne Ziel gesammelt wird
+    /// (Extension ohne Zone, lose Bilder beim Import). Ohne Wahl die Inbox.
+    pub fn default_zone(&self) -> String {
+        self.zone_file()
+            .get("default")
+            .and_then(|z| z.as_str())
+            .filter(|z| !z.is_empty() && self.root.join(z).is_dir())
+            .map(String::from)
+            .unwrap_or_else(|| INBOX.to_string())
+    }
+
+    pub fn set_default_zone(&self, zone: &str) -> Result<()> {
+        let dir = safe_join(&self.root, zone)?;
+        if zone.is_empty() || !dir.is_dir() {
+            return Err(format!("Zone nicht gefunden: {zone}"));
+        }
+        let mut v = self.zone_file();
+        v["default"] = serde_json::json!(zone);
         self.write_zone_file(&v)
     }
 
@@ -764,6 +786,7 @@ impl Library {
     /// Alle Zonen: jeder sichtbare Unterordner, Inbox zuerst, dann alphabetisch.
     /// Liegen Bilder direkt im Bibliotheksordner, gibt es zusätzlich die Zone "".
     pub fn zones(&self) -> Result<Vec<Zone>> {
+        let default = self.default_zone();
         let mut counts: HashMap<String, usize> = HashMap::new();
         {
             let conn = self.conn.lock().unwrap();
@@ -785,7 +808,7 @@ impl Library {
             })
             .collect();
         zones.sort_by(|a, b| {
-            let rank = |z: &Zone| if z.path == INBOX { 0 } else { 1 };
+            let rank = |z: &Zone| if z.path == default { 0 } else { 1 };
             rank(a).cmp(&rank(b)).then_with(|| a.path.to_lowercase().cmp(&b.path.to_lowercase()))
         });
         if let Some(&count) = counts.get("") {
@@ -1193,24 +1216,61 @@ impl Library {
         Ok(moved)
     }
 
-    /// Legt Dateien in den macOS-Papierkorb (wiederherstellbar).
-    pub fn trash_items(&self, paths: &[String]) -> Result<usize> {
-        let abs: Vec<PathBuf> = paths
-            .iter()
-            .map(|p| safe_join(&self.root, p))
-            .collect::<Result<Vec<_>>>()?
-            .into_iter()
-            .filter(|p| p.is_file())
-            .collect();
-        if abs.is_empty() {
-            return Ok(0);
+    /// Legt Dateien in den macOS-Papierkorb (wiederherstellbar). Gibt je Datei
+    /// (Pfad in der Bibliothek, Ort im Papierkorb) zurück, soweit bekannt (für ⌘Z).
+    pub fn trash_items(&self, paths: &[String]) -> Result<Vec<(String, String)>> {
+        #[allow(unused_mut)]
+        let mut done = Vec::new();
+        let mut plain = Vec::new();
+        for rel in paths {
+            let abs = safe_join(&self.root, rel)?;
+            if !abs.is_file() {
+                continue;
+            }
+            #[cfg(target_os = "macos")]
+            {
+                if let Some(at) = crate::macos::trash_with_location(&abs)? {
+                    done.push((rel.clone(), at));
+                    continue;
+                }
+                plain.push(rel.clone());
+            }
+            #[cfg(not(target_os = "macos"))]
+            {
+                trash::delete(&abs).map_err(err)?;
+                plain.push(rel.clone());
+            }
         }
-        trash::delete_all(&abs).map_err(err)?;
         let conn = self.conn.lock().unwrap();
-        for p in paths {
+        for p in done.iter().map(|(p, _)| p).chain(plain.iter()) {
             conn.execute("DELETE FROM item WHERE path = ?1", params![p]).map_err(err)?;
         }
-        Ok(abs.len())
+        Ok(done)
+    }
+
+    /// ⌘Z nach dem Löschen: Dateien aus dem Papierkorb zurück an ihren Platz.
+    pub fn restore_items(&self, items: &[(String, String)]) -> Result<usize> {
+        let mut n = 0;
+        for (rel, from) in items {
+            let src = PathBuf::from(from);
+            let dst = safe_join(&self.root, rel)?;
+            if !src.is_file() {
+                continue;
+            }
+            if let Some(dir) = dst.parent() {
+                fs::create_dir_all(dir).map_err(err)?;
+            }
+            let dst = if dst.exists() { unique_path(dst.parent().unwrap_or(&self.root), &file_name(rel)) } else { dst };
+            if fs::rename(&src, &dst).is_err() {
+                fs::copy(&src, &dst).map_err(err)?;
+                let _ = fs::remove_file(&src);
+            }
+            n += 1;
+        }
+        if n > 0 {
+            self.scan()?;
+        }
+        Ok(n)
     }
 
     pub fn create_zone(&self, name: &str) -> Result<String> {
@@ -1252,7 +1312,7 @@ impl Library {
 
     /// Legt eine Zone samt Inhalt in den Papierkorb. Inbox und Bibliotheksordner bleiben.
     pub fn trash_zone(&self, zone: &str) -> Result<()> {
-        if zone.is_empty() || zone == INBOX {
+        if zone.is_empty() || zone == self.default_zone() {
             return Err("Diese Zone lässt sich nicht löschen".into());
         }
         let dir = safe_join(&self.root, zone)?;
@@ -1406,7 +1466,7 @@ impl Library {
             }
             let rel = rel_path(dir, entry.path());
             let zone = match parent_rel(&rel) {
-                p if p.is_empty() => INBOX.to_string(),
+                p if p.is_empty() => self.default_zone(),
                 p => p.split('/').map(clean_segment).collect::<Vec<_>>().join("/"),
             };
             self.import_one(entry.path(), &zone, None, &mut report)?;
@@ -1436,9 +1496,10 @@ impl Library {
         }
         let text = fs::read_to_string(json_path).map_err(err)?;
         let export: Export = serde_json::from_str(&text).map_err(|e| format!("Keine gültige Export-Datei: {e}"))?;
+        let default = self.default_zone();
         let zone_for = |z: &str| -> String {
             let cleaned = z.split('/').map(clean_segment).filter(|s| !s.is_empty()).collect::<Vec<_>>().join("/");
-            if cleaned.is_empty() { INBOX.to_string() } else { cleaned }
+            if cleaned.is_empty() { default.clone() } else { cleaned }
         };
         for z in &export.zones {
             let _ = fs::create_dir_all(safe_join(&self.root, &zone_for(z))?);
@@ -1713,5 +1774,28 @@ mod tests {
         let own = items.iter().find(|i| i.path == "Zitate/notiz.txt").unwrap();
         assert_eq!(own.quote.as_deref(), Some("Gute Form"));
         assert!(lib.missing_thumbs().unwrap().is_empty(), "keine Vorschaubilder für Text");
+    }
+
+    #[test]
+    fn default_zone_replaces_inbox() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path().join("Bib");
+        let lib = Library::open(&root).unwrap();
+        assert_eq!(lib.default_zone(), INBOX);
+        lib.create_zone("Sammeln").unwrap();
+        lib.set_default_zone("Sammeln").unwrap();
+        assert_eq!(lib.default_zone(), "Sammeln");
+        assert!(lib.trash_zone("Sammeln").is_err(), "Standard-Zone bleibt");
+        let src = tmp.path().join("lose");
+        std::fs::create_dir_all(&src).unwrap();
+        write_png(&src.join("a.png"), 40, 40, 3);
+        lib.import_folder(&src).unwrap();
+        assert!(root.join("Sammeln/a.png").is_file());
+        assert_eq!(lib.zones().unwrap()[0].path, "Sammeln");
+        // ohne Inbox-Ordner erneut öffnen: keine neue Inbox
+        std::fs::remove_dir_all(root.join(INBOX)).unwrap();
+        drop(lib);
+        let _ = Library::open(&root).unwrap();
+        assert!(!root.join(INBOX).exists());
     }
 }

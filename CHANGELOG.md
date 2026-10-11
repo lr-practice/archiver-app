@@ -1,8 +1,13 @@
 # Changelog
 
-## App 0.21.1 (11.10.2026)
+## App 0.22.0 · Extension 3.18.0 (11.10.2026)
 
-- Neuer Freischalt-Code. Der bisherige gilt nicht mehr, Archiver fragt einmal nach dem neuen.
+- ⌘Z macht Verschieben, Löschen (holt die Dateien aus dem Papierkorb zurück) und Umbenennen von Zonen rückgängig, mehrfach hintereinander.
+- Standard-Zone: In Einstellungen › Bibliothek wählbar, wohin alles ohne Ziel kommt (Extension ohne Zone, lose Bilder beim Import). Ersetzt die Inbox; die Inbox lässt sich dann wie jede Zone löschen.
+- Textkarte › Quelle: Die Webseite öffnet sich an der zitierten Stelle, die Stelle ist markiert.
+- Öffnungsanimation ohne das blaue Licht am Anfang.
+- Kartenfarben wieder so kräftig wie in 0.20.0.
+- Neuer Freischalt-Code; der bisherige gilt weiter.
 
 ## App 0.21.0 · Extension 3.17.0 (11.10.2026)
 

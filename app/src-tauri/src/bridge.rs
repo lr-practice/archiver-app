@@ -12,7 +12,7 @@
 // Sie arbeitet direkt auf dem Bibliotheksordner. Eine laufende App bemerkt
 // neue Dateien über ihren Ordner-Watcher.
 
-use crate::library::{now_ms, Library, Source, Zone, INBOX};
+use crate::library::{now_ms, Library, Source, Zone};
 use base64::Engine;
 use serde::Deserialize;
 use serde_json::{json, Value};
@@ -216,7 +216,7 @@ fn handle(msg: &Value, slot: &mut Option<(PathBuf, Library)>) -> Result<Value, S
             let rank = |p: &str| order.iter().position(|o| o == p).unwrap_or(order.len());
             zones.sort_by_key(|z| rank(&z.path));
             let hot: Vec<&String> = hot.iter().filter(|h| zones.iter().any(|z| &z.path == *h)).collect();
-            Ok(json!({ "zones": zones, "hot": hot, "alpha": lib.drag_alpha() }))
+            Ok(json!({ "zones": zones, "hot": hot, "alpha": lib.drag_alpha(), "default": lib.default_zone() }))
         }
         "create_zone" => {
             let lib = library(slot)?;
@@ -226,7 +226,8 @@ fn handle(msg: &Value, slot: &mut Option<(PathBuf, Library)>) -> Result<Value, S
         "save" => {
             let lib = library(slot)?;
             let file = PathBuf::from(str_arg(msg, "file").ok_or("Datei fehlt")?);
-            let zone = str_arg(msg, "zone").unwrap_or(INBOX);
+            let fallback = lib.default_zone();
+            let zone = str_arg(msg, "zone").unwrap_or(&fallback);
             let source = Source {
                 image_url: str_arg(msg, "imageUrl").filter(|u| u.starts_with("http")).map(String::from),
                 page_url: str_arg(msg, "pageUrl").map(String::from),
@@ -248,7 +249,8 @@ fn handle(msg: &Value, slot: &mut Option<(PathBuf, Library)>) -> Result<Value, S
         "list" => {
             let lib = library(slot)?;
             lib.scan()?;
-            let zone = str_arg(msg, "zone").unwrap_or(INBOX);
+            let fallback = lib.default_zone();
+            let zone = str_arg(msg, "zone").unwrap_or(&fallback);
             let items: Vec<Value> = lib
                 .items()?
                 .into_iter()
