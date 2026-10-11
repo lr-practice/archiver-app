@@ -601,5 +601,22 @@
     return true;
   }
 
-  global.ArchiverMedia = { kind, duration, placeholder, PdfView, videoEl, audioEl, audioPlaceholder, audioFormat, togglePlay, player, zoomable, loadPdfjs };
+  // Einstellungen › Darstellung: Video bzw. Audio beim Öffnen abspielen (App und
+  // Betrachter lesen denselben Eintrag). Blockt das System Ton, startet Video stumm.
+  function autoplay(media, kind) {
+    let on = false;
+    try {
+      on = JSON.parse(localStorage.getItem(kind === "video" ? "archiver.autoplayVideo" : "archiver.autoplayAudio")) === true;
+    } catch {}
+    if (!media || !on) return;
+    const p = media.play();
+    if (p && p.catch)
+      p.catch(() => {
+        if (kind !== "video") return;
+        media.muted = true;
+        media.play().catch(() => {});
+      });
+  }
+
+  global.ArchiverMedia = { kind, duration, placeholder, PdfView, videoEl, audioEl, audioPlaceholder, audioFormat, togglePlay, player, zoomable, loadPdfjs, autoplay };
 })(window);

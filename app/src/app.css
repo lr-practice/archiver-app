@@ -5086,3 +5086,130 @@ body.lib-loading {
   min-width: 0;
   justify-content: flex-end;
 }
+
+/* ---- Ordner in einer Zone: Chips, Mosaik oder Abschnitte (0.24) ---- */
+.p-folder-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 2px;
+  min-width: 0;
+  flex: 0 1 auto;
+}
+.p-folder-chips .p-chip.active {
+  outline: 1px dashed rgba(var(--ink-rgb), 0.45);
+  outline-offset: -1px;
+  border-radius: var(--r-sm);
+}
+.p-folder-section + .p-folder-section {
+  margin-top: 40px;
+}
+.p-folder-head {
+  font-size: 17px;
+  padding-bottom: 12px;
+}
+
+/* Karten: Raster, alle Karten einer Reihe gleich hoch (auch „+ New zone“) */
+.p-cards.p-cards-grid {
+  display: grid;
+  grid-template-columns: repeat(var(--card-cols, 3), minmax(0, 1fr));
+  align-items: stretch;
+}
+.p-cards-grid > .p-card {
+  display: flex;
+  flex-direction: column;
+}
+.p-cards-grid > .p-card > .p-card-body {
+  flex: 1 0 auto;
+}
+.p-card-cover.empty {
+  background: rgba(var(--ink-rgb), 0.04);
+}
+.p-card.p-new.p-new-card {
+  padding: 0;
+}
+.p-card.p-new.p-new-card .p-card-cover.empty {
+  background: transparent;
+}
+.p-card.p-card-group {
+  padding: 0 0 4px;
+}
+.p-card-group .p-card-group-title {
+  padding: 14px 16px 12px;
+}
+.p-card-group .p-card-row {
+  margin: 0 10px 0 16px;
+}
+
+/* Aktive Bibliothek: einzelner Reiter oben rechts, zurückgenommen (0.24) */
+.p-lib-tab {
+  position: fixed;
+  top: calc((var(--top-h) - 36px) / 2);
+  right: var(--p-pad, 20px);
+  z-index: 31;
+  padding: 4px;
+  border-radius: var(--r-md);
+  box-shadow: inset 0 0 0 1px rgba(var(--ink-rgb), 0.04);
+}
+.p-lib-tab[hidden] {
+  display: none;
+}
+.p-lib-tab .p-nav-btn {
+  height: 28px;
+  padding: 0 12px;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--p-dim);
+  font-weight: 400;
+}
+.p-lib-tab .p-nav-btn:hover,
+.p-lib-tab .p-nav-btn.active {
+  color: var(--p-text);
+  background: rgba(var(--ink-rgb), 0.06);
+}
+.p-lib-tab .zone-menu {
+  top: calc(100% + 8px);
+  right: 0;
+}
+/* Leiste oben rechts: der Reiter weicht nach links */
+html[data-nav="tr"] .p-lib-tab {
+  right: auto;
+  left: 84px;
+}
+html.fullscreen[data-nav="tr"] .p-lib-tab {
+  left: var(--p-pad);
+}
+body.lightbox-open .p-lib-tab,
+.page-open .p-lib-tab {
+  display: none;
+}
+
+/* Pfade (Info › App, Bibliotheken): einzeilig, Label bricht nie um */
+.p-path {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.p-block-row:has(> .p-block-side .p-path) .p-block-main {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+.p-block-row:has(> .p-block-side .p-path) .p-block-side {
+  flex: 1 1 auto;
+  min-width: 0;
+  justify-content: flex-end;
+}
+.p-block-main:has(> .p-path) {
+  flex: 1 1 auto;
+}
+
+/* Code direkt im Sperr-Hinweis eingeben (0.24) */
+.p-lock-form {
+  width: 100%;
+  min-width: 280px;
+}
+.p-lock-form .p-unlock-form {
+  padding: 6px 0 0;
+}

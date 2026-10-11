@@ -237,7 +237,7 @@ async function appBridge() {
 // legt die Übersicht der App fest; nur sie erscheinen beim Ziehen.
 // Das Ergebnis liegt zusätzlich in storage.local "appZones", damit offene
 // Oberflächen neu zeichnen, wenn sich etwas ändert.
-let bridgeDefaultZone = null; // Standard-Zone der App (statt Inbox)
+let bridgeDefaultZone = null; // Standard-Zone der App (Standard: Unsorted)
 
 async function getZones() {
   const info = await appBridge();
@@ -266,7 +266,7 @@ async function publishAppZones(zones) {
 async function saveToApp(message, sender) {
   const tabId = sender.tab && sender.tab.id;
   const frameId = sender.frameId;
-  // ohne Zone entscheidet die App (Standard-Zone, sonst Inbox)
+  // ohne Zone entscheidet die App (Standard-Zone, sonst Unsorted)
   const zone = message.folder ? sanitizePath(message.folder) : null;
   const filename = buildFilename(message.url, message.suggestedName, TRANSFER_DIR);
 
@@ -298,7 +298,7 @@ async function saveToApp(message, sender) {
     });
     await eraseDownload(id); // Datei liegt jetzt in der Bibliothek, Eintrag im Verlauf wäre tot
     // Gleiches Bild schon in der Bibliothek: nicht doppelt ablegen, sagen wo es liegt
-    const where = String(r.path || "").split("/").slice(0, -1).pop() || "Inbox";
+    const where = String(r.path || "").split("/").slice(0, -1).pop() || "Unsorted";
     if (r.duplicate) sendFeedback(tabId, frameId, t("duplicateIn", [where]), true);
     else if (!message.quiet) sendFeedback(tabId, frameId, t("savedIn", [where]), true);
     return { ok: true, id: r.path };
@@ -373,7 +373,7 @@ async function appPreview(it) {
 
 async function moveInApp(path, targetZone) {
   try {
-    const r = await hostCall("move", { paths: [path], zone: targetZone || bridgeDefaultZone || "Inbox" });
+    const r = await hostCall("move", { paths: [path], zone: targetZone || bridgeDefaultZone || "Unsorted" });
     return { ok: true, newId: (r.moved || [])[0] || path };
   } catch (err) {
     return { ok: false, error: err.message || t("moveFailed") };

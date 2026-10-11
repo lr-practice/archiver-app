@@ -1,5 +1,24 @@
 # Changelog
 
+## App 0.24.0 · Extension 3.19.0 (11.10.2026)
+
+Zonen und Ordner:
+- Eine Karte pro Zone: Jeder Ordner der obersten Ebene ist eine Zone, seine Unterordner erscheinen darin als Ordner. Unterordner als eigene Zonen gibt es nur noch, wenn sie unter Einstellungen › Bibliothek › Ordnerstruktur eingeschaltet sind (Ebene 2 oder 3).
+- In einer Zone mit Ordnern: Chips unter dem Titel filtern nach Ordner (Alle, je Ordner, Ohne Ordner). Umschalter Mosaik (ein Raster) oder Abschnitte (je Ordner eine Kopfzeile), pro Zone gemerkt.
+- Karten-Ansicht als Raster: alle Karten einer Reihe gleich hoch, auch „+ Neue Zone“ und Zonen ohne Bild. Karten zeigen die Zahl der Ordner.
+- Index-Ansicht: Die Zeile „+ Neue Zone“ ist so hoch wie die übrigen Zeilen.
+- Die Standard-Zone heißt jetzt „Unsorted“. Eine bestehende Inbox wird beim Öffnen umbenannt, wenn sie die Standard-Zone ist (nicht in geteilten Bibliotheken).
+
+Oberfläche:
+- Oben rechts steht die aktive Bibliothek als zurückgenommener Reiter; ein Klick zeigt die anderen und „Bibliotheken verwalten“.
+- Info › App: Lange Bibliothekspfade (z. B. Google Drive) bleiben einzeilig und gekürzt, der volle Pfad steht im Tooltip. Gleiches in Einstellungen › Bibliotheken.
+- Freischalt-Code direkt im Sperr-Hinweis eingeben.
+- Einstellungen › Darstellung: Video und Audio beim Öffnen abspielen (je An/Aus, Standard Aus), in Lightbox und Betrachter.
+
+Ziehen:
+- Große WebP-Bilder werden nicht mehr riesig gezogen: In der App kommt das Ziehbild notfalls über Quick Look, in der Extension wird es auf 220 px verkleinert.
+- ⌘Z nach dem Verschieben legt Objekte wieder in ihren genauen Unterordner.
+
 ## App 0.23.0 (11.10.2026)
 
 Bestehende Ordnersysteme als Bibliothek:

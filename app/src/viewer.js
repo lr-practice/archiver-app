@@ -191,6 +191,7 @@
       });
       box.appendChild(wrap);
       setPlayer(a);
+      Media.autoplay(a, "audio");
       $("zoom").textContent = "";
     } else if (k === "video") {
       const v = Media.videoEl(fileSrc(path));
@@ -203,6 +204,7 @@
       box.appendChild(v);
       vzoom = Media.zoomable(v, videoZoomed);
       setPlayer(v);
+      Media.autoplay(v, "video");
       videoZoomed(1);
     } else {
       pdf = new Media.PdfView(box, { padTop: PAD.top, padBottom: PAD.bottom, onChange: pdfChanged });

@@ -111,16 +111,10 @@
     const locked = !isUnlocked();
     document.body.classList.toggle("locked", locked);
     $("lock").hidden = !locked;
-  }
-
-  function openUnlock() {
-    if (state.page !== "settings") togglePage("settings");
-    setTimeout(() => {
-      const input = document.querySelector(".p-unlock-input");
-      if (!input) return;
-      input.scrollIntoView({ block: "center", behavior: "smooth" });
-      input.focus();
-    }, 320);
+    if (locked && !$("lockForm").firstChild) {
+      $("lockForm").appendChild(unlockForm());
+      setTimeout(() => $("lockForm").querySelector("input")?.focus(), 60);
+    }
   }
 
   // ---- Zustand ----
@@ -167,6 +161,7 @@
     order: {}, // Zone → Hashes in eigener Reihenfolge (zones.json, Schlüssel "sort")
     shared: false, // geteilte Bibliothek (studio.rs)
     user: "", // Name für „abgelegt von“
+    folder: null, // gewählter Ordner in der offenen Zone (Chips), null = alle
   };
 
   // ---- Helfer ----
@@ -343,8 +338,10 @@
   function orderZones(zones) {
     const order = pref("zoneOrder", []);
     if (!order.length) return zones;
+    // Zone, die früher in Unterzonen geteilt war: Platz ihrer ersten Unterzone
     const rank = (z) => {
-      const i = order.indexOf(z.path);
+      let i = order.indexOf(z.path);
+      if (i < 0 && z.path) i = order.findIndex((p) => p.startsWith(z.path + "/"));
       return i < 0 ? order.length : i;
     };
     return zones.map((z, i) => [z, i]).sort((a, b) => rank(a[0]) - rank(b[0]) || a[1] - b[1]).map(([z]) => z);
@@ -393,8 +390,8 @@
     state.byPath = new Map(snap.items.map((i) => [i.path, i]));
     state.order = snap.order || {};
     state.shared = !!snap.shared;
-    state.defaultZone = snap.defaultZone || "Inbox";
-    state.structure = snap.structure || { depth: 2, skip: [] };
+    state.defaultZone = snap.defaultZone || "Unsorted";
+    state.structure = snap.structure || { depth: 2, skip: [], subzones: false };
     state.user = snap.user || "";
     if (isZone(state.focus) && !state.zones.some((z) => z.path === state.focus)) state.focus = null;
     for (const p of [...state.selection]) if (!state.byPath.has(p)) state.selection.delete(p);
@@ -702,6 +699,7 @@
     renderZones();
     renderToolbar();
     renderInfo();
+    renderLibTab();
   }
 
   // Prototyp: keine Toolbar mehr. Die Navigation schwebt unten in der Mitte,
@@ -820,6 +818,39 @@
     return state.items.filter((i) => i.zone === path); // neueste zuerst (Reihenfolge aus Rust)
   }
 
+  // Ordner einer Zone (erste Ebene darunter) mit Anzahl, lose Dateien ("") zuletzt
+  function zoneFolders(items) {
+    const counts = new Map();
+    for (const i of items) counts.set(i.folder || "", (counts.get(i.folder || "") || 0) + 1);
+    const named = [...counts].filter(([f]) => f).sort((a, b) => a[0].localeCompare(b[0], undefined, { numeric: true }));
+    return counts.has("") ? [...named, ["", counts.get("")]] : named;
+  }
+
+  // Darstellung einer Zone mit Ordnern: "mosaic" (ein Raster) oder "sections", je Zone gemerkt
+  function zoneLayout(path) {
+    return (pref("zoneLayouts", {}) || {})[path] === "sections" ? "sections" : "mosaic";
+  }
+
+  function setZoneLayout(path, layout) {
+    setPref("zoneLayouts", { ...(pref("zoneLayouts", {}) || {}), [path]: layout });
+    renderZones();
+  }
+
+  // Ordner-Chips unter dem Zonentitel: (All 282) (Typefaces 165) (Loose 3)
+  function folderChips(zone, folders, total) {
+    const wrap = el("span", "p-folder-chips");
+    const pick = (f) => {
+      state.folder = state.folder === f ? null : f;
+      renderZones();
+    };
+    wrap.appendChild(chip("(" + t("folderAll") + " " + total + ")", state.folder == null, () => {
+      state.folder = null;
+      renderZones();
+    }));
+    for (const [f, n] of folders) wrap.appendChild(chip("(" + (f || t("folderLoose")) + " " + n + ")", state.folder === f, () => pick(f)));
+    return wrap;
+  }
+
   // Vorschaubild für Startseite und Karten; fehlt das Thumbnail noch, das Original nehmen.
   function previewImg(item) {
     if (quoteOf(item)) return textSheet(item, "text-sheet mini");
@@ -869,6 +900,16 @@
     }
     // Eigene Reihenfolge je Zone (per Ziehen gesetzt); Neues ohne Platz steht vorn
     if (feat("order")) for (const [zone, list] of state.lists) applyItemOrder(zone, list);
+    // Ordner der offenen Zone: Chip filtert, „Sections“ ordnet nach Ordnern
+    if (isZone(state.focus) && !words.length && state.lists.has(state.focus)) {
+      let list = state.lists.get(state.focus);
+      if (state.folder != null) list = list.filter((i) => (i.folder || "") === state.folder);
+      if (zoneLayout(state.focus) === "sections") {
+        const rank = new Map(zoneFolders(list).map(([f], i) => [f, i]));
+        list = list.map((item, i) => [item, i]).sort((a, b) => rank.get(a[0].folder || "") - rank.get(b[0].folder || "") || a[1] - b[1]).map(([item]) => item);
+      }
+      state.lists.set(state.focus, list);
+    }
     // Finden: eine Liste nach Relevanz, bei gleicher Punktzahl das Neueste zuerst
     state.found = words.length || filtering ? found.sort((a, b) => b[0] - a[0] || b[1] - a[1]).map((x) => x[2]) : null;
 
@@ -1115,6 +1156,13 @@
     const add = el("div", "p-row p-new");
     add.appendChild(mono("+", "dim"));
     add.appendChild(el("span", "zone-card-name", t("newZone")));
+    // leere Spalten wie in den Zonen-Zeilen, damit die Zeile gleich hoch ist
+    add.appendChild(el("span", "p-num"));
+    if (!compact) {
+      add.appendChild(el("span", "p-num"));
+      add.appendChild(el("span", "p-thumbs"));
+    }
+    add.appendChild(el("span"));
     add.addEventListener("click", startNewZone);
     list.appendChild(add);
     return list;
@@ -1294,22 +1342,24 @@
       card.addEventListener("dragstart", (e) => e.preventDefault());
       cards.push(card);
     }
-    const add = el("article", "p-card p-new");
-    add.appendChild(el("div", "zone-card-name", "+ " + t("newZone")));
+    // „+ Neue Zone“ im selben Format wie die übrigen Karten
+    const add = el("article", "p-card p-new p-new-card");
+    add.appendChild(el("div", "p-card-cover empty"));
+    const addBody = el("div", "p-card-body");
+    const addText = el("div");
+    addText.appendChild(el("div", "zone-card-name", "+ " + t("newZone")));
+    addText.appendChild(el("div", "p-card-meta", "\u00a0"));
+    addBody.appendChild(addText);
+    add.appendChild(addBody);
     add.addEventListener("click", startNewZone);
     cards.push(add);
 
-    // Spalten wie ein Mauerwerk: jede Karte in die gerade kürzeste Spalte
+    // Raster mit gleich hohen Karten je Reihe
     const width = $("zones").clientWidth - 80;
     const count = Math.max(1, Math.min(4, Math.floor((width + 10) / 280)));
-    const wrap = el("div", "p-cards");
-    const cols = Array.from({ length: count }, () => wrap.appendChild(el("div", "p-cards-col")));
-    const heights = cols.map(() => 0);
-    for (const card of cards) {
-      const i = heights.indexOf(Math.min(...heights));
-      cols[i].appendChild(card);
-      heights[i] += (card.querySelector(".p-card-cover") ? 3 : 1) + card.querySelectorAll(".p-card-row").length;
-    }
+    const wrap = el("div", "p-cards p-cards-grid");
+    wrap.style.setProperty("--card-cols", String(count));
+    for (const card of cards) wrap.appendChild(card);
     return wrap;
   }
 
@@ -1375,20 +1425,15 @@
 
   function cardMeta(zone) {
     const latest = lastSaved(zone.path);
-    return zone.count ? countText(zone.count) + (latest ? " · " + recentDate(latest) : "") : t("emptyShort");
+    const folders = zoneFolders(zoneItems(zone.path)).filter(([f]) => f).length;
+    const inside = folders ? " · " + t(folders === 1 ? "folderCount1" : "folderCount", { n: folders }) : "";
+    return zone.count ? countText(zone.count) + inside + (latest ? " · " + recentDate(latest) : "") : t("emptyShort");
   }
 
   function zoneCardTile(zone) {
     const card = el("article", "p-card");
     card.dataset.zone = zone.path;
-    const items = zoneItems(zone.path);
-    if (items.length) {
-      const cover = el("div", "p-card-cover" + (items.length >= 3 ? " trio" : ""));
-      for (const item of items.slice(0, items.length >= 3 ? 3 : 1)) {
-        cover.appendChild(previewImg(item));
-      }
-      card.appendChild(cover);
-    }
+    card.appendChild(cardCover(zoneItems(zone.path)));
     const body = el("div", "p-card-body");
     const text = el("div");
     const name = zoneNameEl(zone);
@@ -1412,8 +1457,17 @@
     return card;
   }
 
+  // Titelbild einer Karte: ein Bild oder drei, leer als ruhige Fläche
+  function cardCover(items) {
+    const cover = el("div", "p-card-cover" + (items.length >= 3 ? " trio" : "") + (items.length ? "" : " empty"));
+    for (const item of items.slice(0, items.length >= 3 ? 3 : 1)) cover.appendChild(previewImg(item));
+    return cover;
+  }
+
   function groupCard(top, zones) {
     const card = el("article", "p-card p-card-group");
+    const paths = new Set(zones.map((z) => z.path));
+    card.appendChild(cardCover(state.items.filter((i) => paths.has(i.zone))));
     card.appendChild(el("div", "p-card-group-title", top));
     for (const zone of zones) {
       const row = el("div", "p-card-row");
@@ -1522,6 +1576,22 @@
     return String(path || "").replace(/^\/(Users|home)\/[^/]+/, "~");
   }
 
+  // Langer Pfad als eine Zeile: Anfang … die letzten Ordner, voller Pfad im Tooltip
+  function pathEl(path, extra) {
+    const full = shortPath(path);
+    const parts = full.split("/");
+    let text = full;
+    if (full.length > 44 && parts.length > 4) {
+      // Cloud-Ordner: „GoogleDrive-name@…/Meine Ablage“ wird zu „Google Drive“
+      const cloud = full.match(/Library\/CloudStorage\/([A-Za-z]+)/);
+      const head = cloud ? "~/" + cloud[1].replace(/([a-z])([A-Z])/g, "$1 $2") : parts[0];
+      text = head + "/…/" + parts.slice(-2).join("/");
+    }
+    const span = el(extra ? "div" : "span", "p-path" + (extra ? " " + extra : ""), text);
+    span.title = full;
+    return span;
+  }
+
   // Einklappbare Blöcke in den Einstellungen; der Zustand bleibt gemerkt.
   function collapsible(id, title) {
     return block(title);
@@ -1530,7 +1600,7 @@
   // Ordnerstruktur: wie tief Unterordner eigene Zonen werden, welche Ordner Archiver überspringt
   function renderStructure() {
     const b = block(t("setStructure"));
-    const st = state.structure || { depth: 2, skip: [] };
+    const st = state.structure || { depth: 2, skip: [], subzones: false };
     const save = async (next) => {
       try {
         await invoke("set_structure", { structure: { ...st, ...next } });
@@ -1540,7 +1610,11 @@
       }
       renderPage(true);
     };
-    b.appendChild(blockRow(t("setDepth"), choice([["1", "1"], ["2", "2"], ["3", "3"]], String(st.depth), (id) => save({ depth: Number(id) }))));
+    // Aus: eine Zone pro Ordner der obersten Ebene, Unterordner als Ordner darin
+    const levels = [["off", t("setSubzonesOff")], ["2", t("setLevel", { n: 2 })], ["3", t("setLevel", { n: 3 })]];
+    b.appendChild(
+      blockRow(t("setSubzones"), choice(levels, st.subzones ? String(st.depth) : "off", (id) => save(id === "off" ? { subzones: false } : { subzones: true, depth: Number(id) })))
+    );
     const input = el("input", "p-skip-input");
     input.value = st.skip.join(", ");
     input.spellcheck = false;
@@ -1559,7 +1633,7 @@
     return b;
   }
 
-  // Standard-Zone: wohin alles kommt, was ohne Ziel gesammelt wird (sonst Inbox)
+  // Standard-Zone: wohin alles kommt, was ohne Ziel gesammelt wird (sonst Unsorted)
   function renderDefaultZone() {
     const b = block(t("setDefaultZone"));
     const select = el("select", "p-select");
@@ -1759,6 +1833,16 @@
           })
         )
       );
+      for (const [key, label] of [["autoplayVideo", "setAutoplayVideo"], ["autoplayAudio", "setAutoplayAudio"]])
+        view.appendChild(
+          blockRow(
+            t(label),
+            choice([["on", t("setOn")], ["off", t("setOff")]], pref(key, false) ? "on" : "off", (id) => {
+              setPref(key, id === "on");
+              rerender();
+            })
+          )
+        );
       view.appendChild(
         blockRow(
           t("setInfoPanel"),
@@ -2019,6 +2103,13 @@
       b.appendChild(blockRow(el("div", "p-block-text", t("unlockDone")), mono("●", "p-unlock-dot")));
       return b;
     }
+    b.appendChild(el("div", "p-block-text p-unlock-text", t("unlockText")));
+    b.appendChild(unlockForm());
+    return b;
+  }
+
+  // Eingabe für den Code: in den Einstellungen und direkt im Sperr-Hinweis
+  function unlockForm() {
     const form = el("form", "p-unlock-form");
     const input = el("input", "p-unlock-input");
     input.placeholder = t("unlockPlaceholder");
@@ -2040,13 +2131,12 @@
       }
       setPref("unlock", hash);
       applyLock();
-      renderPage(true);
+      if (state.page) renderPage(true);
       toast(t("unlockOk"));
     });
     input.addEventListener("input", () => form.classList.remove("wrong"));
-    b.appendChild(el("div", "p-block-text p-unlock-text", t("unlockText")));
-    b.appendChild(form);
-    return b;
+    input.addEventListener("keydown", (e) => e.stopPropagation());
+    return form;
   }
 
   // Startton: Ein/Aus, Lautstärke mit Probehören, eigene Datei oder der Standard
@@ -2141,7 +2231,7 @@
     const version = el("span", null, "–");
     if (TAURI.app && TAURI.app.getVersion) TAURI.app.getVersion().then((v) => (version.textContent = v)).catch(() => {});
     meta.appendChild(blockRow(t("aboutVersion"), version));
-    meta.appendChild(blockRow(t("setLibrary"), shortPath(state.root)));
+    meta.appendChild(blockRow(t("setLibrary"), pathEl(state.root)));
     meta.appendChild(blockRow(t("aboutFont"), "SIL OFL"));
     wrap.appendChild(meta);
 
@@ -2156,12 +2246,16 @@
     const shown = single ? state.zones.filter((z) => z.path === state.focus) : state.zones;
     const wrap = el("div", "p-page p-gallery");
 
+    const all = single && shown[0] ? zoneItems(shown[0].path) : [];
+    const folders = zoneFolders(all);
+    const hasFolders = folders.some(([f]) => f);
     if (single && shown[0]) {
       const zone = shown[0];
-      const items = state.lists.get(zone.path) || [];
+      const items = all;
       const latest = lastSaved(zone.path);
+      const named = folders.filter(([f]) => f).length;
       const sentence = items.length
-        ? [t("headZone", { count: countText(items.length), date: recentDate(latest) }), topDomains(items)].filter(Boolean).join(" ")
+        ? [t("headZone", { count: countText(items.length), date: recentDate(latest) }), hasFolders ? t(named === 1 ? "headFolder1" : "headFolders", { n: named }) : "", topDomains(items)].filter(Boolean).join(" ")
         : t("headZoneEmpty");
       const h = headline(lastSegment(zone.path), sentence);
       if (canEdit(zone.path)) {
@@ -2184,10 +2278,16 @@
     }
 
     const bar = el("div", "p-bar");
-    if (single && shown[0]) bar.appendChild(mono(t("allLabel") + " (" + shown[0].count + ")", "strong"));
+    if (single && shown[0] && hasFolders) bar.appendChild(folderChips(shown[0], folders, all.length));
+    else if (single && shown[0]) bar.appendChild(mono(t("allLabel") + " (" + shown[0].count + ")", "strong"));
     else if (state.found) bar.appendChild(mono(t("foundLabel") + " (" + state.found.length + ")", "strong"));
     else bar.appendChild(mono(t("allZonesLabel") + " (" + state.zones.length + ")", "strong"));
     bar.appendChild(el("span", "p-flex"));
+    if (single && shown[0] && hasFolders) {
+      for (const l of ["mosaic", "sections"])
+        bar.appendChild(chip("(" + t(l === "mosaic" ? "layoutMosaic" : "layoutSections") + ")", zoneLayout(shown[0].path) === l, () => setZoneLayout(shown[0].path, l)));
+      bar.appendChild(el("span", "p-filter-gap"));
+    }
     for (const v of ["grid", "original"]) {
       const c = chip("(" + t(v === "grid" ? "viewGrid" : "viewOriginal") + ")", state.view === v, () => {
         state.view = v;
@@ -2209,6 +2309,10 @@
     // Suche oder Filter: eine Liste nach Relevanz statt nach Zonen
     if (state.found) {
       wrap.appendChild(foundSection(state.found));
+      return wrap;
+    }
+    if (single && shown[0] && hasFolders && zoneLayout(shown[0].path) === "sections") {
+      wrap.appendChild(folderSections(shown[0]));
       return wrap;
     }
     shown.forEach((zone) => {
@@ -2277,6 +2381,32 @@
     return card;
   }
 
+  // „Sections“: je Ordner eine Kopfzeile, darunter sein Raster
+  function folderSections(zone) {
+    const list = state.lists.get(zone.path) || [];
+    const wrap = el("div", "p-folder-sections");
+    for (const [folder, n] of zoneFolders(list)) {
+      const part = list.filter((i) => (i.folder || "") === folder);
+      const card = el("section", "zone-card p-section p-folder-section");
+      card.dataset.zone = zone.path;
+      const head = el("h2", "p-head p-folder-head");
+      head.appendChild(el("span", "p-head-title", folder || t("folderLoose")));
+      head.appendChild(el("span", "p-head-text", " " + countText(n)));
+      card.appendChild(head);
+      const body = el("div", "zone-card-grid");
+      body.tabIndex = -1;
+      const items = el("div", "zone-card-items");
+      if (state.view === "original") {
+        items.classList.add("p-masonry");
+        masonryLists.set(items, part);
+      } else for (const item of part) items.appendChild(itemCard(item));
+      body.appendChild(items);
+      card.appendChild(body);
+      wrap.appendChild(card);
+    }
+    return wrap;
+  }
+
   function foundSection(list) {
     const card = el("section", "zone-card p-section p-found");
     const body = el("div", "zone-card-grid");
@@ -2313,7 +2443,7 @@
   }
 
   function canEdit(path) {
-    return path !== "" && path !== (state.defaultZone || "Inbox");
+    return path !== "" && path !== (state.defaultZone || "Unsorted");
   }
 
   // ---- Zonen-Menü (⋯): Umbenennen, im Finder zeigen, löschen ----
@@ -2321,6 +2451,8 @@
   function closeMenus() {
     for (const m of document.querySelectorAll(".zone-menu")) m.remove();
     for (const b of document.querySelectorAll(".zone-menu-btn.open")) b.classList.remove("open");
+    const lib = $("libTabBtn");
+    if (lib) lib.classList.remove("active");
     if (pendingRender) {
       pendingRender = false;
       render();
@@ -2510,6 +2642,7 @@
   }
 
   function setFocus(path) {
+    if (path !== state.focus) state.folder = null;
     state.focus = path;
     setPref("focus", path);
     if (state.query) {
@@ -2720,7 +2853,8 @@
     try {
       const moved = await invoke("move_items", { paths: items.map((i) => i.path), zone });
       if (Array.isArray(moved) && moved.length === items.length) {
-        const back = items.map((i, k) => [moved[k], i.zone]);
+        // zurück in den genauen Ordner (auch Unterordner einer Zone)
+        const back = items.map((i, k) => [moved[k], i.path.includes("/") ? i.path.slice(0, i.path.lastIndexOf("/")) : i.zone]);
         pushUndo(t("undoMove"), async () => {
           for (const z of new Set(back.map(([, z]) => z))) {
             await invoke("move_items", { paths: back.filter(([, b]) => b === z).map(([p]) => p), zone: z });
@@ -3064,6 +3198,7 @@
       const wrap = Media.audioEl(fileSrc(item.abs), item.thumb ? fileSrc(item.thumb) : null, item.title || item.filename, sub);
       box.appendChild(wrap);
       lbSetPlayer(wrap.querySelector("audio"));
+      Media.autoplay(wrap.querySelector("audio"), "audio");
       $("lightboxZoom").textContent = "";
       return true;
     }
@@ -3073,6 +3208,7 @@
       lbVZoom = Media.zoomable(v, lbVideoZoomed);
       lbSetPlayer(v);
       lbVideoZoomed(1);
+      Media.autoplay(v, "video");
       return true;
     }
     lbPdf = new Media.PdfView(box, { padTop: LB_PAD.top, padBottom: LB_PAD.bottom, onChange: lbPdfChanged });
@@ -3688,6 +3824,8 @@
     const icon =
       (await invoke("drag_icon", { hash: first.hash, path: first.thumb || first.abs, color: quoteOf(first) && !first.thumb ? quoteTone(first)[0] : null }).catch(() => null)) ||
       first.thumb ||
+      // nie das Original (große Bilder würden riesig gezogen): neutrale Fläche
+      (await invoke("drag_icon", { hash: first.hash, path: first.abs, color: "#8c8c8c" }).catch(() => null)) ||
       first.abs;
     invoke("plugin:drag|start_drag", {
       item: items.map((i) => i.abs),
@@ -3715,6 +3853,7 @@
   // je nach Hälfte (Raster: links/rechts, Original-Ansicht: oben/unten).
   function reorderTarget(x, y) {
     if (!feat("order") || !isZone(state.focus) || state.query.trim() || filtersActive()) return null;
+    if (state.folder != null || zoneLayout(state.focus) === "sections") return null; // nur im vollen Raster
     if (!dragPaths.length || dragHome !== state.focus) return null;
     const rels = dragPaths.filter(insideLibrary).map((p) => p.slice(state.root.length + 1));
     if (rels.length !== dragPaths.length || rels.some((r) => (state.byPath.get(r) || {}).zone !== state.focus)) return null;
@@ -4499,8 +4638,10 @@
 
   function bindEvents() {
     $("lockText").textContent = t("lockText");
-    $("lockOpen").textContent = t("lockOpen");
-    $("lockOpen").addEventListener("click", openUnlock);
+    $("libTabBtn").addEventListener("click", (e) => {
+      e.stopPropagation();
+      openLibMenu();
+    });
     const zones = $("zones");
 
     zones.addEventListener("mousedown", (e) => {
@@ -4737,7 +4878,44 @@
 
   async function loadLibraries() {
     state.libraries = await invoke("libraries").catch(() => state.libraries || []);
+    renderLibTab();
     return state.libraries;
+  }
+
+  // Reiter oben rechts: aktive Bibliothek, Klick zeigt die anderen
+  function renderLibTab() {
+    const tab = $("libTab");
+    if (!tab) return;
+    const slots = state.libraries || [];
+    const i = slots.findIndex((l) => l.active);
+    const name = i >= 0 ? libraryName(slots[i], i) : state.name;
+    tab.hidden = !name || !state.root;
+    $("libTabBtn").textContent = name || "";
+    $("libTabBtn").title = state.root.replace(/^\/(Users|home)\/[^/]+/, "~");
+  }
+
+  function openLibMenu() {
+    if (document.querySelector(".p-lib-menu")) return closeMenus();
+    closeMenus();
+    const menu = el("div", "zone-menu p-lib-menu");
+    (state.libraries || []).forEach((slot, i) => {
+      if (!slot.path) return;
+      const b = button("zone-menu-item" + (slot.active ? " on" : ""), libraryName(slot, i), () => {
+        closeMenus();
+        switchLibrary(i);
+      });
+      b.appendChild(el("span", "p-more-key", " (⌘" + (i + 1) + ")"));
+      b.title = slot.path.replace(/^\/(Users|home)\/[^/]+/, "~");
+      menu.appendChild(b);
+    });
+    if (menu.children.length) menu.appendChild(el("div", "p-more-rule"));
+    menu.appendChild(button("zone-menu-item", t("libManage"), () => {
+      closeMenus();
+      if (state.page !== "settings") togglePage("settings");
+      openSettingsSection("library");
+    }));
+    $("libTab").appendChild(menu);
+    $("libTabBtn").classList.add("active");
   }
 
   function libraryName(slot, i) {
@@ -4799,7 +4977,7 @@
           () => renderPage(true)
         );
       });
-      const main = [name, el("div", "p-lib-path", slot.path ? shortPath(slot.path) : t("libEmpty"))];
+      const main = [name, slot.path ? pathEl(slot.path, "p-lib-path") : el("div", "p-lib-path", t("libEmpty"))];
       const side = [];
       if (slot.active) {
         side.push(el("span", "p-lib-active", t("libActiveLabel")));
@@ -4929,7 +5107,7 @@
   const EXT_STORE_URL = null;
   const tourStats = { drops: 0, pdfs: 0, collected: 0 };
   const tourDemo = { on: false, prevOrder: null, zones: [], web: [] };
-  const demoHot = () => tourDemo.zones.filter((z) => z !== "Inbox").slice(0, HOT_ZONES);
+  const demoHot = () => tourDemo.zones.filter((z) => z !== "Unsorted").slice(0, HOT_ZONES);
 
   const zoneByName = (name) => state.zones.find((z) => z.path === name);
   const kbdHtml = (s) => s; // Texte stammen aus i18n.js und enthalten <kbd>
@@ -5245,7 +5423,7 @@
       corner: true,
       setup: (ctx) => {
         ctx.n = tourStats.drops;
-        const inbox = zoneByName("Inbox");
+        const inbox = zoneByName("Unsorted");
         if (tourDemo.on && inbox) setFocus(inbox.path);
         else if (state.items.length) setFocus(ALL);
       },

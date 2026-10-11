@@ -1163,13 +1163,33 @@
       e.dataTransfer.setData("text/html", `<img src="${url.replace(/"/g, "&quot;")}">`);
       // Vorschau beim Ziehen: das Bild selbst statt der leeren Fläche
       const img = [...document.elementsFromPoint(e.clientX, e.clientY)].find((n) => n.tagName === "IMG");
-      if (img) {
-        const r = img.getBoundingClientRect();
-        e.dataTransfer.setDragImage(img, Math.min(e.clientX - r.left, r.width), Math.min(e.clientY - r.top, r.height));
-      }
+      if (img) cappedDragImage(e, img);
     },
     true
   );
+
+  // Chrome zeichnet ein <img> als Ziehbild in voller Pixelgröße (große WebP
+  // wurden riesig). Stattdessen eine verkleinerte Kopie, höchstens 220 px.
+  function cappedDragImage(e, img) {
+    const r = img.getBoundingClientRect();
+    const nw = img.naturalWidth || r.width;
+    const nh = img.naturalHeight || r.height;
+    const scale = Math.min(1, 220 / Math.max(nw, nh, 1));
+    const w = Math.max(1, Math.round(nw * scale));
+    const h = Math.max(1, Math.round(nh * scale));
+    const canvas = document.createElement("canvas");
+    canvas.width = w;
+    canvas.height = h;
+    canvas.style.cssText = `position:fixed;left:-10000px;top:0;width:${w}px;height:${h}px;pointer-events:none`;
+    try {
+      canvas.getContext("2d").drawImage(img, 0, 0, w, h);
+    } catch {}
+    document.documentElement.appendChild(canvas);
+    const fx = r.width ? Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)) : 0.5;
+    const fy = r.height ? Math.min(1, Math.max(0, (e.clientY - r.top) / r.height)) : 0.5;
+    e.dataTransfer.setDragImage(canvas, Math.round(w * fx), Math.round(h * fy));
+    setTimeout(() => canvas.remove(), 0);
+  }
 
   // Instagram: eigenes Ziehen mit Zeiger-Ereignissen statt des Browser-Ziehens,
   // das Instagram unterbindet. Erst ab ein paar Pixeln Bewegung, sonst bleibt

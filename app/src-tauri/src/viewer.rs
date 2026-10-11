@@ -276,7 +276,11 @@ pub fn viewer_make_default(app: AppHandle, format: String) -> Result<(), String>
 pub async fn viewer_drag_icon(path: String) -> Option<String> {
     use base64::Engine;
     tauri::async_runtime::spawn_blocking(move || {
-        let img = image::open(&path).ok()?.thumbnail(96, 96);
+        let tmp = std::env::temp_dir().join(format!("archiver-ql-{}", std::process::id()));
+        let img = image::open(&path)
+            .ok()
+            .or_else(|| crate::library::ql_image(std::path::Path::new(&path), 96, &tmp))?
+            .thumbnail(96, 96);
         let mut png = std::io::Cursor::new(Vec::new());
         img.to_rgba8().write_to(&mut png, image::ImageFormat::Png).ok()?;
         Some(format!("data:image/png;base64,{}", base64::engine::general_purpose::STANDARD.encode(png.into_inner())))

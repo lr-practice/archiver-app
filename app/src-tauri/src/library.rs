@@ -18,7 +18,9 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use walkdir::WalkDir;
 
 pub const META_DIR: &str = ".archiver";
-pub const INBOX: &str = "Inbox";
+pub const INBOX: &str = "Unsorted";
+/// Frühere Standard-Zone (bis 0.23); wird beim Öffnen zu „Unsorted“ umbenannt.
+pub const LEGACY_INBOX: &str = "Inbox";
 /// Zwischenordner der Extension in den Downloads (wird nach der Übernahme geleert).
 pub const TRANSFER_DIR: &str = "Archiver-Transfer";
 const THUMB_SIZE: u32 = 720;
@@ -64,6 +66,8 @@ pub struct Item {
     pub path: String,
     pub abs: String,
     pub zone: String,
+    /// Ordner innerhalb der Zone (erste Ebene darunter), leer für lose Dateien
+    pub folder: String,
     pub filename: String,
     pub hash: String,
     pub bytes: i64,
@@ -291,6 +295,40 @@ fn zone_at(dir: &str, depth: usize) -> String {
     dir.split('/').take(depth.max(1)).collect::<Vec<_>>().join("/")
 }
 
+/// Kleines Bild über Quick Look (`qlmanage -t`), höchstens 5 s
+pub(crate) fn ql_image(src: &Path, size: u32, tmp: &Path) -> Option<image::DynamicImage> {
+    let _ = fs::remove_dir_all(tmp);
+    fs::create_dir_all(tmp).ok()?;
+    let img = (|| {
+        let mut child = std::process::Command::new("/usr/bin/qlmanage")
+            .args(["-t", "-s", &size.to_string(), "-o"])
+            .arg(tmp)
+            .arg(src)
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .spawn()
+            .ok()?;
+        let start = std::time::Instant::now();
+        while child.try_wait().ok()?.is_none() {
+            if start.elapsed() > std::time::Duration::from_secs(5) {
+                let _ = child.kill();
+                return None;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(30));
+        }
+        let png = fs::read_dir(tmp).ok()?.filter_map(|e| e.ok()).map(|e| e.path()).find(|p| ext_of(p) == "png")?;
+        image::open(png).ok()
+    })();
+    let _ = fs::remove_dir_all(tmp);
+    img
+}
+
+/// Erster Ordner unterhalb der Zone, in dem eine Datei liegt ("" = direkt in der Zone)
+fn folder_in(dir: &str, zone: &str) -> String {
+    let rest = if zone.is_empty() { dir } else { dir.strip_prefix(zone).and_then(|r| r.strip_prefix('/')).unwrap_or("") };
+    rest.split('/').next().unwrap_or("").to_string()
+}
+
 /// Ordner, die Archiver in bestehenden Projekten überspringt (Layout-Links,
 /// Schriften, Backups, Ableton-Technik). Einträge mit "/" passen auf das Pfadende.
 pub const DEFAULT_SKIP: &[&str] = &["Links", "Document fonts", "Backup", "Ableton Project Info", "Presets", "Samples/Imported"];
@@ -304,9 +342,22 @@ const PACKAGE_EXTS: &[&str] = &["app", "photoslibrary", "logicx", "fcpbundle", "
 pub struct Structure {
     pub depth: usize,
     pub skip: Vec<String>,
+    /// Unterordner als eigene Zonen (bis `depth`). Aus: jeder Ordner der
+    /// obersten Ebene ist eine Zone, Unterordner erscheinen darin als Ordner.
+    #[serde(default)]
+    pub subzones: bool,
 }
 
 impl Structure {
+    /// Ebenen, die eine Zone bilden
+    pub fn zone_depth(&self) -> usize {
+        if self.subzones {
+            self.depth.clamp(2, 3)
+        } else {
+            1
+        }
+    }
+
     /// Wird dieser Ordner (relativer Pfad) übersprungen?
     pub fn skips(&self, rel: &str) -> bool {
         let name = rel.rsplit('/').next().unwrap_or(rel);
@@ -583,6 +634,7 @@ impl Library {
         if !has_folders {
             fs::create_dir_all(root.join(lib.default_zone())).map_err(err)?;
         }
+        lib.migrate_inbox()?;
         lib.restore_metadata()?;
         lib.merge_people()?;
         Ok(lib)
@@ -633,7 +685,38 @@ impl Library {
             .and_then(|z| z.as_str())
             .filter(|z| !z.is_empty() && self.root.join(z).is_dir())
             .map(String::from)
-            .unwrap_or_else(|| INBOX.to_string())
+            .unwrap_or_else(|| {
+                if !self.root.join(INBOX).is_dir() && self.root.join(LEGACY_INBOX).is_dir() {
+                    LEGACY_INBOX.to_string()
+                } else {
+                    INBOX.to_string()
+                }
+            })
+    }
+
+    /// Bis 0.23 hieß die Standard-Zone „Inbox“. In eigenen Bibliotheken wird
+    /// sie zu „Unsorted“, sofern sie Standard ist und es „Unsorted“ noch nicht gibt.
+    fn migrate_inbox(&self) -> Result<()> {
+        if self.shared || self.root.join(INBOX).exists() || !self.root.join(LEGACY_INBOX).is_dir() {
+            return Ok(());
+        }
+        let stored = self.zone_file().get("default").and_then(|z| z.as_str()).map(String::from);
+        if stored.as_deref().is_some_and(|z| z != LEGACY_INBOX && self.root.join(z).is_dir()) {
+            return Ok(());
+        }
+        let new_zone = self.rename_zone(LEGACY_INBOX, INBOX)?;
+        let mut v = self.zone_file();
+        v["default"] = serde_json::json!(new_zone);
+        for key in ["order", "hot"] {
+            if let Some(list) = v.get_mut(key).and_then(|a| a.as_array_mut()) {
+                for z in list.iter_mut() {
+                    if z.as_str() == Some(LEGACY_INBOX) {
+                        *z = serde_json::json!(new_zone);
+                    }
+                }
+            }
+        }
+        self.write_zone_file(&v)
     }
 
     pub fn set_default_zone(&self, zone: &str) -> Result<()> {
@@ -648,18 +731,20 @@ impl Library {
 
     pub fn structure(&self) -> Structure {
         let v = self.zone_file();
-        let depth = v.get("depth").and_then(|d| d.as_u64()).map(|d| d as usize).filter(|d| (1..=3).contains(d)).unwrap_or(DEFAULT_DEPTH);
+        let depth = v.get("depth").and_then(|d| d.as_u64()).map(|d| d as usize).filter(|d| (2..=3).contains(d)).unwrap_or(DEFAULT_DEPTH);
         let skip = v
             .get("skip")
             .and_then(|a| a.as_array())
             .map(|a| a.iter().filter_map(|s| s.as_str().map(String::from)).collect())
             .unwrap_or_else(|| DEFAULT_SKIP.iter().map(|s| s.to_string()).collect());
-        Structure { depth, skip }
+        let subzones = v.get("subzones").and_then(|b| b.as_bool()).unwrap_or(false);
+        Structure { depth, skip, subzones }
     }
 
     pub fn set_structure(&self, st: &Structure) -> Result<()> {
         let mut v = self.zone_file();
-        v["depth"] = serde_json::json!(st.depth.clamp(1, 3));
+        v["depth"] = serde_json::json!(st.depth.clamp(2, 3));
+        v["subzones"] = serde_json::json!(st.subzones);
         v["skip"] = serde_json::json!(st.skip.iter().map(|s| s.trim()).filter(|s| !s.is_empty()).collect::<Vec<_>>());
         self.write_zone_file(&v)?;
         self.scan()?;
@@ -868,13 +953,13 @@ impl Library {
             let mut stmt = conn.prepare("SELECT path FROM item").map_err(err)?;
             let rows = stmt.query_map([], |r| r.get::<_, String>(0)).map_err(err)?;
             for p in rows {
-                *counts.entry(zone_at(&parent_rel(&p.map_err(err)?), st.depth)).or_default() += 1;
+                *counts.entry(zone_at(&parent_rel(&p.map_err(err)?), st.zone_depth())).or_default() += 1;
             }
         }
         let root = self.root.clone();
         let mut zones: Vec<Zone> = WalkDir::new(&self.root)
             .min_depth(1)
-            .max_depth(st.depth)
+            .max_depth(st.zone_depth())
             .into_iter()
             .filter_entry(|e| !is_hidden(e.file_name()) && !(e.file_type().is_dir() && st.skips(&rel_path(&root, e.path()))))
             .filter_map(|e| e.ok())
@@ -903,7 +988,7 @@ impl Library {
 
     /// Alle Einträge mit Quelle und Vorschaubild, neueste zuerst.
     pub fn items(&self) -> Result<Vec<Item>> {
-        let depth = self.structure().depth;
+        let depth = self.structure().zone_depth();
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn
             .prepare(
@@ -927,9 +1012,11 @@ impl Library {
             .query_map([], |r| {
                 let path: String = r.get(0)?;
                 let thumb: Option<String> = r.get(12)?;
+                let zone = zone_at(&parent_rel(&path), depth);
                 Ok(Item {
+                    folder: folder_in(&parent_rel(&path), &zone),
                     abs: self.root.join(&path).to_string_lossy().into_owned(),
-                    zone: zone_at(&parent_rel(&path), depth),
+                    zone,
                     filename: file_name(&path),
                     hash: r.get(1)?,
                     bytes: r.get(2)?,
@@ -1181,7 +1268,8 @@ impl Library {
         }
         let out = self.thumbs_dir().join(format!("{hash}-drag.png"));
         if !out.is_file() {
-            let img = image::open(src).ok()?;
+            // Was das image-Crate nicht liest (AVIF, HEIC, manche WebP): Quick Look
+            let img = image::open(src).ok().or_else(|| ql_image(src, DRAG_ICON_SIZE, &self.thumbs_dir().join(format!("ql-drag-{hash}"))))?;
             img.thumbnail(DRAG_ICON_SIZE, DRAG_ICON_SIZE).to_rgba8().save(&out).ok()?;
         }
         Some(out.to_string_lossy().into_owned())
@@ -1279,7 +1367,7 @@ impl Library {
         if !target.is_dir() {
             return Err(format!("Zone nicht gefunden: {zone}"));
         }
-        let depth = self.structure().depth;
+        let depth = self.structure().zone_depth();
         let mut moved = Vec::new();
         for rel in paths {
             let src = safe_join(&self.root, rel)?;
@@ -1655,7 +1743,7 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let lib = Library::open(&tmp.path().join("Bib")).unwrap();
         assert_eq!(lib.zone_order(), (vec![], vec![]));
-        let order: Vec<String> = ["Typo", "Inbox", "Farbe"].map(String::from).to_vec();
+        let order: Vec<String> = ["Typo", "Unsorted", "Farbe"].map(String::from).to_vec();
         let hot: Vec<String> = order[..2].to_vec();
         lib.set_zone_order(&order, &hot).unwrap();
         assert_eq!(lib.zone_order(), (order, hot));
@@ -1666,14 +1754,14 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let root = tmp.path().join("Bib");
         let lib = Library::open(&root).unwrap();
-        write_png(&root.join("Inbox/a.png"), 40, 20, 10);
+        write_png(&root.join("Unsorted/a.png"), 40, 20, 10);
         write_png(&root.join("Projekt 1/b.png"), 10, 30, 20);
         write_png(&root.join(".archiver/thumbs/ignore.png"), 2, 2, 1);
         assert!(lib.scan().unwrap());
         assert!(!lib.scan().unwrap(), "zweiter Scan ohne Änderung");
 
         let zones = lib.zones().unwrap();
-        assert_eq!(zones.iter().map(|z| z.path.as_str()).collect::<Vec<_>>(), ["Inbox", "Projekt 1"]);
+        assert_eq!(zones.iter().map(|z| z.path.as_str()).collect::<Vec<_>>(), ["Unsorted", "Projekt 1"]);
         assert_eq!(zones[0].count, 1);
 
         let items = lib.items().unwrap();
@@ -1683,7 +1771,7 @@ mod tests {
 
         // Quelle hängt am Hash und überlebt das Verschieben
         lib.set_source(&a.hash, &Source { page_url: Some("https://example.com/x".into()), ..Default::default() }).unwrap();
-        let moved = lib.move_items(&["Inbox/a.png".into()], "Projekt 1").unwrap();
+        let moved = lib.move_items(&["Unsorted/a.png".into()], "Projekt 1").unwrap();
         assert_eq!(moved, ["Projekt 1/a.png"]);
         assert!(!lib.scan().unwrap(), "Verschieben hält die DB aktuell");
         let a2 = lib.items().unwrap().into_iter().find(|i| i.filename == "a.png").unwrap();
@@ -1691,9 +1779,9 @@ mod tests {
         assert_eq!(a2.page_url.as_deref(), Some("https://example.com/x"));
 
         // Namenskonflikt beim Verschieben
-        write_png(&root.join("Inbox/b.png"), 5, 5, 99);
+        write_png(&root.join("Unsorted/b.png"), 5, 5, 99);
         lib.scan().unwrap();
-        let moved = lib.move_items(&["Inbox/b.png".into()], "Projekt 1").unwrap();
+        let moved = lib.move_items(&["Unsorted/b.png".into()], "Projekt 1").unwrap();
         assert_eq!(moved, ["Projekt 1/b 2.png"]);
 
         // Im Finder umbenannt: Scan findet die Quelle über den Hash wieder
@@ -1708,8 +1796,8 @@ mod tests {
         assert!(!lib.scan().unwrap());
         assert!(lib.items().unwrap().iter().all(|i| i.zone != "Projekt 1"));
 
-        assert!(lib.move_items(&["../x.png".into()], "Inbox").is_err());
-        assert!(lib.trash_zone("Inbox").is_err());
+        assert!(lib.move_items(&["../x.png".into()], "Unsorted").is_err());
+        assert!(lib.trash_zone("Unsorted").is_err());
         assert!(lib.trash_zone("").is_err());
     }
 
@@ -1718,8 +1806,8 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let root = tmp.path().join("Bib");
         let lib = Library::open(&root).unwrap();
-        write_png(&root.join("Inbox/gross.png"), 2000, 1000, 50);
-        fs::write(root.join("Inbox/kaputt.jpg"), b"nope").unwrap();
+        write_png(&root.join("Unsorted/gross.png"), 2000, 1000, 50);
+        fs::write(root.join("Unsorted/kaputt.jpg"), b"nope").unwrap();
         lib.scan().unwrap();
         let missing = lib.missing_thumbs().unwrap();
         assert_eq!(missing.len(), 2);
@@ -1779,7 +1867,7 @@ mod tests {
         let x = items.iter().find(|i| i.filename == "x.png").unwrap();
         assert_eq!(x.zone, "Projekt 1");
         assert_eq!(x.page_title.as_deref(), Some("Seite X"));
-        assert_eq!(items.iter().find(|i| i.filename == "lose.png").unwrap().zone, "Inbox");
+        assert_eq!(items.iter().find(|i| i.filename == "lose.png").unwrap().zone, "Unsorted");
         assert!(root.join(".archiver/metadata.json").is_file());
 
         let r = lib.import_folder(&downloads).unwrap();
@@ -1813,23 +1901,23 @@ mod tests {
 
         // gleiches Bild nochmal: keine Kopie, vorhandener Pfad
         write_png(&dl.join("nochmal.png"), 900, 500, 30);
-        assert_eq!(lib.adopt_file(&dl.join("nochmal.png"), None, "Inbox", &source).unwrap(), (rel.clone(), true));
+        assert_eq!(lib.adopt_file(&dl.join("nochmal.png"), None, "Unsorted", &source).unwrap(), (rel.clone(), true));
         assert!(!dl.join("nochmal.png").exists());
 
         // ohne Endung (z. B. Download-ID als Name): Endung aus dem Inhalt
         image::RgbImage::from_pixel(30, 30, image::Rgb([90, 0, 0]))
             .save_with_format(dl.join("1234-abcd"), image::ImageFormat::Png)
             .unwrap();
-        assert_eq!(lib.adopt_file(&dl.join("1234-abcd"), Some("wunsch"), "Inbox", &source).unwrap().0, "Inbox/wunsch.png");
+        assert_eq!(lib.adopt_file(&dl.join("1234-abcd"), Some("wunsch"), "Unsorted", &source).unwrap().0, "Unsorted/wunsch.png");
 
         // PDF und Video ohne Endung: am Inhalt erkannt, als Eintrag gezählt
         std::fs::write(dl.join("dl-1"), b"%PDF-1.7\n%...").unwrap();
-        assert_eq!(lib.adopt_file(&dl.join("dl-1"), Some("katalog"), "Inbox", &source).unwrap().0, "Inbox/katalog.pdf");
+        assert_eq!(lib.adopt_file(&dl.join("dl-1"), Some("katalog"), "Unsorted", &source).unwrap().0, "Unsorted/katalog.pdf");
         std::fs::write(dl.join("dl-2"), b"\0\0\0\x18ftypisom\0\0\x02\0isomiso2").unwrap();
-        assert_eq!(lib.adopt_file(&dl.join("dl-2"), Some("clip"), "Inbox", &source).unwrap().0, "Inbox/clip.mp4");
+        assert_eq!(lib.adopt_file(&dl.join("dl-2"), Some("clip"), "Unsorted", &source).unwrap().0, "Unsorted/clip.mp4");
         std::fs::write(dl.join("dl-3"), b"%PDF-1.4\n").unwrap();
-        assert_eq!(lib.adopt_file(&dl.join("dl-3"), Some("download.jpg"), "Inbox", &source).unwrap().0, "Inbox/download.pdf");
-        let pdf = lib.items().unwrap().into_iter().find(|i| i.path == "Inbox/katalog.pdf").unwrap();
+        assert_eq!(lib.adopt_file(&dl.join("dl-3"), Some("download.jpg"), "Unsorted", &source).unwrap().0, "Unsorted/download.pdf");
+        let pdf = lib.items().unwrap().into_iter().find(|i| i.path == "Unsorted/katalog.pdf").unwrap();
         assert_eq!((pdf.format.as_str(), pdf.pages, pdf.width), ("pdf", None, None));
         assert!(!lib.scan().unwrap(), "PDF und Video bleiben beim Scan erhalten");
         assert_eq!(lib.items().unwrap().len(), 5);
@@ -1905,13 +1993,45 @@ mod tests {
         lib.scan().unwrap();
         let items = lib.items().unwrap();
         assert_eq!(items.len(), 2, "Links und Pakete übersprungen");
+        assert!(items.iter().all(|i| i.zone == "01_Outra"), "eine Zone pro Ordner der obersten Ebene");
+        let mut folders: Vec<&str> = items.iter().map(|i| i.folder.as_str()).collect();
+        folders.sort();
+        assert_eq!(folders, ["02_Layout", "02_Layout"], "Unterordner als Ordner der Zone");
+        let zones: Vec<String> = lib.zones().unwrap().into_iter().map(|z| z.path).collect();
+        assert_eq!(zones, vec!["01_Outra".to_string(), "Neu".to_string()]);
+
+        lib.set_structure(&Structure { depth: 2, skip: DEFAULT_SKIP.iter().map(|s| s.to_string()).collect(), subzones: true }).unwrap();
+        let items = lib.items().unwrap();
         assert!(items.iter().all(|i| i.zone == "01_Outra/02_Layout"));
+        assert!(items.iter().any(|i| i.folder == "04_Products") && items.iter().any(|i| i.folder.is_empty()));
         let zones: Vec<String> = lib.zones().unwrap().into_iter().map(|z| z.path).collect();
         assert_eq!(zones, vec!["01_Outra/02_Layout".to_string(), "Neu".to_string()], "nur Ebene 2, ohne reine Projektordner");
 
-        lib.set_structure(&Structure { depth: 3, skip: vec![] }).unwrap();
+        lib.set_structure(&Structure { depth: 3, skip: vec![], subzones: true }).unwrap();
         let items = lib.items().unwrap();
         assert_eq!(items.len(), 3, "Links wieder dabei");
         assert!(items.iter().any(|i| i.zone == "01_Outra/02_Layout/04_Products"));
+    }
+
+    #[test]
+    fn inbox_becomes_unsorted() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path().join("Alt");
+        write_png(&root.join("Inbox/a.png"), 20, 20, 1);
+        write_png(&root.join("Typo/b.png"), 20, 20, 2);
+        std::fs::create_dir_all(root.join(META_DIR)).unwrap();
+        std::fs::write(root.join(META_DIR).join("zones.json"), r#"{"order":["Typo","Inbox"],"hot":["Inbox"]}"#).unwrap();
+        let lib = Library::open(&root).unwrap();
+        assert!(root.join("Unsorted/a.png").exists() && !root.join("Inbox").exists());
+        assert_eq!(lib.default_zone(), "Unsorted");
+        assert_eq!(lib.zone_order(), (vec!["Typo".to_string(), "Unsorted".to_string()], vec!["Unsorted".to_string()]));
+        // eine andere gewählte Standard-Zone: Inbox bleibt, wie sie ist
+        let root2 = tmp.path().join("Eigen");
+        write_png(&root2.join("Inbox/a.png"), 20, 20, 1);
+        std::fs::create_dir_all(root2.join("Typo")).unwrap();
+        std::fs::create_dir_all(root2.join(META_DIR)).unwrap();
+        std::fs::write(root2.join(META_DIR).join("zones.json"), r#"{"default":"Typo"}"#).unwrap();
+        Library::open(&root2).unwrap();
+        assert!(root2.join("Inbox").is_dir());
     }
 }
