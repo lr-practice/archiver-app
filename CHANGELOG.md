@@ -1,5 +1,9 @@
 # Changelog
 
+## App 0.21.1 (11.10.2026)
+
+- Neuer Freischalt-Code. Der bisherige gilt nicht mehr, Archiver fragt einmal nach dem neuen.
+
 ## App 0.21.0 · Extension 3.17.0 (11.10.2026)
 
 - Drei Bibliotheken: In Einstellungen › Bibliothek gibt es drei Plätze mit Name und Ordner. Umschalten mit ⌘1, ⌘2, ⌘3 oder im Menü. Zonen und Hot Zones gehören jeweils zur Bibliothek, die Extension sammelt in die aktive.

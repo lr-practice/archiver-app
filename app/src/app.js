@@ -93,7 +93,7 @@
 
   // ---- Freischalten: ein gemeinsamer Code, nur sein Hash steht im Code ----
 
-  const UNLOCK_HASH = "4ffbc1224a6cd30617b443e4665695d19c63d76ba51f6b16bdcdc8b28a2d1e13";
+  const UNLOCK_HASH = "12004fa6495855edcff5595961e8da1e62e9eed6502338060283a8bb0efa5646";
 
   function isUnlocked() {
     return pref("unlock", null) === UNLOCK_HASH;
