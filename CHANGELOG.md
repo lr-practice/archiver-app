@@ -1,5 +1,14 @@
 # Changelog
 
+## App 0.23.0 (11.10.2026)
+
+Bestehende Ordnersysteme als Bibliothek:
+- Zonen nur bis zur zweiten Ebene (einstellbar 1–3 unter Einstellungen › Bibliothek › Ordnerstruktur). Tiefere Unterordner gehören zu ihrer Zone, die Details zeigen den Unterordner.
+- Ordner ohne Bilder, PDFs, Video, Audio oder Text erscheinen nicht als Zone; ganz leere Ordner (neue Zonen) schon.
+- Übersprungen werden Links, Document fonts, Backup, Ableton Project Info, Presets, Samples/Imported sowie Programm- und Mediathek-Pakete. Die Liste ist anpassbar.
+- In einem bestehenden Ordnersystem legt Archiver keine leere Inbox an.
+- Karten-Ansicht: lange Pfade werden gekürzt (voller Name beim Überfahren), das Datum bleibt in einer Zeile.
+
 ## App 0.22.0 · Extension 3.18.0 (11.10.2026)
 
 - ⌘Z macht Verschieben, Löschen (holt die Dateien aus dem Papierkorb zurück) und Umbenennen von Zonen rückgängig, mehrfach hintereinander.

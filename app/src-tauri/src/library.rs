@@ -282,6 +282,52 @@ fn parent_rel(rel: &str) -> String {
     rel.rsplit_once('/').map(|(p, _)| p.to_string()).unwrap_or_default()
 }
 
+/// Zone eines Ordners: nur die ersten `depth` Ebenen. Tiefere Unterordner
+/// gehören zu ihrer Zone (bestehende Projektordner werden nicht zerfasert).
+fn zone_at(dir: &str, depth: usize) -> String {
+    if dir.is_empty() {
+        return String::new();
+    }
+    dir.split('/').take(depth.max(1)).collect::<Vec<_>>().join("/")
+}
+
+/// Ordner, die Archiver in bestehenden Projekten überspringt (Layout-Links,
+/// Schriften, Backups, Ableton-Technik). Einträge mit "/" passen auf das Pfadende.
+pub const DEFAULT_SKIP: &[&str] = &["Links", "Document fonts", "Backup", "Ableton Project Info", "Presets", "Samples/Imported"];
+pub const DEFAULT_DEPTH: usize = 2;
+
+/// Pakete, die im Finder wie Dateien aussehen (Programme, Mediatheken, Projekte)
+const PACKAGE_EXTS: &[&str] = &["app", "photoslibrary", "logicx", "fcpbundle", "band", "rtfd", "pages", "key", "numbers", "imovielibrary", "lrdata", "bundle", "framework", "plugin"];
+
+/// Ordnerregeln einer Bibliothek: Zonentiefe und übersprungene Ordner
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct Structure {
+    pub depth: usize,
+    pub skip: Vec<String>,
+}
+
+impl Structure {
+    /// Wird dieser Ordner (relativer Pfad) übersprungen?
+    pub fn skips(&self, rel: &str) -> bool {
+        let name = rel.rsplit('/').next().unwrap_or(rel);
+        if let Some((_, ext)) = name.rsplit_once('.') {
+            if PACKAGE_EXTS.contains(&ext.to_lowercase().as_str()) {
+                return true;
+            }
+        }
+        let lower = rel.to_lowercase();
+        self.skip.iter().any(|s| {
+            let s = s.trim().trim_matches('/').to_lowercase();
+            !s.is_empty() && (lower == s || lower.ends_with(&format!("/{s}")))
+        })
+    }
+}
+
+/// Ordner ohne sichtbaren Inhalt
+fn dir_is_empty(dir: &Path) -> bool {
+    fs::read_dir(dir).map(|rd| rd.filter_map(|e| e.ok()).all(|e| is_hidden(&e.file_name()))).unwrap_or(true)
+}
+
 fn file_name(rel: &str) -> String {
     rel.rsplit_once('/').map(|(_, f)| f.to_string()).unwrap_or_else(|| rel.to_string())
 }
@@ -529,8 +575,14 @@ impl Library {
             user: Mutex::new(None),
             people_sig: Mutex::new(0),
         };
-        // Inbox nur, solange keine andere Standard-Zone gewählt ist
-        fs::create_dir_all(root.join(lib.default_zone())).map_err(err)?;
+        // Inbox nur in einer neuen Bibliothek. In einem bestehenden Ordnersystem
+        // entsteht sie erst, wenn wirklich etwas ohne Ziel hereinkommt.
+        let has_folders = fs::read_dir(root)
+            .map(|rd| rd.filter_map(|e| e.ok()).any(|e| e.path().is_dir() && !is_hidden(&e.file_name())))
+            .unwrap_or(false);
+        if !has_folders {
+            fs::create_dir_all(root.join(lib.default_zone())).map_err(err)?;
+        }
         lib.restore_metadata()?;
         lib.merge_people()?;
         Ok(lib)
@@ -592,6 +644,26 @@ impl Library {
         let mut v = self.zone_file();
         v["default"] = serde_json::json!(zone);
         self.write_zone_file(&v)
+    }
+
+    pub fn structure(&self) -> Structure {
+        let v = self.zone_file();
+        let depth = v.get("depth").and_then(|d| d.as_u64()).map(|d| d as usize).filter(|d| (1..=3).contains(d)).unwrap_or(DEFAULT_DEPTH);
+        let skip = v
+            .get("skip")
+            .and_then(|a| a.as_array())
+            .map(|a| a.iter().filter_map(|s| s.as_str().map(String::from)).collect())
+            .unwrap_or_else(|| DEFAULT_SKIP.iter().map(|s| s.to_string()).collect());
+        Structure { depth, skip }
+    }
+
+    pub fn set_structure(&self, st: &Structure) -> Result<()> {
+        let mut v = self.zone_file();
+        v["depth"] = serde_json::json!(st.depth.clamp(1, 3));
+        v["skip"] = serde_json::json!(st.skip.iter().map(|s| s.trim()).filter(|s| !s.is_empty()).collect::<Vec<_>>());
+        self.write_zone_file(&v)?;
+        self.scan()?;
+        Ok(())
     }
 
     /// Deckkraft der Zonen beim Ziehen (0.3–1.0), gilt in App und Extension.
@@ -715,10 +787,12 @@ impl Library {
 
         let mut seen = HashSet::new();
         let mut changed = false;
+        let st = self.structure();
+        let root = self.root.clone();
         let walker = WalkDir::new(&self.root)
             .min_depth(1)
             .into_iter()
-            .filter_entry(|e| !is_hidden(e.file_name()));
+            .filter_entry(|e| !is_hidden(e.file_name()) && !(e.file_type().is_dir() && st.skips(&rel_path(&root, e.path()))));
         for entry in walker.filter_map(|e| e.ok()) {
             if !entry.file_type().is_file() || !is_media(entry.path()) {
                 continue;
@@ -787,24 +861,33 @@ impl Library {
     /// Liegen Bilder direkt im Bibliotheksordner, gibt es zusätzlich die Zone "".
     pub fn zones(&self) -> Result<Vec<Zone>> {
         let default = self.default_zone();
+        let st = self.structure();
         let mut counts: HashMap<String, usize> = HashMap::new();
         {
             let conn = self.conn.lock().unwrap();
             let mut stmt = conn.prepare("SELECT path FROM item").map_err(err)?;
             let rows = stmt.query_map([], |r| r.get::<_, String>(0)).map_err(err)?;
             for p in rows {
-                *counts.entry(parent_rel(&p.map_err(err)?)).or_default() += 1;
+                *counts.entry(zone_at(&parent_rel(&p.map_err(err)?), st.depth)).or_default() += 1;
             }
         }
+        let root = self.root.clone();
         let mut zones: Vec<Zone> = WalkDir::new(&self.root)
             .min_depth(1)
+            .max_depth(st.depth)
             .into_iter()
-            .filter_entry(|e| !is_hidden(e.file_name()))
+            .filter_entry(|e| !is_hidden(e.file_name()) && !(e.file_type().is_dir() && st.skips(&rel_path(&root, e.path()))))
             .filter_map(|e| e.ok())
             .filter(|e| e.file_type().is_dir())
-            .map(|e| {
+            .filter_map(|e| {
                 let path = rel_path(&self.root, e.path());
-                Zone { count: counts.get(&path).copied().unwrap_or(0), name: path.clone(), path }
+                let count = counts.get(&path).copied().unwrap_or(0);
+                // Ordner ohne Bilder & Co., in denen aber anderes liegt (Projekt-
+                // ordner, Technik): keine Zone. Ganz leere Ordner (neue Zonen) bleiben.
+                if count == 0 && path != default && !dir_is_empty(e.path()) {
+                    return None;
+                }
+                Some(Zone { count, name: path.clone(), path })
             })
             .collect();
         zones.sort_by(|a, b| {
@@ -820,6 +903,7 @@ impl Library {
 
     /// Alle Einträge mit Quelle und Vorschaubild, neueste zuerst.
     pub fn items(&self) -> Result<Vec<Item>> {
+        let depth = self.structure().depth;
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn
             .prepare(
@@ -845,7 +929,7 @@ impl Library {
                 let thumb: Option<String> = r.get(12)?;
                 Ok(Item {
                     abs: self.root.join(&path).to_string_lossy().into_owned(),
-                    zone: parent_rel(&path),
+                    zone: zone_at(&parent_rel(&path), depth),
                     filename: file_name(&path),
                     hash: r.get(1)?,
                     bytes: r.get(2)?,
@@ -1195,10 +1279,11 @@ impl Library {
         if !target.is_dir() {
             return Err(format!("Zone nicht gefunden: {zone}"));
         }
+        let depth = self.structure().depth;
         let mut moved = Vec::new();
         for rel in paths {
             let src = safe_join(&self.root, rel)?;
-            if parent_rel(rel) == zone || !src.is_file() {
+            if zone_at(&parent_rel(rel), depth) == zone || !src.is_file() {
                 continue;
             }
             let dst = unique_path(&target, &file_name(rel));
@@ -1797,5 +1882,36 @@ mod tests {
         drop(lib);
         let _ = Library::open(&root).unwrap();
         assert!(!root.join(INBOX).exists());
+    }
+
+    #[test]
+    fn existing_folder_system() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path().join("Work");
+        let deep = root.join("01_Outra/02_Layout/04_Products/_Mock/Cap");
+        std::fs::create_dir_all(&deep).unwrap();
+        write_png(&deep.join("cap.png"), 40, 40, 1);
+        write_png(&root.join("01_Outra/02_Layout/logo.png"), 40, 40, 2);
+        std::fs::create_dir_all(root.join("01_Outra/02_Layout/Links")).unwrap();
+        write_png(&root.join("01_Outra/02_Layout/Links/placed.png"), 40, 40, 3);
+        std::fs::create_dir_all(root.join("01_Outra/01_Intern")).unwrap();
+        std::fs::write(root.join("01_Outra/01_Intern/brief.indd"), "x").unwrap();
+        std::fs::create_dir_all(root.join("Plugin.app/Contents")).unwrap();
+        write_png(&root.join("Plugin.app/Contents/icon.png"), 40, 40, 4);
+        std::fs::create_dir_all(root.join("Neu")).unwrap();
+
+        let lib = Library::open(&root).unwrap();
+        assert!(!root.join(INBOX).exists(), "keine Inbox in bestehenden Ordnern");
+        lib.scan().unwrap();
+        let items = lib.items().unwrap();
+        assert_eq!(items.len(), 2, "Links und Pakete übersprungen");
+        assert!(items.iter().all(|i| i.zone == "01_Outra/02_Layout"));
+        let zones: Vec<String> = lib.zones().unwrap().into_iter().map(|z| z.path).collect();
+        assert_eq!(zones, vec!["01_Outra/02_Layout".to_string(), "Neu".to_string()], "nur Ebene 2, ohne reine Projektordner");
+
+        lib.set_structure(&Structure { depth: 3, skip: vec![] }).unwrap();
+        let items = lib.items().unwrap();
+        assert_eq!(items.len(), 3, "Links wieder dabei");
+        assert!(items.iter().any(|i| i.zone == "01_Outra/02_Layout/04_Products"));
     }
 }

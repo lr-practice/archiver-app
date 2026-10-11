@@ -5029,6 +5029,8 @@ body.lib-loading {
   appearance: none;
   -webkit-appearance: none;
   min-width: 160px;
+  max-width: 260px;
+  text-overflow: ellipsis;
   padding: 3px 22px 3px 0;
   border: none;
   border-bottom: 1px solid var(--p-rule);
@@ -5040,4 +5042,47 @@ body.lib-loading {
   text-align: right;
   outline: none;
   cursor: pointer;
+}
+
+.p-skip-input {
+  width: 260px;
+  max-width: 100%;
+  padding: 3px 0;
+  border: none;
+  border-bottom: 1px solid var(--p-rule);
+  background: transparent;
+  color: var(--p-text);
+  text-align: right;
+  outline: none;
+}
+
+/* Karten-Ansicht: lange Pfade kürzen, Datum bleibt in einer Zeile */
+.p-card-group {
+  min-width: 0;
+  overflow: hidden;
+}
+.p-card-row-text {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.p-card-row-text .zone-card-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.p-card-row-right {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.p-block-row:has(.p-select) .p-block-main,
+.p-block-row:has(.p-skip-input) .p-block-main {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+.p-block-row:has(.p-select) .p-block-side,
+.p-block-row:has(.p-skip-input) .p-block-side {
+  flex: 1 1 auto;
+  min-width: 0;
+  justify-content: flex-end;
 }

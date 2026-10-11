@@ -653,6 +653,17 @@ struct Snapshot {
     user: Option<String>,
     /// Zone für alles ohne Ziel (Standard: Inbox)
     default_zone: String,
+    /// Zonentiefe und übersprungene Ordner
+    structure: library::Structure,
+}
+
+#[tauri::command]
+async fn set_structure(app: AppHandle, state: State<'_, AppState>, structure: library::Structure) -> Result<(), String> {
+    let lib = current(&state)?;
+    tauri::async_runtime::spawn_blocking(move || lib.set_structure(&structure)).await.map_err(|e| e.to_string())??;
+    let _ = app.emit("library-changed", ());
+    kick_thumbs(&app);
+    Ok(())
 }
 
 #[tauri::command]
@@ -675,6 +686,7 @@ async fn snapshot(state: State<'_, AppState>) -> Result<Snapshot, String> {
         shared: lib.shared,
         user,
         default_zone: lib.default_zone(),
+        structure: lib.structure(),
     })
 }
 
@@ -1114,6 +1126,7 @@ pub fn run() {
             rename_zone,
             set_zone_order,
             set_default_zone,
+            set_structure,
             set_drag_alpha,
             get_drag_alpha,
             trash_zone,

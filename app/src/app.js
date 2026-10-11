@@ -182,6 +182,12 @@
     return path.split("/").join(" / ");
   }
 
+  // Liegt das Objekt tiefer als seine Zone (bestehende Ordner): der Rest des Pfads
+  function subfolderOf(item) {
+    const dir = item.path.includes("/") ? item.path.slice(0, item.path.lastIndexOf("/")) : "";
+    return item.zone && dir.startsWith(item.zone + "/") ? dir.slice(item.zone.length + 1) : "";
+  }
+
   function lastSegment(path) {
     return path === "" ? state.name : path.split("/").pop();
   }
@@ -388,6 +394,7 @@
     state.order = snap.order || {};
     state.shared = !!snap.shared;
     state.defaultZone = snap.defaultZone || "Inbox";
+    state.structure = snap.structure || { depth: 2, skip: [] };
     state.user = snap.user || "";
     if (isZone(state.focus) && !state.zones.some((z) => z.path === state.focus)) state.focus = null;
     for (const p of [...state.selection]) if (!state.byPath.has(p)) state.selection.delete(p);
@@ -1411,8 +1418,9 @@
     for (const zone of zones) {
       const row = el("div", "p-card-row");
       row.dataset.zone = zone.path;
-      const text = el("div");
+      const text = el("div", "p-card-row-text");
       const name = el("div", "zone-card-name", zone.path === top ? top : zone.path.slice(top.length + 1).split("/").join(" / "));
+      name.title = zoneLabel(zone.path);
       text.appendChild(name);
       text.appendChild(el("div", "p-card-meta", zone.count ? countText(zone.count) : t("emptyShort")));
       row.appendChild(text);
@@ -1517,6 +1525,38 @@
   // Einklappbare Blöcke in den Einstellungen; der Zustand bleibt gemerkt.
   function collapsible(id, title) {
     return block(title);
+  }
+
+  // Ordnerstruktur: wie tief Unterordner eigene Zonen werden, welche Ordner Archiver überspringt
+  function renderStructure() {
+    const b = block(t("setStructure"));
+    const st = state.structure || { depth: 2, skip: [] };
+    const save = async (next) => {
+      try {
+        await invoke("set_structure", { structure: { ...st, ...next } });
+        await refresh();
+      } catch (e) {
+        fail(e);
+      }
+      renderPage(true);
+    };
+    b.appendChild(blockRow(t("setDepth"), choice([["1", "1"], ["2", "2"], ["3", "3"]], String(st.depth), (id) => save({ depth: Number(id) }))));
+    const input = el("input", "p-skip-input");
+    input.value = st.skip.join(", ");
+    input.spellcheck = false;
+    input.placeholder = "Links, Backup …";
+    const commit = () => {
+      const skip = input.value.split(",").map((x) => x.trim()).filter(Boolean);
+      if (skip.join(",") !== st.skip.join(",")) save({ skip });
+    };
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") input.blur();
+      e.stopPropagation();
+    });
+    input.addEventListener("blur", commit);
+    b.appendChild(blockRow(t("setSkip"), input));
+    b.appendChild(el("p", "p-block-hint", t("setStructureHint")));
+    return b;
   }
 
   // Standard-Zone: wohin alles kommt, was ohne Ziel gesammelt wird (sonst Inbox)
@@ -1693,6 +1733,7 @@
     if (sub === "library") {
       wrap.appendChild(renderLibrarySlots());
       wrap.appendChild(renderDefaultZone());
+      wrap.appendChild(renderStructure());
       wrap.appendChild(renderZoneSettings());
     }
 
@@ -3106,6 +3147,7 @@
     inner.appendChild(
       lbBlock("Archiver", [
         lbRow(t("zone"), panel ? zoneSelect(item.zone, (zone) => moveSelection(zone)) : zoneLabel(item.zone)),
+        subfolderOf(item) ? lbRow(t("subfolder"), subfolderOf(item).split("/").join(" / ")) : null,
         source || lbRow(t("source"), t("noSource")),
         imageUrl,
         lbRow(t("savedAt"), formatDate(item.capturedAt || item.addedAt)),
