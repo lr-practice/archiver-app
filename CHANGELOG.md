@@ -1,5 +1,10 @@
 # Changelog
 
+## App 0.19.4 (11.10.2026)
+
+- Lightbox „Ablegen in“: Passen nicht alle Zonen in eine Zeile, verteilen sie sich auf gleich lange Zeilen statt eines einzelnen Rests.
+- Bilder lassen sich aus der Lightbox wieder ziehen: die Zonen klappen auf, Loslassen auf einer Zone legt das Bild dorthin (auch in den Finder).
+
 ## App 0.19.3 (11.10.2026)
 
 - Öffnung nach der Tour ohne die helle Querlinie: nur das Licht von den Seiten, dann öffnet sich die Oberfläche. Der Startton setzt mit dem Öffnen ein.

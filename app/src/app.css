@@ -3461,6 +3461,13 @@ body.has-selection .card-text:not(.selected):hover .text-sheet {
   background: rgba(var(--ink-rgb), 0.08);
 }
 
+/* Messen der natürlichen Breite in einer Zeile (lbBalanceZones) */
+.lb-zones.measure {
+  flex-wrap: nowrap;
+  max-width: none;
+  width: max-content;
+}
+
 /* Lightbox „Ablegen in“: Hot Zones zuerst, dann eine feine Linie */
 .lb-chip-sep {
   width: 1px;

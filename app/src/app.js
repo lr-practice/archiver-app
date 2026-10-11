@@ -2913,6 +2913,7 @@
     const chips = state.zones.map((zone, i) => {
       const c = el("button", "lb-chip" + (zone.path === item.zone ? " current" : "") + (i < HOT_ZONES ? " hot" : ""));
       c.type = "button";
+      c.dataset.zone = zone.path; // Ziel auch beim Ziehen aus der Lightbox
       if (i < HOT_ZONES) c.appendChild(el("span", "lb-key", String(i + 1)));
       c.appendChild(zoneNameEl(zone));
       c.addEventListener("click", () => lbMoveTo(zone.path));
@@ -2923,6 +2924,21 @@
     $("lbZones").replaceChildren(el("span", "lb-mono", t("dropBar")), ...chips);
     $("lbZones").hidden = false;
     $("lbAction").classList.add("active");
+    lbBalanceZones();
+  }
+
+  // Passen nicht alle Zonen in eine Zeile, werden die Zeilen gleich lang
+  // statt eines einzelnen Rests in der letzten Zeile.
+  function lbBalanceZones() {
+    const bar = $("lbZones");
+    bar.style.width = "";
+    bar.classList.add("measure");
+    const natural = bar.scrollWidth;
+    bar.classList.remove("measure");
+    const room = bar.getBoundingClientRect().width;
+    if (natural <= room + 1) return;
+    const rows = Math.ceil(natural / room);
+    bar.style.width = Math.min(room, Math.ceil(natural / rows) + 48) + "px";
   }
 
   function lbCloseZones() {
@@ -3023,6 +3039,32 @@
       lbZoomAt(gestureBase * e.scale, e.clientX, e.clientY);
     });
     stage.addEventListener("gestureend", (e) => e.preventDefault());
+
+    // Ganzes Bild ziehen: Zonen klappen auf, das Bild lässt sich hineinlegen
+    // (oder in den Finder). Vergrößert verschiebt Ziehen den Ausschnitt.
+    let lift = null;
+    $("lightboxImg").draggable = false;
+    window.addEventListener("resize", () => {
+      if (!$("lbZones").hidden) lbBalanceZones();
+    });
+    stage.addEventListener("pointerdown", (e) => {
+      if (e.button !== 0 || !lbView.fitted || lbMode !== "image") return;
+      if (e.target !== $("lightboxImg")) return;
+      lift = { x: e.clientX, y: e.clientY };
+    });
+    stage.addEventListener("pointermove", (e) => {
+      if (!lift || !(e.buttons & 1)) return;
+      if (Math.hypot(e.clientX - lift.x, e.clientY - lift.y) < DRAG_THRESHOLD) return;
+      lift = null;
+      const item = lightboxItem();
+      if (!item) return;
+      const opened = $("lbZones").hidden;
+      if (opened) lbOpenZones();
+      startNativeDrag([item], () => {
+        if (opened && state.lightbox) setTimeout(lbCloseZones, 300);
+      });
+    });
+    stage.addEventListener("pointerup", () => (lift = null));
 
     // Ziehen verschiebt das vergrößerte Bild
     let drag = null;
@@ -3245,11 +3287,14 @@
     document.body.classList.remove("dragging");
   }
 
-  async function startNativeDrag(items) {
+  async function startNativeDrag(items, onEnd) {
     const channel = new TAURI.core.Channel();
     // Das Ende des Ziehens kann vor dem Drop-Ereignis ankommen. Die Leiste
     // bleibt deshalb kurz stehen, sonst findet der Drop sein Ziel nicht mehr.
-    channel.onmessage = () => setTimeout(hideDropbar, 250);
+    channel.onmessage = () => {
+      setTimeout(hideDropbar, 250);
+      if (onEnd) onEnd();
+    };
     const zones = new Set(items.map((i) => i.zone));
     dragHome = zones.size === 1 ? [...zones][0] : null;
     if (!document.body.classList.contains("at-home")) showDropbar();
@@ -3319,6 +3364,9 @@
       dropCount++;
       tourStats.drops++;
       const zone = target.dataset.zone;
+      // Aus der Lightbox auf eine ihrer Zonen: wie ein Klick auf die Zone
+      const lbItem = state.lightbox && target.classList.contains("lb-chip") ? lightboxItem() : null;
+      if (lbItem && paths.length === 1 && paths[0] === lbItem.abs) return lbMoveTo(zone);
       const own = paths.filter(insideLibrary).map((path) => path.slice(state.root.length + 1));
       const foreign = paths.filter((path) => !insideLibrary(path));
       const toMove = own.filter((rel) => {
