@@ -6,6 +6,7 @@
 - Im Kapitel zu den Active Zones bleibt die Leiste unten stehen, bis man weitergeht.
 - Neue Öffnung nach der Tour: Im Dunkel drückt blaues Licht von den Seiten herein, eine helle Linie teilt die Fläche quer, dann öffnet sich die Oberfläche (Welle oder Lid).
 - Extension: Bild mit gedrückter Shift-Taste auf eine Zone ziehen legt es schlicht in den Download-Ordner, am Archiv vorbei. Die Zonen zeigen dabei „In Downloads sichern“.
+- Active Zones beim Darüberziehen: bleiben gläsern und hell wie im Ruhezustand, nur feiner Rand und leicht angehoben, statt dunkelblau (App und Extension).
 
 ## App 0.19.1 · Extension 3.16.2 (10.10.2026)
 

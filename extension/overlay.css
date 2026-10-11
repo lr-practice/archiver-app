@@ -103,16 +103,16 @@ input {
   color: #a9a9a9;
 }
 
+/* Ziel: bleibt gläsern wie im Ruhezustand, nur etwas heller, feiner Rand, leicht angehoben */
 .zone.active {
-  background: rgba(31, 42, 77, 0.92);
-  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.5), inset 0 0 0 1px #5b7cff;
+  background: rgba(38, 38, 38, var(--zone-alpha, 0.88));
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.5), inset 0 0 0 1px rgba(255, 255, 255, 0.45);
   color: #ffffff;
   transform: translateY(-4px);
 }
 
 .zone.root.active {
-  background: rgba(60, 60, 60, 0.9);
-  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.5), inset 0 0 0 1px rgba(255, 255, 255, 0.5);
+  background: rgba(38, 38, 38, calc(var(--zone-alpha, 0.88) * 0.8));
 }
 
 .zone-label {
@@ -129,7 +129,7 @@ input {
 .zone-hint {
   pointer-events: none;
   font-size: 13px;
-  color: #c9d6ff;
+  color: #a9a9a9;
   opacity: 0;
   transition: opacity 0.12s ease;
 }
@@ -265,13 +265,19 @@ html.light .zone.landed,
 
 html.light .zone.active,
 :host(.light) .zone.active {
-  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.15), inset 0 0 0 1px #5b7cff;
+  background: rgba(255, 255, 255, var(--zone-alpha, 0.88));
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.15), inset 0 0 0 1px rgba(17, 17, 17, 0.4);
+  color: #111111;
 }
 
 html.light .zone.root.active,
 :host(.light) .zone.root.active {
-  background: rgba(245, 245, 245, 0.9);
-  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.15), inset 0 0 0 1px rgba(17, 17, 17, 0.5);
+  background: rgba(255, 255, 255, calc(var(--zone-alpha, 0.88) * 0.8));
+}
+
+html.light .zone-hint,
+:host(.light) .zone-hint {
+  color: #707070;
 }
 
 html.light .zone-parent,

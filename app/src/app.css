@@ -2807,10 +2807,14 @@ body.lightbox-open .p-top {
   transition: opacity 0.12s ease;
 }
 
-/* Ziel: gleiche Sprache wie alle Ablageziele (.drop-active), dazu leicht angehoben */
+/* Ziel: bleibt gläsern wie im Ruhezustand, nur etwas heller, feiner Rand, leicht angehoben */
 .p-dropbar .p-hot.drop-active {
-  background: rgba(var(--accent-rgb), 0.28) !important;
-  outline: 1px solid var(--accent) !important;
+  background: color-mix(
+    in srgb,
+    color-mix(in srgb, var(--menu-bg) 88%, #fff) calc(var(--zone-alpha, 0.97) * 100%),
+    transparent
+  ) !important;
+  outline: 1px solid rgba(var(--ink-rgb), 0.45) !important;
   outline-offset: -1px;
   transform: translateY(-4px);
 }
