@@ -79,6 +79,18 @@ fn library_slots(s: &Settings) -> Vec<LibrarySlot> {
 const LIBRARY_MAX_FILES: usize = 20_000;
 const LIBRARY_COUNT_SECS: u64 = 10;
 
+/// Ebenen unterhalb von ~/Library/CloudStorage bzw. ~/Library/Mobile Documents,
+/// None für alles andere. Beispiel: …/CloudStorage/GoogleDrive-x/Meine Ablage/Projekt = 3
+fn cloud_depth(root: &Path) -> Option<usize> {
+    let home = dirs::home_dir().and_then(|h| h.canonicalize().ok())?;
+    for base in ["Library/CloudStorage", "Library/Mobile Documents"] {
+        if let Ok(rest) = root.strip_prefix(home.join(base)) {
+            return Some(rest.components().count());
+        }
+    }
+    None
+}
+
 fn check_library(root: &Path) -> Result<(), String> {
     let root = root.canonicalize().map_err(|e| e.to_string())?;
     if !root.is_dir() {
@@ -99,7 +111,14 @@ fn check_library(root: &Path) -> Result<(), String> {
     }
     // ein ganzes Laufwerk (/Volumes/Name) ist ebenfalls zu groß
     let is_volume = root.parent() == Some(Path::new("/Volumes"));
-    if blocked.contains(&root) || is_volume || system.iter().any(|s| root.starts_with(s)) {
+    // Cloud-Ordner (Google Drive, Dropbox, OneDrive, iCloud Drive) liegen unter
+    // ~/Library, sind aber normale Ordner. Gesperrt bleibt nur ihre oberste Ebene
+    // (das ganze Konto); die Menge prüft danach die Zählung.
+    let cloud = cloud_depth(&root);
+    if cloud.is_some_and(|d| d <= 1) {
+        return Err("library-system".into());
+    }
+    if blocked.contains(&root) || is_volume || (cloud.is_none() && system.iter().any(|s| root.starts_with(s))) {
         return Err("library-system".into());
     }
     // Vorab zählen: zu viele Dateien oder zu langsam → ablehnen.
@@ -1219,6 +1238,15 @@ mod tests {
         }
         assert_eq!(check_library(&dir).unwrap_err(), "library-large");
         std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn cloud_folders_allowed() {
+        let home = dirs::home_dir().unwrap().canonicalize().unwrap();
+        let drive = home.join("Library/CloudStorage/GoogleDrive-test/Meine Ablage");
+        assert_eq!(cloud_depth(&drive), Some(2));
+        assert_eq!(cloud_depth(&drive.join("Referenzen")), Some(3));
+        assert_eq!(cloud_depth(&home.join("Library/Caches")), None);
     }
 
     #[test]

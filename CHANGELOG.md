@@ -7,6 +7,7 @@ Bestehende Ordnersysteme als Bibliothek:
 - Ordner ohne Bilder, PDFs, Video, Audio oder Text erscheinen nicht als Zone; ganz leere Ordner (neue Zonen) schon.
 - Übersprungen werden Links, Document fonts, Backup, Ableton Project Info, Presets, Samples/Imported sowie Programm- und Mediathek-Pakete. Die Liste ist anpassbar.
 - In einem bestehenden Ordnersystem legt Archiver keine leere Inbox an.
+- Ordner in Google Drive, Dropbox, OneDrive und iCloud Drive lassen sich wieder als Bibliothek wählen (wurden fälschlich als Systemordner abgelehnt).
 - Karten-Ansicht: lange Pfade werden gekürzt (voller Name beim Überfahren), das Datum bleibt in einer Zeile.
 
 ## App 0.22.0 · Extension 3.18.0 (11.10.2026)
