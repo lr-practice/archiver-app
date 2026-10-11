@@ -1,8 +1,7 @@
 // reveal.js
 // Licht-Öffnung nach der Einstiegstour: ein WebGL-Shader über dem Fenster.
-// Im Dunkel drückt Licht von den Seiten herein, eine helle Linie teilt die
-// Fläche quer. Dann öffnet sich die Oberfläche, weich von der Mitte aus
-// (Welle, Standard) oder als Lid entlang der Linie.
+// Im Dunkel drückt Licht von den Seiten herein. Dann öffnet sich die Oberfläche, weich von der Mitte aus
+// (Welle, Standard) oder als Lid aus der Mitte.
 // Elemente erscheinen, wenn das Licht sie erreicht. Zum Schluss leuchtet der
 // Fensterrand kurz von innen. Ruhig und langsam, zusammen etwa 5 s.
 
@@ -48,7 +47,7 @@
     }
 
     // Das Dunkel als weiche, abgerundete Fläche, von den Seiten bedrängt
-    // vom Licht, quer geteilt von einer hellen Linie
+    // vom Licht
     vec3 field(vec2 px, vec2 res, vec2 c) {
       vec2 q = px - c;
       float g = u_glow;
@@ -56,10 +55,6 @@
       float soft = max(res.x, res.y) * 0.12;
       float sd = box(q, b, min(b.x, b.y) * 0.55);
       float o = smoothstep(-soft, soft * 1.4, sd);
-      // Querlinie: an den Seiten hell, zur Mitte hin verglimmend
-      float side = smoothstep(0.0, b.x * 1.1, abs(q.x));
-      float band = exp(-pow(q.y / (10.0 + 26.0 * g), 2.0)) * g * (0.35 + 0.65 * side);
-      o = clamp(o + band * (1.0 - o), 0.0, 1.0);
       vec3 col = o < 0.5 ? mix(u_deep, u_g2 * 0.75, o * 2.0) : mix(u_g2 * 0.75, EDGE, (o - 0.5) * 2.0);
       return col;
     }
@@ -166,10 +161,11 @@
   }
 
   /**
-   * play({ mode: "wave" | "lid", targets: Element[], onStart })
+   * play({ mode: "wave" | "lid", targets: Element[], onStart, onOpen })
+   * onOpen: wenn sich die Fläche zu öffnen beginnt (Startton)
    * Die Oberfläche ist beim Aufruf schon fertig gezeichnet, aber verdeckt.
    */
-  function play({ mode = "wave", targets = [], onStart } = {}) {
+  function play({ mode = "wave", targets = [], onStart, onOpen } = {}) {
     const still = matchMedia("(prefers-reduced-motion: reduce)").matches;
     const layer = document.createElement("div");
     layer.className = "reveal";
@@ -179,6 +175,7 @@
 
     if (still) {
       if (onStart) onStart();
+      if (onOpen) onOpen();
       return layer
         .animate([{ opacity: 1 }, { opacity: 0 }], { duration: 500, easing: "ease-out", fill: "forwards" })
         .finished.then(() => layer.remove());
@@ -198,6 +195,7 @@
     if (!ctx) {
       // Ohne WebGL: nur weich einblenden
       if (onStart) onStart();
+      if (onOpen) onOpen();
       return layer
         .animate([{ opacity: 1 }, { opacity: 0 }], { duration: 900, easing: "ease-out", fill: "forwards" })
         .finished.then(() => layer.remove());
@@ -243,6 +241,7 @@
     });
 
     if (onStart) onStart();
+    if (onOpen) setTimeout(onOpen, START);
 
     const frameAt = START + DUR * (lid ? 0.5 : 0.6);
     const frameDur = 2400;

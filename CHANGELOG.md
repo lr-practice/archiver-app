@@ -1,5 +1,10 @@
 # Changelog
 
+## App 0.19.3 (11.10.2026)
+
+- Öffnung nach der Tour ohne die helle Querlinie: nur das Licht von den Seiten, dann öffnet sich die Oberfläche. Der Startton setzt mit dem Öffnen ein.
+- Startton beim App-Start etwas später, im Takt mit der einfahrenden Wortmarke.
+
 ## App 0.19.2 · Extension 3.16.3 (11.10.2026)
 
 - Getting Started läuft im normalen Fenster, kein erzwungenes Vollbild mehr.

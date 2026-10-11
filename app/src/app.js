@@ -4708,8 +4708,8 @@
       targets: revealTargets(),
       onStart: () => {
         if (cover) cover.remove();
-        playStartSound();
       },
+      onOpen: () => playStartSound(),
     });
   }
 
@@ -4768,12 +4768,14 @@
   // Animation beginnt erst, wenn es zu sehen ist, läuft einmal ganz durch,
   // und erst dann gibt die schwarze Fläche die Oberfläche frei.
   const SPLASH_MS = matchMedia("(prefers-reduced-motion: reduce)").matches ? 300 : 2500;
+  const SOUND_DELAY_MS = 350;
   const splashPlayed = new Promise((resolve) => {
     const win = TAURI.window && TAURI.window.getCurrentWindow && TAURI.window.getCurrentWindow();
     const started = Date.now();
     const play = () => {
       $("splash").classList.add("play");
-      playStartSound();
+      // Ton setzt ein, wenn die Wortmarke ins Bild gleitet
+      setTimeout(playStartSound, SOUND_DELAY_MS);
       setTimeout(resolve, SPLASH_MS);
     };
     const poll = () => {
