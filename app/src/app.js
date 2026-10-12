@@ -68,6 +68,18 @@
   }
 
   // Auswahl: ruhige gestrichelte Outline oder eine, die langsam um das Objekt läuft
+  // Fensterhintergrund (Mac): wie stark die Farbe die macOS-Unschärfe deckt, getrennt von den Zonen
+  function applyWinAlpha(v) {
+    const root = document.documentElement;
+    if (typeof v !== "number") {
+      delete root.dataset.winalpha;
+      root.style.removeProperty("--win-alpha");
+    } else {
+      root.dataset.winalpha = "on";
+      root.style.setProperty("--win-alpha", String(v));
+    }
+  }
+
   function applyFocusAnim(on) {
     if (on) document.documentElement.dataset.focusanim = "on";
     else delete document.documentElement.dataset.focusanim;
@@ -146,6 +158,7 @@
   applyRadius(pref("radius", "round"));
   applyTopFade(pref("topFade", "fade"));
   applyFocusAnim(pref("focusAnim", false));
+  applyWinAlpha(pref("winAlpha", null));
   applyNavPos(pref("navPos", "tl"));
 
   const state = {
@@ -163,7 +176,7 @@
     homeSizes: pref("homeSizes", null) || { index: pref("homeSize", 1), preview: pref("homeSize", 1), cards: pref("homeSize", 1) },
     // (Übersicht: Größe wie die Karten, solange nichts eigenes gespeichert ist)
     query: "",
-    filters: { kind: null, color: null, orient: null, format: null, period: null, dup: false, label: null, site: null },
+    filters: { kind: null, color: null, orient: null, format: null, period: null, dup: false, label: null, site: null, by: null, fresh: false },
     found: null, // Seite „Finden“: Treffer nach Rangfolge, null ohne Suche und Filter
     view: pref("view", "grid"),
     size: pref("size", 120),
@@ -423,6 +436,33 @@
 
   let pendingRender = false;
 
+  // ⌘R: Bibliothek neu einlesen. Mit „Welle“ blenden die sichtbaren Objekte
+  // diagonal von oben links nach unten rechts ein, schnell und ohne Einzelauftritt.
+  async function reloadObjects() {
+    await refresh();
+    if (pref("reloadAnim", "plain") === "wave") reloadWave(document.getElementById("zones") || document.body);
+  }
+
+  function reloadWave(root) {
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    const nodes = root.querySelectorAll(".card, .p-card, .p-row:not(.p-row-head), .p-block-row");
+    for (const n of nodes) {
+      const r = n.getBoundingClientRect();
+      if (r.bottom < 0 || r.top > vh || r.width === 0) continue;
+      const d = Math.round((Math.max(0, r.top) / vh) * 160 + (Math.max(0, r.left) / vw) * 120);
+      n.classList.remove("p-wave");
+      void n.offsetWidth;
+      n.style.animationDelay = d + "ms";
+      n.classList.add("p-wave");
+      setTimeout(() => {
+        n.classList.remove("p-wave");
+        n.style.animationDelay = "";
+      }, d + 400);
+    }
+  }
+
   function applyThumbs(list) {
     let media = false;
     const byHash = new Map(list.map((x) => [x.hash, x.thumb]));
@@ -581,7 +621,7 @@
 
   function filtersActive() {
     const f = state.filters;
-    return filtersShown() && !!(f.kind || f.color || f.orient || f.format || f.period || f.dup || f.label || f.site);
+    return filtersShown() && !!(f.kind || f.color || f.orient || f.format || f.period || f.dup || f.label || f.site || f.by || f.fresh);
   }
 
   function orientation(item) {
@@ -600,7 +640,48 @@
     if (f.format && formatKey(item) !== f.format) return false;
     if (f.period && Date.now() - itemTime(item) > PERIODS[f.period] * 864e5) return false;
     if (f.dup && !dupes.has(item.hash)) return false;
+    if (f.by && item.addedBy !== f.by) return false;
+    if (f.fresh && !isFresh(item)) return false;
     return true;
+  }
+
+  // ---- Geteilte Bibliothek: „neu von anderen“ bis zum ersten Ansehen ----
+  // Gesehen gilt ein Objekt, sobald man seine Zone wieder verlässt oder es groß öffnet.
+  // Beim ersten Mal zählt alles Vorhandene als gesehen, damit nicht alles leuchtet.
+  let seenHashes = null;
+  function seenSet() {
+    if (seenHashes) return seenHashes;
+    const stored = pref("seenOthers", null);
+    if (Array.isArray(stored)) seenHashes = new Set(stored);
+    else {
+      seenHashes = new Set(state.items.filter(byOther).map((i) => i.hash));
+      setPref("seenOthers", [...seenHashes]);
+    }
+    return seenHashes;
+  }
+
+  function byOther(item) {
+    return !!(item.addedBy && state.user && item.addedBy !== state.user);
+  }
+
+  function isFresh(item) {
+    return state.shared && byOther(item) && !seenSet().has(item.hash);
+  }
+
+  function zoneHasFresh(path) {
+    return state.shared && state.items.some((i) => i.zone === path && isFresh(i));
+  }
+
+  function markSeen(items) {
+    const seen = seenSet();
+    let changed = false;
+    for (const i of items) {
+      if (byOther(i) && !seen.has(i.hash)) {
+        seen.add(i.hash);
+        changed = true;
+      }
+    }
+    if (changed) setPref("seenOthers", [...seen]);
   }
 
   function formatKey(item) {
@@ -646,11 +727,18 @@
       bar.appendChild(chip("(" + t("period_" + p) + ")", f.period === p, () => setFilter("period", p)));
     bar.appendChild(el("span", "p-filter-gap"));
     bar.appendChild(chip("(" + t("filterDup") + ")", f.dup, () => setFilter("dup", true)));
+    if (state.shared) {
+      const fresh = state.items.filter(isFresh).length;
+      if (fresh || f.fresh) {
+        bar.appendChild(el("span", "p-filter-gap"));
+        bar.appendChild(chip("(" + t("filterFresh") + " " + fresh + ")", f.fresh, () => setFilter("fresh", true)));
+      }
+    }
     if (filtersActive()) {
       bar.appendChild(el("span", "p-flex"));
       bar.appendChild(
         chip("(" + t("filterReset") + ")", false, () => {
-          state.filters = { kind: null, color: null, orient: null, format: null, period: null, dup: false, label: null, site: null };
+          state.filters = { kind: null, color: null, orient: null, format: null, period: null, dup: false, label: null, site: null, by: null, fresh: false };
           renderZones();
         })
       );
@@ -694,6 +782,15 @@
     const motif = (l) => (lang === "de" && LABEL_DE[l] ? LABEL_DE[l][0].toUpperCase() + LABEL_DE[l].slice(1) : l);
     if (labels.length || state.filters.label) wrap.appendChild(facetRow("facetMotif", labels, "label", motif));
     if (sites.length || state.filters.site) wrap.appendChild(facetRow("facetSource", sites, "site", (x) => x));
+    // Geteilte Bibliothek: „Von: JP“, wer abgelegt hat
+    if (state.shared) {
+      const people = new Map();
+      for (const item of state.items) if (item.addedBy && matches(item, words)) people.set(item.addedBy, (people.get(item.addedBy) || 0) + 1);
+      if (people.size > 1 || state.filters.by) {
+        const list = [...people].sort((a, b) => b[1] - a[1]);
+        wrap.appendChild(facetRow("facetBy", list, "by", (x) => (x === state.user ? t("byMe") : byInitials(x))));
+      }
+    }
     return wrap;
   }
 
@@ -839,12 +936,52 @@
     return state.items.filter((i) => i.zone === path); // neueste zuerst (Reihenfolge aus Rust)
   }
 
-  // Ordner einer Zone (erste Ebene darunter) mit Anzahl, lose Dateien ("") zuletzt
-  function zoneFolders(items) {
+  // Für Übersichten (Karten-Cover, Index-Thumbs, Vorschau): in der eigenen Reihenfolge der Zone
+  function orderedItems(path) {
+    const list = zoneItems(path);
+    return feat("order") ? applyItemOrder(path, list) : list;
+  }
+
+  // Ordnerpfad eines Objekts innerhalb seiner Zone ("" = direkt in der Zone)
+  function subdirOf(item) {
+    const d = item.path.slice(0, Math.max(0, item.path.lastIndexOf("/")));
+    const z = item.zone || "";
+    if (!z) return d;
+    return d === z ? "" : d.startsWith(z + "/") ? d.slice(z.length + 1) : "";
+  }
+
+  // Liegt das Objekt im Ordner (samt Unterordnern)? "" = lose, direkt in der Zone
+  function inFolder(item, folder) {
+    if (folder == null) return true;
+    const d = subdirOf(item);
+    return folder === "" ? d === "" : d === folder || d.startsWith(folder + "/");
+  }
+
+  // Unterordner der Ebene `base`, in dem das Objekt liegt ("" = direkt auf dieser Ebene)
+  function childFolder(item, base) {
+    const d = subdirOf(item);
+    const pre = base ? base + "/" : "";
+    if (base && !d.startsWith(pre)) return "";
+    const rest = d.slice(pre.length);
+    return rest ? pre + rest.split("/")[0] : "";
+  }
+
+  function parentFolder(folder) {
+    const i = folder ? folder.lastIndexOf("/") : -1;
+    return i > 0 ? folder.slice(0, i) : null;
+  }
+
+  // Ordner einer Ebene mit Anzahl (samt Unterordnern). Oben in der Zone kommen
+  // lose Dateien ("") zuletzt; im Ordner zählen nur seine eigenen Unterordner.
+  function zoneFolders(items, base) {
     const counts = new Map();
-    for (const i of items) counts.set(i.folder || "", (counts.get(i.folder || "") || 0) + 1);
+    for (const i of items) {
+      if (base && !inFolder(i, base)) continue;
+      const f = childFolder(i, base);
+      counts.set(f, (counts.get(f) || 0) + 1);
+    }
     const named = [...counts].filter(([f]) => f).sort((a, b) => a[0].localeCompare(b[0], undefined, { numeric: true }));
-    return counts.has("") ? [...named, ["", counts.get("")]] : named;
+    return counts.has("") && !base ? [...named, ["", counts.get("")]] : named;
   }
 
   // Darstellung einer Zone mit Ordnern: "mosaic" (ein Raster) oder "sections", je Zone gemerkt
@@ -857,19 +994,30 @@
     renderZones();
   }
 
-  // Ordner-Chips unter dem Zonentitel: (All 282) (Typefaces 165) (Loose 3)
+  // Ordner-Chips unter dem Zonentitel: (All 282) (Typefaces 165) (Loose 3).
+  // Im Ordner: (Alle n) für diese Ebene, dahinter nur seine Unterordner.
   function folderChips(zone, folders, total) {
     const wrap = el("span", "p-folder-chips");
-    const pick = (f) => {
-      state.folder = state.folder === f ? null : f;
-      renderZones();
-    };
-    wrap.appendChild(chip("(" + t("folderAll") + " " + total + ")", state.folder == null, () => {
-      state.folder = null;
+    const base = state.folder || null;
+    wrap.appendChild(chip("(" + t("folderAll") + " " + total + ")", state.folder == null || state.folder === base, () => {
+      state.folder = base;
       renderZones();
     }));
-    for (const [f, n] of folders) wrap.appendChild(chip("(" + (f || t("folderLoose")) + " " + n + ")", state.folder === f, () => pick(f)));
+    for (const [f, n] of folders) wrap.appendChild(chip("(" + (f ? lastSegment(f) : t("folderLoose")) + " " + n + ")", state.folder === f, () => openFolder(f)));
     return wrap;
+  }
+
+  // Ordner betreten bzw. eine Ebene zurück (Esc, ⌘↑, Klick im Pfad)
+  function openFolder(f) {
+    state.folder = f;
+    state.folderKbd = null;
+    renderZones();
+  }
+
+  function folderUp() {
+    if (state.folder == null) return false;
+    openFolder(parentFolder(state.folder));
+    return true;
   }
 
   // Ordner als Karten oben in der Zone: Vorschau, Name, Anzahl. Klick filtert wie die Chips.
@@ -879,17 +1027,14 @@
     for (const [f, n] of named) {
       const idx = wrap.children.length;
       const card = el("article", "p-card p-folder-card" + (state.folder === f ? " active" : "") + (state.folderKbd === idx ? " kbd-focus" : ""));
-      card.appendChild(cardCover(applyItemOrder(zone.path, items.filter((i) => i.folder === f))));
+      card.appendChild(cardCover(applyItemOrder(zone.path, items.filter((i) => inFolder(i, f)))));
       const body = el("div", "p-card-body");
       const text = el("div");
-      text.appendChild(el("div", "zone-card-name", f));
+      text.appendChild(el("div", "zone-card-name", lastSegment(f)));
       text.appendChild(el("div", "p-card-meta", n === 1 ? t("countImage") : t("countImages", { n })));
       body.appendChild(text);
       card.appendChild(body);
-      card.addEventListener("click", () => {
-        state.folder = state.folder === f ? null : f;
-        renderZones();
-      });
+      card.addEventListener("click", () => openFolder(f));
       card.dataset.folder = f;
       wrap.appendChild(card);
     }
@@ -948,10 +1093,12 @@
     // Ordner der offenen Zone: Chip filtert, „Sections“ ordnet nach Ordnern
     if (isZone(state.focus) && !words.length && state.lists.has(state.focus)) {
       let list = state.lists.get(state.focus);
-      if (state.folder != null) list = list.filter((i) => (i.folder || "") === state.folder);
+      if (state.folder != null) list = list.filter((i) => inFolder(i, state.folder));
       if (zoneLayout(state.focus) === "sections") {
-        const rank = new Map(zoneFolders(list).map(([f], i) => [f, i]));
-        list = list.map((item, i) => [item, i]).sort((a, b) => rank.get(a[0].folder || "") - rank.get(b[0].folder || "") || a[1] - b[1]).map(([item]) => item);
+        const base = state.folder || null;
+        const rank = new Map(zoneFolders(list, base).map(([f], i) => [f, i]));
+        const at = (item) => rank.get(childFolder(item, base)) ?? rank.size;
+        list = list.map((item, i) => [item, i]).sort((a, b) => at(a[0]) - at(b[0]) || a[1] - b[1]).map(([item]) => item);
       }
       state.lists.set(state.focus, list);
     }
@@ -1182,7 +1329,7 @@
       if (!compact) {
         row.appendChild(el("span", "p-num", recentDate(lastSaved(zone.path))));
         const thumbs = el("span", "p-thumbs");
-        for (const item of zoneItems(zone.path).slice(0, 6)) {
+        for (const item of orderedItems(zone.path).slice(0, 6)) {
           thumbs.appendChild(previewImg(item));
         }
         row.appendChild(thumbs);
@@ -1278,7 +1425,7 @@
     card.dataset.zone = zone.path;
     card.dataset.swap = zone.path;
     card.title = t("keyHint", { n: i + 1 });
-    const items = zoneItems(zone.path);
+    const items = orderedItems(zone.path);
     const cover = el("div", "p-card-cover" + (items.length >= 3 ? " trio" : "") + (items.length ? "" : " empty"));
     for (const item of items.slice(0, items.length >= 3 ? 3 : 1)) cover.appendChild(previewImg(item));
     card.appendChild(cover);
@@ -1424,7 +1571,7 @@
     const panel = el("section", "p-preview");
     if (path == null) return panel;
     panel.dataset.zone = path;
-    const items = zoneItems(path);
+    const items = orderedItems(path);
     const head = el("div", "p-preview-head");
     const title = el("div", "p-preview-title");
     title.appendChild(document.createTextNode(lastSegment(path)));
@@ -1511,12 +1658,12 @@
         const r = other.getBoundingClientRect();
         if (ev.clientX >= r.left && ev.clientX <= r.right && ev.clientY >= r.top && ev.clientY <= r.bottom) {
           target = other;
-          after = ev.clientY > r.top + r.height / 2;
+          // Die gezogene Karte nimmt den Platz des Ziels ein: nach vorn davor, nach hinten dahinter
+          after = order.indexOf(card.dataset.group) < order.indexOf(other.dataset.group);
         }
       }
       for (const other of document.querySelectorAll(".p-cards .p-card[data-group]")) {
-        other.classList.toggle("drop-before", other === target && !after);
-        other.classList.toggle("drop-after", other === target && after);
+        other.classList.toggle("drop-target", other === target);
       }
     };
     const onUp = () => {
@@ -1529,7 +1676,7 @@
       document.body.classList.remove("sorting");
       card.classList.remove("lifted");
       card.style.transform = "";
-      for (const n of document.querySelectorAll(".drop-before, .drop-after")) n.classList.remove("drop-before", "drop-after");
+      for (const n of document.querySelectorAll(".drop-target")) n.classList.remove("drop-target");
       if (!target) return;
       const tops = order.filter((top) => top !== card.dataset.group);
       tops.splice(tops.indexOf(target.dataset.group) + (after ? 1 : 0), 0, card.dataset.group);
@@ -1556,7 +1703,7 @@
   function zoneCardTile(zone) {
     const card = el("article", "p-card");
     card.dataset.zone = zone.path;
-    card.appendChild(cardCover(zoneItems(zone.path)));
+    card.appendChild(cardCover(orderedItems(zone.path)));
     const body = el("div", "p-card-body");
     const text = el("div");
     const name = zoneNameEl(zone);
@@ -2108,6 +2255,33 @@
           })
         )
       );
+      if (isMac) {
+        const value = mono("", "p-alpha-value");
+        const slider = el("input", "p-volume p-alpha");
+        slider.type = "range";
+        slider.min = "0";
+        slider.max = "100";
+        slider.step = "5";
+        const show = (pct) => (value.textContent = pct + " %");
+        const start = Math.round((typeof pref("winAlpha", null) === "number" ? pref("winAlpha", null) : 0.85) * 100);
+        slider.value = String(start);
+        show(start);
+        slider.addEventListener("input", () => {
+          show(slider.value);
+          applyWinAlpha(Number(slider.value) / 100);
+        });
+        slider.addEventListener("change", () => setPref("winAlpha", Number(slider.value) / 100));
+        look.appendChild(blockRow(t("setWinAlpha"), [slider, value]));
+      }
+      look.appendChild(
+        blockRow(
+          t("setReloadAnim"),
+          choice([["plain", t("setReloadPlain")], ["wave", t("setReloadWave")]], pref("reloadAnim", "plain"), (id) => {
+            setPref("reloadAnim", id);
+            if (id === "wave") reloadWave(document.getElementById("zones") || document.body);
+          })
+        )
+      );
       wrap.appendChild(look);
       wrap.appendChild(renderDragSettings());
     }
@@ -2466,13 +2640,15 @@
     const wrap = el("div", "p-page p-gallery");
 
     const all = single && shown[0] ? zoneItems(shown[0].path) : [];
-    const folders = zoneFolders(all);
-    const hasFolders = folders.some(([f]) => f);
+    const hasFolders = zoneFolders(all).some(([f]) => f);
+    // Ebenenweise: im Ordner nur seine eigenen Unterordner
+    const folders = zoneFolders(all, state.folder || null);
+    const here = state.folder ? all.filter((i) => inFolder(i, state.folder)) : all;
     if (single && shown[0]) {
       const zone = shown[0];
       const items = all;
       const latest = lastSaved(zone.path);
-      const named = folders.filter(([f]) => f).length;
+      const named = zoneFolders(all).filter(([f]) => f).length;
       const sentence = items.length
         ? [t("headZone", { count: countText(items.length), date: recentDate(latest) }).replace(/\.\.$/, "."), hasFolders ? t(named === 1 ? "headFolder1" : "headFolders", { n: named }) : "", topDomains(items)].filter(Boolean).join(" ")
         : t("headZoneEmpty");
@@ -2484,20 +2660,27 @@
         title.addEventListener("dblclick", () => startRename(title, zone.path));
       }
       if (hasFolders && state.folder != null) {
-        // Im Unterordner: Pfad „Zone / Ordner“, ein Klick auf die Zone führt zurück
+        // Im Unterordner: Pfad „Zone / Ordner / Unterordner“, jeder Teil führt auf seine Ebene
         const title = h.querySelector(".p-head-title");
-        title.classList.add("p-head-back");
-        title.title = t("folderBack");
-        title.addEventListener("click", () => {
-          state.folder = null;
-          renderZones();
+        const back = (node, target) => {
+          node.classList.add("p-head-back");
+          node.title = t("folderBack");
+          node.addEventListener("click", () => openFolder(target));
+        };
+        back(title, null);
+        const parts = state.folder ? state.folder.split("/") : [""];
+        let after = title;
+        parts.forEach((part, i) => {
+          const span = el("span", "p-head-title p-head-folder", " / " + (part || t("folderLoose")));
+          if (i < parts.length - 1) back(span, parts.slice(0, i + 1).join("/"));
+          after.after(span);
+          after = span;
         });
-        title.after(el("span", "p-head-title p-head-folder", " / " + (state.folder || t("folderLoose"))));
       }
       if (hasFolders) {
         // Kopfzeile am Bildraster: Titel links, Ordner rechts als Karten (3/6) oder Liste (2/6)
         const row = el("div", "p-head-row " + (pref("folderStyle", "cards") === "list" ? "is-list" : "is-cards"));
-        row.append(h, folderCards(zone, folders, all));
+        row.append(h, folderCards(zone, folders, here));
         wrap.appendChild(row);
       } else wrap.appendChild(h);
     } else if (searching) {
@@ -2513,11 +2696,21 @@
     }
 
     const bar = el("div", "p-bar");
-    if (single && shown[0] && hasFolders) bar.appendChild(folderChips(shown[0], folders, all.length));
+    if (single && shown[0] && hasFolders) bar.appendChild(folderChips(shown[0], folders, here.length));
     else if (single && shown[0]) bar.appendChild(mono(t("allLabel") + " (" + shown[0].count + ")", "strong"));
     else if (state.found) bar.appendChild(mono(t("foundLabel") + " (" + state.found.length + ")", "strong"));
     else bar.appendChild(mono(t("allZonesLabel") + " (" + state.zones.length + ")", "strong"));
     bar.appendChild(el("span", "p-flex"));
+    if (single && shown[0]) {
+      const copies = cloudCopies(all);
+      if (copies.length) {
+        const c = chip("(" + t("cloudCopies", { n: copies.length }) + ")", false, () => mergeCloudCopies(copies));
+        c.classList.add("p-cloud-copies");
+        c.title = t("cloudCopiesHint");
+        bar.appendChild(c);
+        bar.appendChild(el("span", "p-filter-gap"));
+      }
+    }
     if (single && shown[0] && hasFolders) {
       for (const l of ["mosaic", "sections"])
         bar.appendChild(chip("(" + t(l === "mosaic" ? "layoutMosaic" : "layoutSections") + ")", zoneLayout(shown[0].path) === l, () => setZoneLayout(shown[0].path, l)));
@@ -2620,13 +2813,14 @@
   function folderSections(zone) {
     const list = state.lists.get(zone.path) || [];
     const wrap = el("div", "p-folder-sections");
-    for (const [folder, n] of zoneFolders(list)) {
-      const part = list.filter((i) => (i.folder || "") === folder);
+    const base = state.folder || null;
+    for (const [folder, n] of zoneFolders(list, base).concat(base && list.some((i) => childFolder(i, base) === "") ? [["", 0]] : [])) {
+      const part = list.filter((i) => childFolder(i, base) === folder);
       const card = el("section", "zone-card p-section p-folder-section");
       card.dataset.zone = zone.path;
       const head = el("h2", "p-head p-folder-head");
-      head.appendChild(el("span", "p-head-title", folder || t("folderLoose")));
-      head.appendChild(el("span", "p-head-text", " " + countText(n)));
+      head.appendChild(el("span", "p-head-title", folder ? lastSegment(folder) : base ? lastSegment(base) : t("folderLoose")));
+      head.appendChild(el("span", "p-head-text", " " + countText(part.length)));
       card.appendChild(head);
       const body = el("div", "zone-card-grid");
       body.tabIndex = -1;
@@ -2665,6 +2859,11 @@
       name.appendChild(document.createTextNode(parts[parts.length - 1]));
     } else {
       name.textContent = lastSegment(zone.path);
+    }
+    if (zoneHasFresh(zone.path)) {
+      const dot = el("span", "p-fresh-dot");
+      dot.title = t("freshHint");
+      name.appendChild(dot);
     }
     return name;
   }
@@ -2869,9 +3068,14 @@
       img.loading = "lazy";
       img.decoding = "async";
       img.alt = "";
+      // Noch nicht geladen: Glasfläche wie die Zonenleiste, beim Laden blendet sie weich aus
+      const done = () => card.classList.remove("loading");
+      img.addEventListener("load", done);
+      img.addEventListener("error", done);
       card.appendChild(img);
       card.appendChild(el("div", "card-badge"));
       card.appendChild(el("div", "card-media"));
+      card.appendChild(el("span", "card-fresh"));
       cardCache.set(item.path, card);
     }
     const label = mediaLabel(item);
@@ -2896,7 +3100,11 @@
       if (sheet) sheet.remove();
       img.hidden = false;
       const src = thumbSrc(item);
-      if (img.getAttribute("src") !== src) img.src = src;
+      if (img.getAttribute("src") !== src) {
+        card.classList.add("loading");
+        img.src = src;
+        if (img.complete && img.naturalWidth) card.classList.remove("loading");
+      }
     }
     // Geteilte Bibliothek: Kürzel der Person, die abgelegt hat, nur bei Objekten anderer
     const by = item.addedBy && item.addedBy !== state.user ? byInitials(item.addedBy) + " · " : "";
@@ -2907,10 +3115,13 @@
     if (state.view === "original" && item.width && item.height) card.style.setProperty("--ar", `${item.width} / ${item.height}`);
     else card.style.removeProperty("--ar");
     card.classList.toggle("selected", state.selection.has(item.path));
+    card.classList.toggle("fresh", isFresh(item));
     return card;
   }
 
   function setFocus(path) {
+    // Zone verlassen: was darin neu von anderen war, gilt als gesehen
+    if (path !== state.focus && isZone(state.focus) && state.shared) markSeen(zoneItems(state.focus));
     if (path !== state.focus) {
       state.folder = null;
       state.folderKbd = null;
@@ -3227,6 +3438,31 @@
     }
   }
 
+  // ---- iCloud-Konfliktkopien („Bild 2.jpg“ neben „Bild.jpg“) ----
+  // Nur inhaltsgleiche Kopien zählen; abweichende bleiben unangetastet.
+  function cloudCopies(items) {
+    const out = [];
+    for (const item of items) {
+      const m = /^(.*) (\d{1,2})(\.[^./]+)?$/.exec(item.path);
+      if (!m) continue;
+      const orig = state.byPath.get(m[1] + (m[3] || ""));
+      if (orig && orig.hash === item.hash) out.push(item);
+    }
+    return out;
+  }
+
+  async function mergeCloudCopies(copies) {
+    if (!copies.length) return;
+    try {
+      const trashed = await invoke("trash_items", { paths: copies.map((i) => i.path) });
+      if (Array.isArray(trashed) && trashed.length) pushUndo(t("undoTrash"), () => invoke("restore_items", { items: trashed }));
+      await refresh();
+      toast(t("cloudMerged", { n: copies.length }));
+    } catch (e) {
+      fail(e);
+    }
+  }
+
   // ---- Zonen anlegen und umbenennen ----
 
   function undoRename(oldPath, newPath) {
@@ -3396,6 +3632,7 @@
   }
 
   function openLightbox(item) {
+    if (item && state.shared) markSeen([item]);
     if (!item) return;
     const zone = state.found && state.found.includes(item) ? FOUND : item.zone;
     const list = lbList({ zone });
@@ -4160,12 +4397,13 @@
 
   function clearDropUi() {
     for (const n of document.querySelectorAll(".drop-active")) n.classList.remove("drop-active");
-    for (const n of document.querySelectorAll(".drop-before, .drop-after")) n.classList.remove("drop-before", "drop-after");
+    for (const n of document.querySelectorAll(".drop-target")) n.classList.remove("drop-target");
   }
 
   // Umsortieren: alle gezogenen Objekte liegen in der gerade offenen Zone,
-  // die Maus steht über einer anderen Karte dieser Zone. Davor oder dahinter
-  // je nach Hälfte (Raster: links/rechts, Original-Ansicht: oben/unten).
+  // die Maus steht über einer anderen Karte dieser Zone. Das Ziel trägt den
+  // Fokus-Ring; die Objekte nehmen seinen Platz ein (nach vorn gezogen davor,
+  // nach hinten gezogen dahinter).
   function reorderTarget(x, y) {
     if (!feat("order") || !isZone(state.focus) || state.query.trim() || filtersActive()) return null;
     if (state.folder != null || zoneLayout(state.focus) === "sections") return null; // nur im vollen Raster
@@ -4175,8 +4413,9 @@
     const hit = document.elementFromPoint(x, y);
     const card = hit && !hit.closest("#dropbar") ? hit.closest("#zones .card") : null;
     if (!card || rels.includes(card.dataset.path)) return null;
-    const r = card.getBoundingClientRect();
-    const after = state.view === "original" ? y > r.top + r.height / 2 : x > r.left + r.width / 2;
+    const list = state.lists.get(state.focus) || [];
+    const at = (path) => list.findIndex((i) => i.path === path);
+    const after = at(rels[0]) < at(card.dataset.path);
     return { card, ref: card.dataset.path, after, moved: rels };
   }
 
@@ -4206,7 +4445,7 @@
       clearDropUi();
       lastTarget = target;
       lastReorder = target && target.dataset.zone !== dragHome ? null : reorderTarget(x, y);
-      if (lastReorder) lastReorder.card.classList.add(lastReorder.after ? "drop-after" : "drop-before");
+      if (lastReorder) lastReorder.card.classList.add("drop-target");
       if (target && target.dataset.zone !== dragHome) target.classList.add("drop-active");
       return;
     }
@@ -5137,8 +5376,26 @@
       return;
     }
 
+    // ⌘↑ wie im Finder: eine Ordnerebene hoch, oben in der Zone zurück zur Übersicht
+    if (e.metaKey && !e.shiftKey && !e.altKey && e.key === "ArrowUp" && !state.page && state.focus != null) {
+      e.preventDefault();
+      if (!(isZone(state.focus) && folderUp())) {
+        const back = state.focus;
+        if (state.zones.some((z) => z.path === back)) {
+          state.homeCursor = back;
+          state.homeKbd = true;
+        }
+        setFocus(null);
+        applyHomeCursor(true);
+      }
+      return;
+    }
+
     if (mod && (e.key === "n" || e.key === "N") && !e.shiftKey) {
       startNewZone();
+    } else if (mod && !e.shiftKey && (e.key === "r" || e.key === "R")) {
+      e.preventDefault();
+      reloadObjects();
     } else if (mod && (e.key === "d" || e.key === "D")) {
       toggleInfo();
     } else if (mod && e.key === ",") {
@@ -5165,7 +5422,9 @@
       else if (state.page === "settings" && state.settingsSub) openSettingsSection(null);
       else if (state.page) closePage();
       else if (state.selection.size) selectOnly(null);
-      else if (state.focus != null) {
+      else if (isZone(state.focus) && folderUp()) {
+        // im Unterordner: eine Ebene zurück
+      } else if (state.focus != null) {
         // zurück zur Startseite, die eben offene Zone ist dort gewählt
         const back = state.focus;
         if (state.zones.some((z) => z.path === back)) {

@@ -1,5 +1,17 @@
 # Changelog
 
+## App 0.24.8 (12.10.2026)
+
+- Eine Fokus-Sprache: Auswahl, Tastaturfokus, Tausch- und Umsortier-Ziel sowie das Ablageziel in der Zonenleiste zeigen denselben gestrichelten Ring. Er folgt der Eckenrundung, „Umlaufend“ gilt überall.
+- Objekte umsortieren: Statt einer Linie über oder unter dem Objekt trägt das Ziel den Ring, die gezogenen Objekte nehmen seinen Platz ein.
+- Ordner ebenenweise: Im Ordner stehen nur seine eigenen Unterordner, der Pfad „Zone / Ordner / Unterordner“ führt auf jede Ebene. Esc und ⌘↑ gehen eine Ebene hoch.
+- ⌘R lädt die Objekte neu. Einstellungen › Aussehen › Neu laden: Sofort oder Welle (diagonal, schnell).
+- Einstellungen › Aussehen › Fensterhintergrund: wie stark die Farbe die macOS-Unschärfe deckt, getrennt von den Zonen.
+- Übersicht (Karten-Cover, Index-Thumbs, Vorschau) folgt der eigenen Reihenfolge einer Zone.
+- Noch nicht geladene Bilder erscheinen als Glasfläche, beim Laden blendet das Glas weich aus.
+- Geteilte Bibliothek: Punkt „neu von anderen“ an Objekten und Zonen bis zum ersten Ansehen. In „Alle Objekte“ Filter „Neu von anderen“ und „Von“ (z. B. JP).
+- iCloud-Konfliktkopien mit gleichem Inhalt („Bild 2.jpg“) werden erkannt; „Doppel zusammenführen“ legt sie in den Papierkorb (rückgängig machbar).
+
 ## App 0.24.7 (12.10.2026)
 
 - Zonenleiste beim Ziehen: Das Glas ist sofort da und blendet mit ein, statt erst nach dem Einblenden scharf zu werden. Die Herkunftszone bleibt Glas und nimmt nur die Schrift zurück.

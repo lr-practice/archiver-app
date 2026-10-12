@@ -1590,24 +1590,6 @@ body.sorting * {
   user-select: none;
 }
 
-/* Ziel beim Umsortieren: die ganze Karte gestrichelt und hervorgehoben */
-.p-card.drop-before,
-.p-card.drop-after {
-  outline: 1.5px dashed var(--ink);
-  outline-offset: 3px;
-  background: rgba(var(--ink-rgb), 0.08);
-}
-
-.p-card.drop-before::after,
-.p-card.drop-after::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  z-index: 2;
-  background: rgba(var(--ink-rgb), 0.14);
-  pointer-events: none;
-}
-
 .p-card-cover {
   height: var(--cover, 170px);
   display: grid;
@@ -4832,46 +4814,6 @@ html[data-nav="tc"] .page-open .p-top {
   box-shadow: 0 0 0 1.5px rgba(0, 0, 0, 0.5);
 }
 
-/* Umsortieren in der Zone: gestrichelte Einfügelinie vor bzw. hinter der Karte */
-.card.drop-before::before,
-.card.drop-after::before {
-  content: "";
-  position: absolute;
-  z-index: 3;
-  top: 0;
-  bottom: 0;
-  width: 0;
-  border-left: 2px dashed var(--accent);
-}
-
-.card.drop-before::before {
-  left: 0;
-}
-
-.card.drop-after::before {
-  right: 0;
-}
-
-.original .card.drop-before::before,
-.original .card.drop-after::before {
-  top: auto;
-  bottom: auto;
-  left: 0;
-  right: 0;
-  width: auto;
-  height: 0;
-  border-left: none;
-  border-top: 2px dashed var(--accent);
-}
-
-.original .card.drop-before::before {
-  top: 0;
-}
-
-.original .card.drop-after::before {
-  bottom: 0;
-}
-
 /* PDF-Ersteller: Notiz unter der Bildunterschrift (wie pdf.rs NOTE_LINES) */
 .pdf-page.with-notes .pdf-cap {
   height: calc(var(--u) * 47);
@@ -5483,46 +5425,6 @@ html[data-topfade="glass"] .p-drag::after {
   outline-offset: 0;
 }
 
-/* Umlaufende Outline (Settings › Auswahl-Outline): Striche wandern langsam im Uhrzeigersinn */
-html[data-focusanim] .card.selected:not(.original .card),
-html[data-focusanim] .p-folder-card.active,
-html[data-focusanim] .p-folder-card.kbd-focus,
-html[data-focusanim] .p-home .p-card.kbd-focus {
-  outline: none;
-  position: relative;
-  overflow: visible;
-}
-html[data-focusanim] .p-folder-card .p-card-cover,
-html[data-focusanim] .p-home .p-card .p-card-cover {
-  border-radius: var(--r-lg) var(--r-lg) 0 0;
-}
-html[data-focusanim] .card.selected:not(.original .card)::after,
-html[data-focusanim] .p-folder-card.active::after,
-html[data-focusanim] .p-folder-card.kbd-focus::after,
-html[data-focusanim] .p-home .p-card.kbd-focus::after {
-  content: "";
-  position: absolute;
-  inset: -3px;
-  pointer-events: none;
-  z-index: 4;
-  --ant: var(--p-text, var(--ink));
-  background:
-    linear-gradient(90deg, var(--ant) 50%, transparent 0) top left / 8px 1px repeat-x,
-    linear-gradient(90deg, var(--ant) 50%, transparent 0) bottom left / 8px 1px repeat-x,
-    linear-gradient(0deg, var(--ant) 50%, transparent 0) top left / 1px 8px repeat-y,
-    linear-gradient(0deg, var(--ant) 50%, transparent 0) top right / 1px 8px repeat-y;
-  animation: p-ants 1.6s linear infinite;
-}
-html[data-focusanim] .card.selected:not(.original .card)::after { inset: -2px; }
-html[data-focusanim] .p-head-row.is-list .p-folder-card::after { inset: 0; }
-@keyframes p-ants {
-  from { background-position: 0 0, 0 100%, 0 0, 100% 0; }
-  to { background-position: 8px 0, -8px 100%, 0 -8px, 100% 8px; }
-}
-@media (prefers-reduced-motion: reduce) {
-  html[data-focusanim] *::after { animation: none !important; }
-}
-
 /* ---- 0.24.6: Einstellungen › Zonen per Ziehen sortieren ---- */
 .p-zone-row {
   cursor: grab;
@@ -5601,4 +5503,222 @@ html.light .p-hot {
 }
 .p-hot.is-home > :not(.p-hot-hint) {
   opacity: calc(0.45 * var(--hot-in));
+}
+
+/* ---- 0.24.8: Eine Fokus-Sprache ----
+   Auswahl, Tastaturfokus, Tauschziel, Umsortier-Ziel und Ablageziel der
+   Active Zones zeigen denselben gestrichelten Ring. Er liegt als ::after
+   über dem Element, folgt der Eckenrundung (Einstellungen › Rundung) und
+   läuft bei „Umlaufend“ langsam im Uhrzeigersinn. Gezeichnet als SVG-Maske,
+   weil outline in älterem WebKit die Rundung nicht kennt und sich nicht
+   animieren lässt. --ring-lg: Karten mit Abstand, --ring-in: Karten bündig,
+   --ring-0: eckige Objekte und Zeilen. */
+:root {
+  --ring-lg: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Crect x='.5' y='.5' rx='11' style='width:calc(100%25 - 1px);height:calc(100%25 - 1px)' fill='none' stroke='black' stroke-dasharray='4 4'/%3E%3C/svg%3E");
+  --ring-in: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Crect x='.5' y='.5' rx='8' style='width:calc(100%25 - 1px);height:calc(100%25 - 1px)' fill='none' stroke='black' stroke-dasharray='4 4'/%3E%3C/svg%3E");
+  --ring-0: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Crect x='.5' y='.5' rx='0' style='width:calc(100%25 - 1px);height:calc(100%25 - 1px)' fill='none' stroke='black' stroke-dasharray='4 4'/%3E%3C/svg%3E");
+}
+:root[data-radius="square"] {
+  --ring-lg: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Crect x='.5' y='.5' rx='0' style='width:calc(100%25 - 1px);height:calc(100%25 - 1px)' fill='none' stroke='black' stroke-dasharray='4 4'/%3E%3C/svg%3E");
+  --ring-in: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Crect x='.5' y='.5' rx='0' style='width:calc(100%25 - 1px);height:calc(100%25 - 1px)' fill='none' stroke='black' stroke-dasharray='4 4'/%3E%3C/svg%3E");
+}
+:root[data-radius="soft"] {
+  --ring-lg: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Crect x='.5' y='.5' rx='7' style='width:calc(100%25 - 1px);height:calc(100%25 - 1px)' fill='none' stroke='black' stroke-dasharray='4 4'/%3E%3C/svg%3E");
+  --ring-in: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Crect x='.5' y='.5' rx='4' style='width:calc(100%25 - 1px);height:calc(100%25 - 1px)' fill='none' stroke='black' stroke-dasharray='4 4'/%3E%3C/svg%3E");
+}
+:root[data-radius="xl"] {
+  --ring-lg: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Crect x='.5' y='.5' rx='17' style='width:calc(100%25 - 1px);height:calc(100%25 - 1px)' fill='none' stroke='black' stroke-dasharray='4 4'/%3E%3C/svg%3E");
+  --ring-in: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Crect x='.5' y='.5' rx='14' style='width:calc(100%25 - 1px);height:calc(100%25 - 1px)' fill='none' stroke='black' stroke-dasharray='4 4'/%3E%3C/svg%3E");
+}
+@media (prefers-reduced-motion: no-preference) {
+  :root[data-focusanim] {
+    --ring-lg: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Cstyle%3Erect{animation:a 1.6s linear infinite}%40keyframes a{to{stroke-dashoffset:-8}}%3C/style%3E%3Crect x='.5' y='.5' rx='11' style='width:calc(100%25 - 1px);height:calc(100%25 - 1px)' fill='none' stroke='black' stroke-dasharray='4 4'/%3E%3C/svg%3E");
+    --ring-in: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Cstyle%3Erect{animation:a 1.6s linear infinite}%40keyframes a{to{stroke-dashoffset:-8}}%3C/style%3E%3Crect x='.5' y='.5' rx='8' style='width:calc(100%25 - 1px);height:calc(100%25 - 1px)' fill='none' stroke='black' stroke-dasharray='4 4'/%3E%3C/svg%3E");
+    --ring-0: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Cstyle%3Erect{animation:a 1.6s linear infinite}%40keyframes a{to{stroke-dashoffset:-8}}%3C/style%3E%3Crect x='.5' y='.5' rx='0' style='width:calc(100%25 - 1px);height:calc(100%25 - 1px)' fill='none' stroke='black' stroke-dasharray='4 4'/%3E%3C/svg%3E");
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  :root[data-focusanim][data-radius="square"] {
+    --ring-lg: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Cstyle%3Erect{animation:a 1.6s linear infinite}%40keyframes a{to{stroke-dashoffset:-8}}%3C/style%3E%3Crect x='.5' y='.5' rx='0' style='width:calc(100%25 - 1px);height:calc(100%25 - 1px)' fill='none' stroke='black' stroke-dasharray='4 4'/%3E%3C/svg%3E");
+    --ring-in: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Cstyle%3Erect{animation:a 1.6s linear infinite}%40keyframes a{to{stroke-dashoffset:-8}}%3C/style%3E%3Crect x='.5' y='.5' rx='0' style='width:calc(100%25 - 1px);height:calc(100%25 - 1px)' fill='none' stroke='black' stroke-dasharray='4 4'/%3E%3C/svg%3E");
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  :root[data-focusanim][data-radius="soft"] {
+    --ring-lg: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Cstyle%3Erect{animation:a 1.6s linear infinite}%40keyframes a{to{stroke-dashoffset:-8}}%3C/style%3E%3Crect x='.5' y='.5' rx='7' style='width:calc(100%25 - 1px);height:calc(100%25 - 1px)' fill='none' stroke='black' stroke-dasharray='4 4'/%3E%3C/svg%3E");
+    --ring-in: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Cstyle%3Erect{animation:a 1.6s linear infinite}%40keyframes a{to{stroke-dashoffset:-8}}%3C/style%3E%3Crect x='.5' y='.5' rx='4' style='width:calc(100%25 - 1px);height:calc(100%25 - 1px)' fill='none' stroke='black' stroke-dasharray='4 4'/%3E%3C/svg%3E");
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  :root[data-focusanim][data-radius="xl"] {
+    --ring-lg: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Cstyle%3Erect{animation:a 1.6s linear infinite}%40keyframes a{to{stroke-dashoffset:-8}}%3C/style%3E%3Crect x='.5' y='.5' rx='17' style='width:calc(100%25 - 1px);height:calc(100%25 - 1px)' fill='none' stroke='black' stroke-dasharray='4 4'/%3E%3C/svg%3E");
+    --ring-in: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Cstyle%3Erect{animation:a 1.6s linear infinite}%40keyframes a{to{stroke-dashoffset:-8}}%3C/style%3E%3Crect x='.5' y='.5' rx='14' style='width:calc(100%25 - 1px);height:calc(100%25 - 1px)' fill='none' stroke='black' stroke-dasharray='4 4'/%3E%3C/svg%3E");
+  }
+}
+
+/* Wer einen Ring trägt */
+.card.selected:not(.original .card),
+.card.drop-target,
+.p-home .kbd-focus,
+.p-card.kbd-focus,
+.p-folder-card.active,
+.p-hot-card.swap-target,
+.p-row.swap-target,
+.p-card.drop-target,
+.p-dropbar .p-hot.drop-active {
+  --ring: var(--ring-lg);
+  --ring-gap: 3px;
+  position: relative;
+  overflow: visible;
+  outline: none !important;
+}
+.card.selected:not(.original .card),
+.card.drop-target {
+  --ring: var(--ring-0);
+  --ring-gap: 2px;
+}
+.p-home .p-row.kbd-focus,
+.p-home .p-card-row.kbd-focus,
+.p-row.swap-target {
+  --ring: var(--ring-0);
+  --ring-gap: -2px;
+}
+.p-head-row.is-list .p-folder-card.kbd-focus,
+.p-head-row.is-list .p-folder-card.active {
+  --ring: var(--ring-in);
+  --ring-gap: 0px;
+}
+.card.selected:not(.original .card)::after,
+.card.drop-target::after,
+.p-home .kbd-focus::after,
+.p-card.kbd-focus::after,
+.p-folder-card.active::after,
+.p-hot-card.swap-target::after,
+.p-row.swap-target::after,
+.p-card.drop-target::after,
+.p-dropbar .p-hot.drop-active::after {
+  content: "";
+  position: absolute;
+  inset: calc(-1 * var(--ring-gap));
+  z-index: 4;
+  pointer-events: none;
+  background: var(--p-text, var(--ink));
+  -webkit-mask: var(--ring) 0 0 / 100% 100% no-repeat;
+  mask: var(--ring) 0 0 / 100% 100% no-repeat;
+  animation: none;
+}
+/* Karten öffnen overflow für den Ring, das Cover behält die Rundung */
+.p-card.kbd-focus .p-card-cover,
+.p-folder-card.active .p-card-cover,
+.p-hot-card.swap-target .p-card-cover,
+.p-card.drop-target .p-card-cover {
+  border-radius: var(--r-lg) var(--r-lg) 0 0;
+  overflow: hidden;
+}
+/* Ziele leicht aufgehellt, ohne Linie über oder unter dem Objekt */
+.p-hot-card.swap-target,
+.p-row.swap-target,
+.p-card.drop-target {
+  background: rgba(var(--ink-rgb), 0.08);
+}
+.card.drop-target img,
+.card.drop-target video,
+.card.drop-target canvas {
+  opacity: 0.6;
+  transition: opacity 0.1s ease;
+}
+.p-dropbar .p-hot.drop-active {
+  outline: none !important;
+}
+
+/* ---- 0.24.8: ⌘R mit Welle (Einstellungen › Aussehen › Neu laden) ---- */
+.p-wave {
+  animation: p-wave 0.3s cubic-bezier(0.2, 0.7, 0.3, 1) both;
+}
+@keyframes p-wave {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+
+/* ---- 0.24.8: Fensterhintergrund (Einstellungen › Aussehen), getrennt von den Zonen ----
+   --bg-solid ist die Grundfarbe je Schema, --win-alpha deckt sie über der macOS-Unschärfe. */
+:root {
+  --bg-solid: #101010;
+}
+html.light {
+  --bg-solid: #d6d6d6;
+}
+html[data-scheme="sage"] {
+  --bg-solid: #2b312e;
+}
+html[data-scheme="sage"].light {
+  --bg-solid: #e9ece9;
+}
+html.mac[data-winalpha] {
+  --bg: color-mix(in srgb, var(--bg-solid) calc(var(--win-alpha, 0.6) * 100%), transparent);
+}
+html.mac[data-winalpha].light,
+html.mac[data-winalpha][data-scheme] {
+  --bg: color-mix(in srgb, var(--bg-solid) calc(var(--win-alpha, 0.6) * 100%), transparent);
+}
+/* html und body malen sonst beide --bg; mit eigenem Wert nur der body, damit der Prozentwert stimmt */
+html.mac[data-winalpha] {
+  background: transparent;
+}
+
+/* ---- 0.24.8: Noch nicht geladene Bilder als Glasfläche ---- */
+.card {
+  transition: background-color 0.45s ease, box-shadow 0.45s ease;
+}
+.card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background: linear-gradient(135deg, rgba(var(--ink-rgb), 0.07), transparent 55%);
+  opacity: 0;
+  transition: opacity 0.45s ease;
+}
+.card.loading {
+  background-color: color-mix(in srgb, var(--menu-bg) calc(var(--zone-alpha, 0.97) * 60%), transparent);
+  box-shadow: inset 0 0 0 1px rgba(var(--ink-rgb), 0.07);
+}
+.card.loading::before {
+  opacity: 1;
+}
+.card img {
+  transition: opacity 0.45s ease, filter 0.18s ease;
+}
+.card.loading img {
+  opacity: 0 !important;
+}
+
+/* ---- 0.24.8: Geteilte Bibliothek, neu von anderen ---- */
+.card-fresh {
+  display: none;
+}
+.card.fresh .card-fresh {
+  display: block;
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 3;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #ffffff;
+  box-shadow: 0 0 0 1.5px rgba(0, 0, 0, 0.35), 0 1px 4px rgba(0, 0, 0, 0.3);
+  pointer-events: none;
+}
+.p-fresh-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-left: 7px;
+  border-radius: 50%;
+  background: var(--p-text);
+  vertical-align: 0.2em;
 }
