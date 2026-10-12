@@ -4,34 +4,6 @@ use objc2::runtime::AnyObject;
 use objc2::{class, msg_send};
 use objc2_foundation::NSString;
 
-// ---- Papierkorb ----
-
-/// Legt eine Datei in den Papierkorb und gibt zurück, wo sie dort liegt
-/// (für ⌘Z). Der Finder benennt bei Namensgleichheit um, darum fragen.
-pub fn trash_with_location(path: &std::path::Path) -> Result<Option<String>, String> {
-    unsafe {
-        let ns_path = NSString::from_str(&path.to_string_lossy());
-        let url: *mut AnyObject = msg_send![class!(NSURL), fileURLWithPath: &*ns_path];
-        let fm: *mut AnyObject = msg_send![class!(NSFileManager), defaultManager];
-        let mut out: *mut AnyObject = std::ptr::null_mut();
-        let out_ptr: *mut *mut AnyObject = &mut out;
-        let no_error: *mut *mut AnyObject = std::ptr::null_mut();
-        let ok: bool = msg_send![fm, trashItemAtURL: url, resultingItemURL: out_ptr, error: no_error];
-        if !ok {
-            return Err(format!("Papierkorb: {}", path.display()));
-        }
-        if out.is_null() {
-            return Ok(None);
-        }
-        let p: *mut AnyObject = msg_send![out, path];
-        if p.is_null() {
-            return Ok(None);
-        }
-        let s: *const std::os::raw::c_char = msg_send![p, UTF8String];
-        Ok(Some(std::ffi::CStr::from_ptr(s).to_string_lossy().into_owned()))
-    }
-}
-
 // ---- Zwischenablage ----
 
 /// Bilddateien als Bilder in die Zwischenablage (TIFF/PNG je nach Ziel-App).

@@ -261,6 +261,9 @@ fn start_analysis_worker(app: AppHandle, lib: Arc<Library>) -> mpsc::Sender<()> 
 fn activate(app: &AppHandle, root: &Path) -> Result<(), String> {
     let lib = Arc::new(Library::open(root)?);
     lib.set_user(load_settings(app).user);
+    // „Zuletzt gelöscht“: was älter als 7 Tage ist, geht in den Papierkorb des Macs
+    let purge = lib.clone();
+    std::thread::spawn(move || purge.purge_deleted(library::DELETED_DAYS));
     let state = app.state::<AppState>();
     *state.watcher.lock().unwrap() = None;
 
@@ -678,6 +681,10 @@ struct Snapshot {
     default_zone: String,
     /// Zonentiefe und übersprungene Ordner
     structure: library::Structure,
+    /// Alle Ordner unterhalb der Zonen, auch leere (0.27)
+    folders: Vec<String>,
+    /// Anzahl unter „Zuletzt gelöscht“
+    deleted: usize,
 }
 
 #[tauri::command]
@@ -710,6 +717,8 @@ async fn snapshot(state: State<'_, AppState>) -> Result<Snapshot, String> {
         user,
         default_zone: lib.default_zone(),
         structure: lib.structure(),
+        folders: lib.folders(),
+        deleted: lib.deleted_count(),
     })
 }
 
@@ -799,8 +808,8 @@ async fn export_moodboard(app: AppHandle, title: String, meta: String, file_name
 }
 
 #[tauri::command]
-async fn move_items(app: AppHandle, state: State<'_, AppState>, paths: Vec<String>, zone: String) -> Result<Vec<String>, String> {
-    let moved = current(&state)?.move_items(&paths, &zone)?;
+async fn move_items(app: AppHandle, state: State<'_, AppState>, paths: Vec<String>, zone: String, exact: Option<bool>) -> Result<Vec<String>, String> {
+    let moved = current(&state)?.move_items_to(&paths, &zone, exact.unwrap_or(false))?;
     let _ = app.emit("library-changed", ());
     Ok(moved)
 }
@@ -808,6 +817,34 @@ async fn move_items(app: AppHandle, state: State<'_, AppState>, paths: Vec<Strin
 #[tauri::command]
 async fn trash_items(app: AppHandle, state: State<'_, AppState>, paths: Vec<String>) -> Result<Vec<(String, String)>, String> {
     let n = current(&state)?.trash_items(&paths)?;
+    let _ = app.emit("library-changed", ());
+    Ok(n)
+}
+
+#[tauri::command]
+async fn create_folder(app: AppHandle, state: State<'_, AppState>, parent: String, name: String) -> Result<String, String> {
+    let f = current(&state)?.create_folder(&parent, &name)?;
+    let _ = app.emit("library-changed", ());
+    Ok(f)
+}
+
+#[tauri::command]
+async fn deleted_items(state: State<'_, AppState>) -> Result<Vec<library::DeletedItem>, String> {
+    let lib = current(&state)?;
+    tauri::async_runtime::spawn_blocking(move || lib.deleted_items()).await.map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+async fn restore_deleted(app: AppHandle, state: State<'_, AppState>, files: Vec<String>) -> Result<usize, String> {
+    let n = current(&state)?.restore_deleted(&files)?;
+    let _ = app.emit("library-changed", ());
+    kick_thumbs(&app);
+    Ok(n)
+}
+
+#[tauri::command]
+async fn remove_deleted(app: AppHandle, state: State<'_, AppState>, files: Vec<String>) -> Result<usize, String> {
+    let n = current(&state)?.remove_deleted(&files)?;
     let _ = app.emit("library-changed", ());
     Ok(n)
 }
@@ -1175,6 +1212,10 @@ pub fn run() {
             trash_items,
             restore_items,
             create_zone,
+            create_folder,
+            deleted_items,
+            restore_deleted,
+            remove_deleted,
             rename_zone,
             set_zone_order,
             set_default_zone,

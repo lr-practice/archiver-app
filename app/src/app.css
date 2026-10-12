@@ -5706,3 +5706,100 @@ html.light .p-dropbar .p-hot {
 .p-head-row > .p-head {
   align-self: start;
 }
+
+/* ---- 0.27: Ordnerkarte als Ablageziel (Ring wie 4.1) ---- */
+.p-folder-card.drop-active {
+  --ring: var(--ring-lg);
+  --ring-gap: 3px;
+  position: relative;
+  overflow: visible;
+}
+.p-head-row.is-list .p-folder-card.drop-active {
+  --ring: var(--ring-in);
+  --ring-gap: 0px;
+}
+.p-folder-card.drop-active::after {
+  content: "";
+  position: absolute;
+  inset: calc(-1 * var(--ring-gap));
+  z-index: 4;
+  pointer-events: none;
+  background: var(--p-text, var(--ink));
+  -webkit-mask: var(--ring) 0 0 / 100% 100% no-repeat;
+  mask: var(--ring) 0 0 / 100% 100% no-repeat;
+}
+
+/* ---- 0.27: Zuletzt gelöscht ---- */
+.p-del-box {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.p-del {
+  position: relative;
+  aspect-ratio: 1;
+  overflow: hidden;
+  background: var(--thumb-bg);
+  cursor: default;
+}
+.p-del > img,
+.p-del > .text-sheet {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0.72;
+  transition: opacity 0.12s ease;
+}
+.p-del:hover > img,
+.p-del.sel > img {
+  opacity: 1;
+}
+.p-del.sel {
+  --ring: var(--ring-0);
+  --ring-gap: 2px;
+  overflow: visible;
+}
+.p-del.sel::after {
+  content: "";
+  position: absolute;
+  inset: calc(-1 * var(--ring-gap));
+  z-index: 4;
+  pointer-events: none;
+  background: var(--p-text, var(--ink));
+  -webkit-mask: var(--ring) 0 0 / 100% 100% no-repeat;
+  mask: var(--ring) 0 0 / 100% 100% no-repeat;
+}
+.p-del-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 6px;
+  font-family: "Geist Mono", ui-monospace, monospace;
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--p-faint);
+  white-space: nowrap;
+  overflow: hidden;
+}
+.p-del-meta > span:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.p-chip.danger:hover {
+  color: var(--danger);
+}
+.p-deleted-row {
+  cursor: pointer;
+  color: var(--p-dim);
+}
+.p-deleted-row .zone-card-name {
+  color: var(--p-dim);
+}
+.p-deleted-row:hover .zone-card-name {
+  color: var(--p-text);
+}
+@media (prefers-reduced-motion: reduce) {
+  .p-del > img { transition: none; }
+}

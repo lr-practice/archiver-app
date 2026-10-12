@@ -146,6 +146,7 @@
 
   const SIZES = [72, 96, 120, 160, 220, 300];
   const ALL = "\u0000all";
+  const DELETED = "\u0000deleted"; // „Zuletzt gelöscht“ (0.27)
   const isZone = (f) => f != null && !String(f).startsWith("\u0000");
   // Startseite: Vorschaubilder im Index, Spalten im Mosaik, Titelbild der Karten
   const HOME_SIZES = [
@@ -428,6 +429,9 @@
     state.defaultZone = snap.defaultZone || "Unsorted";
     state.structure = snap.structure || { depth: 2, skip: [], subzones: false };
     state.user = snap.user || "";
+    state.folders = snap.folders || [];
+    state.deletedCount = snap.deleted || 0;
+    if (state.focus === DELETED) state.deletedItems = await invoke("deleted_items").catch(() => []);
     if (isZone(state.focus) && !state.zones.some((z) => z.path === state.focus)) state.focus = null;
     for (const p of [...state.selection]) if (!state.byPath.has(p)) state.selection.delete(p);
     // Offenes Menü nicht unter der Maus wegzeichnen (z. B. während „Wirklich löschen?“)
@@ -841,6 +845,10 @@
         if (!last && !exists) b.classList.add("dim");
         btns.push(b);
       });
+    } else if (state.focus === DELETED && !state.query.trim()) {
+      btns.push(navButton(t("navAll"), false, () => setFocus(ALL)));
+      btns.push(el("span", "p-nav-sep", "›"));
+      btns.push(navButton(t("deletedTitle"), true));
     } else {
       btns.push(navButton(t("navAll"), state.focus === ALL || !!state.query.trim(), () => setFocus(ALL)));
     }
@@ -974,12 +982,21 @@
 
   // Ordner einer Ebene mit Anzahl (samt Unterordnern). Oben in der Zone kommen
   // lose Dateien ("") zuletzt; im Ordner zählen nur seine eigenen Unterordner.
-  function zoneFolders(items, base) {
+  function zoneFolders(items, base, zone) {
     const counts = new Map();
     for (const i of items) {
       if (base && !inFolder(i, base)) continue;
       const f = childFolder(i, base);
       counts.set(f, (counts.get(f) || 0) + 1);
+    }
+    // 0.27: auch leere Ordner (gerade angelegt) zeigen
+    if (zone != null) {
+      const pre = (zone ? zone + "/" : "") + (base ? base + "/" : "");
+      for (const d of state.folders || []) {
+        if (!d.startsWith(pre)) continue;
+        const f = (base ? base + "/" : "") + d.slice(pre.length).split("/")[0];
+        if (!counts.has(f)) counts.set(f, 0);
+      }
     }
     const named = [...counts].filter(([f]) => f).sort((a, b) => a[0].localeCompare(b[0], undefined, { numeric: true }));
     return counts.has("") && !base ? [...named, ["", counts.get("")]] : named;
@@ -1018,6 +1035,60 @@
     renderZones();
   }
 
+  // Neuer Unterordner auf der aktuellen Ebene, auf Wunsch mit der Auswahl darin.
+  // Er heißt erst „Neuer Ordner“ und lässt sich gleich umbenennen (wie im Finder).
+  async function newFolder(withSelection) {
+    if (!isZone(state.focus)) return;
+    const parent = state.focus + (state.level ? "/" + state.level : "");
+    const items = withSelection ? selectedItems() : [];
+    try {
+      const rel = await invoke("create_folder", { parent, name: t("newFolderName") });
+      if (items.length) await invoke("move_items", { paths: items.map((i) => i.path), zone: rel, exact: true });
+      await refresh();
+      renameFolder(rel);
+    } catch (e) {
+      fail(e);
+    }
+  }
+
+  function renameFolder(rel) {
+    const card = [...document.querySelectorAll(".p-folder-card")].find((c) => c.dataset.zone === rel);
+    const name = card && card.querySelector(".zone-card-name");
+    if (!name) return;
+    inlineInput(
+      name,
+      lastSegment(rel),
+      async (value) => {
+        try {
+          const next = await invoke("rename_zone", { zone: rel, name: value });
+          const inZone = (p) => p.slice(state.focus.length + 1);
+          for (const key of ["level", "folder"]) if (state[key] === inZone(rel)) state[key] = inZone(next);
+          await refresh();
+        } catch (e) {
+          fail(e);
+          renderZones();
+        }
+      },
+      renderZones
+    );
+  }
+
+  function openZoneBackgroundMenu(x, y) {
+    closeMenus();
+    closeMoreMenu();
+    const menu = el("div", "zone-menu p-ctx-menu");
+    menu.addEventListener("click", (e) => e.stopPropagation());
+    menu.addEventListener("contextmenu", (e) => e.preventDefault());
+    menu.appendChild(button("zone-menu-item", t("newFolder"), () => {
+      closeMenus();
+      newFolder(false);
+    }));
+    document.body.appendChild(menu);
+    const r = menu.getBoundingClientRect();
+    menu.style.left = Math.max(8, Math.min(x, window.innerWidth - r.width - 8)) + "px";
+    menu.style.top = Math.max(8, Math.min(y, window.innerHeight - r.height - 8)) + "px";
+  }
+
   function folderUp() {
     // Erst den Chip-Filter lösen, dann eine Ebene hoch
     if (state.folder != null && state.folder !== state.level) {
@@ -1046,6 +1117,7 @@
       card.appendChild(body);
       card.addEventListener("click", () => openFolder(f));
       card.dataset.folder = f;
+      card.dataset.zone = zone.path + "/" + f; // Ablageziel beim Ziehen (0.27)
       wrap.appendChild(card);
     }
     return wrap;
@@ -1123,7 +1195,7 @@
     const scroll = key === lastViewKey ? grid.scrollTop : 0;
     lastViewKey = key;
 
-    grid.replaceChildren(home ? renderHome() : renderGallery(words.length > 0 || filtering));
+    grid.replaceChildren(home ? renderHome() : state.focus === DELETED && !words.length && !filtering ? renderDeleted() : renderGallery(words.length > 0 || filtering));
     if (home) applyHomeCursor(false);
     layoutMasonry(true);
     grid.scrollTop = scroll;
@@ -1383,6 +1455,18 @@
     add.appendChild(el("span"));
     add.addEventListener("click", startNewZone);
     list.appendChild(add);
+    // Zuletzt gelöscht: letzte Zeile, nur wenn etwas darin liegt
+    if (!compact && state.deletedCount) {
+      const del = el("div", "p-row p-deleted-row");
+      del.appendChild(mono("", "dim"));
+      del.appendChild(el("span", "zone-card-name", t("deletedTitle")));
+      del.appendChild(el("span", "p-num", String(state.deletedCount)));
+      del.appendChild(el("span", "p-num", t("deletedRow", { days: DELETED_DAYS })));
+      del.appendChild(el("span", "p-thumbs"));
+      del.appendChild(el("span"));
+      del.addEventListener("click", openDeleted);
+      list.appendChild(del);
+    }
     return list;
   }
 
@@ -2682,15 +2766,16 @@
     const wrap = el("div", "p-page p-gallery");
 
     const all = single && shown[0] ? zoneItems(shown[0].path) : [];
-    const hasFolders = zoneFolders(all).some(([f]) => f);
+    const zonePath = single && shown[0] ? shown[0].path : null;
+    const hasFolders = zoneFolders(all, null, zonePath).some(([f]) => f);
     // Ebenenweise: im Ordner nur seine eigenen Unterordner
-    const folders = zoneFolders(all, state.level || null);
+    const folders = zoneFolders(all, state.level || null, zonePath);
     const here = state.level ? all.filter((i) => inFolder(i, state.level)) : all;
     if (single && shown[0]) {
       const zone = shown[0];
       const items = all;
       const latest = lastSaved(zone.path);
-      const named = zoneFolders(all).filter(([f]) => f).length;
+      const named = zoneFolders(all, null, zone.path).filter(([f]) => f).length;
       const sentence = items.length
         ? [t("headZone", { count: countText(items.length), date: recentDate(latest) }).replace(/\.\.$/, "."), hasFolders ? t(named === 1 ? "headFolder1" : "headFolders", { n: named }) : "", topDomains(items)].filter(Boolean).join(" ")
         : t("headZoneEmpty");
@@ -3415,8 +3500,10 @@
     }
   }
 
+  const dirOf = (p) => p.slice(0, Math.max(0, p.lastIndexOf("/")));
+
   async function moveSelection(zone) {
-    const items = selectedItems().filter((i) => i.zone !== zone);
+    const items = selectedItems().filter((i) => i.zone !== zone && dirOf(i.path) !== zone);
     if (!items.length) return;
     const pos = rememberPosition(items);
     try {
@@ -3426,7 +3513,7 @@
         const back = items.map((i, k) => [moved[k], i.path.includes("/") ? i.path.slice(0, i.path.lastIndexOf("/")) : i.zone]);
         pushUndo(t("undoMove"), async () => {
           for (const z of new Set(back.map(([, z]) => z))) {
-            await invoke("move_items", { paths: back.filter(([, b]) => b === z).map(([p]) => p), zone: z });
+            await invoke("move_items", { paths: back.filter(([, b]) => b === z).map(([p]) => p), zone: z, exact: true });
           }
         });
       }
@@ -4509,7 +4596,20 @@
       landOn(target && dragPaths.length && target.dataset.zone !== dragHome ? target : null);
       const paths = dragPaths;
       dragPaths = [];
-      if (!target || !paths.length) return;
+      if (!paths.length) return;
+      if (!target) {
+        // 0.27: Ordner (und Dateien) von außen ohne Ziel: Ordner werden zu Zonen,
+        // lose Dateien landen in der Standard-Zone
+        const outside = paths.filter((path) => !insideLibrary(path));
+        if (outside.length && state.focus !== DELETED)
+          invoke("import_files", { paths: outside, zone: "" })
+            .then((r) => {
+              toast(t("importDone", { imported: r.imported, duplicates: r.duplicates, sources: r.withSource }));
+              return refresh();
+            })
+            .catch(fail);
+        return;
+      }
       const zone = target.dataset.zone;
       // Aus der Lightbox auf eine ihrer Zonen: wie ein Klick auf die Zone
       const lbItem = state.lightbox && target.classList.contains("lb-chip") ? lightboxItem() : null;
@@ -4518,7 +4618,7 @@
       const foreign = paths.filter((path) => !insideLibrary(path));
       const toMove = own.filter((rel) => {
         const item = state.byPath.get(rel);
-        return item && item.zone !== zone;
+        return item && item.zone !== zone && dirOf(rel) !== zone;
       });
       if (toMove.length) {
         state.selection = new Set(toMove);
@@ -5163,6 +5263,7 @@
     });
     menu.appendChild(grid);
     rule();
+    if (isZone(state.focus) && !state.query.trim() && canEdit(state.focus)) entry(menu, t("newFolderWith"), () => newFolder(true));
     entry(menu, t("ctxCopy"), () => copyImages(items), "⌘C");
     if (one) entry(menu, t("reveal"), () => invoke("reveal", { path: one.abs }).catch(fail));
     entry(menu, t("pdfExport"), exportPdf, "⌘P");
@@ -5172,6 +5273,120 @@
     const r = menu.getBoundingClientRect();
     menu.style.left = Math.max(8, Math.min(x, window.innerWidth - r.width - 8)) + "px";
     menu.style.top = Math.max(8, Math.min(y, window.innerHeight - r.height - 8)) + "px";
+  }
+
+  // ---- Zuletzt gelöscht (0.27) ----
+  // Gelöschtes liegt 7 Tage unter .archiver/deleted in der Bibliothek, dann geht
+  // es in den Papierkorb des Macs. Hier lässt es sich zurückholen.
+
+  const DELETED_DAYS = 7;
+
+  async function openDeleted() {
+    state.deletedItems = await invoke("deleted_items").catch(() => []);
+    state.delSel = new Set();
+    setFocus(DELETED);
+  }
+
+  function daysLeft(item) {
+    return Math.max(1, Math.ceil(DELETED_DAYS - (Date.now() - item.deletedAt) / 86400000));
+  }
+
+  function renderDeleted() {
+    const list = state.deletedItems || [];
+    const sel = state.delSel || (state.delSel = new Set());
+    for (const k of [...sel]) if (!list.some((i) => i.abs === k)) sel.delete(k);
+    const wrap = el("div", "p-page p-gallery p-deleted");
+    wrap.appendChild(headline(t("deletedTitle"), list.length ? t("deletedText", { count: countText(list.length), days: DELETED_DAYS }) : t("deletedEmpty")));
+    const bar = el("div", "p-bar");
+    bar.appendChild(mono((sel.size ? t("ctxSelected", { n: sel.size }) : t("allLabel")) + " (" + (sel.size || list.length) + ")", "strong"));
+    bar.appendChild(el("span", "p-flex"));
+    const targets = () => (sel.size ? [...sel] : list.map((i) => i.abs));
+    if (list.length) {
+      bar.appendChild(chip("(" + t(sel.size ? "deletedRestore" : "deletedRestoreAll") + ")", false, () => restoreDeleted(targets())));
+      bar.appendChild(el("span", "p-filter-gap"));
+      const rm = chip("(" + t(sel.size ? "deletedRemove" : "deletedRemoveAll") + ")", false, () => removeDeleted(targets()));
+      rm.classList.add("danger");
+      bar.appendChild(rm);
+    }
+    wrap.appendChild(bar);
+    const section = el("section", "zone-card p-section");
+    const body = el("div", "zone-card-grid");
+    const items = el("div", "zone-card-items");
+    for (const item of list) {
+      const tile = el("div", "p-del" + (sel.has(item.abs) ? " sel" : ""));
+      tile.appendChild(previewImg(item));
+      const meta = el("div", "p-del-meta");
+      meta.append(el("span", null, zoneLabel(item.zone)), el("span", null, t("deletedDays", { n: daysLeft(item) })));
+      tile.title = item.path;
+      const box = el("div", "p-del-box");
+      box.append(tile, meta);
+      tile.addEventListener("click", (e) => {
+        if (!(e.metaKey || e.shiftKey)) sel.clear();
+        if (sel.has(item.abs) && (e.metaKey || e.shiftKey)) sel.delete(item.abs);
+        else sel.add(item.abs);
+        renderZones();
+      });
+      tile.addEventListener("dblclick", () => restoreDeleted([item.abs]));
+      tile.addEventListener("contextmenu", (e) => {
+        e.preventDefault();
+        if (!sel.has(item.abs)) {
+          sel.clear();
+          sel.add(item.abs);
+          renderZones();
+        }
+        openDeletedMenu(e.clientX, e.clientY);
+      });
+      items.appendChild(box);
+    }
+    body.appendChild(items);
+    section.appendChild(body);
+    wrap.appendChild(section);
+    return wrap;
+  }
+
+  function openDeletedMenu(x, y) {
+    closeMenus();
+    closeMoreMenu();
+    const files = [...(state.delSel || [])];
+    const menu = el("div", "zone-menu p-ctx-menu");
+    menu.addEventListener("click", (e) => e.stopPropagation());
+    menu.addEventListener("contextmenu", (e) => e.preventDefault());
+    const entry = (text, fn, cls = "") =>
+      menu.appendChild(button("zone-menu-item" + cls, text, () => {
+        closeMenus();
+        fn();
+      }));
+    entry(t("deletedRestore"), () => restoreDeleted(files));
+    menu.appendChild(el("div", "p-more-rule"));
+    entry(t("deletedRemove"), () => removeDeleted(files), " danger");
+    document.body.appendChild(menu);
+    const r = menu.getBoundingClientRect();
+    menu.style.left = Math.max(8, Math.min(x, window.innerWidth - r.width - 8)) + "px";
+    menu.style.top = Math.max(8, Math.min(y, window.innerHeight - r.height - 8)) + "px";
+  }
+
+  async function restoreDeleted(files) {
+    if (!files.length) return;
+    try {
+      const n = await invoke("restore_deleted", { files });
+      state.delSel = new Set();
+      await refresh();
+      toast(t("deletedRestored", { n }));
+    } catch (e) {
+      fail(e);
+    }
+  }
+
+  async function removeDeleted(files) {
+    if (!files.length) return;
+    try {
+      const n = await invoke("remove_deleted", { files });
+      state.delSel = new Set();
+      await refresh();
+      toast(t("deletedRemoved", { n }));
+    } catch (e) {
+      fail(e);
+    }
   }
 
   // ---- Menü ⋯ in der Navigation ----
@@ -5211,6 +5426,7 @@
     item("+ " + t("newZone"), startNewZone, false, "⌘N");
     item(t("infoPanel"), toggleInfo, state.infoOpen, "⌘D");
     item(t("pdfExport"), exportPdf, false, "⌘P");
+    item(t("deletedTitle") + (state.deletedCount ? " · " + state.deletedCount : ""), openDeleted, state.focus === DELETED);
     menu.appendChild(el("div", "p-more-rule"));
     (state.libraries || []).forEach((slot, i) => {
       if (slot.path) item(libraryName(slot, i), () => switchLibrary(i), slot.active, "⌘" + (i + 1));
@@ -5283,7 +5499,15 @@
         return;
       }
       const card = e.target.closest(".card");
-      if (!card) return;
+      if (!card) {
+        if (state.focus === DELETED) return;
+        // In einer Zone: Rechtsklick in den Hintergrund legt einen Unterordner an
+        if (isZone(state.focus) && !state.query.trim() && canEdit(state.focus)) {
+          e.preventDefault();
+          openZoneBackgroundMenu(e.clientX, e.clientY);
+        }
+        return;
+      }
       e.preventDefault();
       openItemMenu(card.dataset.path, e.clientX, e.clientY);
     });
