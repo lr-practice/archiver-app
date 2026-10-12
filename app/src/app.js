@@ -2106,6 +2106,47 @@
     return lang === "de" ? "Deutsch" : "English";
   }
 
+  // Am ganzen Mac (system.rs): Kürzel der Palette und Zonenleiste beim Ziehen.
+  // Feste Auswahl statt Tastenrekorder; ⌥⌘ Space ist die Finder-Suche.
+  const PALETTE_KEYS = [
+    ["Alt+Space", "⌥ Space"],
+    ["Control+Alt+Space", "⌃⌥ Space"],
+    ["Shift+Alt+Space", "⇧⌥ Space"],
+    ["", null],
+  ];
+  function renderSystemSettings() {
+    const sys = block(t("setSystem"));
+    sys.appendChild(blockRow(el("div", "p-block-text", t("setSystemText"))));
+    const rows = el("div");
+    const show = (prefs) => {
+      const save = (next) =>
+        invoke("set_system_prefs", { prefs: next })
+          .then(() => show(next))
+          .catch((e) => {
+            const key = PALETTE_KEYS.find(([id]) => id === next.shortcut);
+            if (String(e) === "shortcut-taken") toast(t("setKeyTaken", { key: key ? key[1] : next.shortcut }), false, 6000);
+            else fail(e);
+          });
+      rows.replaceChildren(
+        blockRow(
+          t("setPaletteKey"),
+          choice(
+            PALETTE_KEYS.map(([id, label]) => [id || "off", label || t("setOff")]),
+            prefs.shortcut || "off",
+            (id) => save({ ...prefs, shortcut: id === "off" ? "" : id })
+          )
+        ),
+        blockRow(
+          t("setDropbarSys"),
+          choice([["on", t("setOn")], ["off", t("setOff")]], prefs.dropbar ? "on" : "off", (id) => save({ ...prefs, dropbar: id === "on" }))
+        )
+      );
+    };
+    invoke("system_prefs").then(show).catch(fail);
+    sys.appendChild(rows);
+    return sys;
+  }
+
   function openSettingsSection(id) {
     previewDropbar(false);
     state.settingsSub = id;
@@ -2337,6 +2378,7 @@
         viewerBlock.appendChild(rows);
         wrap.appendChild(viewerBlock);
       }
+      if (isMac) wrap.appendChild(renderSystemSettings());
     }
 
     if (sub === "studio") renderStudioSettings(wrap, rerender);

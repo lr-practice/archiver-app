@@ -377,3 +377,196 @@ pub fn audio_artwork(path: &std::path::Path) -> Option<Vec<u8>> {
         None
     })
 }
+
+// ---- Schwebende Fenster am ganzen Mac (system.rs) ----
+// Palette und Zonenleiste werden zu NSPanel ohne Aktivierung: Sie erscheinen
+// über jedem Programm, auch im Vollbild, ohne dass Archiver nach vorne kommt.
+
+use objc2::runtime::{AnyClass, Bool, ClassBuilder, Sel};
+use objc2::sel;
+use objc2_foundation::{NSPoint, NSRect, NSSize};
+
+extern "C-unwind" fn panel_yes(_this: &AnyObject, _cmd: Sel) -> Bool {
+    Bool::YES
+}
+
+extern "C-unwind" fn panel_no(_this: &AnyObject, _cmd: Sel) -> Bool {
+    Bool::NO
+}
+
+/// NSPanel-Unterklasse, die ohne Titelleiste Tastatureingaben annimmt.
+fn panel_class() -> &'static AnyClass {
+    static CLASS: std::sync::OnceLock<&'static AnyClass> = std::sync::OnceLock::new();
+    CLASS.get_or_init(|| {
+        if let Some(cls) = AnyClass::get(c"ArchiverPanel") {
+            return cls;
+        }
+        let mut builder = ClassBuilder::new(c"ArchiverPanel", class!(NSPanel)).expect("ArchiverPanel");
+        unsafe {
+            builder.add_method(sel!(canBecomeKeyWindow), panel_yes as extern "C-unwind" fn(_, _) -> _);
+            builder.add_method(sel!(canBecomeMainWindow), panel_no as extern "C-unwind" fn(_, _) -> _);
+        }
+        builder.register()
+    })
+}
+
+/// Macht aus einem Tauri-Fenster ein schwebendes Panel auf `level`
+/// (3 = schwebend, 25 = Statusebene).
+pub unsafe fn make_panel(window: *mut AnyObject, level: isize) {
+    if window.is_null() {
+        return;
+    }
+    objc2::ffi::object_setClass(window, panel_class());
+    // NSWindowStyleMaskNonactivatingPanel
+    let mask: usize = msg_send![window, styleMask];
+    let _: () = msg_send![window, setStyleMask: mask | (1 << 7)];
+    let _: () = msg_send![window, setLevel: level];
+    // auf allen Spaces (1), neben Vollbild-Programmen (1 << 8), nicht im ⌘`-Wechsel (1 << 6)
+    let _: () = msg_send![window, setCollectionBehavior: (1usize) | (1 << 8) | (1 << 6)];
+    let _: () = msg_send![window, setFloatingPanel: true];
+    let _: () = msg_send![window, setHidesOnDeactivate: false];
+}
+
+pub unsafe fn panel_visible(window: *mut AnyObject) -> bool {
+    !window.is_null() && msg_send![window, isVisible]
+}
+
+/// Einblenden ohne Archiver zu aktivieren; `key`: nimmt Tastatureingaben an.
+pub unsafe fn panel_show(window: *mut AnyObject, key: bool) {
+    if window.is_null() {
+        return;
+    }
+    let _: () = msg_send![window, setAlphaValue: 1.0f64];
+    let _: () = msg_send![window, setIgnoresMouseEvents: false];
+    if key {
+        let none: *mut AnyObject = std::ptr::null_mut();
+        let _: () = msg_send![window, makeKeyAndOrderFront: none];
+        // Tastatur direkt ins Suchfeld: die Webansicht wird Ersthelfer
+        let content: *mut AnyObject = msg_send![window, contentView];
+        let web = find_webview(content);
+        if !web.is_null() {
+            let _: bool = msg_send![window, makeFirstResponder: web];
+        }
+    } else {
+        let _: () = msg_send![window, orderFrontRegardless];
+    }
+}
+
+/// Sucht die WKWebView unter einer Ansicht (Tiefensuche).
+unsafe fn find_webview(view: *mut AnyObject) -> *mut AnyObject {
+    if view.is_null() {
+        return view;
+    }
+    let is_web: bool = msg_send![view, isKindOfClass: class!(WKWebView)];
+    if is_web {
+        return view;
+    }
+    let subs: *mut AnyObject = msg_send![view, subviews];
+    let n: usize = if subs.is_null() { 0 } else { msg_send![subs, count] };
+    for i in 0..n {
+        let sub: *mut AnyObject = msg_send![subs, objectAtIndex: i];
+        let found = find_webview(sub);
+        if !found.is_null() {
+            return found;
+        }
+    }
+    std::ptr::null_mut()
+}
+
+pub unsafe fn panel_hide(window: *mut AnyObject) {
+    if !window.is_null() {
+        let none: *mut AnyObject = std::ptr::null_mut();
+        let _: () = msg_send![window, orderOut: none];
+    }
+}
+
+/// Beim Herausziehen: fast unsichtbar und durchklickbar.
+pub unsafe fn panel_ghost(window: *mut AnyObject, on: bool) {
+    if window.is_null() {
+        return;
+    }
+    let _: () = msg_send![window, setAlphaValue: if on { 0.06f64 } else { 1.0f64 }];
+    let _: () = msg_send![window, setIgnoresMouseEvents: on];
+}
+
+/// Sichtbarer Bereich (ohne Menüleiste und Dock) des Bildschirms mit dem Zeiger.
+unsafe fn mouse_screen_frame() -> Option<NSRect> {
+    let mouse: NSPoint = msg_send![class!(NSEvent), mouseLocation];
+    let screens: *mut AnyObject = msg_send![class!(NSScreen), screens];
+    if screens.is_null() {
+        return None;
+    }
+    let n: usize = msg_send![screens, count];
+    let mut fallback = None;
+    for i in 0..n {
+        let screen: *mut AnyObject = msg_send![screens, objectAtIndex: i];
+        let frame: NSRect = msg_send![screen, frame];
+        let visible: NSRect = msg_send![screen, visibleFrame];
+        if fallback.is_none() {
+            fallback = Some(visible);
+        }
+        let inside = mouse.x >= frame.origin.x
+            && mouse.x <= frame.origin.x + frame.size.width
+            && mouse.y >= frame.origin.y
+            && mouse.y <= frame.origin.y + frame.size.height;
+        if inside {
+            return Some(visible);
+        }
+    }
+    fallback
+}
+
+/// Palette mittig, etwas über der Mitte, auf dem Bildschirm mit dem Zeiger.
+pub unsafe fn panel_center_on_mouse_screen(window: *mut AnyObject) {
+    let Some(vf) = mouse_screen_frame() else { return };
+    let frame: NSRect = msg_send![window, frame];
+    let x = vf.origin.x + ((vf.size.width - frame.size.width) / 2.0).round();
+    // Oberkante bei etwa einem Sechstel der Höhe von oben, wie Spotlight
+    let top = vf.origin.y + vf.size.height - (vf.size.height / 6.0).round();
+    let y = (top - frame.size.height).max(vf.origin.y);
+    let rect = NSRect::new(NSPoint::new(x, y), frame.size);
+    let _: () = msg_send![window, setFrame: rect, display: false];
+}
+
+/// Zonenleiste: volle Breite unten auf dem Bildschirm mit dem Zeiger.
+pub unsafe fn panel_bottom_of_mouse_screen(window: *mut AnyObject, height: f64) {
+    let Some(vf) = mouse_screen_frame() else { return };
+    let rect = NSRect::new(vf.origin, NSSize::new(vf.size.width, height.min(vf.size.height)));
+    let _: () = msg_send![window, setFrame: rect, display: true];
+}
+
+/// Linke Maustaste gedrückt? Und der Zähler der Drag-Zwischenablage.
+pub fn drag_probe() -> (bool, isize) {
+    objc2::rc::autoreleasepool(|_| unsafe {
+        let buttons: usize = msg_send![class!(NSEvent), pressedMouseButtons];
+        let name = NSString::from_str("Apple CFPasteboard drag");
+        let board: *mut AnyObject = msg_send![class!(NSPasteboard), pasteboardWithName: &*name];
+        let count: isize = if board.is_null() { 0 } else { msg_send![board, changeCount] };
+        (buttons & 1 == 1, count)
+    })
+}
+
+/// Werden gerade Dateien gezogen (nicht nur Text oder ein Link)?
+pub fn drag_has_files() -> bool {
+    objc2::rc::autoreleasepool(|_| unsafe {
+        let name = NSString::from_str("Apple CFPasteboard drag");
+        let board: *mut AnyObject = msg_send![class!(NSPasteboard), pasteboardWithName: &*name];
+        if board.is_null() {
+            return false;
+        }
+        let types: *mut AnyObject = msg_send![board, types];
+        if types.is_null() {
+            return false;
+        }
+        let file = NSString::from_str("public.file-url");
+        msg_send![types, containsObject: &*file]
+    })
+}
+
+/// Ist Archiver gerade das aktive Programm?
+pub fn app_active() -> bool {
+    unsafe {
+        let me: *mut AnyObject = msg_send![class!(NSRunningApplication), currentApplication];
+        !me.is_null() && msg_send![me, isActive]
+    }
+}

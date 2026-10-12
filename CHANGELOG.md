@@ -1,5 +1,13 @@
 # Changelog
 
+## App 0.26.0 (12.10.2026)
+
+Archiver am ganzen Mac, auch wenn das Fenster zu ist:
+- Palette per ⌥ Space in jedem Programm: Active Zones als Karten wie in der App, Suche über Zonen und Objekte, Zone mit 1–4 wechseln. Objekte zieht man direkt heraus, etwa in einen InDesign-Rahmen; dabei wird die Palette fast unsichtbar und lässt Klicks durch. ↵ kopiert, ⌘↵ zeigt im Finder, esc schließt.
+- Zonenleiste beim Ziehen: Wer irgendwo Dateien zieht (Finder, Schreibtisch, Mail …), sieht unten die Active Zones 01–04. Loslassen sichert die Dateien in der Zone.
+- Einstellungen › Extension & Observer › Am ganzen Mac: Kürzel wählen (⌥ Space, ⌃⌥ Space, ⇧⌥ Space oder aus) und die Leiste an- oder ausschalten.
+- Das Fenster schließen beendet Archiver nicht mehr, es läuft für Palette und Leiste weiter. ⌘Q beendet.
+
 ## App 0.25.0 (12.10.2026)
 
 - Neues Hell: neutrales Hellgrau (#F4F4F4) ohne Farbstich, alle Grautöne ohne Sättigung. Weiße Bilder behalten ihre Kante.

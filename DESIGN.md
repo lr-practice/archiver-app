@@ -1,6 +1,6 @@
 # Archiver – Design-System
 
-Stand: App 0.25.0 · Extension 3.20.0
+Stand: App 0.26.0 · Extension 3.20.0
 
 Diese Datei hält fest, wie Archiver aussieht und warum. Sie gilt für die Mac-App
 (`app/src`) und die Chrome-Extension (`extension/`). Wer an der Oberfläche
@@ -165,6 +165,10 @@ Zonen als Karten, Active Zones oben in jeder Übersicht.
 (`panel.css`). Sie folgt der App 1:1. Seit 3.20.0 gilt das für die Übersicht,
 die Zone, die Glasleiste beim Ziehen, Geist und die Bibliothek oben rechts.
 
+**Am ganzen Mac** (`palette.*`, `dropbar.*`, `src-tauri/src/system.rs`):
+schwebende Fenster über anderen Programmen, auch wenn das Archiver-Fenster zu
+ist. Sie nutzen dieselben Karten, Ringe und Glaswerte wie die App (4.12, 4.13).
+
 ---
 
 ## 4. Komponenten
@@ -246,6 +250,27 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
 - **Lightbox:** Das Bild steht groß auf `--lightbox-bg`. Leertaste öffnet sie,
   Pfeile blättern, `I` zeigt die Info.
 - **Seitenblatt:** Details von rechts, `--sheet-w` = min(560 px, 46 vw).
+
+### 4.12 Palette (`palette.css`)
+- **Zweck:** Per Kürzel (Standard ⌥ Space, Einstellungen › Extension & Observer) über
+  jedem Programm Zonen und Objekte holen, etwa in einen InDesign-Rahmen.
+- **Form:** 860 × 620 px, macOS-Glas mit 12 px Rundung, Suchfeld 17 px oben.
+  Start: Active Zones als Zonenkarten (4.4) mit 01–04 und „Active Zone“,
+  darunter der Index als flachere Karten (8:3). Zone: Active Zones als Reiter,
+  Objekte eckig in sechs Spalten (4.6). Suche: passende Zonen als Karten,
+  darunter Objekte. Tasten stehen als Mono-Etiketten in der Fußzeile.
+- **Verhalten:** Beim Herausziehen eines Objekts wird die Palette auf 6 %
+  Deckkraft gesetzt und lässt Klicks durch. Klick in ein anderes Programm
+  blendet sie aus.
+- **Nicht:** Sie aktiviert Archiver nicht und holt das Hauptfenster nicht nach vorne.
+
+### 4.13 Zonenleiste am ganzen Mac (`dropbar.css`)
+- **Zweck:** Wie 4.3, aber beim Ziehen von Dateien in jedem Programm.
+- **Form:** Volle Breite unten auf dem Bildschirm mit dem Zeiger, 280 px hoch,
+  dieselben vier Glaskarten, Ring und Glühen wie 4.3. Die Karten haben keine
+  eigene Unschärfe (das Fenster ist durchsichtig), deshalb gilt `--zone-alpha`.
+- **Nicht:** Erscheint nicht, wenn Archiver selbst vorne ist, und nicht bei
+  Text oder Links ohne Datei.
 
 ---
 

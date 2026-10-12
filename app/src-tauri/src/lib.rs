@@ -10,6 +10,7 @@ pub mod bridge;
 pub mod library;
 pub mod pdf;
 pub mod studio;
+mod system;
 mod viewer;
 #[cfg(target_os = "macos")]
 mod macos;
@@ -43,6 +44,9 @@ struct Settings {
     /// Drei feste Plätze für Bibliotheken, zwischen denen man umschaltet
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     libraries: Vec<LibrarySlot>,
+    /// Palette per Kürzel und Zonenleiste beim Ziehen am ganzen Mac
+    #[serde(default)]
+    system: system::SystemPrefs,
 }
 
 #[derive(Serialize, Deserialize, Default, Clone)]
@@ -961,15 +965,35 @@ struct UpdateInfo {
     notes: Option<String>,
 }
 
+// ---- Am ganzen Mac: Palette und Zonenleiste (system.rs) ----
+
+#[tauri::command]
+fn system_prefs(app: AppHandle) -> system::SystemPrefs {
+    load_settings(&app).system
+}
+
+#[tauri::command]
+fn set_system_prefs(app: AppHandle, prefs: system::SystemPrefs) -> Result<(), String> {
+    let mut s = load_settings(&app);
+    s.system = prefs.clone();
+    save_settings(&app, &s)?;
+    system::apply(&app, &prefs)
+}
+
 /// Hell / Dunkel aus den Einstellungen: Fensterrahmen und Glas passend setzen.
 /// Dunkel bleibt das HUD-Glas, Hell nimmt das helle Seitenleisten-Glas.
 #[tauri::command]
 fn set_appearance(window: tauri::WebviewWindow, light: bool) {
     let _ = window.set_theme(Some(if light { tauri::Theme::Light } else { tauri::Theme::Dark }));
-    if window.label() == "main" {
+    if window.label() == "main" || window.label() == system::PALETTE {
         use tauri::window::{Effect, EffectState, EffectsBuilder};
         let effect = if light { Effect::Sidebar } else { Effect::HudWindow };
-        let _ = window.set_effects(EffectsBuilder::new().effect(effect).state(EffectState::Active).build());
+        let radius = if window.label() == system::PALETTE { 12.0 } else { 0.0 };
+        let mut fx = EffectsBuilder::new().effect(effect).state(EffectState::Active);
+        if radius > 0.0 {
+            fx = fx.radius(radius);
+        }
+        let _ = window.set_effects(fx.build());
     }
 }
 
@@ -1103,6 +1127,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_drag::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(system::shortcut_plugin())
         .manage(AppState::default())
         .setup(|app| {
             let handle = app.handle().clone();
@@ -1113,16 +1138,24 @@ pub fn run() {
             if let Some(path) = viewer::from_args() {
                 viewer::open(&handle, path);
             }
+            system::setup(&handle, &load_settings(&handle).system);
             Ok(())
         })
         .on_window_event(|window, event| {
-            // Ist der Betrachter offen, wird das Hauptfenster nur ausgeblendet,
-            // damit „In Archiver zeigen“ es wieder hervorholen kann.
-            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-                if window.label() == "main" && window.app_handle().get_webview_window(viewer::LABEL).is_some() {
+            // Das Hauptfenster wird beim Schließen nur ausgeblendet: Archiver läuft
+            // weiter für Palette und Zonenleiste (system.rs), der Betrachter kann es
+            // mit „In Archiver zeigen“ hervorholen, das Dock-Symbol ebenso. ⌘Q beendet.
+            match event {
+                tauri::WindowEvent::CloseRequested { api, .. }
+                    if window.label() == "main" && (cfg!(target_os = "macos") || window.app_handle().get_webview_window(viewer::LABEL).is_some()) =>
+                {
                     api.prevent_close();
                     let _ = window.hide();
                 }
+                tauri::WindowEvent::Focused(false) if window.label() == system::PALETTE => {
+                    system::palette_blurred(window.app_handle());
+                }
+                _ => {}
             }
         })
         .invoke_handler(tauri::generate_handler![
@@ -1181,6 +1214,10 @@ pub fn run() {
             viewer::show_in_app,
             viewer::viewer_defaults,
             viewer::viewer_make_default,
+            system::palette_hide,
+            system::palette_ghost,
+            system_prefs,
+            set_system_prefs,
         ])
         .build(tauri::generate_context!())
         .expect("Archiver konnte nicht starten")
