@@ -5095,11 +5095,6 @@ body.lib-loading {
   min-width: 0;
   flex: 0 1 auto;
 }
-.p-folder-chips .p-chip.active {
-  outline: 1px dashed rgba(var(--ink-rgb), 0.45);
-  outline-offset: -1px;
-  border-radius: var(--r-sm);
-}
 .p-folder-section + .p-folder-section {
   margin-top: 40px;
 }
@@ -5403,4 +5398,121 @@ html[data-topfade="glass"] .p-drag::after {
   backdrop-filter: blur(28px) saturate(1.2);
   -webkit-mask-image: linear-gradient(to bottom, rgba(0, 0, 0, 1.000) 0, rgba(0, 0, 0, 1.000) calc(0px + (calc(var(--top-h) + 96px) - 0px) * 0.000), rgba(0, 0, 0, 0.980) calc(0px + (calc(var(--top-h) + 96px) - 0px) * 0.083), rgba(0, 0, 0, 0.926) calc(0px + (calc(var(--top-h) + 96px) - 0px) * 0.167), rgba(0, 0, 0, 0.844) calc(0px + (calc(var(--top-h) + 96px) - 0px) * 0.250), rgba(0, 0, 0, 0.741) calc(0px + (calc(var(--top-h) + 96px) - 0px) * 0.333), rgba(0, 0, 0, 0.624) calc(0px + (calc(var(--top-h) + 96px) - 0px) * 0.417), rgba(0, 0, 0, 0.500) calc(0px + (calc(var(--top-h) + 96px) - 0px) * 0.500), rgba(0, 0, 0, 0.376) calc(0px + (calc(var(--top-h) + 96px) - 0px) * 0.583), rgba(0, 0, 0, 0.259) calc(0px + (calc(var(--top-h) + 96px) - 0px) * 0.667), rgba(0, 0, 0, 0.156) calc(0px + (calc(var(--top-h) + 96px) - 0px) * 0.750), rgba(0, 0, 0, 0.074) calc(0px + (calc(var(--top-h) + 96px) - 0px) * 0.833), rgba(0, 0, 0, 0.020) calc(0px + (calc(var(--top-h) + 96px) - 0px) * 0.917), rgba(0, 0, 0, 0.000) calc(0px + (calc(var(--top-h) + 96px) - 0px) * 1.000));
   mask-image: linear-gradient(to bottom, rgba(0, 0, 0, 1.000) 0, rgba(0, 0, 0, 1.000) calc(0px + (calc(var(--top-h) + 96px) - 0px) * 0.000), rgba(0, 0, 0, 0.980) calc(0px + (calc(var(--top-h) + 96px) - 0px) * 0.083), rgba(0, 0, 0, 0.926) calc(0px + (calc(var(--top-h) + 96px) - 0px) * 0.167), rgba(0, 0, 0, 0.844) calc(0px + (calc(var(--top-h) + 96px) - 0px) * 0.250), rgba(0, 0, 0, 0.741) calc(0px + (calc(var(--top-h) + 96px) - 0px) * 0.333), rgba(0, 0, 0, 0.624) calc(0px + (calc(var(--top-h) + 96px) - 0px) * 0.417), rgba(0, 0, 0, 0.500) calc(0px + (calc(var(--top-h) + 96px) - 0px) * 0.500), rgba(0, 0, 0, 0.376) calc(0px + (calc(var(--top-h) + 96px) - 0px) * 0.583), rgba(0, 0, 0, 0.259) calc(0px + (calc(var(--top-h) + 96px) - 0px) * 0.667), rgba(0, 0, 0, 0.156) calc(0px + (calc(var(--top-h) + 96px) - 0px) * 0.750), rgba(0, 0, 0, 0.074) calc(0px + (calc(var(--top-h) + 96px) - 0px) * 0.833), rgba(0, 0, 0, 0.020) calc(0px + (calc(var(--top-h) + 96px) - 0px) * 0.917), rgba(0, 0, 0, 0.000) calc(0px + (calc(var(--top-h) + 96px) - 0px) * 1.000));
+}
+
+/* ---- 0.24.5: Ordner rechts neben dem Titel, am Bildraster ausgerichtet ----
+   Karten über 3/6, Liste über 2/6. Aktiv heißt immer Outline, Filter nur hell/dunkel. */
+.p-head-row {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  column-gap: 6px;
+  align-items: end;
+  margin: 0 0 28px;
+}
+.p-head-row > .p-head {
+  margin: 0;
+  align-self: end;
+}
+.p-head-row.is-cards > .p-head { grid-column: 1 / 4; }
+.p-head-row.is-list > .p-head { grid-column: 1 / 5; }
+.p-head-row .p-folder-cards {
+  margin: 0;
+}
+.p-head-row.is-cards .p-folder-cards {
+  grid-column: 4 / 7;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+.p-head-row.is-list .p-folder-cards {
+  grid-column: 5 / 7;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.p-head-row.is-list .p-folder-cards .p-folder-card {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  text-align: left;
+  gap: 14px;
+  padding: 6px;
+  background: transparent;
+  border-radius: var(--r-sm);
+  overflow: visible;
+}
+.p-head-row.is-list .p-folder-card:hover {
+  background: rgba(var(--ink-rgb), 0.05);
+}
+.p-head-row.is-list .p-folder-card .p-card-cover {
+  display: block;
+  flex: 0 0 56px;
+  width: 56px;
+  height: 56px;
+  aspect-ratio: auto;
+  border-radius: 2px;
+  overflow: hidden;
+}
+.p-head-row.is-list .p-folder-card .p-card-cover > *:not(:first-child) { display: none; }
+.p-head-row.is-list .p-folder-card .p-card-cover > *:first-child {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.p-head-row.is-list .p-folder-card .p-card-body {
+  flex: 1;
+  padding: 0;
+  background: transparent;
+}
+.p-head-row.is-list .p-folder-card .p-card-body > div {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+}
+.p-head-row.is-list .p-folder-card .zone-card-name { font-size: 14px; }
+.p-head-row.is-list .p-folder-card.kbd-focus,
+.p-head-row.is-list .p-folder-card.active {
+  outline-offset: 0;
+}
+
+/* Umlaufende Outline (Settings › Auswahl-Outline): Striche wandern langsam im Uhrzeigersinn */
+html[data-focusanim] .card.selected:not(.original .card),
+html[data-focusanim] .p-folder-card.active,
+html[data-focusanim] .p-folder-card.kbd-focus,
+html[data-focusanim] .p-home .p-card.kbd-focus {
+  outline: none;
+  position: relative;
+  overflow: visible;
+}
+html[data-focusanim] .p-folder-card .p-card-cover,
+html[data-focusanim] .p-home .p-card .p-card-cover {
+  border-radius: var(--r-lg) var(--r-lg) 0 0;
+}
+html[data-focusanim] .card.selected:not(.original .card)::after,
+html[data-focusanim] .p-folder-card.active::after,
+html[data-focusanim] .p-folder-card.kbd-focus::after,
+html[data-focusanim] .p-home .p-card.kbd-focus::after {
+  content: "";
+  position: absolute;
+  inset: -3px;
+  pointer-events: none;
+  z-index: 4;
+  --ant: var(--p-text, var(--ink));
+  background:
+    linear-gradient(90deg, var(--ant) 50%, transparent 0) top left / 8px 1px repeat-x,
+    linear-gradient(90deg, var(--ant) 50%, transparent 0) bottom left / 8px 1px repeat-x,
+    linear-gradient(0deg, var(--ant) 50%, transparent 0) top left / 1px 8px repeat-y,
+    linear-gradient(0deg, var(--ant) 50%, transparent 0) top right / 1px 8px repeat-y;
+  animation: p-ants 1.6s linear infinite;
+}
+html[data-focusanim] .card.selected:not(.original .card)::after { inset: -2px; }
+html[data-focusanim] .p-head-row.is-list .p-folder-card::after { inset: 0; }
+@keyframes p-ants {
+  from { background-position: 0 0, 0 100%, 0 0, 100% 0; }
+  to { background-position: 8px 0, -8px 100%, 0 -8px, 100% 8px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  html[data-focusanim] *::after { animation: none !important; }
 }

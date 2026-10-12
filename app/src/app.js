@@ -67,6 +67,12 @@
     document.documentElement.dataset.topfade = id === "glass" ? "glass" : "fade";
   }
 
+  // Auswahl: ruhige gestrichelte Outline oder eine, die langsam um das Objekt läuft
+  function applyFocusAnim(on) {
+    if (on) document.documentElement.dataset.focusanim = "on";
+    else delete document.documentElement.dataset.focusanim;
+  }
+
   // Position der Navigation: oben/unten, jeweils links, Mitte, rechts
   const NAV_POS = ["tl", "tc", "tr", "bl", "bc", "br"];
   function applyNavPos(id) {
@@ -137,6 +143,7 @@
 
   applyRadius(pref("radius", "round"));
   applyTopFade(pref("topFade", "fade"));
+  applyFocusAnim(pref("focusAnim", false));
   applyNavPos(pref("navPos", "tl"));
 
   const state = {
@@ -1873,6 +1880,25 @@
           })
         )
       );
+      view.appendChild(
+        blockRow(
+          t("setFolderStyle"),
+          choice([["cards", t("setFolderCards")], ["list", t("setFolderList")]], pref("folderStyle", "cards"), (id) => {
+            setPref("folderStyle", id);
+            rerender();
+          })
+        )
+      );
+      view.appendChild(
+        blockRow(
+          t("setFocusAnim"),
+          choice([["off", t("setFocusStill")], ["on", t("setFocusRun")]], pref("focusAnim", false) ? "on" : "off", (id) => {
+            setPref("focusAnim", id === "on");
+            applyFocusAnim(id === "on");
+            rerender();
+          })
+        )
+      );
       for (const [key, label] of [["autoplayVideo", "setAutoplayVideo"], ["autoplayAudio", "setAutoplayAudio"]])
         view.appendChild(
           blockRow(
@@ -2295,7 +2321,7 @@
       const latest = lastSaved(zone.path);
       const named = folders.filter(([f]) => f).length;
       const sentence = items.length
-        ? [t("headZone", { count: countText(items.length), date: recentDate(latest) }), hasFolders ? t(named === 1 ? "headFolder1" : "headFolders", { n: named }) : "", topDomains(items)].filter(Boolean).join(" ")
+        ? [t("headZone", { count: countText(items.length), date: recentDate(latest) }).replace(/\.\.$/, "."), hasFolders ? t(named === 1 ? "headFolder1" : "headFolders", { n: named }) : "", topDomains(items)].filter(Boolean).join(" ")
         : t("headZoneEmpty");
       const h = headline(lastSegment(zone.path), sentence);
       if (canEdit(zone.path)) {
@@ -2304,7 +2330,12 @@
         title.title = t("renameHint");
         title.addEventListener("dblclick", () => startRename(title, zone.path));
       }
-      wrap.appendChild(h);
+      if (hasFolders) {
+        // Kopfzeile am Bildraster: Titel links, Ordner rechts als Karten (3/6) oder Liste (2/6)
+        const row = el("div", "p-head-row " + (pref("folderStyle", "cards") === "list" ? "is-list" : "is-cards"));
+        row.append(h, folderCards(zone, folders, all));
+        wrap.appendChild(row);
+      } else wrap.appendChild(h);
     } else if (searching) {
       wrap.classList.add("p-find");
       const n = state.found ? state.found.length : 0;
@@ -2343,7 +2374,6 @@
       renderToolbar();
       renderZones();
     }));
-    if (single && shown[0] && hasFolders) wrap.appendChild(folderCards(shown[0], folders, all));
     wrap.appendChild(bar);
     if (filtersShown()) wrap.insertBefore(filterBar(), bar);
 
@@ -2885,6 +2915,7 @@
   function folderKey(e) {
     const cards = [...document.querySelectorAll(".p-folder-card")];
     if (!cards.length) return false;
+    const list = !!document.querySelector(".p-head-row.is-list");
     const mark = (i) => {
       state.folderKbd = i;
       cards.forEach((c, n) => c.classList.toggle("kbd-focus", n === i));
@@ -2892,6 +2923,11 @@
     };
     if (state.folderKbd != null && cards[state.folderKbd]) {
       const i = state.folderKbd;
+      // Liste: ↑↓ wandern durch die Einträge, ↓ vom letzten zurück zu den Bildern
+      if (list && (e.key === "ArrowUp" || (e.key === "ArrowDown" && i < cards.length - 1))) {
+        mark(Math.max(0, i + (e.key === "ArrowUp" ? -1 : 1)));
+        return true;
+      }
       if (e.key === "ArrowRight" || e.key === "ArrowLeft") mark(Math.max(0, Math.min(cards.length - 1, i + (e.key === "ArrowRight" ? 1 : -1))));
       else if (e.key === "Enter" || e.key === " ") cards[i].click();
       else if (e.key === "ArrowDown" || e.key === "Escape") {
@@ -2913,7 +2949,7 @@
       if (Math.abs(r.left + r.width / 2 - x) < Math.abs(cards[best].getBoundingClientRect().left + cards[best].offsetWidth / 2 - x)) best = n;
     });
     selectOnly(null);
-    mark(best);
+    mark(list ? cards.length - 1 : best);
     return true;
   }
 

@@ -1,5 +1,12 @@
 # Changelog
 
+## App 0.24.5 (12.10.2026)
+
+- Ordner sitzen rechts neben dem Zonentitel und richten sich am Bildraster aus: als Karten über drei Sechstel oder als Liste über zwei Sechstel (Vorschau, Name, Anzahl rechtsbündig). Einstellungen › Darstellung › Ordner in einer Zone: Karten (Standard) oder Liste. In der Liste wandern ↑↓ durch die Einträge.
+- Aktiv-Zustände einheitlich: Karten und Listeneinträge zeigen eine Outline, Filter wechseln nur zwischen hell und dunkel.
+- Einstellungen › Darstellung › Auswahl-Outline: Ruhig (Standard) oder Umlaufend. Umlaufend wandert die gestrichelte Linie langsam um ausgewählte Objekte und aktive Ordner.
+- Kopfzeile: kein doppelter Punkt mehr nach abgekürztem Monat („10. Okt.“).
+
 ## App 0.24.4 (11.10.2026)
 
 - Ordnerkarten oben in der Zone: ein Sechstel breit, Bild im Verhältnis 2:1 wie die Zonenkarten, mehr Luft darüber. ↑ aus der obersten Bildreihe springt auf die Karten, ←→ wechselt, Enter filtert, ↓ oder Esc führt zurück.
