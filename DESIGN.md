@@ -1,6 +1,6 @@
 # Archiver – Design-System
 
-Stand: App 0.26.0 · Extension 3.20.0
+Stand: App 0.26.1 · Extension 3.20.0
 
 Diese Datei hält fest, wie Archiver aussieht und warum. Sie gilt für die Mac-App
 (`app/src`) und die Chrome-Extension (`extension/`). Wer an der Oberfläche
@@ -259,7 +259,8 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
   darunter der Index als flachere Karten (8:3). Zone: Active Zones als Reiter,
   Objekte eckig in sechs Spalten (4.6). Suche: passende Zonen als Karten,
   darunter Objekte. Tasten stehen als Mono-Etiketten in der Fußzeile.
-- **Verhalten:** Beim Herausziehen eines Objekts wird die Palette auf 6 %
+- **Verhalten:** Aus InDesign geöffnet heißt ↵ „Platzieren“ (markierter
+  Rahmen oder Platzieren-Cursor), sonst „Kopieren“. Beim Herausziehen eines Objekts wird die Palette auf 6 %
   Deckkraft gesetzt und lässt Klicks durch. Klick in ein anderes Programm
   blendet sie aus.
 - **Nicht:** Sie aktiviert Archiver nicht und holt das Hauptfenster nicht nach vorne.

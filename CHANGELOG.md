@@ -1,5 +1,11 @@
 # Changelog
 
+## App 0.26.1 (12.10.2026)
+
+- Palette aus InDesign: Rahmen markieren, ⌥ Space, Doppelklick oder ↵ auf ein Bild – es landet verknüpft im Rahmen, proportional gefüllt und zentriert. Ohne markierten Rahmen liegt es im Platzieren-Cursor. Beim ersten Mal fragt macOS, ob Archiver InDesign steuern darf.
+- esc schließt die Palette und holt das Programm von vorher zurück, nicht mehr das Archiver-Fenster.
+- Bild aus dem Finder öffnen: nur der Observer erscheint, das Archiver-Fenster bleibt zu bzw. hinten.
+
 ## App 0.26.0 (12.10.2026)
 
 Archiver am ganzen Mac, auch wenn das Fenster zu ist:
