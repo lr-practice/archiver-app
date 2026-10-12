@@ -6173,6 +6173,11 @@
     TAURI.event.listen("thumbs-ready", (e) => applyThumbs(e.payload));
     TAURI.event.listen("analysis-ready", (e) => applyAnalysis(e.payload));
     TAURI.event.listen("reveal-in-app", (e) => revealFromViewer(e.payload));
+    // Bibliothek anderswo gewechselt (Palette, ⌘1–3): nachziehen
+    TAURI.event.listen("library-switched", (e) => {
+      if (!e || e.payload === state.root || $("app").hidden) return;
+      afterLibrarySwitch();
+    });
     const info = await invoke("start_info");
     // Die Bibliothek wird erst hier geöffnet (im Hintergrund, mit Ordner-Schutz),
     // damit das Fenster nie hängt.

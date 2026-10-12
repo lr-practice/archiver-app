@@ -4,6 +4,7 @@
 //   Suche   passende Zonen als Karten, darunter passende Objekte
 // Objekte zieht man heraus, z. B. in einen InDesign-Rahmen; währenddessen ist
 // die Palette fast unsichtbar und durchklickbar. ↵ kopiert, ⌘↵ zeigt im Finder.
+// Leertaste zeigt das Objekt groß innerhalb der Palette, ⌘1–3 wechselt die Bibliothek.
 
 (function () {
   const TAURI = window.__TAURI__;
@@ -27,7 +28,35 @@
     cards: [], // sichtbare Karten (Zonen)
     objects: [], // sichtbare Objekte
     indesign: false, // aus InDesign geöffnet: ↵ und Doppelklick platzieren dort
+    preview: null, // Objekt in der großen Ansicht (Leertaste)
   };
+
+  // Textkarten wie in der App (app.js quoteTone): Grundfarbe, Schrift Ton in Ton
+  const QUOTE_TONES = {
+    red: ["#ff0000", "#5c0000", 0.7],
+    green: ["#00b050", "#003d1c", 0.7],
+    violet: ["#7030a0", "#e2c8f5", 0.75],
+    cyan: ["#00b0f0", "#003d54", 0.7],
+    yellow: ["#ffff00", "#5c5c00", 0.75],
+    white: ["#f4f3ef", "#141414", 0.5],
+  };
+  const RANDOM_TONES = ["red", "green", "violet", "cyan", "yellow"];
+  function quoteTone(item) {
+    if (QUOTE_TONES[item.tone]) return QUOTE_TONES[item.tone];
+    const key = String(item.hash || item.path || "");
+    let h = 0;
+    for (let i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) >>> 0;
+    return QUOTE_TONES[RANDOM_TONES[h % RANDOM_TONES.length]];
+  }
+
+  function textSheet(item, cls) {
+    const node = el("div", "pal-text" + (cls ? " " + cls : ""));
+    const [bg, fg] = quoteTone(item);
+    node.style.setProperty("--ts-bg", bg);
+    node.style.setProperty("--ts-fg", fg);
+    node.appendChild(el("div", "pal-text-body", item.quote));
+    return node;
+  }
 
   function el(tag, cls, text) {
     const node = document.createElement(tag);
@@ -156,11 +185,14 @@
 
   function obj(item) {
     const node = el("div", "pal-obj");
-    const img = el("img");
-    img.src = thumbSrc(item);
-    img.loading = "lazy";
-    img.draggable = false;
-    node.appendChild(img);
+    if (kindOf(item) === "text") node.appendChild(textSheet(item));
+    else {
+      const img = el("img");
+      img.src = thumbSrc(item);
+      img.loading = "lazy";
+      img.draggable = false;
+      node.appendChild(img);
+    }
     node.title = item.filename;
     node.addEventListener("mousedown", (e) => pressObject(e, item));
     node.addEventListener("dblclick", () => placeItem(item));
@@ -215,7 +247,7 @@
       state.cards = state.zones.map((z) => z.path);
       state.area = "cards";
       $("hits").textContent = "⌥ SPACE";
-      keys([["←→", t("palZone")], ["↵", t("palOpen")], ["1–4", t("palActive")]]);
+      keys([["←→", t("palZone")], ["↵", t("palOpen")], ["1–4", t("palActive")], ["⌘1–3", t("palLibrary")]]);
     }
 
     if (state.view === "zone") {
@@ -227,7 +259,7 @@
       body.appendChild(grid);
       state.objects = items;
       state.area = "objects";
-      keys([["↵", enterLabel()], ["⌘↵", t("palFinder")], ["1–4", t("palZone")], ["⌫", t("palBack")]]);
+      keys([["↵", enterLabel()], ["␣", t("palPreview")], ["⌘↵", t("palFinder")], ["1–4", t("palZone")], ["⌫", t("palBack")]]);
     }
 
     if (state.view === "search") {
@@ -380,8 +412,124 @@
     invoke("palette_hide").catch(() => {});
   }
 
+  // ---- Große Ansicht (Leertaste), innerhalb der Palette ----
+
+  function openPreview(item) {
+    closePreview();
+    state.preview = item;
+    const layer = el("div", "pal-preview");
+    const stage = el("div", "pal-preview-stage");
+    const kind = kindOf(item);
+    if (kind === "text") stage.appendChild(textSheet(item, "large"));
+    else if (kind === "video") {
+      const v = el("video");
+      v.src = fileSrc(item.abs);
+      v.muted = true;
+      v.loop = true;
+      v.autoplay = true;
+      v.playsInline = true;
+      v.poster = item.thumb ? fileSrc(item.thumb) : "";
+      stage.appendChild(v);
+    } else {
+      const img = el("img");
+      img.draggable = false;
+      // Bilder im Original, alles andere (PDF, Audio) als Vorschaubild
+      img.src = kind === "image" ? fileSrc(item.abs) : thumbSrc(item);
+      img.onerror = () => {
+        img.onerror = null;
+        img.src = thumbSrc(item);
+      };
+      img.addEventListener("mousedown", (e) => pressObject(e, item));
+      stage.appendChild(img);
+    }
+    layer.appendChild(stage);
+    const meta = el("div", "pal-preview-meta");
+    meta.appendChild(el("span", "pal-preview-name", item.filename));
+    const i = state.objects.indexOf(item);
+    meta.appendChild(mono(i >= 0 ? i + 1 + " / " + state.objects.length : "", "pal-dim"));
+    layer.appendChild(meta);
+    layer.addEventListener("click", (e) => {
+      if (e.target === layer || e.target === stage) closePreview();
+    });
+    const pal = document.querySelector(".pal");
+    pal.insertBefore(layer, $("keys"));
+    pal.classList.add("previewing");
+    keys([["←→", t("palStep")], ["↵", enterLabel()], ["␣", t("palClose")]]);
+  }
+
+  function closePreview() {
+    const layer = document.querySelector(".pal-preview");
+    if (!layer) return false;
+    const v = layer.querySelector("video");
+    if (v) {
+      v.pause();
+      v.removeAttribute("src");
+      v.load();
+    }
+    layer.remove();
+    document.querySelector(".pal").classList.remove("previewing");
+    state.preview = null;
+    render();
+    return true;
+  }
+
+  function previewKey(e) {
+    if (e.key === " " || e.key === "Escape") {
+      e.preventDefault();
+      return closePreview();
+    }
+    if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
+      e.preventDefault();
+      const list = state.objects;
+      const i = list.indexOf(state.preview);
+      const next = list[Math.max(0, Math.min(list.length - 1, i + (e.key === "ArrowRight" ? 1 : -1)))];
+      if (next && next !== state.preview) {
+        state.sel = list.indexOf(next);
+        openPreview(next);
+      }
+      return;
+    }
+    if (e.key === "Enter") {
+      e.preventDefault();
+      if (e.metaKey) return invoke("reveal", { path: state.preview.abs }).then(hide).catch(() => {});
+      return placeItem(state.preview);
+    }
+    e.preventDefault();
+  }
+
+  // ⌘1–3: Bibliothek wechseln, wie in der App
+  async function switchLibrary(i) {
+    try {
+      const slots = await invoke("libraries");
+      const slot = slots[i];
+      if (!slot || !slot.path) return toast(t("palNoSlot", { n: i + 1 }));
+      if (!slot.active) {
+        await invoke("open_library", { path: slot.path });
+        state.dirty = true;
+        await load();
+      }
+      goStart();
+      toast(slot.name || slot.path.split("/").pop());
+    } catch (e) {
+      toast(String(e));
+    }
+  }
+
   function onKey(e) {
+    if (state.preview) return previewKey(e);
     const q = $("q").value;
+    if (e.metaKey && !e.altKey && !e.shiftKey && /^[1-3]$/.test(e.key)) {
+      e.preventDefault();
+      return switchLibrary(Number(e.key) - 1);
+    }
+    // Leertaste: großes Bild des gewählten Objekts (solange im Suchfeld nichts getippt ist)
+    if (e.key === " " && !q && state.area === "objects") {
+      const s = selected();
+      if (s.item) {
+        e.preventDefault();
+        return openPreview(s.item);
+      }
+    }
     if (e.key === "Escape") {
       e.preventDefault();
       if (state.view !== "start") return goStart();
@@ -473,8 +621,10 @@
   document.addEventListener("keydown", onKey);
 
   TAURI.event.listen("library-changed", () => (state.dirty = true));
+  TAURI.event.listen("library-switched", () => (state.dirty = true));
   TAURI.event.listen("palette-open", async (e) => {
     state.indesign = e && e.payload === true;
+    state.preview = null;
     await load();
     goStart();
   });

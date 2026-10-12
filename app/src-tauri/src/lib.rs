@@ -388,8 +388,11 @@ async fn open_library(app: AppHandle, path: String) -> Result<(), String> {
             slots[i] = LibrarySlot { name: folder_name(&path), path: Some(path.clone()) };
         }
         settings.libraries = slots;
-        settings.library = Some(path);
-        save_settings(&worker, &settings)
+        settings.library = Some(path.clone());
+        save_settings(&worker, &settings)?;
+        // Hauptfenster, Palette und Leiste ziehen nach (auch beim Wechsel aus der Palette)
+        let _ = worker.emit("library-switched", path);
+        Ok(())
     })
     .await
     .map_err(|e| e.to_string())?
