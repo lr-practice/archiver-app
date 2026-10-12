@@ -97,8 +97,10 @@
 
   // Studio-Funktionen (Einstellungen › Studio): jede einzeln abschaltbar, Standard an.
   // Die geteilte Bibliothek ist kein Schalter hier, sie hängt an der Bibliothek selbst.
-  const FEATURES = ["notes", "moodboard", "order", "rights", "package"];
+  // Schaltbare Studio-Werkzeuge. Moodboard und eigene Reihenfolge sind seit 0.24.6 immer an.
+  const FEATURES = ["notes", "rights", "package"];
   function feat(id) {
+    if (!FEATURES.includes(id)) return true;
     return pref("feat." + id, true) !== false;
   }
 
@@ -178,6 +180,12 @@
   };
 
   // ---- Helfer ----
+
+  // Kürzel wie „JP“: kurze Eingaben bleiben, wie sie sind, sonst Anfangsbuchstaben
+  function byInitials(name) {
+    const v = String(name).trim();
+    return v.length <= 3 && !/\s/.test(v) ? v.toUpperCase() : monogram(v);
+  }
 
   function monogram(name) {
     const words = String(name || "").trim().split(/\s+/).filter(Boolean);
@@ -1038,13 +1046,29 @@
     wrap.style.setProperty("--cover", HOME_SIZES[homeStep()].cover + "px");
 
     if (state.home === "overview") wrap.appendChild(overviewLayout());
-    else if (state.home === "cards") wrap.appendChild(cardsLayout());
-    else if (state.home === "preview") {
+    else if (state.home === "cards") {
+      // Active Zones stehen in jeder Ansicht oben, je nach Darstellung als Karten oder Zeilen
+      const row = el("div", "p-hotrow");
+      for (let i = 0; i < HOT_ZONES; i++) row.appendChild(state.zones[i] ? hotCard(state.zones[i], i) : hotSlot(i));
+      wrap.appendChild(row);
+      wrap.appendChild(restBar(state.zones.length - HOT_ZONES));
+      wrap.appendChild(cardsLayout());
+    } else if (state.home === "preview") {
       const split = el("div", "p-split");
-      split.appendChild(indexList(true));
+      const lists = el("div", "p-split-lists");
+      lists.appendChild(hotLabel());
+      lists.appendChild(hotList(true));
+      lists.appendChild(restBar(state.zones.length - HOT_ZONES));
+      lists.appendChild(indexList(true, state.zones.slice(HOT_ZONES), HOT_ZONES));
+      split.appendChild(lists);
       split.appendChild(previewPanel());
       wrap.appendChild(split);
-    } else wrap.appendChild(indexList(false));
+    } else {
+      wrap.appendChild(hotLabel());
+      wrap.appendChild(hotList(false));
+      wrap.appendChild(restBar(state.zones.length - HOT_ZONES));
+      wrap.appendChild(indexList(false, state.zones.slice(HOT_ZONES), HOT_ZONES));
+    }
     return wrap;
   }
 
@@ -1126,7 +1150,7 @@
     return Number.isInteger(step) ? Math.max(0, Math.min(HOME_SIZES.length - 1, step)) : 1;
   }
 
-  function indexList(compact, zones = state.zones, offset = 0) {
+  function indexList(compact, zones = state.zones, offset = 0, swap = offset > 0) {
     const list = el("div", "p-index" + (compact ? " compact" : ""));
     const head = el("div", "p-row p-row-head");
     head.appendChild(mono(t("colNo")));
@@ -1143,7 +1167,7 @@
       const index = offset + i;
       const row = el("div", "p-row p-zone");
       row.dataset.zone = zone.path;
-      if (offset) {
+      if (swap) {
         // Übersicht: Zeile per Ziehen mit einer Hot Zone tauschen
         row.dataset.swap = zone.path;
         row.addEventListener("pointerdown", (e) => dragSwap(e, row));
@@ -1206,6 +1230,26 @@
   }
 
   // ---- Übersicht: oben die vier Hot Zones als Karten, darunter der Index ----
+
+  function hotList(compact) {
+    const list = indexList(compact, state.zones.slice(0, HOT_ZONES), 0, true);
+    list.querySelector(".p-new")?.remove();
+    return list;
+  }
+
+  function hotLabel() {
+    const label = el("div", "p-bar p-overview-bar p-hot-label");
+    label.appendChild(mono(t("hotLabel") + " (" + Math.min(HOT_ZONES, state.zones.length) + ")", "strong"));
+    label.appendChild(el("span", "p-flex"));
+    label.appendChild(mono(t("hotHintRow"), "dim"));
+    return label;
+  }
+
+  function restBar(n) {
+    const label = el("div", "p-bar p-overview-bar");
+    label.appendChild(mono(t("indexLabel") + " (" + Math.max(0, n) + ")", "strong"));
+    return label;
+  }
 
   function overviewLayout() {
     const wrap = el("div", "p-overview");
@@ -1283,10 +1327,24 @@
     const start = { x: e.clientX, y: e.clientY };
     let lifted = false;
     let target = null;
+    let targetRect = null;
+    let home = null;
+    // Vorschau des Tauschs: die Zielkarte rückt schon an den Platz, der frei wird
+    const preview = (n, on) => {
+      if (!n) return;
+      // Karte und Zeile haben verschiedene Formen: dann tritt das Ziel nur zurück
+      if (n.classList.contains("p-row") !== node.classList.contains("p-row")) return void n.classList.toggle("swap-out", on);
+      n.style.transition = "transform 0.22s cubic-bezier(.2,.7,.2,1)";
+      if (!on) return void (n.style.transform = "");
+      const r = n.getBoundingClientRect();
+      const cur = new DOMMatrixReadOnly(getComputedStyle(n).transform);
+      n.style.transform = `translate(${home.left - (r.left - cur.m41)}px, ${home.top - (r.top - cur.m42)}px)`;
+    };
     const onMove = (ev) => {
       if (!lifted) {
         if (Math.hypot(ev.clientX - start.x, ev.clientY - start.y) < DRAG_THRESHOLD) return;
         lifted = true;
+        home = node.getBoundingClientRect();
         node.classList.add("lifted");
         node.style.pointerEvents = "none";
         document.body.classList.add("sorting");
@@ -1294,11 +1352,22 @@
       }
       ev.preventDefault();
       node.style.transform = `translate(${ev.clientX - start.x}px, ${ev.clientY - start.y}px)`;
+      // Das Ziel bleibt gewählt, solange der Zeiger über seinem alten Platz ist,
+      // auch wenn es für die Vorschau schon weggerückt ist
+      const inside = (r) => r && ev.clientX >= r.left && ev.clientX <= r.right && ev.clientY >= r.top && ev.clientY <= r.bottom;
+      if (target && inside(targetRect)) return;
       const hit = document.elementFromPoint(ev.clientX, ev.clientY);
       const next = hit && hit.closest("[data-swap]");
-      target = next && next !== node ? next : null;
-      for (const n of document.querySelectorAll(".swap-target")) if (n !== target) n.classList.remove("swap-target");
-      if (target) target.classList.add("swap-target");
+      const found = next && next !== node && next !== target ? next : null;
+      if (found === target) return;
+      preview(target, false);
+      target?.classList.remove("swap-target");
+      target = found;
+      targetRect = target ? target.getBoundingClientRect() : null;
+      if (target) {
+        target.classList.add("swap-target");
+        preview(target, true);
+      }
     };
     const onUp = () => {
       window.removeEventListener("pointermove", onMove);
@@ -1308,24 +1377,40 @@
       cardDragged = true;
       setTimeout(() => (cardDragged = false), 0);
       document.body.classList.remove("sorting");
+      const from = new Map();
+      if (target) {
+        from.set(node.dataset.swap, node.getBoundingClientRect());
+        from.set(target.dataset.swap, target.getBoundingClientRect());
+      }
       node.classList.remove("lifted");
       node.style.transform = "";
       node.style.pointerEvents = "";
-      for (const n of document.querySelectorAll(".swap-target")) n.classList.remove("swap-target");
+      for (const n of document.querySelectorAll(".swap-target, .swap-out")) n.classList.remove("swap-target", "swap-out");
       if (!target) return;
       const order = state.zones.map((z) => z.path);
       const a = order.indexOf(node.dataset.swap);
       const b = order.indexOf(target.dataset.swap);
-      if (a < 0 || b < 0) return;
+      if (a < 0 || b < 0) return preview(target, false);
       [order[a], order[b]] = [order[b], order[a]];
       setZoneOrder(order);
       renderZones();
+      // Beide gleiten von dort, wo man sie zuletzt gesehen hat, an ihren neuen Platz
+      for (const [path, r] of from) {
+        const n = [...document.querySelectorAll("[data-swap]")].find((x) => x.dataset.swap === path);
+        if (!n) continue;
+        const to = n.getBoundingClientRect();
+        n.animate(
+          [{ transform: `translate(${r.left - to.left}px, ${r.top - to.top}px)` }, { transform: "none" }],
+          { duration: 320, easing: "cubic-bezier(.2,.7,.2,1)" }
+        );
+      }
       if (a < HOT_ZONES || b < HOT_ZONES) toast(t("hotSwapped", { zone: zoneLabel(order[Math.min(a, b)]) }));
     };
     window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", onUp);
     window.addEventListener("pointercancel", onUp);
   }
+
 
   function previewZone() {
     if (state.hover && state.zones.some((z) => z.path === state.hover)) return state.hover;
@@ -1366,7 +1451,7 @@
   // (z. B. Kunden / Studio B) gesammelt in einer Karte als Liste.
   function cardsLayout() {
     const groups = new Map();
-    for (const zone of state.zones) {
+    for (const zone of state.zones.slice(HOT_ZONES)) {
       const top = zone.path === "" ? "" : zone.path.split("/")[0];
       if (!groups.has(top)) groups.set(top, []);
       groups.get(top).push(zone);
@@ -1450,9 +1535,10 @@
       tops.splice(tops.indexOf(target.dataset.group) + (after ? 1 : 0), 0, card.dataset.group);
       const rank = new Map(tops.map((top, i) => [top, i]));
       const topOf = (path) => (path === "" ? "" : path.split("/")[0]);
-      const paths = state.zones.map((z, i) => [z.path, i]);
+      // Die Active Zones oben bleiben stehen, sortiert wird der Rest
+      const paths = state.zones.slice(HOT_ZONES).map((z, i) => [z.path, i]);
       paths.sort((a, b) => rank.get(topOf(a[0])) - rank.get(topOf(b[0])) || a[1] - b[1]);
-      setZoneOrder(paths.map(([path]) => path));
+      setZoneOrder([...state.zones.slice(0, HOT_ZONES).map((z) => z.path), ...paths.map(([path]) => path)]);
       renderZones();
     };
     card.addEventListener("pointermove", onMove);
@@ -1695,6 +1781,64 @@
   }
 
   // Zonen: umbenennen, neu anlegen (die ersten vier sind die Hot Zones, Tasten 1–4)
+  // Einstellungen › Zonen: Zeile greifen und an neuen Platz schieben, die anderen rücken nach.
+  // Die ersten vier sind die Active Zones.
+  function dragZoneRow(e, row, list) {
+    if (e.button !== 0 || e.target.closest("button, input")) return;
+    const start = e.clientY;
+    let lifted = false;
+    const onMove = (ev) => {
+      if (!lifted) {
+        if (Math.abs(ev.clientY - start) < DRAG_THRESHOLD) return;
+        lifted = true;
+        row.classList.add("lifted");
+        document.body.classList.add("sorting");
+        window.getSelection().removeAllRanges();
+      }
+      ev.preventDefault();
+      const rows = [...list.children].filter((r) => r !== row);
+      const before = rows.find((r) => {
+        const b = r.getBoundingClientRect();
+        return ev.clientY < b.top + b.height / 2;
+      });
+      if (before !== row.nextSibling) {
+        const old = new Map([...list.children].map((r) => [r, r.getBoundingClientRect().top]));
+        list.insertBefore(row, before || null);
+        // Nachrückende Zeilen gleiten an ihren Platz
+        for (const r of list.children) {
+          if (r === row) continue;
+          const dy = old.get(r) - r.getBoundingClientRect().top;
+          if (!dy) continue;
+          r.animate([{ transform: `translateY(${dy}px)` }, { transform: "none" }], { duration: 160, easing: "ease-out" });
+        }
+        [...list.children].forEach((r, i) => {
+          const no = r.querySelector(".p-zone-main .p-mono");
+          if (no) {
+            no.textContent = String(i + 1).padStart(2, "0");
+            no.classList.toggle("p-zone-hot", i < HOT_ZONES);
+          }
+        });
+      }
+    };
+    const onUp = () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onUp);
+      if (!lifted) return;
+      document.body.classList.remove("sorting");
+      row.classList.remove("lifted");
+      // Der Klick nach dem Loslassen soll nicht umbenennen
+      const swallow = (ev) => ev.stopPropagation();
+      window.addEventListener("click", swallow, true);
+      setTimeout(() => window.removeEventListener("click", swallow, true), 0);
+            setZoneOrder([...list.children].map((r) => r.dataset.zone));
+      renderZones();
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onUp);
+  }
+
   function renderZoneSettings() {
     const b = collapsible("zones", t("setZones"));
     const list = el("div", "p-zone-list");
@@ -1754,6 +1898,7 @@
         del.classList.remove("armed");
       });
       row.lastChild.append(del);
+      row.addEventListener("pointerdown", (e) => dragZoneRow(e, row, list));
       list.appendChild(row);
     });
     b.appendChild(list);
@@ -1785,10 +1930,10 @@
   // Zeile am Griff ziehen: wandert live mit, beim Loslassen wird gespeichert
   // Einstellungen: oben eine ruhige Liste der Bereiche, jeder öffnet sein Untermenü.
   // Ganz unten steht immer der Freischalt-Code.
-  const SETTINGS_SECTIONS = ["library", "look", "studio", "connect", "sound", "general"];
+  const SETTINGS_SECTIONS = ["library", "view", "look", "start", "studio", "connect", "general"];
 
   function sectionTitle(id) {
-    return t({ library: "setLibrary", look: "setView", studio: "setStudio", connect: "setConnect", sound: "setSound", general: "setGeneral" }[id]);
+    return t({ library: "setLibrary", view: "setSecView", look: "setLook", start: "setSecStart", studio: "setStudio", connect: "setConnect", general: "setGeneral" }[id]);
   }
 
   function sectionSummary(id) {
@@ -1807,7 +1952,10 @@
       const on = FEATURES.filter(feat).length;
       return on + " / " + FEATURES.length + (state.shared ? " · " + t("featSharedOn") : "");
     }
-    if (id === "sound") return pref("startSound", true) ? t("setOn") : t("setOff");
+    if (id === "view")
+      return t(state.view === "original" ? "viewOriginal" : "viewGrid") + " · " + t(pref("folderStyle", "cards") === "list" ? "setFolderList" : "setFolderCards");
+    if (id === "start")
+      return t(pref("revealForm", "wave") === "lid" ? "revealLid" : "revealWave") + " · " + t("setSound") + " " + (pref("startSound", true) ? t("setOn") : t("setOff")).toLowerCase();
     return lang === "de" ? "Deutsch" : "English";
   }
 
@@ -1848,8 +1996,8 @@
       wrap.appendChild(renderZoneSettings());
     }
 
-    if (sub === "look") {
-      const view = block(t("setObjects"));
+    if (sub === "view") {
+      const view = block(null);
       view.appendChild(
         blockRow(
           t("setImages"),
@@ -1872,29 +2020,9 @@
       );
       view.appendChild(
         blockRow(
-          t("setTopFade"),
-          choice([["fade", t("setTopFadeFade")], ["glass", t("setTopFadeGlass")]], pref("topFade", "fade"), (id) => {
-            setPref("topFade", id);
-            applyTopFade(id);
-            rerender();
-          })
-        )
-      );
-      view.appendChild(
-        blockRow(
           t("setFolderStyle"),
           choice([["cards", t("setFolderCards")], ["list", t("setFolderList")]], pref("folderStyle", "cards"), (id) => {
             setPref("folderStyle", id);
-            rerender();
-          })
-        )
-      );
-      view.appendChild(
-        blockRow(
-          t("setFocusAnim"),
-          choice([["off", t("setFocusStill")], ["on", t("setFocusRun")]], pref("focusAnim", false) ? "on" : "off", (id) => {
-            setPref("focusAnim", id === "on");
-            applyFocusAnim(id === "on");
             rerender();
           })
         )
@@ -1919,8 +2047,10 @@
         )
       );
       wrap.appendChild(view);
+    }
 
-      const look = block(t("setLook"));
+    if (sub === "look") {
+      const look = block(null);
       look.appendChild(
         blockRow(
           t("setTheme"),
@@ -1958,6 +2088,33 @@
         )
       );
       look.appendChild(blockRow(t("setNavPos"), navPosPicker(rerender)));
+      look.appendChild(
+        blockRow(
+          t("setTopFade"),
+          choice([["fade", t("setTopFadeFade")], ["glass", t("setTopFadeGlass")]], pref("topFade", "fade"), (id) => {
+            setPref("topFade", id);
+            applyTopFade(id);
+            rerender();
+          })
+        )
+      );
+      look.appendChild(
+        blockRow(
+          t("setFocusAnim"),
+          choice([["off", t("setFocusStill")], ["on", t("setFocusRun")]], pref("focusAnim", false) ? "on" : "off", (id) => {
+            setPref("focusAnim", id === "on");
+            applyFocusAnim(id === "on");
+            rerender();
+          })
+        )
+      );
+      wrap.appendChild(look);
+      wrap.appendChild(renderDragSettings());
+    }
+
+    // Start: Öffnung und Startton gehören zum selben Moment
+    if (sub === "start") {
+      const open = block(t("setReveal"));
       // Licht-Öffnung nach Getting Started: Welle oder Lid, zum Vergleich abspielbar
       const reveal = choice([["wave", t("revealWave")], ["lid", t("revealLid")]], pref("revealForm", "wave"), (id) => {
         setPref("revealForm", id);
@@ -1969,9 +2126,9 @@
           setTimeout(() => playReveal(null), 350);
         })
       );
-      look.appendChild(blockRow(t("setReveal"), reveal));
-      wrap.appendChild(look);
-      wrap.appendChild(renderDragSettings());
+      open.appendChild(blockRow(t("setReveal"), reveal));
+      wrap.appendChild(open);
+      wrap.appendChild(renderSoundSettings());
     }
 
     if (sub === "connect") {
@@ -2007,8 +2164,6 @@
         wrap.appendChild(viewerBlock);
       }
     }
-
-    if (sub === "sound") wrap.appendChild(renderSoundSettings());
 
     if (sub === "studio") renderStudioSettings(wrap, rerender);
 
@@ -2054,11 +2209,9 @@
   // Studio: Schalter je Funktion, dazu Name und geteilte Bibliothek
   function renderStudioSettings(wrap, rerender) {
     wrap.appendChild(el("p", "p-block-hint p-studio-lead", t("setStudioText")));
-    const tools = block(null);
+    const tools = block(t("featTools"));
     for (const [id, title, text] of [
       ["notes", "featNotes", "featNotesText"],
-      ["moodboard", "featMoodboard", "featMoodboardText"],
-      ["order", "featOrder", "featOrderText"],
       ["rights", "featRights", "featRightsText"],
       ["package", "featPackage", "featPackageText"],
     ]) {
@@ -2075,7 +2228,6 @@
         )
       );
     }
-    wrap.appendChild(tools);
 
     const team = block(t("featShared"));
     team.appendChild(blockRow(el("div", "p-block-text", t("featSharedText"))));
@@ -2119,6 +2271,7 @@
       )
     );
     wrap.appendChild(team);
+    wrap.appendChild(tools);
   }
 
   // Zonen beim Ziehen: Deckkraft, gilt in der App und (über die Bibliothek) in der Extension
@@ -2329,6 +2482,17 @@
         title.classList.add("zone-card-name");
         title.title = t("renameHint");
         title.addEventListener("dblclick", () => startRename(title, zone.path));
+      }
+      if (hasFolders && state.folder != null) {
+        // Im Unterordner: Pfad „Zone / Ordner“, ein Klick auf die Zone führt zurück
+        const title = h.querySelector(".p-head-title");
+        title.classList.add("p-head-back");
+        title.title = t("folderBack");
+        title.addEventListener("click", () => {
+          state.folder = null;
+          renderZones();
+        });
+        title.after(el("span", "p-head-title p-head-folder", " / " + (state.folder || t("folderLoose"))));
       }
       if (hasFolders) {
         // Kopfzeile am Bildraster: Titel links, Ordner rechts als Karten (3/6) oder Liste (2/6)
@@ -2734,8 +2898,10 @@
       const src = thumbSrc(item);
       if (img.getAttribute("src") !== src) img.src = src;
     }
+    // Geteilte Bibliothek: Kürzel der Person, die abgelegt hat, nur bei Objekten anderer
+    const by = item.addedBy && item.addedBy !== state.user ? byInitials(item.addedBy) + " · " : "";
     card.querySelector(".card-badge").textContent =
-      (feat("rights") && item.internal ? t("internalBadge") + " · " : "") + (domainOf(item.pageUrl) || item.filename);
+      (feat("rights") && item.internal ? t("internalBadge") + " · " : "") + by + (domainOf(item.pageUrl) || item.filename);
     card.classList.toggle("card-internal", feat("rights") && !!item.internal);
     // Seitenverhältnis fürs Bild, damit die Spalten vor dem Laden stehen
     if (state.view === "original" && item.width && item.height) card.style.setProperty("--ar", `${item.width} / ${item.height}`);

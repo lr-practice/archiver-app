@@ -1,5 +1,15 @@
 # Changelog
 
+## App 0.24.6 (12.10.2026)
+
+- Einstellungen neu geordnet: Bibliothek, Ansicht, Aussehen, Start (Öffnung und Startton), Studio, Extension & Observer, Allgemein. Studio enthält nur noch Projekt- und Team-Werkzeuge (Name, geteilte Bibliothek, Notiz, Rechte, Zone als Paket). Moodboard und eigene Reihenfolge sind immer an.
+- Einstellungen › Bibliothek › Zonen: Zonen lassen sich wieder per Ziehen sortieren, die anderen rücken nach.
+- Active Zones stehen in jeder Übersicht oben: in Karten als Karten, in Vorschau und Index als eigene Zeilen.
+- Tausch mit einer Active Zone sichtbar: Beim Ziehen rückt das Ziel an den frei werdenden Platz, beim Loslassen gleiten beide an ihre neuen Plätze.
+- Im Unterordner steht „Zone / Ordner“ in der Kopfzeile, ein Klick auf die Zone führt zurück.
+- Ordnerkarten richten sich von rechts aus, ohne Lücke am Rand.
+- Geteilte Bibliothek: Objekte anderer zeigen im Hover-Schild das Kürzel, z. B. „JP · pinterest.com“.
+
 ## App 0.24.5 (12.10.2026)
 
 - Ordner sitzen rechts neben dem Zonentitel und richten sich am Bildraster aus: als Karten über drei Sechstel oder als Liste über zwei Sechstel (Vorschau, Name, Anzahl rechtsbündig). Einstellungen › Darstellung › Ordner in einer Zone: Karten (Standard) oder Liste. In der Liste wandern ↑↓ durch die Einträge.
