@@ -5554,3 +5554,51 @@ html[data-focusanim] .p-head-row.is-list .p-folder-card::after { inset: 0; }
   opacity: 0.35;
   transition: opacity 0.18s ease;
 }
+
+/* ---- 0.24.7: Glas der Zonenleiste ohne Verzögerung ----
+   WebKit zeichnet backdrop-filter erst, wenn keine Deckkraft-Animation mehr
+   darüber liegt. Deshalb blendet nicht die Leiste per opacity ein, sondern
+   --hot-in steuert Glas, Unschärfe, Schatten und Inhalt direkt. */
+@property --hot-in {
+  syntax: "<number>";
+  inherits: true;
+  initial-value: 1;
+}
+.p-dropbar {
+  animation: hot-glass-in 0.14s ease-out;
+}
+.p-dropbar.leaving {
+  animation: hot-glass-out 0.2s ease 0.3s forwards;
+}
+@keyframes hot-glass-in {
+  from {
+    --hot-in: 0;
+  }
+}
+@keyframes hot-glass-out {
+  to {
+    --hot-in: 0;
+  }
+}
+.p-hot {
+  --hot-shadow: 0.5;
+  background: color-mix(in srgb, var(--menu-bg) calc(var(--zone-alpha, 0.97) * var(--hot-in) * 100%), transparent);
+  -webkit-backdrop-filter: blur(calc(24px * var(--hot-in))) saturate(calc(1 + 0.4 * var(--hot-in)));
+  backdrop-filter: blur(calc(24px * var(--hot-in))) saturate(calc(1 + 0.4 * var(--hot-in)));
+  box-shadow:
+    0 14px 44px rgba(0, 0, 0, calc(var(--hot-shadow) * var(--hot-in))),
+    inset 0 0 0 1px rgba(var(--ink-rgb), calc(0.07 * var(--hot-in)));
+}
+html.light .p-hot {
+  --hot-shadow: 0.14;
+}
+.p-hot > :not(.p-hot-hint) {
+  opacity: var(--hot-in);
+}
+/* Herkunftszone: zurückgenommen über den Inhalt, das Glas bleibt Glas */
+.p-hot.is-home {
+  opacity: 1;
+}
+.p-hot.is-home > :not(.p-hot-hint) {
+  opacity: calc(0.45 * var(--hot-in));
+}

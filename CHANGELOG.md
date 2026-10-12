@@ -1,5 +1,9 @@
 # Changelog
 
+## App 0.24.7 (12.10.2026)
+
+- Zonenleiste beim Ziehen: Das Glas ist sofort da und blendet mit ein, statt erst nach dem Einblenden scharf zu werden. Die Herkunftszone bleibt Glas und nimmt nur die Schrift zurück.
+
 ## App 0.24.6 (12.10.2026)
 
 - Einstellungen neu geordnet: Bibliothek, Ansicht, Aussehen, Start (Öffnung und Startton), Studio, Extension & Observer, Allgemein. Studio enthält nur noch Projekt- und Team-Werkzeuge (Name, geteilte Bibliothek, Notiz, Rechte, Zone als Paket). Moodboard und eigene Reihenfolge sind immer an.
