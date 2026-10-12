@@ -611,3 +611,32 @@ pub fn release_app(app: usize) {
         }
     }
 }
+
+// ---- Start über „Öffnen mit“ ----
+
+/// Wurde Archiver gestartet, um Dateien zu öffnen (Finder-Doppelklick,
+/// „Öffnen mit“)? Beim Start liegt dann das Apple Event 'odoc' an statt 'oapp'.
+/// Nur während des Starts (RunEvent::Ready) aussagekräftig.
+pub fn launched_with_documents() -> bool {
+    unsafe {
+        let mgr: *mut AnyObject = msg_send![class!(NSAppleEventManager), sharedAppleEventManager];
+        if mgr.is_null() {
+            return false;
+        }
+        let event: *mut AnyObject = msg_send![mgr, currentAppleEvent];
+        if event.is_null() {
+            return false;
+        }
+        let id: u32 = msg_send![event, eventID];
+        id == u32::from_be_bytes(*b"odoc")
+    }
+}
+
+/// Schiebt ein Fenster hinter alle anderen seiner Ebene, ohne es zu schließen
+/// (Hauptfenster, wenn nur der Betrachter nach vorne soll).
+pub unsafe fn send_to_back(window: *mut AnyObject) {
+    if !window.is_null() {
+        // NSWindowBelow = -1, relativeTo 0: unter alle Fenster
+        let _: () = msg_send![window, orderWindow: -1isize, relativeTo: 0isize];
+    }
+}

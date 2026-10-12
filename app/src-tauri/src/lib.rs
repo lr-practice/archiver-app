@@ -1234,6 +1234,11 @@ pub fn run() {
             // Das Hauptfenster startet unsichtbar: wurde die App mit einem Bild
             // geöffnet, erscheint nur der Betrachter, sonst wie gewohnt die App.
             tauri::RunEvent::Ready => {
+                // Mit einem Bild gestartet (Finder): nur der Betrachter, nie das Hauptfenster
+                #[cfg(target_os = "macos")]
+                if macos::launched_with_documents() {
+                    return;
+                }
                 let app = app.clone();
                 std::thread::spawn(move || {
                     std::thread::sleep(Duration::from_millis(450));
