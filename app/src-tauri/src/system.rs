@@ -14,7 +14,7 @@
 // allen Spaces und Vollbild-Programmen.
 //
 // Ereignisse:
-//   "palette-open"    an die Palette: wurde eingeblendet
+//   "palette-open"    an die Palette: wurde eingeblendet (true = aus InDesign)
 //   "dropbar-show"    an die Leiste: Ziehen hat begonnen
 //   "dropbar-release" an die Leiste: Maustaste losgelassen
 
@@ -151,7 +151,7 @@ pub fn toggle_palette(app: &AppHandle) {
                     crate::macos::release_app(BEFORE_PALETTE.swap(prev, Ordering::Relaxed));
                     crate::macos::panel_center_on_mouse_screen(ns);
                     crate::macos::panel_show(ns, true);
-                    let _ = app2.emit_to(PALETTE, "palette-open", ());
+                    let _ = app2.emit_to(PALETTE, "palette-open", from_indesign());
                 }
             }
         });
@@ -215,6 +215,72 @@ pub fn palette_ghost(app: AppHandle, on: bool) {
     }
     #[cfg(not(target_os = "macos"))]
     let _ = app;
+}
+
+// ---- InDesign: Bild in den markierten Rahmen oder in den Platzieren-Cursor ----
+
+/// Läuft in InDesign (ExtendScript). Markierter Rahmen (auch ein Bild darin):
+/// Bild hinein, proportional füllen, zentrieren. Sonst: in den Platzieren-Cursor.
+const INDESIGN_JS: &str = r#"
+var f = File(arguments[0]);
+var out = "nodoc";
+if (app.documents.length > 0) {
+  var sel = app.selection;
+  var t = sel.length === 1 ? sel[0] : null;
+  if (t && /^(Image|PDF|EPS|ImportedPage|PICT|WMF|Graphic)$/.test(t.constructor.name)) t = t.parent;
+  if (t && /^(Rectangle|Oval|Polygon)$/.test(t.constructor.name)) {
+    t.place(f);
+    t.fit(FitOptions.FILL_PROPORTIONALLY);
+    t.fit(FitOptions.CENTER_CONTENT);
+    out = "frame";
+  } else {
+    app.activeDocument.placeGuns.loadPlaceGun(f, false);
+    out = "gun";
+  }
+}
+out;
+"#;
+
+/// Kam die Palette aus InDesign?
+fn from_indesign() -> bool {
+    #[cfg(target_os = "macos")]
+    {
+        let app = BEFORE_PALETTE.load(Ordering::Relaxed);
+        return crate::macos::app_bundle_id(app).is_some_and(|id| id.starts_with("com.adobe.InDesign"));
+    }
+    #[cfg(not(target_os = "macos"))]
+    false
+}
+
+/// ↵ oder Doppelklick in der Palette. Kam sie aus InDesign: Bild dort platzieren
+/// ("frame" | "gun" | "nodoc"). Sonst "none" (die Palette kopiert dann).
+#[tauri::command]
+pub async fn palette_place(app: AppHandle, path: String) -> Result<String, String> {
+    if !from_indesign() {
+        return Ok("none".into());
+    }
+    hide_palette(&app);
+    tauri::async_runtime::spawn_blocking(move || {
+        // osascript fragt beim ersten Mal „Archiver möchte InDesign steuern“
+        let script = r#"on run argv
+  tell application id "com.adobe.InDesign"
+    activate
+    return do script (item 2 of argv) language javascript with arguments {item 1 of argv}
+  end tell
+end run"#;
+        let out = std::process::Command::new("osascript")
+            .args(["-e", script, &path, INDESIGN_JS])
+            .output()
+            .map_err(|e| e.to_string())?;
+        if out.status.success() {
+            return Ok(String::from_utf8_lossy(&out.stdout).trim().to_string());
+        }
+        let err = String::from_utf8_lossy(&out.stderr).to_string();
+        // -1743: nicht erlaubt (Systemeinstellungen › Datenschutz › Automation)
+        Err(if err.contains("-1743") { "indesign-denied".into() } else { err.trim().to_string() })
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 /// Beobachtet das Ziehen am ganzen Mac. Kein Ereignis-Hook (der bräuchte die

@@ -26,6 +26,7 @@
     area: "cards", // cards | objects (welcher Bereich die Pfeiltasten hat)
     cards: [], // sichtbare Karten (Zonen)
     objects: [], // sichtbare Objekte
+    indesign: false, // aus InDesign geöffnet: ↵ und Doppelklick platzieren dort
   };
 
   function el(tag, cls, text) {
@@ -162,6 +163,7 @@
     node.appendChild(img);
     node.title = item.filename;
     node.addEventListener("mousedown", (e) => pressObject(e, item));
+    node.addEventListener("dblclick", () => placeItem(item));
     return node;
   }
 
@@ -225,7 +227,7 @@
       body.appendChild(grid);
       state.objects = items;
       state.area = "objects";
-      keys([["↵", t("palCopy")], ["⌘↵", t("palFinder")], ["1–4", t("palZone")], ["⌫", t("palBack")]]);
+      keys([["↵", enterLabel()], ["⌘↵", t("palFinder")], ["1–4", t("palZone")], ["⌫", t("palBack")]]);
     }
 
     if (state.view === "search") {
@@ -250,7 +252,7 @@
       state.objects = items.slice(0, 120);
       if (state.area === "cards" && !state.cards.length) state.area = "objects";
       if (state.area === "objects" && !state.objects.length) state.area = "cards";
-      keys([["↵", t("palCopy")], ["⌘↵", t("palFinder")], ["tab", t("palSwitch")]]);
+      keys([["↵", enterLabel()], ["⌘↵", t("palFinder")], ["tab", t("palSwitch")]]);
     }
     markSel();
   }
@@ -351,6 +353,20 @@
     return { item: state.objects[state.sel] };
   }
 
+  const enterLabel = () => (state.indesign ? t("palPlace") : t("palCopy"));
+
+  // Aus InDesign: in den markierten Rahmen, sonst in den Platzieren-Cursor.
+  // Sonst (oder wenn InDesign nicht mitspielt): kopieren.
+  async function placeItem(item) {
+    if (!state.indesign) return copyItem(item);
+    try {
+      const r = await invoke("palette_place", { path: item.abs });
+      if (r === "none") return copyItem(item);
+    } catch (e) {
+      toast(String(e) === "indesign-denied" ? t("palDenied") : String(e));
+    }
+  }
+
   async function copyItem(item) {
     try {
       await invoke("copy_images", { paths: [item.abs], text: item.quote || null });
@@ -406,7 +422,7 @@
       if (s.zone != null) return openZone(s.zone);
       if (!s.item) return;
       if (e.metaKey) return invoke("reveal", { path: s.item.abs }).then(hide).catch(() => {});
-      return copyItem(s.item);
+      return placeItem(s.item);
     }
   }
 
@@ -457,7 +473,8 @@
   document.addEventListener("keydown", onKey);
 
   TAURI.event.listen("library-changed", () => (state.dirty = true));
-  TAURI.event.listen("palette-open", async () => {
+  TAURI.event.listen("palette-open", async (e) => {
+    state.indesign = e && e.payload === true;
     await load();
     goStart();
   });

@@ -640,3 +640,15 @@ pub unsafe fn send_to_back(window: *mut AnyObject) {
         let _: () = msg_send![window, orderWindow: -1isize, relativeTo: 0isize];
     }
 }
+
+/// Bundle-ID eines mit `frontmost_other_app` gemerkten Programms.
+pub fn app_bundle_id(app: usize) -> Option<String> {
+    if app == 0 {
+        return None;
+    }
+    unsafe {
+        let id: *mut AnyObject = msg_send![app as *mut AnyObject, bundleIdentifier];
+        let s = rust_string(id);
+        (!s.is_empty()).then_some(s)
+    }
+}

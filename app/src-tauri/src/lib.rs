@@ -1216,6 +1216,7 @@ pub fn run() {
             viewer::viewer_make_default,
             system::palette_hide,
             system::palette_ghost,
+            system::palette_place,
             system_prefs,
             set_system_prefs,
         ])
