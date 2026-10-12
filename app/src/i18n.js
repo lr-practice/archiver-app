@@ -1012,13 +1012,9 @@
     const tauri = global.__TAURI__;
     if (tauri && tauri.core) tauri.core.invoke("set_appearance", { light }).catch(() => {});
   }
-  // Farbschema: "standard" oder "sage" (Periwinkle auf Grau-Grün)
+  // Farbschema: seit 0.27 nur noch "standard" (Salbei entfernt)
   function scheme() {
-    try {
-      return JSON.parse(localStorage.getItem("archiver.scheme")) === "sage" ? "sage" : "standard";
-    } catch (e) {
-      return "standard";
-    }
+    return "standard";
   }
   function applyScheme() {
     if (scheme() === "sage") document.documentElement.dataset.scheme = "sage";

@@ -45,7 +45,6 @@ Klassen und Attribute auf `html`:
 |---|---|
 | Dunkel (Standard) | `:root` |
 | Hell | `html.light` (setzt `app.js` je nach Einstellung) |
-| Salbei dunkel / hell | `html[data-scheme="sage"]` / `…[data-scheme="sage"].light` |
 | Mac mit Fensterglas | `html.mac` (halbtransparent über der macOS-Unschärfe) |
 
 Bei neuen Regeln gilt:
@@ -76,10 +75,6 @@ Bei neuen Regeln gilt:
 | `--accent` / `--accent-rgb` | `#2d5aeb` | dito | Toast, aktive Systemzustände |
 | `--glow-rgb` | `91,124,255` | dito | Glühen der Zielkarte beim Ablegen |
 | `--danger` | `#e5484d` | dito | Fehler-Toast, Löschen |
-
-Für das Schema Salbei stehen die Werte in `app.css` im Abschnitt
-`html[data-scheme="sage"]`. Dessen Akzent ist ein Graublau (`#a6b5d6` dunkel,
-`#5f6f94` hell).
 
 Für die Farbe gilt:
 
@@ -302,7 +297,7 @@ sie nur auf ausdrückliches Go.
 
 - [ ] Die neue Regel nutzt Tokens und keine festen Farben, Dauern oder Radien
       außerhalb der Stufen.
-- [ ] Sie funktioniert in Dunkel, Hell und Salbei sowie mit und ohne `html.mac`.
+- [ ] Sie funktioniert in Dunkel und Hell sowie mit und ohne `html.mac`.
 - [ ] Hervorhebungen laufen über den Ring (4.1) und nicht über Farbe.
 - [ ] Wenn die Komponente auch in der Extension vorkommt, ist sie dort gleich
       oder als Abweichung in Abschnitt 5 notiert.

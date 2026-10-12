@@ -4137,84 +4137,6 @@ body.page-open .p-lock {
   font-size: 10px;
 }
 
-/* ---- Farbschema „Salbei“: Periwinkle auf Grau-Grün (Einstellungen → Darstellung) ---- */
-
-html[data-scheme="sage"]:not(.light) {
-  --splash-bg: #2b312e;
-  --bg: rgba(43, 49, 46, 0.9);
-  --card-bg: rgba(56, 63, 59, 0.42);
-  --panel: rgba(43, 49, 46, 0.97);
-  --sheet-bg: #2b312e;
-  --menu-bg: rgba(54, 61, 57, 0.97);
-  --thumb-bg: #353c38;
-  --muted: #8e938f;
-  --ink: #e4e7e5;
-  --ink-rgb: 228, 231, 229;
-  --ink-inverse: #1c211e;
-  --accent: #a6b5d6;
-  --accent-rgb: 166, 181, 214;
-  --accent-ink: #161b26;
-  --glow-rgb: 166, 181, 214;
-  --p-text: #e4e7e5;
-  --p-dim: #8e938f;
-  --p-faint: #646a66;
-  --p-pill: rgba(58, 66, 61, 0.86);
-}
-
-html[data-scheme="sage"]:not(.mac):not(.light) {
-  --bg: #2b312e;
-}
-
-html[data-scheme="sage"].light {
-  --splash-bg: #e9ece9;
-  --bg: rgba(233, 236, 233, 0.92);
-  --card-bg: rgba(0, 0, 0, 0.04);
-  --panel: #e9ece9;
-  --sheet-bg: #e9ece9;
-  --menu-bg: rgba(238, 241, 238, 0.98);
-  --thumb-bg: #d9ddd9;
-  --muted: #6c726d;
-  --ink: #1c211e;
-  --ink-rgb: 28, 33, 30;
-  --ink-inverse: #e9ece9;
-  --accent: #5f6f94;
-  --accent-rgb: 95, 111, 148;
-  --accent-ink: #ffffff;
-  --glow-rgb: 95, 111, 148;
-  --p-text: #1c211e;
-  --p-dim: #6c726d;
-  --p-faint: #a3a8a4;
-  --p-pill: rgba(222, 227, 222, 0.94);
-}
-
-/* Wortmarke und aktive Knöpfe im Akzent, Knopf-Schrift dunkel */
-html[data-scheme="sage"] .p-nav-brand,
-html[data-scheme="sage"] .splash-word {
-  color: var(--accent);
-}
-
-html[data-scheme="sage"] .p-nav-btn.active,
-html[data-scheme="sage"] .p-nav.has-glide .p-nav-btn.active:hover {
-  background: var(--accent);
-  color: var(--accent-ink);
-}
-
-html[data-scheme="sage"] .p-chip.active {
-  color: var(--accent);
-}
-
-html[data-scheme="sage"] .btn.primary,
-html[data-scheme="sage"] .p-unlock-go,
-html[data-scheme="sage"] .p-lock-btn {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: var(--accent-ink);
-}
-
-html[data-scheme="sage"] .toast {
-  color: var(--accent-ink);
-}
-
 /* ---- Einstellungen: Bereiche als Liste, Untermenüs mit Zurück ---- */
 
 .p-settings-nav {
@@ -5650,12 +5572,6 @@ html.light .p-hot {
 html.light {
   --bg-solid: #d6d6d6;
 }
-html[data-scheme="sage"] {
-  --bg-solid: #2b312e;
-}
-html[data-scheme="sage"].light {
-  --bg-solid: #e9ece9;
-}
 html.mac[data-winalpha] {
   --bg: color-mix(in srgb, var(--bg-solid) calc(var(--win-alpha, 0.6) * 100%), transparent);
 }
@@ -5728,7 +5644,7 @@ html.mac[data-winalpha] {
    haben. Übersetzt aus Dunkel: gleiche Kontraste, Karten eine Stufe vom Grund
    abgesetzt, Navigation als weißes Glas, Zonenkarten beim Ziehen als helles
    Glas ohne Sättigung (Deckkraft über den Regler). Salbei bleibt unverändert. */
-html.light:not([data-scheme="sage"]) {
+html.light {
   --bg-solid: #f4f4f4;
   --bg: #f4f4f4;
   --panel: #f4f4f4;
@@ -5750,32 +5666,32 @@ html.light:not([data-scheme="sage"]) {
   --menu-bg: rgba(250, 250, 250, 0.97);
   --menu-shadow: 0 14px 44px rgba(0, 0, 0, 0.14), inset 0 0 0 1px rgba(0, 0, 0, 0.06);
 }
-html.mac[data-winalpha].light:not([data-scheme="sage"]) {
+html.mac[data-winalpha].light {
   --bg: color-mix(in srgb, var(--bg-solid) calc(var(--win-alpha, 0.6) * 100%), transparent);
 }
-html.light:not([data-scheme="sage"]) .p-nav {
+html.light .p-nav {
   background: var(--p-pill);
   -webkit-backdrop-filter: blur(24px) saturate(0);
   backdrop-filter: blur(24px) saturate(0);
   box-shadow: 0 10px 34px rgba(0, 0, 0, 0.08), inset 0 0 0 1px rgba(0, 0, 0, 0.05);
 }
-html.light:not([data-scheme="sage"]) .p-nav-btn.active {
+html.light .p-nav-btn.active {
   background: rgba(0, 0, 0, 0.08);
 }
-html.light:not([data-scheme="sage"]) .p-nav > .p-nav-glide {
+html.light .p-nav > .p-nav-glide {
   background: rgba(0, 0, 0, 0.06);
 }
-html.light:not([data-scheme="sage"]) .p-lib-tab {
+html.light .p-lib-tab {
   background: transparent;
   box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.08);
 }
-html.light:not([data-scheme="sage"]) .p-card {
+html.light .p-card {
   background: rgba(0, 0, 0, 0.045);
 }
-html.light:not([data-scheme="sage"]) .p-card:hover {
+html.light .p-card:hover {
   background: rgba(0, 0, 0, 0.07);
 }
-html.light:not([data-scheme="sage"]) .p-dropbar .p-hot {
+html.light .p-dropbar .p-hot {
   --menu-bg: #fafafa;
   --hot-shadow: 0.16;
   -webkit-backdrop-filter: blur(calc(28px * var(--hot-in))) saturate(0);
