@@ -5701,3 +5701,8 @@ html.light .p-dropbar .p-hot {
     inset 0 0 0 1px rgba(255, 255, 255, calc(0.7 * var(--hot-in))),
     inset 0 0 0 0.5px rgba(0, 0, 0, calc(0.08 * var(--hot-in)));
 }
+
+/* ---- 0.27: Titel der Zone steht oben fest, springt nicht mit den Ordnerkarten ---- */
+.p-head-row > .p-head {
+  align-self: start;
+}

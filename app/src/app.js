@@ -189,7 +189,8 @@
     order: {}, // Zone → Hashes in eigener Reihenfolge (zones.json, Schlüssel "sort")
     shared: false, // geteilte Bibliothek (studio.rs)
     user: "", // Name für „abgelegt von“
-    folder: null, // gewählter Ordner in der offenen Zone (Chips), null = alle
+    folder: null, // Filter in der offenen Zone (Chips), null = alle
+    level: null, // betretener Ordner (Karten, Pfad), null = oberste Ebene der Zone
   };
 
   // ---- Helfer ----
@@ -996,27 +997,36 @@
 
   // Ordner-Chips unter dem Zonentitel: (All 282) (Typefaces 165) (Loose 3).
   // Im Ordner: (Alle n) für diese Ebene, dahinter nur seine Unterordner.
+  // 0.27: Chips filtern nur, die Ebene (Titel, Pfad, Karten) bleibt stehen.
   function folderChips(zone, folders, total) {
     const wrap = el("span", "p-folder-chips");
-    const base = state.folder || null;
-    wrap.appendChild(chip("(" + t("folderAll") + " " + total + ")", state.folder == null || state.folder === base, () => {
-      state.folder = base;
+    const base = state.level || null;
+    const pick = (f) => {
+      state.folder = f;
       renderZones();
-    }));
-    for (const [f, n] of folders) wrap.appendChild(chip("(" + (f ? lastSegment(f) : t("folderLoose")) + " " + n + ")", state.folder === f, () => openFolder(f)));
+    };
+    wrap.appendChild(chip("(" + t("folderAll") + " " + total + ")", state.folder == null || state.folder === base, () => pick(base)));
+    for (const [f, n] of folders) wrap.appendChild(chip("(" + (f ? lastSegment(f) : t("folderLoose")) + " " + n + ")", state.folder === f, () => pick(f)));
     return wrap;
   }
 
   // Ordner betreten bzw. eine Ebene zurück (Esc, ⌘↑, Klick im Pfad)
   function openFolder(f) {
+    state.level = f;
     state.folder = f;
     state.folderKbd = null;
     renderZones();
   }
 
   function folderUp() {
-    if (state.folder == null) return false;
-    openFolder(parentFolder(state.folder));
+    // Erst den Chip-Filter lösen, dann eine Ebene hoch
+    if (state.folder != null && state.folder !== state.level) {
+      state.folder = state.level;
+      renderZones();
+      return true;
+    }
+    if (state.level == null) return false;
+    openFolder(parentFolder(state.level));
     return true;
   }
 
@@ -2674,8 +2684,8 @@
     const all = single && shown[0] ? zoneItems(shown[0].path) : [];
     const hasFolders = zoneFolders(all).some(([f]) => f);
     // Ebenenweise: im Ordner nur seine eigenen Unterordner
-    const folders = zoneFolders(all, state.folder || null);
-    const here = state.folder ? all.filter((i) => inFolder(i, state.folder)) : all;
+    const folders = zoneFolders(all, state.level || null);
+    const here = state.level ? all.filter((i) => inFolder(i, state.level)) : all;
     if (single && shown[0]) {
       const zone = shown[0];
       const items = all;
@@ -2691,7 +2701,7 @@
         title.title = t("renameHint");
         title.addEventListener("dblclick", () => startRename(title, zone.path));
       }
-      if (hasFolders && state.folder != null) {
+      if (hasFolders && state.level != null) {
         // Im Unterordner: Pfad „Zone / Ordner / Unterordner“, jeder Teil führt auf seine Ebene
         const title = h.querySelector(".p-head-title");
         const back = (node, target) => {
@@ -2700,7 +2710,7 @@
           node.addEventListener("click", () => openFolder(target));
         };
         back(title, null);
-        const parts = state.folder ? state.folder.split("/") : [""];
+        const parts = state.level ? state.level.split("/") : [""];
         let after = title;
         parts.forEach((part, i) => {
           const span = el("span", "p-head-title p-head-folder", " / " + (part || t("folderLoose")));
@@ -3156,6 +3166,7 @@
     if (path !== state.focus && isZone(state.focus) && state.shared) markSeen(zoneItems(state.focus));
     if (path !== state.focus) {
       state.folder = null;
+      state.level = null;
       state.folderKbd = null;
     }
     state.focus = path;
