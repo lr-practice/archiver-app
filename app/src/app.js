@@ -1701,6 +1701,8 @@
     for (const [top, zones] of groups) {
       const card = zones.length === 1 && !zones[0].path.includes("/") ? zoneCardTile(zones[0]) : groupCard(top, zones);
       card.dataset.group = top;
+      // eine einzelne Zone lässt sich auch mit einer Active Zone oben tauschen (0.27)
+      if (zones.length === 1) card.dataset.single = card.dataset.swap = zones[0].path;
       card.addEventListener("pointerdown", (e) => dragCard(e, card, [...groups.keys()]));
       card.addEventListener("dragstart", (e) => e.preventDefault());
       cards.push(card);
@@ -1737,6 +1739,7 @@
     const start = { x: e.clientX, y: e.clientY };
     let lifted = false;
     let target = null;
+    let hot = null;
     let after = false;
     const onMove = (ev) => {
       if (!lifted) {
@@ -1747,6 +1750,14 @@
       }
       card.style.transform = `translate(${ev.clientX - start.x}px, ${ev.clientY - start.y}px)`;
       target = null;
+      hot = null;
+      if (card.dataset.single != null) {
+        for (const other of document.querySelectorAll(".p-hotrow .p-hot-card[data-swap]")) {
+          const r = other.getBoundingClientRect();
+          if (ev.clientX >= r.left && ev.clientX <= r.right && ev.clientY >= r.top && ev.clientY <= r.bottom) hot = other;
+        }
+      }
+      for (const other of document.querySelectorAll(".p-hotrow .p-hot-card[data-swap]")) other.classList.toggle("swap-target", other === hot);
       for (const other of document.querySelectorAll(".p-cards .p-card[data-group]")) {
         if (other === card) continue;
         const r = other.getBoundingClientRect();
@@ -1770,7 +1781,19 @@
       document.body.classList.remove("sorting");
       card.classList.remove("lifted");
       card.style.transform = "";
-      for (const n of document.querySelectorAll(".drop-target")) n.classList.remove("drop-target");
+      for (const n of document.querySelectorAll(".drop-target, .swap-target")) n.classList.remove("drop-target", "swap-target");
+      if (hot) {
+        // Mit der Active Zone tauschen: die Zone rückt nach oben, die Active Zone an ihren Platz
+        const zones = state.zones.map((z) => z.path);
+        const a = zones.indexOf(card.dataset.single);
+        const b = zones.indexOf(hot.dataset.swap);
+        if (a < 0 || b < 0) return;
+        [zones[a], zones[b]] = [zones[b], zones[a]];
+        setZoneOrder(zones);
+        renderZones();
+        toast(t("hotSwapped", { zone: zoneLabel(zones[b]) }));
+        return;
+      }
       if (!target) return;
       const tops = order.filter((top) => top !== card.dataset.group);
       tops.splice(tops.indexOf(target.dataset.group) + (after ? 1 : 0), 0, card.dataset.group);

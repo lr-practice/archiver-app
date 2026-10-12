@@ -119,7 +119,7 @@
       hotZone: "Active zone",
       hotHint: "Drag a zone onto a card to swap",
       hotHintRow: "Drag a zone onto an active zone to swap",
-      hotSwapped: "{zone} is now a active zone.",
+      hotSwapped: "{zone} is now an active zone.",
       setZonesHint: "Drag to reorder. The first four are your active zones.",
       layoutIndex: "Index",
       layoutPreview: "Preview",
