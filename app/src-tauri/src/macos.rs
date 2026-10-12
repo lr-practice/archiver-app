@@ -570,3 +570,44 @@ pub fn app_active() -> bool {
         !me.is_null() && msg_send![me, isActive]
     }
 }
+
+/// Programm, das gerade vorne ist (nicht Archiver selbst), gehalten bis
+/// `activate_app` es wieder nach vorne holt. 0 = keins.
+pub fn frontmost_other_app() -> usize {
+    unsafe {
+        let ws: *mut AnyObject = msg_send![class!(NSWorkspace), sharedWorkspace];
+        let app: *mut AnyObject = msg_send![ws, frontmostApplication];
+        let me: *mut AnyObject = msg_send![class!(NSRunningApplication), currentApplication];
+        if app.is_null() {
+            return 0;
+        }
+        let pid: i32 = msg_send![app, processIdentifier];
+        let my_pid: i32 = if me.is_null() { -1 } else { msg_send![me, processIdentifier] };
+        if pid == my_pid {
+            return 0;
+        }
+        let _: *mut AnyObject = msg_send![app, retain];
+        app as usize
+    }
+}
+
+/// Holt ein mit `frontmost_other_app` gemerktes Programm nach vorne und gibt es frei.
+pub fn activate_app(app: usize) {
+    if app == 0 {
+        return;
+    }
+    unsafe {
+        let app = app as *mut AnyObject;
+        let _: bool = msg_send![app, activateWithOptions: 0usize];
+        let _: () = msg_send![app, release];
+    }
+}
+
+/// Gibt ein gemerktes Programm frei, ohne es zu aktivieren.
+pub fn release_app(app: usize) {
+    if app != 0 {
+        unsafe {
+            let _: () = msg_send![app as *mut AnyObject, release];
+        }
+    }
+}

@@ -33,6 +33,9 @@ pub const DEFAULT_SHORTCUT: &str = "Alt+Space";
 static DROPBAR_ON: AtomicBool = AtomicBool::new(true);
 /// Gerade wird aus der Palette gezogen: keine Leiste, Palette nicht schließen
 static PALETTE_DRAG: AtomicBool = AtomicBool::new(false);
+/// Programm, das vor der Palette vorne war (NSRunningApplication, 0 = keins)
+#[cfg(target_os = "macos")]
+static BEFORE_PALETTE: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
 
 #[derive(Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -142,8 +145,10 @@ pub fn toggle_palette(app: &AppHandle) {
             let ns = ns.cast();
             unsafe {
                 if crate::macos::panel_visible(ns) {
-                    crate::macos::panel_hide(ns);
+                    close_palette(ns);
                 } else {
+                    let prev = crate::macos::frontmost_other_app();
+                    crate::macos::release_app(BEFORE_PALETTE.swap(prev, Ordering::Relaxed));
                     crate::macos::panel_center_on_mouse_screen(ns);
                     crate::macos::panel_show(ns, true);
                     let _ = app2.emit_to(PALETTE, "palette-open", ());
@@ -155,12 +160,26 @@ pub fn toggle_palette(app: &AppHandle) {
     let _ = app;
 }
 
+/// Palette ausblenden. War Archiver dadurch vorne (esc, Klick in die Palette),
+/// kommt das Programm von vorher zurück, nicht das Archiver-Fenster.
+#[cfg(target_os = "macos")]
+unsafe fn close_palette(ns: *mut objc2::runtime::AnyObject) {
+    crate::macos::panel_hide(ns);
+    let prev = BEFORE_PALETTE.swap(0, Ordering::Relaxed);
+    if crate::macos::app_active() {
+        crate::macos::activate_app(prev);
+    } else if prev != 0 {
+        // nur freigeben
+        crate::macos::release_app(prev);
+    }
+}
+
 pub fn hide_palette(app: &AppHandle) {
     #[cfg(target_os = "macos")]
     if let Some(win) = app.get_webview_window(PALETTE) {
         let _ = app.run_on_main_thread(move || {
             if let Ok(ns) = win.ns_window() {
-                unsafe { crate::macos::panel_hide(ns.cast()) };
+                unsafe { close_palette(ns.cast()) };
             }
         });
     }
