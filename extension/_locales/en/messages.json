@@ -306,5 +306,67 @@
   },
   "openAppTitle": {
     "message": "Everything else lives in the app: zones, sorting, search"
+  },
+  "menuRecent": {
+    "message": "Recent"
+  },
+  "menuZoneItself": {
+    "message": "Directly in $ZONE$",
+    "placeholders": {
+      "zone": {
+        "content": "$1"
+      }
+    }
+  },
+  "objCount": {
+    "message": "$COUNT$ objects",
+    "placeholders": {
+      "count": {
+        "content": "$1"
+      }
+    }
+  },
+  "objCountOne": {
+    "message": "1 object"
+  },
+  "activeTitle": {
+    "message": "Active Zones"
+  },
+  "activeLead": {
+    "message": "in $LIB$. Drag an image here or drop with 1–4.",
+    "placeholders": {
+      "lib": {
+        "content": "$1"
+      }
+    }
+  },
+  "activeLeadNoLib": {
+    "message": "Drag an image here or drop with 1–4."
+  },
+  "activeLabel": {
+    "message": "(Active Zones)"
+  },
+  "activeTag": {
+    "message": "Active Zone"
+  },
+  "zoneLead": {
+    "message": "$COUNT$, last $DATE$.",
+    "placeholders": {
+      "count": {
+        "content": "$1"
+      },
+      "date": {
+        "content": "$2"
+      }
+    }
+  },
+  "dayToday": {
+    "message": "today"
+  },
+  "dayYesterday": {
+    "message": "yesterday"
+  },
+  "allLabel": {
+    "message": "(All)"
   }
 }

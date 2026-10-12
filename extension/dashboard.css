@@ -42,3 +42,20 @@ html.light body {
   background: #f5f5f5;
   color: #111111;
 }
+
+/* Geist wie in der App */
+@font-face {
+  font-family: "Geist";
+  src: url("fonts/Geist-Variable.woff2") format("woff2");
+  font-weight: 100 900;
+}
+
+@font-face {
+  font-family: "Geist Mono";
+  src: url("fonts/GeistMono-Regular.woff2") format("woff2");
+  font-weight: 400;
+}
+
+body {
+  font-family: "Geist", -apple-system, BlinkMacSystemFont, sans-serif;
+}

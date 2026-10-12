@@ -118,11 +118,65 @@ fn library_root() -> Option<PathBuf> {
     root.is_dir().then_some(root)
 }
 
+/// Bibliothek für eine Anfrage: `library` (Pfad) nur, wenn sie in der App als
+/// Bibliothek eingetragen ist (⇧ beim Ziehen in der Extension), sonst die aktive.
+fn library_root_for(msg: &Value) -> Option<PathBuf> {
+    if let Some(want) = str_arg(msg, "library") {
+        let known = app_settings()
+            .map(|s| s.libraries.iter().any(|l| l.path.as_deref() == Some(want)) || s.library.as_deref() == Some(want))
+            .unwrap_or(false);
+        let root = PathBuf::from(want);
+        if known && root.is_dir() {
+            return Some(root);
+        }
+    }
+    library_root()
+}
+
+/// Alle Bibliotheken aus den Einstellungen, die es gibt, die aktive markiert.
+fn library_list() -> Vec<Value> {
+    let Some(s) = app_settings() else { return vec![] };
+    let active = s.library.clone();
+    let mut out: Vec<Value> = s
+        .libraries
+        .iter()
+        .filter_map(|l| {
+            let path = l.path.clone()?;
+            if !Path::new(&path).is_dir() {
+                return None;
+            }
+            let name = if l.name.trim().is_empty() {
+                Path::new(&path).file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default()
+            } else {
+                l.name.clone()
+            };
+            Some(json!({ "name": name, "path": path, "active": active.as_deref() == Some(path.as_str()) }))
+        })
+        .collect();
+    if out.is_empty() {
+        if let Some(root) = library_root() {
+            let name = root.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+            out.push(json!({ "name": name, "path": root.to_string_lossy(), "active": true }));
+        }
+    }
+    out
+}
+
+#[derive(Deserialize, Default)]
+struct LibrarySlotSetting {
+    #[serde(default)]
+    name: String,
+    #[serde(default)]
+    path: Option<String>,
+}
+
 #[derive(Deserialize)]
 struct AppSettings {
     library: Option<String>,
     #[serde(default)]
     user: Option<String>,
+    #[serde(default)]
+    libraries: Vec<LibrarySlotSetting>,
 }
 
 fn app_settings() -> Option<AppSettings> {
@@ -152,7 +206,7 @@ pub fn run_host() {
     let stdout = std::io::stdout();
     let mut input = stdin.lock();
     let mut output = stdout.lock();
-    let mut lib: Option<(PathBuf, Library)> = None;
+    let mut lib: Vec<(PathBuf, Library)> = Vec::new();
     while let Some(msg) = read_message(&mut input) {
         let id = msg.get("id").cloned().unwrap_or(Value::Null);
         let reply = match handle(&msg, &mut lib) {
@@ -170,15 +224,43 @@ pub fn run_host() {
     }
 }
 
-/// Öffnet die Bibliothek bei Bedarf neu (z. B. wenn in der App gewechselt wurde).
-fn library<'a>(slot: &'a mut Option<(PathBuf, Library)>) -> Result<&'a Library, String> {
-    let root = library_root().ok_or("Keine Bibliothek eingerichtet")?;
-    if slot.as_ref().map(|(r, _)| r != &root).unwrap_or(true) {
-        *slot = Some((root.clone(), Library::open(&root)?));
-    }
+/// Öffnet die Bibliothek der Anfrage bei Bedarf (aktive oder per ⇧ gewählte).
+/// Geöffnete Bibliotheken bleiben offen, damit der Wechsel per ⇧ schnell ist.
+fn library<'a>(slot: &'a mut Vec<(PathBuf, Library)>, msg: &Value) -> Result<&'a Library, String> {
+    let root = library_root_for(msg).ok_or("Keine Bibliothek eingerichtet")?;
+    let i = match slot.iter().position(|(r, _)| r == &root) {
+        Some(i) => i,
+        None => {
+            slot.push((root.clone(), Library::open(&root)?));
+            slot.len() - 1
+        }
+    };
     // Name für „abgelegt von“ kann sich in der App jederzeit ändern
-    slot.as_ref().unwrap().1.set_user(app_settings().and_then(|s| s.user));
-    Ok(&slot.as_ref().unwrap().1)
+    slot[i].1.set_user(app_settings().and_then(|s| s.user));
+    Ok(&slot[i].1)
+}
+
+/// Ordner innerhalb der Zonen (bis zwei Ebenen tief) fürs Rechtsklickmenü der Extension.
+fn zone_folders(lib: &Library, zones: &[Zone]) -> Result<Value, String> {
+    let mut map = serde_json::Map::new();
+    let mut sets: std::collections::BTreeMap<String, std::collections::BTreeSet<String>> = Default::default();
+    for item in lib.items()? {
+        if !zones.iter().any(|z| z.path == item.zone) {
+            continue;
+        }
+        let dir = item.path.rsplit_once('/').map(|(d, _)| d).unwrap_or("");
+        let Some(rest) = dir.strip_prefix(&format!("{}/", item.zone)) else { continue };
+        let parts: Vec<&str> = rest.split('/').take(2).collect();
+        let set = sets.entry(item.zone.clone()).or_default();
+        set.insert(parts[0].to_string());
+        if parts.len() > 1 {
+            set.insert(format!("{}/{}", parts[0], parts[1]));
+        }
+    }
+    for (zone, set) in sets {
+        map.insert(zone, json!(set.into_iter().collect::<Vec<_>>()));
+    }
+    Ok(Value::Object(map))
 }
 
 /// Zonen wie in der App: ohne Bibliotheksordner selbst und ohne leere Elternordner.
@@ -195,7 +277,7 @@ fn str_arg<'a>(msg: &'a Value, key: &str) -> Option<&'a str> {
     msg.get(key).and_then(|v| v.as_str()).filter(|s| !s.is_empty())
 }
 
-fn handle(msg: &Value, slot: &mut Option<(PathBuf, Library)>) -> Result<Value, String> {
+fn handle(msg: &Value, slot: &mut Vec<(PathBuf, Library)>) -> Result<Value, String> {
     let cmd = str_arg(msg, "cmd").unwrap_or("");
     match cmd {
         "hello" => {
@@ -205,10 +287,11 @@ fn handle(msg: &Value, slot: &mut Option<(PathBuf, Library)>) -> Result<Value, S
                 "version": env!("CARGO_PKG_VERSION"),
                 "library": root.as_ref().map(|r| r.to_string_lossy().into_owned()),
                 "name": root.as_ref().and_then(|r| r.file_name()).map(|n| n.to_string_lossy().into_owned()),
+                "libraries": library_list(),
             }))
         }
         "zones" => {
-            let lib = library(slot)?;
+            let lib = library(slot, msg)?;
             lib.scan()?;
             // Reihenfolge und Hot Zones aus der Übersicht der App
             let (order, hot) = lib.zone_order();
@@ -216,15 +299,23 @@ fn handle(msg: &Value, slot: &mut Option<(PathBuf, Library)>) -> Result<Value, S
             let rank = |p: &str| order.iter().position(|o| o == p).unwrap_or(order.len());
             zones.sort_by_key(|z| rank(&z.path));
             let hot: Vec<&String> = hot.iter().filter(|h| zones.iter().any(|z| &z.path == *h)).collect();
-            Ok(json!({ "zones": zones, "hot": hot, "alpha": lib.drag_alpha(), "default": lib.default_zone() }))
+            let folders = zone_folders(lib, &zones).unwrap_or(Value::Null);
+            Ok(json!({
+                "zones": zones,
+                "hot": hot,
+                "alpha": lib.drag_alpha(),
+                "default": lib.default_zone(),
+                "folders": folders,
+                "libraries": library_list(),
+            }))
         }
         "create_zone" => {
-            let lib = library(slot)?;
+            let lib = library(slot, msg)?;
             let name = str_arg(msg, "name").ok_or("Name fehlt")?;
             Ok(json!({ "zone": lib.create_zone(name)? }))
         }
         "save" => {
-            let lib = library(slot)?;
+            let lib = library(slot, msg)?;
             let file = PathBuf::from(str_arg(msg, "file").ok_or("Datei fehlt")?);
             let fallback = lib.default_zone();
             let zone = str_arg(msg, "zone").unwrap_or(&fallback);
@@ -247,7 +338,7 @@ fn handle(msg: &Value, slot: &mut Option<(PathBuf, Library)>) -> Result<Value, S
             Ok(json!({ "path": path, "duplicate": duplicate }))
         }
         "list" => {
-            let lib = library(slot)?;
+            let lib = library(slot, msg)?;
             lib.scan()?;
             let fallback = lib.default_zone();
             let zone = str_arg(msg, "zone").unwrap_or(&fallback);
@@ -273,14 +364,14 @@ fn handle(msg: &Value, slot: &mut Option<(PathBuf, Library)>) -> Result<Value, S
             Ok(json!({ "items": items }))
         }
         "preview" => {
-            let lib = library(slot)?;
+            let lib = library(slot, msg)?;
             let (abs, hash) = lib.locate(str_arg(msg, "path").ok_or("Pfad fehlt")?)?;
             let (mime, bytes) = lib.small_preview(&hash, &abs).ok_or("Keine Vorschau")?;
             let data = base64::engine::general_purpose::STANDARD.encode(bytes);
             Ok(json!({ "hash": hash, "dataUrl": format!("data:{mime};base64,{data}") }))
         }
         "move" => {
-            let lib = library(slot)?;
+            let lib = library(slot, msg)?;
             let paths: Vec<String> = msg
                 .get("paths")
                 .and_then(|v| v.as_array())
@@ -290,7 +381,7 @@ fn handle(msg: &Value, slot: &mut Option<(PathBuf, Library)>) -> Result<Value, S
             Ok(json!({ "moved": lib.move_items(&paths, zone)? }))
         }
         "reveal" => {
-            let lib = library(slot)?;
+            let lib = library(slot, msg)?;
             let (abs, _) = lib.locate(str_arg(msg, "path").ok_or("Pfad fehlt")?)?;
             reveal_in_finder(&abs);
             Ok(json!({}))

@@ -1,5 +1,16 @@
 # Changelog
 
+## App 0.24.9 · Extension 3.20.0 (12.10.2026)
+
+Extension auf dem Stand der App:
+- Ziehen: Die Zonenleiste sieht aus wie in der App (Glas, Nummer 01–04, Name und Zahl, Geist-Schrift) und erscheint ohne Verzögerung.
+- Shift beim Ziehen wechselt die Bibliothek. Die Bibliotheksleiste ist nur sichtbar, solange Shift gehalten wird; abgelegt wird in die gewählte Bibliothek. Mit nur einer Bibliothek legt Shift wie bisher in Downloads ab.
+- Rechtsklick-Menü: oben die drei zuletzt genutzten Zonen, darunter alle Zonen mit ihren Ordnern und Unterordnern.
+- Übersicht und Zone im Layout der App: Kopfzeile „Active Zones“, Nummern an den Karten, „n Objekte · Datum“, größeres Raster, Bibliothek oben rechts.
+
+App:
+- Die Brücke zur Extension liefert die Bibliotheken und die Ordner jeder Zone und nimmt Objekte für eine andere eingetragene Bibliothek an.
+
 ## App 0.24.8 (12.10.2026)
 
 - Eine Fokus-Sprache: Auswahl, Tastaturfokus, Tausch- und Umsortier-Ziel sowie das Ablageziel in der Zonenleiste zeigen denselben gestrichelten Ring. Er folgt der Eckenrundung, „Umlaufend“ gilt überall.

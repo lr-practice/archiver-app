@@ -44,6 +44,28 @@
   let panelHostEl = null;
   let panels = null;
 
+  // Geist wie in der App. @font-face greift im Shadow DOM nicht, deshalb über
+  // document.fonts; die Seite sieht nur die zusätzliche Schrift, ändert nichts.
+  let fontsLoaded = false;
+  function loadFonts() {
+    if (fontsLoaded || !window.FontFace || !document.fonts) return;
+    fontsLoaded = true;
+    [
+      ["Geist", "fonts/Geist-Variable.woff2", { weight: "100 900" }],
+      ["Geist Mono", "fonts/GeistMono-Regular.woff2", { weight: "400" }],
+    ].forEach(([family, file, desc]) => {
+      const face = new FontFace(family, `url(${chrome.runtime.getURL(file)})`, desc);
+      face.load().then((f) => document.fonts.add(f)).catch(() => {});
+    });
+  }
+
+  // Ein-/Ausblenden der Zonenleiste als animierbare Zahl (siehe overlay.css)
+  try {
+    CSS.registerProperty({ name: "--archiver-zone-in", syntax: "<number>", inherits: true, initialValue: "1" });
+  } catch (e) {
+    // schon registriert (zweite Injektion) oder nicht unterstützt: Fallback 1 im CSS
+  }
+
   function ensureOverlay() {
     if (!overlayReady) {
       overlayReady = Promise.all(
@@ -62,6 +84,7 @@
         rootEl = UI.el("div", "root");
         shadow.appendChild(rootEl);
         document.documentElement.appendChild(host);
+        loadFonts();
       });
     }
     return overlayReady;
@@ -88,8 +111,10 @@
     chrome.storage.local &&
     chrome.storage.local.get({ appZoneAlpha: null }, (d) => (zoneAlpha = typeof d.appZoneAlpha === "number" ? d.appZoneAlpha : null));
   loadAlpha();
+  let zoneInfo = null;
   loadZones((list, info) => {
     zones = list;
+    zoneInfo = info || null;
     barZones = hotOf(list, info);
   });
 
@@ -98,9 +123,10 @@
       if (ArchiverShared.zonesChanged(changes, area)) {
         loadZones((list, info) => {
           zones = list;
+          zoneInfo = info || null;
           barZones = hotOf(list, info);
           if (zonesBarEl) removeZones(); // Zonenanzahl kann sich geändert haben
-          if (gallery) gallery.render(barZones);
+          if (gallery) gallery.render(barZones, zoneInfo);
         });
       }
       if (area === "sync" && changes.shortcut) loadShortcut((s) => (shortcut = s));
@@ -167,6 +193,7 @@
     } else if (message.type === "pinterest-collect" && window === window.top) {
       collectPinterestBoard().then((result) => chrome.runtime.sendMessage({ type: "pinterest-pins", ...result }));
     } else if (message.type === "context-save") {
+      dropLibrary = null;
       contextSave(message);
     } else if (message.type === "capture-start" && window === window.top) {
       startAreaCapture();
@@ -212,7 +239,7 @@
 
   function saveCard(card, folder, source) {
     // Textkarten (mit Farbe) landen bei laufender App als .txt in der Zone (background.js asTextFile)
-    chrome.runtime.sendMessage({ type: "download-image", url: card.dataUrl, suggestedName: card.name, folder, tone: card.tone, textCard: !!card.tone, ...source });
+    sendSave({ type: "download-image", url: card.dataUrl, suggestedName: card.name, folder, tone: card.tone, textCard: !!card.tone, ...source });
   }
 
   // Farben der Textkarten, gleiche Werte wie in der App (app.js QUOTE_TONES):
@@ -284,7 +311,7 @@
   }
 
   function saveMediaFile(url, folder, source) {
-    chrome.runtime.sendMessage({ type: "download-image", url: resolveUrl(url), folder, ...source });
+    sendSave({ type: "download-image", url: resolveUrl(url), folder, ...source });
   }
 
   async function saveVideoCard(url, folder, fallbackTitle) {
@@ -307,7 +334,7 @@
     const video = videoPageUrl(location.href);
     if (isPdfPage()) saveMediaFile(location.href, folder, { pageUrl: location.href, pageTitle: document.title || null });
     else if (video) saveVideoCard(video, folder, document.title.replace(/ - YouTube$/, ""));
-    else chrome.runtime.sendMessage({ type: "capture-visible", folder, ...source });
+    else sendSave({ type: "capture-visible", folder, ...source });
   }
 
   function contextSave(msg) {
@@ -321,7 +348,7 @@
       savePage(folder, source);
     } else if (msg.srcUrl) {
       const best = ctx && ctx.target && ctx.target.tagName === "IMG" ? findBestImageUrl(ctx.target) : null;
-      chrome.runtime.sendMessage({ type: "download-image", url: resolveUrl(best || msg.srcUrl), folder, ...source });
+      sendSave({ type: "download-image", url: resolveUrl(best || msg.srcUrl), folder, ...source });
     } else if (selection) {
       saveCard(textCard(selection, source), folder, { ...source, quote: selection });
     } else if (msg.linkUrl) {
@@ -332,8 +359,8 @@
       savePage(folder, source);
     } else {
       const url = ctx ? imageAt(ctx.x, ctx.y) : null;
-      if (url) chrome.runtime.sendMessage({ type: "download-image", url: resolveUrl(url), folder, ...source });
-      else chrome.runtime.sendMessage({ type: "capture-visible", folder, ...source });
+      if (url) sendSave({ type: "download-image", url: resolveUrl(url), folder, ...source });
+      else sendSave({ type: "capture-visible", folder, ...source });
     }
   }
 
@@ -673,10 +700,11 @@
     toolbar.appendChild(UI.buildPanelButtons(panels));
 
     galleryPanelEl.appendChild(toolbar);
+    galleryPanelEl.appendChild(toolbar.libTab);
     galleryPanelEl.appendChild(gallery.el);
     rootEl.appendChild(galleryPanelEl);
     rootEl.appendChild(panelHostEl);
-    gallery.render(barZones);
+    gallery.render(barZones, zoneInfo);
   }
 
   function removeGalleryPanel() {
@@ -701,6 +729,7 @@
         const zone = UI.el("div", "zone" + (isRootZoneName(name) ? " root" : ""));
         zone.dataset.index = String(i);
         // Schwebende Karte wie in der App: Name oben links, Unterzone mit grauem Elternteil
+        zone.appendChild(UI.el("span", "zone-key", String(i + 1).padStart(2, "0")));
         const label = UI.el("div", "zone-label");
         const parts = String(name).split("/");
         if (parts.length > 1) label.appendChild(UI.el("span", "zone-parent", parts.slice(0, -1).join(" / ") + " / "));
@@ -719,6 +748,7 @@
   // eine Zone angelegt worden sein). Ändert sich etwas, wird die Leiste neu gebaut.
   let zonesRefreshedAt = 0;
   function refreshZones() {
+    if (dropLibrary) return; // per ⇧ andere Bibliothek gewählt: deren Zonen stehen lassen
     if (Date.now() - zonesRefreshedAt < 2000) return;
     zonesRefreshedAt = Date.now();
     loadZones((list, info) => {
@@ -741,6 +771,7 @@
       zonesBarEl = null;
       zoneEls = [];
     }
+    removeLibBar();
     dragCounter = 0;
   }
 
@@ -1376,11 +1407,11 @@
     const source = code ? igSource(code, item) : currentPageSource();
     const hit = item ? igPick(item, video, imageUrl) : null;
     if (hit) {
-      chrome.runtime.sendMessage({ type: "download-image", url: hit.url, suggestedName: `instagram-${code}-${fileNameOf(hit.url).slice(0, 40)}`.replace(/\.(jpe?g|mp4|webp|heic)$/i, "") + "." + hit.ext, folder, toDownloads: shiftDrop, ...source });
+      sendSave({ type: "download-image", url: hit.url, suggestedName: `instagram-${code}-${fileNameOf(hit.url).slice(0, 40)}`.replace(/\.(jpe?g|mp4|webp|heic)$/i, "") + "." + hit.ext, folder, toDownloads: shiftDrop, ...source });
     } else if (video) {
       photographVideo(video, folder);
     } else if (imageUrl) {
-      chrome.runtime.sendMessage({ type: "download-image", url: resolveUrl(imageUrl), folder, toDownloads: shiftDrop, ...source });
+      sendSave({ type: "download-image", url: resolveUrl(imageUrl), folder, toDownloads: shiftDrop, ...source });
     }
   }
 
@@ -1409,14 +1440,90 @@
     return typeof result === "string" ? resolveUrl(result) : result;
   }
 
-  // Shift beim Loslassen: Bild landet in ~/Downloads statt in der Zone
+  // Shift beim Loslassen: Bild landet in ~/Downloads statt in der Zone.
+  // Gibt es in der App mehrere Bibliotheken, wechselt ⇧ stattdessen die Bibliothek.
   let shiftDrop = false;
+
+  // ---- ⇧ beim Ziehen: Bibliothek wechseln ----
+  // Jeder Druck auf ⇧ (gelesen aus dragover, Tastenereignisse gibt es während
+  // eines Drags nicht) springt zur nächsten Bibliothek und zeigt ihre Active
+  // Zones. Die Bibliotheks-Leiste ist nur sichtbar, solange ⇧ gedrückt ist.
+  let dragLibs = []; // [{ name, path, active }]
+  let libIdx = -1;
+  let shiftHeld = false;
+  let dropLibrary = null; // Pfad der per ⇧ gewählten Bibliothek, null = aktive
+  let libBarEl = null;
+
+  function sendSave(message) {
+    return chrome.runtime.sendMessage(dropLibrary ? { ...message, library: dropLibrary } : message);
+  }
+
+  function loadDragLibs() {
+    dropLibrary = null;
+    libIdx = -1;
+    shiftHeld = false;
+    chrome.runtime.sendMessage({ type: "library-zones", library: null }, (r) => {
+      if (chrome.runtime.lastError || !r || !r.app) return;
+      dragLibs = Array.isArray(r.libraries) ? r.libraries : [];
+      libIdx = Math.max(0, dragLibs.findIndex((l) => l.active));
+    });
+  }
+
+  function cycleLibrary() {
+    if (dragLibs.length < 2) return;
+    libIdx = (libIdx + 1) % dragLibs.length;
+    const lib = dragLibs[libIdx];
+    dropLibrary = lib.active ? null : lib.path;
+    showLibBar();
+    chrome.runtime.sendMessage({ type: "library-zones", library: lib.path }, (r) => {
+      if (chrome.runtime.lastError || !r || !r.app || dragLibs[libIdx] !== lib) return;
+      barZones = r.hot && r.hot.length ? r.hot : r.zones.slice(0, 4);
+      relabelZones();
+    });
+  }
+
+  function showLibBar() {
+    if (!rootEl) return;
+    if (!libBarEl) {
+      libBarEl = UI.el("div", "lib-bar");
+      rootEl.appendChild(libBarEl);
+    }
+    libBarEl.replaceChildren(
+      ...dragLibs.map((l, i) => UI.el("span", "lib" + (i === libIdx ? " on" : ""), l.name)),
+      UI.el("span", "lib-key", "⇧")
+    );
+    libBarEl.hidden = false;
+  }
+
+  function hideLibBar() {
+    if (libBarEl) libBarEl.hidden = true;
+  }
+
+  function removeLibBar() {
+    if (libBarEl) libBarEl.remove();
+    libBarEl = null;
+  }
+
+  // Karten behalten, nur Namen tauschen (Leiste bleibt ruhig stehen)
+  function relabelZones() {
+    zoneEls.forEach((zone, i) => {
+      const name = barZones[i];
+      zone.hidden = name == null;
+      if (name == null) return;
+      const label = zone.querySelector(".zone-label");
+      label.replaceChildren();
+      const parts = String(name).split("/");
+      if (parts.length > 1) label.appendChild(UI.el("span", "zone-parent", parts.slice(0, -1).join(" / ") + " / "));
+      label.appendChild(document.createTextNode(parts[parts.length - 1]));
+    });
+  }
 
   document.addEventListener(
     "dragenter",
     (e) => {
       if (!e.dataTransfer || manualOpen) return; // im offenen Overlay übernehmen die Zonen-Karten
       dragCounter++;
+      if (dragCounter === 1 && !zonesBarEl) loadDragLibs();
       showZones();
     },
     true
@@ -1428,8 +1535,17 @@
       if (!e.dataTransfer || manualOpen) return;
       e.preventDefault(); // notwendig, damit "drop" überhaupt feuert
       e.dataTransfer.dropEffect = "copy";
-      // Mit Shift geht das Bild am Archiv vorbei in den Download-Ordner
-      if (zonesBarEl && zonesBarEl.classList.contains("to-downloads") !== e.shiftKey) {
+      // Mehrere Bibliotheken: ⇧ wechselt die Bibliothek, die Leiste zeigt sich nur bei gedrückter Taste
+      if (dragLibs.length > 1) {
+        if (e.shiftKey && !shiftHeld) {
+          shiftHeld = true;
+          cycleLibrary();
+        } else if (!e.shiftKey && shiftHeld) {
+          shiftHeld = false;
+          hideLibBar();
+        }
+      } else if (zonesBarEl && zonesBarEl.classList.contains("to-downloads") !== e.shiftKey) {
+        // Nur eine Bibliothek: mit Shift geht das Bild am Archiv vorbei in den Download-Ordner
         zonesBarEl.classList.toggle("to-downloads", e.shiftKey);
         const hint = t(e.shiftKey ? "dropDownloads" : "dropRelease");
         zoneEls.forEach((el) => (el.querySelector(".zone-hint").textContent = hint));
@@ -1457,7 +1573,8 @@
     (e) => {
       if (manualOpen) return;
       const zoneIdx = getZoneIndex(e.clientX, e.clientY);
-      shiftDrop = e.shiftKey;
+      shiftDrop = dragLibs.length > 1 ? false : e.shiftKey;
+      removeLibBar();
       debugLog("drop, zoneIdx:", zoneIdx, "types:", e.dataTransfer.types);
 
       if (zoneIdx === -1) {
@@ -1522,11 +1639,11 @@
         if (result.file) {
           const reader = new FileReader();
           reader.onload = () => {
-            chrome.runtime.sendMessage({ type: "download-image", url: reader.result, suggestedName: result.file.name, folder, toDownloads: shiftDrop });
+            sendSave({ type: "download-image", url: reader.result, suggestedName: result.file.name, folder, toDownloads: shiftDrop });
           };
           reader.readAsDataURL(result.file);
         } else {
-          chrome.runtime.sendMessage({ type: "download-image", url: result, folder, toDownloads: shiftDrop, ...currentPageSource() });
+          sendSave({ type: "download-image", url: result, folder, toDownloads: shiftDrop, ...currentPageSource() });
         }
       }
       removeZones();

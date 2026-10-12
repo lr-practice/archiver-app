@@ -227,7 +227,7 @@ async function appBridge() {
   let info = null;
   try {
     const r = await hostCall("hello");
-    if (r.library) info = { library: r.library, name: r.name || "Archiver", version: r.version };
+    if (r.library) info = { library: r.library, name: r.name || "Archiver", version: r.version, libraries: Array.isArray(r.libraries) ? r.libraries : [] };
   } catch {}
   bridgeCache = { at: Date.now(), info };
   return info;
@@ -238,6 +238,29 @@ async function appBridge() {
 // Das Ergebnis liegt zusätzlich in storage.local "appZones", damit offene
 // Oberflächen neu zeichnen, wenn sich etwas ändert.
 let bridgeDefaultZone = null; // Standard-Zone der App (Standard: Unsorted)
+let bridgeFolders = {}; // Zone → Ordner darin (bis zwei Ebenen), fürs Rechtsklickmenü
+
+// Zonen einer anderen Bibliothek (⇧ beim Ziehen): nur die Active Zones zählen
+async function libraryZones(library) {
+  const info = await appBridge();
+  if (!info) return { app: false };
+  const libraries = info.libraries || [];
+  const r = await hostCall("zones", { library: library || null });
+  const zones = (r.zones || []).map((z) => z.path);
+  const hot = Array.isArray(r.hot) && r.hot.length ? r.hot.filter((n) => zones.includes(n)) : zones.slice(0, 4);
+  return { app: true, libraries, library: library || null, zones, hot, alpha: typeof r.alpha === "number" ? r.alpha : null };
+}
+
+// Zuletzt genutzte Zonen (oben im Rechtsklickmenü)
+async function rememberRecent(zone) {
+  if (!zone) return;
+  const { recentZones } = await storageGet({ recentZones: [] });
+  const list = [zone, ...(Array.isArray(recentZones) ? recentZones : []).filter((z) => z !== zone)].slice(0, 3);
+  if (JSON.stringify(list) !== JSON.stringify(recentZones)) {
+    await storageSet({ recentZones: list });
+    buildMenus();
+  }
+}
 
 async function getZones() {
   const info = await appBridge();
@@ -247,6 +270,7 @@ async function getZones() {
       const zones = (r.zones || []).map((z) => z.path);
       bridgeDefaultZone = r.default || null;
       const hot = Array.isArray(r.hot) ? r.hot.filter((n) => zones.includes(n)) : zones.slice(0, 4);
+      bridgeFolders = r.folders && typeof r.folders === "object" ? r.folders : {};
       await publishAppZones({ zones, hot });
       const alpha = typeof r.alpha === "number" ? r.alpha : null;
       const { appZoneAlpha } = await storageGet({ appZoneAlpha: null });
@@ -295,7 +319,9 @@ async function saveToApp(message, sender) {
       quote: message.quote ? String(message.quote).slice(0, 20000) : null,
       tone: message.tone || null,
       capturedAt: Date.now(),
+      library: message.library || null,
     });
+    if (!message.library) rememberRecent(zone || bridgeDefaultZone);
     await eraseDownload(id); // Datei liegt jetzt in der Bibliothek, Eintrag im Verlauf wäre tot
     // Gleiches Bild schon in der Bibliothek: nicht doppelt ablegen, sagen wo es liegt
     const where = String(r.path || "").split("/").slice(0, -1).pop() || "Unsorted";
@@ -320,6 +346,7 @@ async function listAppFolder(zone) {
       inHistory: true,
       pageUrl: it.pageUrl || null,
       pageTitle: it.pageTitle || null,
+      ts: it.ts || null,
     }))
   );
   return { items };
@@ -405,10 +432,14 @@ let menuBuild = Promise.resolve();
 
 async function menuZoneList() {
   const z = await getZones().catch(() => ({ app: false }));
-  if (z.app) return z.zones.map((name) => ({ name, folder: name }));
+  if (z.app) return z.zones.map((name) => ({ name, folder: name, folders: bridgeFolders[name] || [] }));
   const { zones } = await new Promise((r) => chrome.storage.sync.get({ zones: null, projects: null }, r));
   const names = (Array.isArray(zones) && zones.length ? zones : ["Projekt 1", "Projekt 2", "Projekt 3", "Downloads"]).filter(Boolean);
   return names.map((name) => ({ name, folder: String(name).trim().toLowerCase() === "downloads" ? null : name }));
+}
+
+function lastName(path) {
+  return String(path).split("/").pop();
 }
 
 function buildMenus() {
@@ -416,9 +447,48 @@ function buildMenus() {
     menuZones = await menuZoneList();
     await new Promise((r) => chrome.contextMenus.removeAll(r));
     chrome.contextMenus.create({ id: "archiver", title: t("menuDropIn"), contexts: MENU_CONTEXTS });
-    menuZones.forEach((zone, i) => {
-      const label = String(zone.name).split("/").join(" / ");
-      chrome.contextMenus.create({ id: "zone:" + i, parentId: "archiver", title: label, contexts: MENU_CONTEXTS });
+    // Ziele als flache Liste; die Menü-IDs zeigen auf ihren Index
+    const zones = menuZones;
+    menuZones = [];
+    const target = (entry) => menuZones.push(entry) - 1;
+    const pretty = (path) => String(path).split("/").join(" / ");
+    // Oben die drei zuletzt genutzten Zonen bzw. Ordner
+    const { recentZones } = await storageGet({ recentZones: [] });
+    const known = new Set(zones.flatMap((z) => [z.folder, ...(z.folders || []).map((f) => z.folder + "/" + f)]));
+    const recent = (Array.isArray(recentZones) ? recentZones : []).filter((r) => known.has(r)).slice(0, 3);
+    for (const r of recent) {
+      chrome.contextMenus.create({ id: "zone:" + target({ name: r, folder: r }), parentId: "archiver", title: pretty(r), contexts: MENU_CONTEXTS });
+    }
+    if (recent.length) chrome.contextMenus.create({ id: "sep-recent", parentId: "archiver", type: "separator", contexts: MENU_CONTEXTS });
+    // Darunter alle Zonen, Zonen mit Ordnern klappen auf (Zone selbst, dann Ordner › Unterordner)
+    zones.forEach((zone, zi) => {
+      const label = pretty(zone.name);
+      const folders = zone.folders || [];
+      if (!folders.length) {
+        chrome.contextMenus.create({ id: "zone:" + target(zone), parentId: "archiver", title: label, contexts: MENU_CONTEXTS });
+        return;
+      }
+      const parent = "group:" + zi;
+      chrome.contextMenus.create({ id: parent, parentId: "archiver", title: label, contexts: MENU_CONTEXTS });
+      chrome.contextMenus.create({ id: "zone:" + target(zone), parentId: parent, title: t("menuZoneItself", [lastName(zone.name)]), contexts: MENU_CONTEXTS });
+      chrome.contextMenus.create({ id: parent + ":sep", parentId: parent, type: "separator", contexts: MENU_CONTEXTS });
+      const tops = folders.filter((f) => !f.includes("/"));
+      for (const top of tops) {
+        const subs = folders.filter((f) => f.startsWith(top + "/"));
+        const entry = { name: zone.name + "/" + top, folder: zone.folder + "/" + top };
+        if (!subs.length) {
+          chrome.contextMenus.create({ id: "zone:" + target(entry), parentId: parent, title: top, contexts: MENU_CONTEXTS });
+          continue;
+        }
+        const sub = parent + ":" + top;
+        chrome.contextMenus.create({ id: sub, parentId: parent, title: top, contexts: MENU_CONTEXTS });
+        chrome.contextMenus.create({ id: "zone:" + target(entry), parentId: sub, title: t("menuZoneItself", [top]), contexts: MENU_CONTEXTS });
+        chrome.contextMenus.create({ id: sub + ":sep", parentId: sub, type: "separator", contexts: MENU_CONTEXTS });
+        for (const f of subs) {
+          const e = { name: zone.name + "/" + f, folder: zone.folder + "/" + f };
+          chrome.contextMenus.create({ id: "zone:" + target(e), parentId: sub, title: f.slice(top.length + 1), contexts: MENU_CONTEXTS });
+        }
+      }
     });
     chrome.contextMenus.create({ id: "sep", parentId: "archiver", type: "separator", contexts: MENU_CONTEXTS });
     chrome.contextMenus.create({ id: "area", parentId: "archiver", title: t("menuArea"), contexts: MENU_CONTEXTS });
@@ -548,7 +618,7 @@ async function captureVisible(message, sender) {
   const base = String(message.pageTitle || tab.title || "Seite").replace(/\s+/g, " ").trim().slice(0, 80) || "Seite";
   const name = (r ? t("captureNameArea") + " " : "") + base + ".png";
   return handleDownload(
-    { url: dataUrl, suggestedName: name, folder: message.folder, pageUrl: message.pageUrl || tab.url, pageTitle: message.pageTitle || tab.title },
+    { url: dataUrl, suggestedName: name, folder: message.folder, library: message.library || null, pageUrl: message.pageUrl || tab.url, pageTitle: message.pageTitle || tab.title },
     sender
   );
 }
@@ -560,6 +630,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   if (message.type === "download-image" && message.url) {
     handleDownload(message, sender).then(sendResponse);
+    return true;
+  }
+
+  // ⇧ beim Ziehen: Liste der Bibliotheken und Active Zones der gewählten
+  if (message.type === "library-zones") {
+    libraryZones(message.library).then(sendResponse, () => sendResponse({ app: false }));
     return true;
   }
 

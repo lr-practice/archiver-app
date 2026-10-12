@@ -16,6 +16,7 @@ const panels = UI.createPanelController(document.getElementById("panelHost"));
 const toolbar = UI.buildToolbar(gallery, document.documentElement);
 toolbar.appendChild(UI.buildPanelButtons(panels));
 document.getElementById("toolbarHost").appendChild(toolbar);
+document.getElementById("toolbarHost").appendChild(toolbar.libTab);
 
 document.addEventListener("keydown", (e) => {
   if (gallery.handleKey(e)) {
@@ -35,7 +36,7 @@ chrome.storage.onChanged.addListener((changes, area) => {
 
 // Mit App nur die vier Active Zones, alles Weitere in der App
 function renderActive(list, info) {
-  gallery.render(info && info.app && Array.isArray(info.hot) && info.hot.length ? info.hot : list);
+  gallery.render(info && info.app && Array.isArray(info.hot) && info.hot.length ? info.hot : list, info || null);
 }
 
 loadZones(renderActive);

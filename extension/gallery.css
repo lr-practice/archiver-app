@@ -783,3 +783,170 @@ html.light .zone-strip-label,
   order: 10;
   margin-left: 4px;
 }
+
+/* ---- 3.20: wie die App ----
+   Navigation oben links, Bibliothek oben rechts (öffnet die App), Kopfzeile
+   „Active Zones in …“, Karten mit Nummer und Etikett, Zone mit Satz. */
+
+.zones-grid {
+  padding: 96px 40px 140px;
+  font-family: "Geist", -apple-system, BlinkMacSystemFont, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+.x-head {
+  grid-column: 1 / -1;
+  max-width: 780px;
+  margin: 0 0 34px;
+  font-size: 24px;
+  line-height: 1.18;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  color: #ededed;
+}
+
+.x-head-text {
+  color: #8c8c8c;
+}
+
+.x-bar {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  padding-bottom: 4px;
+}
+
+.x-mono {
+  font-family: "Geist Mono", ui-monospace, "SF Mono", monospace;
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.x-bar .x-mono {
+  color: #ededed;
+}
+
+.zones-grid.cards .zone-card-cover {
+  height: 170px;
+}
+
+.x-key {
+  position: absolute;
+  top: 10px;
+  left: 12px;
+  right: 12px;
+  z-index: 2;
+  display: flex;
+  justify-content: space-between;
+  pointer-events: none;
+}
+
+.x-key .x-mono {
+  padding: 2px 6px;
+  border-radius: 5px;
+  background: rgba(0, 0, 0, 0.55);
+  color: #ffffff;
+}
+
+.zones-grid.cards .zone-card-title {
+  font-size: 15px;
+}
+
+/* Geöffnete Zone: Titel und Satz wie die Kopfzeile der App */
+.zones-grid.focused .zone-card-title {
+  font-size: 24px;
+}
+
+.zones-grid.focused .zone-card-count {
+  color: #8c8c8c;
+}
+
+/* Navigation oben links */
+.gallery-toolbar {
+  top: 17px;
+  left: 40px;
+  bottom: auto;
+  transform: none;
+  gap: 2px;
+  padding: 4px;
+  box-shadow: 0 14px 44px rgba(0, 0, 0, 0.3), inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+}
+
+.gallery-toolbar .nav-btn:not(.nav-more) {
+  font-size: 13px;
+}
+
+.gallery-toolbar .nav-btn {
+  height: 32px;
+  padding: 0 14px;
+}
+
+.gallery-toolbar .nav-more {
+  padding: 0 14px;
+}
+
+.more-menu {
+  bottom: auto;
+  top: calc(100% + 12px);
+  right: auto;
+  left: -4px;
+}
+
+/* Bibliothek oben rechts, ein Klick öffnet die App */
+.x-lib-tab {
+  position: fixed;
+  top: 17px;
+  right: 40px;
+  padding: 4px;
+  border-radius: 6px;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+}
+
+.x-lib-tab:has(> [hidden]) {
+  display: none;
+}
+
+.x-lib-tab .nav-app {
+  height: 28px;
+  margin: 0;
+  padding: 0 12px;
+  color: #8c8c8c;
+  font-weight: 400;
+}
+
+.x-lib-tab .nav-app:hover {
+  color: #ededed;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+html.light .x-head,
+:host(.light) .x-head,
+html.light .x-bar .x-mono,
+:host(.light) .x-bar .x-mono {
+  color: #111111;
+}
+
+html.light .x-head-text,
+:host(.light) .x-head-text,
+html.light .zones-grid.focused .zone-card-count,
+:host(.light) .zones-grid.focused .zone-card-count {
+  color: #6e6e6e;
+}
+
+html.light .x-lib-tab,
+:host(.light) .x-lib-tab {
+  box-shadow: inset 0 0 0 1px rgba(17, 17, 17, 0.06);
+}
+
+html.light .x-lib-tab .nav-app:hover,
+:host(.light) .x-lib-tab .nav-app:hover {
+  color: #111111;
+  background: rgba(17, 17, 17, 0.06);
+}
+
+/* Raster in der Zone wie in der App: große Felder */
+.zones-grid.focused .zone-card-grid {
+  grid-template-columns: repeat(auto-fill, minmax(max(var(--thumb-size, 200px), 200px), 1fr));
+}
