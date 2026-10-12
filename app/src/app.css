@@ -5803,3 +5803,23 @@ html.light .p-dropbar .p-hot {
 @media (prefers-reduced-motion: reduce) {
   .p-del > img { transition: none; }
 }
+
+/* ---- 0.27: Video-Vorschau beim Hover (Daumenkino aus acht Bildern) ---- */
+.card-scrub {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  z-index: 1;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.18s ease;
+}
+.card-scrub.on {
+  opacity: 1;
+}
+.card > .card-badge,
+.card > .card-media {
+  z-index: 2;
+}

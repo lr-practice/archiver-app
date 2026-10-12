@@ -3269,6 +3269,54 @@
     return card;
   }
 
+  // Kurzversion eines Videos: acht Standbilder aus dem ganzen Clip, nacheinander
+  // (wie ein Daumenkino), solange der Zeiger auf der Karte liegt. Ohne Ton.
+  const SCRUB_FRAMES = 8;
+  const SCRUB_MS = 320;
+  function videoScrub(card) {
+    const item = state.byPath.get(card.dataset.path);
+    if (!item || kindOf(item) !== "video" || card.querySelector(".card-scrub")) return;
+    if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    let timer = 0;
+    let video = null;
+    const stop = () => {
+      clearTimeout(timer);
+      clearInterval(timer);
+      card.removeEventListener("pointerleave", stop);
+      if (video) {
+        video.removeAttribute("src");
+        video.load();
+        video.remove();
+      }
+    };
+    card.addEventListener("pointerleave", stop);
+    // kurz verweilen, damit Überfahren keine Videos lädt
+    timer = setTimeout(() => {
+      video = document.createElement("video");
+      video.className = "card-scrub";
+      video.muted = true;
+      video.playsInline = true;
+      video.preload = "auto";
+      video.src = fileSrc(item.abs);
+      card.appendChild(video);
+      let k = 0;
+      let at = [];
+      const step = () => {
+        if (!at.length) return;
+        video.currentTime = at[k++ % at.length];
+      };
+      video.addEventListener("loadedmetadata", () => {
+        const d = video.duration;
+        if (!isFinite(d) || d <= 0) return stop();
+        at = Array.from({ length: SCRUB_FRAMES }, (_, i) => ((i + 0.5) / SCRUB_FRAMES) * d);
+        step();
+        timer = setInterval(step, SCRUB_MS);
+      });
+      video.addEventListener("seeked", () => video.classList.add("on"), { once: true });
+      video.addEventListener("error", stop);
+    }, 250);
+  }
+
   function setFocus(path) {
     // Zone verlassen: was darin neu von anderen war, gilt als gesehen
     if (path !== state.focus && isZone(state.focus) && state.shared) markSeen(zoneItems(state.focus));
@@ -5538,6 +5586,12 @@
     zones.addEventListener("dblclick", (e) => {
       const card = e.target.closest(".card");
       if (card) openLightbox(state.byPath.get(card.dataset.path));
+    });
+
+    // 0.27: Video beim Hover als kurze Vorschau aus wenigen Bildern
+    zones.addEventListener("pointerover", (e) => {
+      const card = e.target.closest(".card");
+      if (card && !card.contains(e.relatedTarget)) videoScrub(card);
     });
 
     $("search").placeholder = t("search");
