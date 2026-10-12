@@ -213,6 +213,8 @@ button {
 
 .v-nav {
   bottom: 22px;
+  /* Feste Breite: springt nicht mit dem Dateinamen, mit Player gleich breit */
+  width: min(600px, calc(100% - 32px));
   transition: left 0.26s ease;
 }
 
@@ -286,12 +288,13 @@ button {
   color: var(--dim);
   font-family: var(--mono);
   font-size: 12px;
+  font-variant-numeric: tabular-nums;
 }
 
 .v-name {
+  flex: 1 1 0;
   padding: 0 10px;
   min-width: 0;
-  max-width: 320px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -487,8 +490,10 @@ button {
   gap: 18px;
 }
 .v-media .media-audio-cover {
-  max-width: min(100%, 560px);
-  max-height: calc(100% - 120px);
+  /* groß: füllt die Höhe, auch kleine Cover werden hochskaliert */
+  height: min(calc(100% - 70px), 760px);
+  width: auto;
+  max-width: 100%;
   min-height: 0;
   object-fit: contain;
   border-radius: var(--r-md);
@@ -518,9 +523,7 @@ button {
 /* ---- Eigener Player (Audio, Video): obere Reihe der Navigationsleiste ---- */
 body.has-player .v-nav {
   flex-wrap: wrap;
-  justify-content: center;
   row-gap: 0;
-  width: min(600px, calc(100% - 32px));
 }
 
 .mp-row {
@@ -621,6 +624,31 @@ body.has-player .v-nav {
   transform: none;
 }
 
+/* Waveform statt Linie, sobald die Tonspur gelesen ist */
+.mp-wave {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: none;
+  pointer-events: none;
+}
+
+.mp-track.has-wave {
+  height: 24px;
+}
+
+.mp-track.has-wave .mp-wave {
+  display: block;
+}
+
+.mp-track.has-wave::before,
+.mp-track.has-wave .mp-fill,
+.mp-track.has-wave .mp-knob {
+  display: none;
+}
+
+
 .v-zoom:empty {
   display: none;
 }
@@ -635,10 +663,12 @@ body.has-player .v-media .media-audio {
   bottom: 128px;
 }
 
-body.has-player .v-media .media-audio-cover {
-  max-height: calc(100% - 70px);
-}
 
 body.has-player .v-zones {
   bottom: 114px;
+}
+
+/* Gezoomtes Video: verschieben per Ziehen */
+.media-video.zoomed {
+  cursor: grab;
 }

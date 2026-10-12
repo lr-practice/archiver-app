@@ -19,6 +19,7 @@
     if (PDF_EXTS.includes(ext)) return "pdf";
     if (VIDEO_EXTS.includes(ext)) return "video";
     if (AUDIO_EXTS.includes(ext)) return "audio";
+    if (ext === "txt") return "text";
     return "image";
   }
 
@@ -335,6 +336,46 @@
   const ICON_MUTE =
     '<svg width="15" height="12" viewBox="0 0 15 12"><path d="M0.5 4h2.6L7 0.8v10.4L3.1 8H0.5z" fill="currentColor"/><path d="M9.6 3.8l4 4.4M13.6 3.8l-4 4.4" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>';
 
+  // Waveform: Lautstärke-Spitzen aus der Tonspur, einmal pro Datei berechnet.
+  // Große Dateien und Videos ohne Ton bleiben bei der schlichten Linie.
+  const PEAK_BINS = 240;
+  const peakCache = new Map();
+  function peaksOf(src) {
+    if (!peakCache.has(src)) {
+      peakCache.set(
+        src,
+        (async () => {
+          const Ctx = global.AudioContext || global.webkitAudioContext;
+          if (!Ctx) return null;
+          const res = await fetch(src);
+          const size = Number(res.headers.get("content-length") || 0);
+          if (!res.ok || size > 80e6) return null;
+          const buf = await res.arrayBuffer();
+          if (buf.byteLength > 80e6) return null;
+          const ctx = new Ctx();
+          try {
+            const audio = await ctx.decodeAudioData(buf);
+            const ch = [...Array(audio.numberOfChannels).keys()].map((i) => audio.getChannelData(i));
+            const step = Math.max(1, Math.floor(audio.length / PEAK_BINS));
+            const peaks = new Float32Array(PEAK_BINS);
+            let max = 0;
+            for (let b = 0; b < PEAK_BINS; b++) {
+              let m = 0;
+              for (let i = b * step, e = Math.min(audio.length, i + step); i < e; i += 16)
+                for (const c of ch) m = Math.max(m, Math.abs(c[i]));
+              peaks[b] = m;
+              max = Math.max(max, m);
+            }
+            return max > 0.001 ? peaks.map((v) => v / max) : null;
+          } finally {
+            ctx.close && ctx.close();
+          }
+        })().catch(() => null)
+      );
+    }
+    return peakCache.get(src);
+  }
+
   function player(media) {
     media.controls = false;
     const row = document.createElement("div");
@@ -356,7 +397,9 @@
     const track = mk("div", "mp-track");
     const fill = mk("i", "mp-fill");
     const knob = mk("b", "mp-knob");
-    track.append(fill, knob);
+    const wave = mk("canvas", "mp-wave");
+    track.append(fill, knob, wave);
+    let peaks = null;
     const total = mk("span", "mp-time");
     const vol = mk("button", "mp-btn mp-vol", ICON_VOL);
     row.append(play, cur, track, total, vol);
@@ -370,7 +413,39 @@
       knob.style.left = f * 100 + "%";
       cur.textContent = duration(media.currentTime) || "0:00";
       total.textContent = duration(d) || "–:––";
+      if (peaks) drawWave(f);
     };
+    // Balken: gespielt in voller Textfarbe, der Rest zurückgenommen
+    const drawWave = (f) => {
+      const w = track.clientWidth;
+      const h = track.clientHeight;
+      if (!w || !h) return;
+      const dpr = global.devicePixelRatio || 1;
+      if (wave.width !== Math.round(w * dpr) || wave.height !== Math.round(h * dpr)) {
+        wave.width = Math.round(w * dpr);
+        wave.height = Math.round(h * dpr);
+      }
+      const g = wave.getContext("2d");
+      g.setTransform(dpr, 0, 0, dpr, 0, 0);
+      g.clearRect(0, 0, w, h);
+      g.fillStyle = getComputedStyle(row).color;
+      const bars = Math.max(8, Math.floor(w / 3));
+      for (let i = 0; i < bars; i++) {
+        const v = peaks[Math.floor((i / bars) * peaks.length)];
+        const bh = Math.max(2, v * h);
+        g.globalAlpha = (i + 0.5) / bars <= f ? 1 : 0.22;
+        g.fillRect(i * 3, (h - bh) / 2, 2, bh);
+      }
+    };
+    const src = media.currentSrc || media.src;
+    if (src)
+      peaksOf(src).then((p) => {
+        if (!p || !row.parentNode) return;
+        peaks = p;
+        track.classList.add("has-wave");
+        draw();
+      });
+    if (global.ResizeObserver) new ResizeObserver(() => peaks && draw()).observe(track);
     const loop = () => {
       draw();
       raf = media.paused || !row.isConnected ? 0 : requestAnimationFrame(loop);
@@ -425,6 +500,99 @@
     };
   }
 
+  // Video zoomen wie ein Bild: ⌘/Zwei-Finger-Zoom, Doppelklick, Ziehen verschiebt.
+  // Das Video bleibt ein Element; skaliert wird per transform um den Zeiger.
+  function zoomable(video, onChange) {
+    let s = 1;
+    let x = 0;
+    let y = 0;
+    let moved = false;
+    video.style.transformOrigin = "0 0";
+    const apply = (animate) => {
+      const w = video.offsetWidth;
+      const h = video.offsetHeight;
+      x = Math.min(0, Math.max(w * (1 - s), x));
+      y = Math.min(0, Math.max(h * (1 - s), y));
+      video.style.transition = animate ? "transform 0.18s ease" : "";
+      video.style.transform = s === 1 ? "" : `translate(${x}px, ${y}px) scale(${s})`;
+      video.classList.toggle("zoomed", s > 1);
+      onChange && onChange(s);
+    };
+    const zoomAt = (next, cx, cy, animate) => {
+      next = Math.min(8, Math.max(1, next));
+      if (next < 1.03) next = 1;
+      const r = video.getBoundingClientRect();
+      // Punkt im ungezoomten Element
+      const px = cx == null ? video.offsetWidth / 2 : (cx - r.left) / s;
+      const py = cy == null ? video.offsetHeight / 2 : (cy - r.top) / s;
+      x = x + px * s - px * next;
+      y = y + py * s - py * next;
+      s = next;
+      apply(animate);
+    };
+    const host = video.parentNode;
+    host.addEventListener(
+      "wheel",
+      (e) => {
+        if (!video.isConnected) return;
+        if (e.ctrlKey || e.metaKey) {
+          e.preventDefault();
+          const d = Math.max(-50, Math.min(50, e.deltaY));
+          zoomAt(s * Math.exp(-d * 0.01), e.clientX, e.clientY);
+        } else if (s > 1) {
+          e.preventDefault();
+          x -= e.deltaX;
+          y -= e.deltaY;
+          apply();
+        }
+      },
+      { passive: false }
+    );
+    let base = 1;
+    host.addEventListener("gesturestart", (e) => {
+      e.preventDefault();
+      base = s;
+    });
+    host.addEventListener("gesturechange", (e) => {
+      e.preventDefault();
+      zoomAt(base * e.scale, e.clientX, e.clientY);
+    });
+    video.addEventListener("dblclick", (e) => zoomAt(s > 1 ? 1 : 2, e.clientX, e.clientY, true));
+    let drag = null;
+    video.addEventListener("pointerdown", (e) => {
+      moved = false;
+      if (e.button !== 0 || s === 1) return;
+      drag = { cx: e.clientX, cy: e.clientY, x, y };
+      video.setPointerCapture(e.pointerId);
+    });
+    video.addEventListener("pointermove", (e) => {
+      if (!drag) return;
+      if (Math.abs(e.clientX - drag.cx) + Math.abs(e.clientY - drag.cy) > 3) moved = true;
+      x = drag.x + e.clientX - drag.cx;
+      y = drag.y + e.clientY - drag.cy;
+      apply();
+    });
+    const end = () => (drag = null);
+    video.addEventListener("pointerup", end);
+    video.addEventListener("pointercancel", end);
+    // Nach dem Verschieben kein Play/Pause per Klick
+    video.addEventListener(
+      "click",
+      (e) => {
+        if (!moved) return;
+        moved = false;
+        e.stopImmediatePropagation();
+      },
+      true
+    );
+    return {
+      scale: () => s,
+      toggle: (cx, cy) => zoomAt(s > 1 ? 1 : 2, cx, cy, true),
+      zoomBy: (f) => zoomAt(s * f, null, null, true),
+      reset: () => zoomAt(1, null, null, true),
+    };
+  }
+
   // Leertaste: laufendes Video/Audio anhalten bzw. starten. false = nichts da.
   function togglePlay(root) {
     const m = (root || document).querySelector(".media-video, .media-audio-player");
@@ -433,5 +601,22 @@
     return true;
   }
 
-  global.ArchiverMedia = { kind, duration, placeholder, PdfView, videoEl, audioEl, audioPlaceholder, audioFormat, togglePlay, player, loadPdfjs };
+  // Einstellungen › Darstellung: Video bzw. Audio beim Öffnen abspielen (App und
+  // Betrachter lesen denselben Eintrag). Blockt das System Ton, startet Video stumm.
+  function autoplay(media, kind) {
+    let on = false;
+    try {
+      on = JSON.parse(localStorage.getItem(kind === "video" ? "archiver.autoplayVideo" : "archiver.autoplayAudio")) === true;
+    } catch {}
+    if (!media || !on) return;
+    const p = media.play();
+    if (p && p.catch)
+      p.catch(() => {
+        if (kind !== "video") return;
+        media.muted = true;
+        media.play().catch(() => {});
+      });
+  }
+
+  global.ArchiverMedia = { kind, duration, placeholder, PdfView, videoEl, audioEl, audioPlaceholder, audioFormat, togglePlay, player, zoomable, loadPdfjs, autoplay };
 })(window);

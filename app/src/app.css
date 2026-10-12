@@ -11,6 +11,9 @@
   --text: var(--ink);
   --muted: #8a8a8e;
   --accent: #2d5aeb;
+  --accent-rgb: 45, 90, 235;
+  --accent-ink: #ffffff;
+  --glow-rgb: 91, 124, 255;
   --danger: #e5484d;
   --thumb: 120px;
   --ink: #ffffff;
@@ -525,6 +528,8 @@ html.light .lb-bar {
 
 .lb-nav {
   bottom: 22px;
+  /* Feste Breite: springt nicht mit dem Dateinamen, mit Player gleich breit */
+  width: min(600px, calc(100% - 32px));
 }
 
 .lightbox.info-open .lb-bar {
@@ -578,12 +583,13 @@ html.light .lb-bar {
   color: var(--p-dim);
   font-family: "Geist Mono", ui-monospace, monospace;
   font-size: 12px;
+  font-variant-numeric: tabular-nums;
 }
 
 .lb-name {
+  flex: 1 1 0;
   padding: 0 10px;
   min-width: 0;
-  max-width: 320px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -610,7 +616,7 @@ html.light .lb-bar {
 .lb-action {
   margin-left: 2px;
   background: var(--accent);
-  color: #fff;
+  color: var(--accent-ink);
 }
 
 .lb-action:hover,
@@ -665,7 +671,7 @@ html.light .lb-bar {
 }
 
 .lb-chip:hover {
-  background: rgba(45, 90, 235, 0.2);
+  background: rgba(var(--accent-rgb), 0.2);
   outline: 1px dashed var(--accent);
 }
 
@@ -839,6 +845,68 @@ html.light .lb-bar {
   border-top: 1px dashed var(--line);
 }
 
+/* Rückfrage: kompakt, ohne Rahmenlinien */
+.dialog.confirm {
+  width: 340px;
+  outline: none;
+  border-radius: 14px;
+  padding: 22px 22px 18px;
+  background: var(--menu-bg);
+  box-shadow: var(--menu-shadow);
+  -webkit-backdrop-filter: blur(24px);
+  backdrop-filter: blur(24px);
+  animation: confirm-in 0.18s cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
+.dialog.confirm h3 {
+  margin: 0 0 6px;
+  font-size: 15px;
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+
+.dialog.confirm p {
+  margin: 0 0 20px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.confirm-foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.confirm-foot .btn {
+  border-radius: 999px;
+  padding: 7px 16px;
+  border-color: rgba(var(--ink-rgb), 0.18);
+}
+
+.confirm-foot .btn.danger-fill {
+  background: var(--danger);
+  border-color: var(--danger);
+  color: #fff;
+}
+
+.confirm-foot .btn.danger-fill:hover {
+  filter: brightness(1.08);
+}
+
+.confirm-foot .btn:focus-visible {
+  outline: 2px solid rgba(var(--ink-rgb), 0.5);
+  outline-offset: 2px;
+}
+
+@keyframes confirm-in {
+  from { opacity: 0; transform: scale(0.97); }
+}
+
+.modal:has(.confirm) {
+  background: rgba(0, 0, 0, 0.35);
+}
+
 /* ---- Toasts ---- */
 
 .toasts {
@@ -855,7 +923,7 @@ html.light .lb-bar {
 }
 
 .toast {
-  background: rgba(45, 90, 235, 0.95);
+  background: rgba(var(--accent-rgb), 0.95);
   color: var(--ink);
   padding: 8px 16px;
   font-size: 12px;
@@ -1049,6 +1117,7 @@ html.light .lb-bar {
 }
 
 .zone-menu-btn:focus-visible,
+.zone-menu-btn.open,
 .zone-menu-wrap:has(.zone-menu) .zone-menu-btn {
   opacity: 1;
 }
@@ -1390,7 +1459,7 @@ body {
 
 /* Ablegen: gleiche Sprache wie die Zonen in der Extension */
 .drop-active {
-  background: rgba(45, 90, 235, 0.2) !important;
+  background: rgba(var(--accent-rgb), 0.2) !important;
   outline: 1px dashed var(--accent) !important;
   outline-offset: -1px;
   color: var(--ink) !important;
@@ -1519,24 +1588,6 @@ body.sorting,
 body.sorting * {
   cursor: grabbing !important;
   user-select: none;
-}
-
-/* Ziel beim Umsortieren: die ganze Karte gestrichelt und hervorgehoben */
-.p-card.drop-before,
-.p-card.drop-after {
-  outline: 1.5px dashed var(--ink);
-  outline-offset: 3px;
-  background: rgba(var(--ink-rgb), 0.08);
-}
-
-.p-card.drop-before::after,
-.p-card.drop-after::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  z-index: 2;
-  background: rgba(var(--ink-rgb), 0.14);
-  pointer-events: none;
 }
 
 .p-card-cover {
@@ -2088,14 +2139,6 @@ body.lightbox-open .p-dropbar {
 
 .page-open .zones-grid {
   margin-right: var(--sheet-w);
-}
-
-.p-nav {
-  transition: left 0.26s var(--sheet-ease);
-}
-
-.page-open .p-nav {
-  left: calc((100% - var(--sheet-w)) / 2);
 }
 
 .page-open .info-panel {
@@ -2695,17 +2738,17 @@ body.lightbox-open .p-top {
   -webkit-backdrop-filter: none;
   backdrop-filter: none;
   box-shadow: none;
-  animation: hot-in 0.16s ease-out;
+  animation: hot-in 0.14s ease-out;
 }
 
 .p-dropbar[hidden] {
   display: none;
 }
 
+/* Ruhige Bewegung: nur Ein- und Ausblenden, kein Hochfahren */
 @keyframes hot-in {
   from {
     opacity: 0;
-    transform: translateY(12px);
   }
 }
 
@@ -2718,12 +2761,12 @@ body.lightbox-open .p-top {
   padding: 16px 18px;
   border-radius: var(--r-lg);
   outline: none;
-  background: var(--menu-bg);
+  background: color-mix(in srgb, var(--menu-bg) calc(var(--zone-alpha, 0.97) * 100%), transparent);
   -webkit-backdrop-filter: blur(24px) saturate(1.4);
   backdrop-filter: blur(24px) saturate(1.4);
   box-shadow: var(--menu-shadow), inset 0 0 0 1px rgba(var(--ink-rgb), 0.07);
   color: var(--p-text);
-  transition: transform 0.12s ease, background 0.12s ease;
+  transition: background 0.1s ease;
 }
 
 .p-hot .p-drop-key {
@@ -2746,12 +2789,26 @@ body.lightbox-open .p-top {
   transition: opacity 0.12s ease;
 }
 
-/* Ziel: gleiche Sprache wie alle Ablageziele (.drop-active), dazu leicht angehoben */
+/* Ziel: bleibt gläsern wie im Ruhezustand, nur etwas heller, feiner Rand, leicht angehoben */
 .p-dropbar .p-hot.drop-active {
-  background: rgba(45, 90, 235, 0.28) !important;
-  outline: 1px solid var(--accent) !important;
+  background: color-mix(
+    in srgb,
+    color-mix(in srgb, var(--menu-bg) 88%, #fff) calc(var(--zone-alpha, 0.97) * 100%),
+    transparent
+  ) !important;
+  outline: 1px solid rgba(var(--ink-rgb), 0.45) !important;
   outline-offset: -1px;
-  transform: translateY(-4px);
+}
+
+/* Abgelegt: kein Glühen, die Leiste blendet nur ruhig aus */
+.p-dropbar.leaving {
+  animation: hot-out 0.2s ease 0.3s forwards;
+}
+
+@keyframes hot-out {
+  to {
+    opacity: 0;
+  }
 }
 
 /* Zone, in der die Objekte schon liegen: zurückgenommen, kein Ziel */
@@ -2884,14 +2941,82 @@ html.light .p-nav {
 
 /* ---- Textkarten als Text (wie die Karte der Extension: Kennung, Zitat, Quelle · Datum) ---- */
 
+/* Vorschau in Zonen-Karten, Mosaik und Zeilen: farbige Fläche mit dem Anfang des Texts */
+.text-sheet.mini {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  padding: 9%;
+}
+
+.text-sheet.mini .ts-label,
+.text-sheet.mini .ts-foot {
+  display: none;
+}
+
+.text-sheet.mini .ts-body {
+  flex: 1;
+  min-height: 0;
+  font-size: max(7px, 6.5cqw);
+  font-weight: 500;
+  line-height: 1.24;
+  overflow: hidden;
+  word-break: break-word;
+  -webkit-mask-image: linear-gradient(#000 65%, transparent);
+  mask-image: linear-gradient(#000 65%, transparent);
+}
+
+.p-thumbs .text-sheet.mini {
+  flex: 0 0 auto;
+  width: var(--row-thumb, 26px);
+  height: var(--row-thumb, 26px);
+  padding: 0;
+}
+
+.p-thumbs .text-sheet.mini .ts-body {
+  display: none;
+}
+
+.p-card-cover .text-sheet.mini {
+  padding-top: 52px; /* unter Nummer und „Active Zone“ */
+}
+
+.p-card-cover.trio .text-sheet.mini:first-child {
+  grid-row: span 2;
+}
+
+/* Farbwahl in den Details */
+.tone-picker {
+  display: flex;
+  gap: 8px;
+}
+
+.tone-dot {
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: var(--dot);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.12);
+  cursor: default;
+}
+
+.tone-dot.active {
+  outline: 1px dashed rgba(var(--ink-rgb), 0.7);
+  outline-offset: 3px;
+}
+
 .text-sheet {
   --ts-pad: 7.8cqw;
   container-type: inline-size;
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
-  background: #f4f3ef;
-  color: #141414;
+  /* Farbe pro Karte (app.js quoteTone): Grundfarben, Schrift Ton in Ton */
+  background: var(--ts-bg, #f4f3ef);
+  color: var(--ts-fg, #141414);
   font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
 }
 
@@ -2909,7 +3034,8 @@ html.light .p-nav {
 .text-sheet .ts-label,
 .text-sheet .ts-foot {
   font-family: ui-monospace, "SF Mono", Menlo, monospace;
-  color: #8a8a85;
+  color: var(--ts-fg, #8a8a85);
+  opacity: var(--ts-dim, 1);
   letter-spacing: 0.02em;
 }
 
@@ -2993,9 +3119,9 @@ body.has-selection .card-text:not(.selected):hover .text-sheet {
 }
 
 .text-sheet.large {
-  width: min(860px, 100%);
+  width: min(1100px, 100%);
   margin: auto 0;
-  padding: 64px 64px 52px;
+  padding: 80px 80px 64px;
   user-select: text;
   -webkit-user-select: text;
   cursor: text;
@@ -3004,7 +3130,7 @@ body.has-selection .card-text:not(.selected):hover .text-sheet {
 
 .text-sheet.large .ts-label,
 .text-sheet.large .ts-foot {
-  font-size: 13px;
+  font-size: 14px;
 }
 
 .text-sheet.large .ts-body {
@@ -3016,19 +3142,19 @@ body.has-selection .card-text:not(.selected):hover .text-sheet {
 }
 
 .text-sheet.large.short .ts-body {
-  font-size: 38px;
+  font-size: 50px;
 }
 
 .text-sheet.large.medium .ts-body {
-  font-size: 27px;
+  font-size: 34px;
 }
 
 .text-sheet.large.long .ts-body {
-  font-size: 21px;
+  font-size: 25px;
 }
 
 .text-sheet.large ::selection {
-  background: rgba(45, 90, 235, 0.25);
+  background: rgba(var(--accent-rgb), 0.25);
 }
 
 /* Quelle steht schon unten auf der Textkarte */
@@ -3072,8 +3198,10 @@ body.has-selection .card-text:not(.selected):hover .text-sheet {
   gap: 18px;
 }
 .lb-media .media-audio-cover {
-  max-width: min(100%, 560px);
-  max-height: calc(100% - 120px);
+  /* groß: füllt die Höhe, auch kleine Cover werden hochskaliert */
+  height: min(calc(100% - 70px), 760px);
+  width: auto;
+  max-width: 100%;
   min-height: 0;
   object-fit: contain;
   border-radius: var(--r-md);
@@ -3137,9 +3265,7 @@ body.has-selection .card-text:not(.selected):hover .text-sheet {
 /* ---- Eigener Player (Audio, Video): obere Reihe der Navigationsleiste ---- */
 .lightbox.has-player .lb-nav {
   flex-wrap: wrap;
-  justify-content: center;
   row-gap: 0;
-  width: min(600px, calc(100% - 32px));
 }
 
 .mp-row {
@@ -3240,6 +3366,31 @@ body.has-selection .card-text:not(.selected):hover .text-sheet {
   transform: none;
 }
 
+/* Waveform statt Linie, sobald die Tonspur gelesen ist */
+.mp-wave {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: none;
+  pointer-events: none;
+}
+
+.mp-track.has-wave {
+  height: 24px;
+}
+
+.mp-track.has-wave .mp-wave {
+  display: block;
+}
+
+.mp-track.has-wave::before,
+.mp-track.has-wave .mp-fill,
+.mp-track.has-wave .mp-knob {
+  display: none;
+}
+
+
 .lb-zoom:empty {
   display: none;
 }
@@ -3254,9 +3405,7 @@ body.has-selection .card-text:not(.selected):hover .text-sheet {
   bottom: 128px;
 }
 
-.lightbox.has-player .lb-media .media-audio-cover {
-  max-height: calc(100% - 70px);
-}
+
 
 .lightbox.has-player .lb-zones {
   bottom: 114px;
@@ -3339,6 +3488,13 @@ body.has-selection .card-text:not(.selected):hover .text-sheet {
   outline: 1.5px dashed var(--ink);
   outline-offset: 3px;
   background: rgba(var(--ink-rgb), 0.08);
+}
+
+/* Messen der natürlichen Breite in einer Zeile (lbBalanceZones) */
+.lb-zones.measure {
+  flex-wrap: nowrap;
+  max-width: none;
+  width: max-content;
 }
 
 /* Lightbox „Ablegen in“: Hot Zones zuerst, dann eine feine Linie */
@@ -3635,6 +3791,79 @@ html.light .pdf-maker {
   display: none;
 }
 
+/* Plakat: randloses Raster, Bilder angeschnitten, Beschriftung im Bild */
+.pdf-page.poster .pdf-head {
+  font-family: "Courier New", Courier, monospace;
+  font-size: calc(var(--u) * 5.6);
+  text-transform: uppercase;
+  padding: 0 calc(var(--u) * 7);
+  height: calc(var(--u) * 22);
+  align-items: center;
+  color: #111111;
+}
+
+.pdf-page.poster .pdf-head b {
+  font-weight: 400;
+}
+
+.pdf-page.poster .pdf-head span {
+  color: #111111;
+}
+
+.pdf-page.poster .pdf-foot {
+  display: none;
+}
+
+.pdf-page.poster .pdf-grid {
+  gap: 0;
+  padding: 0;
+}
+
+.pdf-page.poster .pdf-cell {
+  border-radius: 0;
+  overflow: hidden;
+}
+
+.pdf-page.poster .pdf-box img {
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  max-height: none;
+  object-fit: cover;
+}
+
+.pdf-page.poster .pdf-quote {
+  padding: calc(var(--u) * 7);
+  font-size: calc(var(--u) * 9);
+}
+
+.pdf-page.poster .pdf-cap {
+  position: absolute;
+  left: calc(var(--u) * 7);
+  right: calc(var(--u) * 7);
+  bottom: calc(var(--u) * 7);
+  height: auto;
+  padding: 0;
+  font-family: "Courier New", Courier, monospace;
+  font-size: calc(var(--u) * 5.6);
+  line-height: 1.35;
+  text-transform: uppercase;
+  color: #111111;
+}
+
+.pdf-page.poster .pdf-cap .dim {
+  color: inherit;
+}
+
+.pdf-page.poster .pdf-cell.on-dark .pdf-cap {
+  color: #ffffff;
+}
+
+.pdf-page.poster .pdf-cell.lifted {
+  outline-offset: -2px;
+}
+
 /* ---- 0.17.1: Hover in der Navigation als gleitende Fläche ----
    app.js legt .p-nav-glide in die Leiste und schiebt sie unter den Button
    unter der Maus. Die Buttons selbst färben beim Hover nicht mehr. */
@@ -3686,56 +3915,9 @@ html.light .pdf-maker {
   transition: background-color 0.18s ease-out, color 0.18s ease-out;
 }
 
-/* ---- „Archiver“: beim Hover wabert ein Blauverlauf langsam durch die Schrift ---- */
-
-.p-nav-brand {
-  --rainbow: linear-gradient(
-    100deg,
-    #7fd6ff 0%,
-    #3fa9ff 18%,
-    #b4e6ff 34%,
-    #2f6bff 52%,
-    #6fc4ff 70%,
-    #a9c8ff 86%,
-    #7fd6ff 100%
-  );
-}
-
-.p-nav .p-nav-brand:hover {
-  color: transparent;
-  background-image: var(--rainbow);
-  background-size: 180px 100%;
-  -webkit-background-clip: text;
-  background-clip: text;
-  animation: brand-flow 7s ease-in-out infinite alternate;
-}
-
-html.light .p-nav-brand {
-  --rainbow: linear-gradient(
-    100deg,
-    #1a9be6 0%,
-    #0a6fe0 18%,
-    #4cb6f2 34%,
-    #1f4fd8 52%,
-    #2a9df0 70%,
-    #5a8ef0 86%,
-    #1a9be6 100%
-  );
-}
-
-@keyframes brand-flow {
-  from {
-    background-position: 0 0;
-  }
-  to {
-    background-position: -180px 0;
-  }
-}
+/* „Archiver“: kein Hover, auf der Startseite aktiv wie die anderen Einträge */
 
 @media (prefers-reduced-motion: reduce) {
-  .p-nav-brand:hover {
-    animation: none;
-  }
   .p-nav > .p-nav-glide {
     transition: opacity 0.18s ease-out;
   }
@@ -3830,3 +4012,1776 @@ html.light .p-nav-brand {
   min-width: 300px;
 }
 
+
+/* Gezoomtes Video: verschieben per Ziehen */
+.media-video.zoomed {
+  cursor: grab;
+}
+
+/* Zonen-Menü (⋯) schwebt fest über der Seite, damit Karten es nicht abschneiden */
+.zone-menu.floating {
+  position: fixed;
+  right: auto;
+  z-index: 60;
+}
+
+/* ---- Freischalten ---- */
+
+.p-lock {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg);
+  -webkit-backdrop-filter: blur(28px);
+  backdrop-filter: blur(28px);
+  transition: right 0.28s cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
+body.page-open .p-lock {
+  right: var(--sheet-w);
+}
+
+.p-lock-inner {
+  display: grid;
+  justify-items: center;
+  gap: 14px;
+  text-align: center;
+  max-width: 320px;
+  padding: 0 24px;
+}
+
+.p-lock-mark {
+  font-size: 22px;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+}
+
+.p-lock-inner p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.p-lock-btn {
+  margin-top: 6px;
+  border: none;
+  border-radius: 999px;
+  padding: 8px 18px;
+  background: var(--ink);
+  color: var(--ink-inverse);
+  font-size: 13px;
+}
+
+.p-lock-btn:hover {
+  opacity: 0.88;
+}
+
+.p-unlock .p-unlock-text {
+  padding: 11px 0 4px;
+  color: var(--p-dim);
+}
+
+.p-unlock-form {
+  display: flex;
+  gap: 8px;
+  padding: 10px 0 4px;
+}
+
+.p-unlock-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  background: rgba(var(--ink-rgb), 0.06);
+  border: 1px solid transparent;
+  border-radius: 999px;
+  padding: 8px 14px;
+  color: var(--ink);
+  font: 13px var(--p-mono);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  outline: none;
+}
+
+.p-unlock-input::placeholder {
+  color: var(--p-faint);
+}
+
+.p-unlock-input:focus {
+  border-color: rgba(var(--ink-rgb), 0.25);
+}
+
+.p-unlock-go {
+  border: none;
+  border-radius: 999px;
+  padding: 8px 16px;
+  background: var(--ink);
+  color: var(--ink-inverse);
+  font-size: 13px;
+}
+
+.p-unlock-form.wrong .p-unlock-input {
+  border-color: var(--danger);
+  animation: unlock-shake 0.36s;
+}
+
+@keyframes unlock-shake {
+  20%, 60% { transform: translateX(-4px); }
+  40%, 80% { transform: translateX(4px); }
+}
+
+.p-unlock-dot {
+  color: var(--ink);
+  font-size: 10px;
+}
+
+/* ---- Farbschema „Salbei“: Periwinkle auf Grau-Grün (Einstellungen → Darstellung) ---- */
+
+html[data-scheme="sage"]:not(.light) {
+  --splash-bg: #2b312e;
+  --bg: rgba(43, 49, 46, 0.9);
+  --card-bg: rgba(56, 63, 59, 0.42);
+  --panel: rgba(43, 49, 46, 0.97);
+  --sheet-bg: #2b312e;
+  --menu-bg: rgba(54, 61, 57, 0.97);
+  --thumb-bg: #353c38;
+  --muted: #8e938f;
+  --ink: #e4e7e5;
+  --ink-rgb: 228, 231, 229;
+  --ink-inverse: #1c211e;
+  --accent: #a6b5d6;
+  --accent-rgb: 166, 181, 214;
+  --accent-ink: #161b26;
+  --glow-rgb: 166, 181, 214;
+  --p-text: #e4e7e5;
+  --p-dim: #8e938f;
+  --p-faint: #646a66;
+  --p-pill: rgba(58, 66, 61, 0.86);
+}
+
+html[data-scheme="sage"]:not(.mac):not(.light) {
+  --bg: #2b312e;
+}
+
+html[data-scheme="sage"].light {
+  --splash-bg: #e9ece9;
+  --bg: rgba(233, 236, 233, 0.92);
+  --card-bg: rgba(0, 0, 0, 0.04);
+  --panel: #e9ece9;
+  --sheet-bg: #e9ece9;
+  --menu-bg: rgba(238, 241, 238, 0.98);
+  --thumb-bg: #d9ddd9;
+  --muted: #6c726d;
+  --ink: #1c211e;
+  --ink-rgb: 28, 33, 30;
+  --ink-inverse: #e9ece9;
+  --accent: #5f6f94;
+  --accent-rgb: 95, 111, 148;
+  --accent-ink: #ffffff;
+  --glow-rgb: 95, 111, 148;
+  --p-text: #1c211e;
+  --p-dim: #6c726d;
+  --p-faint: #a3a8a4;
+  --p-pill: rgba(222, 227, 222, 0.94);
+}
+
+/* Wortmarke und aktive Knöpfe im Akzent, Knopf-Schrift dunkel */
+html[data-scheme="sage"] .p-nav-brand,
+html[data-scheme="sage"] .splash-word {
+  color: var(--accent);
+}
+
+html[data-scheme="sage"] .p-nav-btn.active,
+html[data-scheme="sage"] .p-nav.has-glide .p-nav-btn.active:hover {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+html[data-scheme="sage"] .p-chip.active {
+  color: var(--accent);
+}
+
+html[data-scheme="sage"] .btn.primary,
+html[data-scheme="sage"] .p-unlock-go,
+html[data-scheme="sage"] .p-lock-btn {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-ink);
+}
+
+html[data-scheme="sage"] .toast {
+  color: var(--accent-ink);
+}
+
+/* ---- Einstellungen: Bereiche als Liste, Untermenüs mit Zurück ---- */
+
+.p-settings-nav {
+  padding: 4px 16px;
+}
+
+.p-settings-link {
+  display: flex;
+  align-items: baseline;
+  gap: 16px;
+  width: 100%;
+  padding: 13px 0;
+  border: none;
+  border-top: 1px solid var(--p-rule);
+  background: none;
+  color: var(--p-text);
+  font: inherit;
+  text-align: left;
+}
+
+.p-settings-link:first-child {
+  border-top: none;
+}
+
+.p-settings-link-title {
+  flex: 0 0 auto;
+}
+
+.p-settings-link-sum {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: right;
+  color: var(--p-faint);
+  font-size: 13px;
+}
+
+.p-settings-link-arrow {
+  color: var(--p-faint);
+  transition: transform 0.18s ease, color 0.18s ease;
+}
+
+.p-settings-link:hover .p-settings-link-arrow {
+  color: var(--p-text);
+  transform: translateX(2px);
+}
+
+.p-settings-back {
+  margin: 0 4px 14px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--p-dim);
+  font-size: 13px;
+}
+
+.p-settings-back:hover {
+  color: var(--p-text);
+}
+
+.p-sheet .p-settings-back + .p-head {
+  margin-bottom: 28px;
+}
+
+.p-unlock {
+  margin-top: 18px;
+}
+
+.p-alpha-value {
+  min-width: 40px;
+  text-align: right;
+  color: var(--p-dim);
+}
+
+.page-open .p-dropbar.preview {
+  right: var(--sheet-w);
+  pointer-events: none;
+}
+
+/* ---- 0.19: Position der Navigation (Einstellungen › Darstellung) ---- */
+
+.p-navpos {
+  display: inline-grid;
+  grid-template-columns: repeat(3, 22px);
+  grid-template-rows: repeat(2, 16px);
+  gap: 2px;
+  padding: 4px;
+  border-radius: var(--r-sm);
+  box-shadow: inset 0 0 0 1px rgba(var(--ink-rgb), 0.12);
+}
+
+.p-navpos-dot {
+  position: relative;
+  border: none;
+  padding: 0;
+  background: transparent;
+  border-radius: 3px;
+  cursor: pointer;
+}
+
+.p-navpos-dot::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 5px;
+  height: 5px;
+  margin: -2.5px 0 0 -2.5px;
+  border-radius: 50%;
+  background: rgba(var(--ink-rgb), 0.25);
+  transition: background-color 0.18s ease-out, transform 0.18s ease-out;
+}
+
+.p-navpos-dot:hover::after {
+  background: rgba(var(--ink-rgb), 0.6);
+}
+
+.p-navpos-dot.on::after {
+  background: var(--accent);
+  transform: scale(1.5);
+}
+
+html[data-nav="tc"] .p-top,
+html[data-nav="tr"] .p-top {
+  left: 0;
+  right: 0;
+  padding: 0 var(--p-pad) 0 84px;
+  justify-content: center;
+  pointer-events: none;
+}
+
+html[data-nav="tr"] .p-top {
+  justify-content: flex-end;
+}
+
+html[data-nav="tc"] .p-nav,
+html[data-nav="tr"] .p-nav,
+html[data-nav^="b"] .p-nav {
+  pointer-events: auto;
+}
+
+/* Unten schwebt die Leiste als Pille über dem Inhalt */
+html[data-nav^="b"] .p-top {
+  top: auto;
+  bottom: 18px;
+  left: 0;
+  right: 0;
+  height: auto;
+  padding: 0 var(--p-pad);
+  justify-content: flex-start;
+  pointer-events: none;
+  transition: opacity 0.22s ease-out, transform 0.22s ease-out;
+}
+
+html[data-nav="bc"] .p-top {
+  justify-content: center;
+}
+
+html[data-nav="br"] .p-top {
+  justify-content: flex-end;
+}
+
+html[data-nav^="b"] .p-nav {
+  background: var(--p-pill);
+  -webkit-backdrop-filter: blur(24px) saturate(1.4);
+  backdrop-filter: blur(24px) saturate(1.4);
+  box-shadow: 0 14px 44px rgba(0, 0, 0, 0.35), inset 0 0 0 1px rgba(var(--ink-rgb), 0.06);
+}
+
+html[data-nav^="b"] .p-page {
+  padding-bottom: 110px;
+}
+
+/* Beim Ziehen fahren unten die Active Zones ein, die Leiste weicht aus */
+html[data-nav^="b"] body.dragging .p-top {
+  opacity: 0;
+  transform: translateY(16px);
+}
+
+html[data-nav^="b"] .p-more-menu.zone-menu {
+  top: auto;
+  bottom: calc(100% + 8px);
+}
+
+html[data-nav$="r"] .p-more-menu.zone-menu {
+  left: auto;
+  right: -4px;
+}
+
+/* ---- 0.19: Getting Started ---- */
+
+.tour.away {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.tour-card {
+  width: min(380px, calc(100vw - 32px));
+  transition: left 0.25s, top 0.25s;
+}
+
+.tour-card.wide {
+  width: min(640px, calc(100vw - 32px));
+}
+
+.tour-progress {
+  display: flex;
+  gap: 3px;
+  margin-bottom: 14px;
+}
+
+.tour-progress i {
+  flex: 1;
+  height: 2px;
+  border-radius: 1px;
+  background: rgba(var(--ink-rgb), 0.12);
+}
+
+.tour-progress i.on {
+  background: var(--p-text);
+}
+
+.tour-title {
+  margin: 0 0 6px;
+}
+
+.tour-text kbd,
+.tour-keys kbd {
+  font-family: var(--p-mono);
+  font-size: 11px;
+  color: var(--p-text);
+  padding: 1px 5px;
+  border-radius: 3px;
+  box-shadow: inset 0 0 0 1px rgba(var(--ink-rgb), 0.25);
+}
+
+.tour-extra {
+  margin-top: 14px;
+}
+
+.tour-actions {
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.tour-actions-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.tour-mono {
+  font-family: var(--p-mono);
+  font-size: 11px;
+  color: var(--p-faint);
+}
+
+.tour-finder {
+  border-top: 1px solid rgba(var(--ink-rgb), 0.1);
+}
+
+.tour-finder-row {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  padding: 6px 0;
+  border-bottom: 1px solid rgba(var(--ink-rgb), 0.1);
+  font-size: 12px;
+  color: var(--p-text);
+}
+
+.tour-finder-row span:nth-child(2) {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tour-finder-row svg {
+  width: 14px;
+  height: 14px;
+  color: var(--p-dim);
+}
+
+.tour-keys {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 7px 14px;
+  font-size: 13px;
+}
+
+.tour-keys kbd {
+  justify-self: start;
+}
+
+.tour-keys span {
+  color: var(--p-dim);
+}
+
+.tour-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+/* Schema-Browser im Kapitel „Sammeln im Browser“ */
+.tour-schema {
+  position: relative;
+  height: 300px;
+  border-radius: var(--r-md);
+  background: var(--p-bg, rgba(var(--ink-rgb), 0.03));
+  box-shadow: inset 0 0 0 1px rgba(var(--ink-rgb), 0.1);
+  overflow: hidden;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.tour-schema-tag {
+  position: absolute;
+  right: 10px;
+  top: 8px;
+  z-index: 2;
+  font-family: var(--p-mono);
+  font-size: 11px;
+  color: var(--p-faint);
+}
+
+.tour-schema-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 30px;
+  padding: 0 10px;
+  border-bottom: 1px solid rgba(var(--ink-rgb), 0.1);
+}
+
+.tour-schema-dots {
+  width: 44px;
+  height: 10px;
+  background: radial-gradient(circle 5px at 5px 5px, rgba(var(--ink-rgb), 0.18) 98%, transparent),
+    radial-gradient(circle 5px at 22px 5px, rgba(var(--ink-rgb), 0.18) 98%, transparent),
+    radial-gradient(circle 5px at 39px 5px, rgba(var(--ink-rgb), 0.18) 98%, transparent);
+}
+
+.tour-schema-url {
+  flex: 1;
+  max-width: 260px;
+  margin: 0 auto;
+  height: 20px;
+  border-radius: 4px;
+  background: rgba(var(--ink-rgb), 0.08);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--p-mono);
+  font-size: 10px;
+  color: var(--p-dim);
+}
+
+.tour-schema-grid {
+  display: flex;
+  gap: 8px;
+  padding: 14px 12px;
+  flex-wrap: wrap;
+}
+
+.tour-schema-item {
+  height: 96px;
+  cursor: grab;
+  touch-action: none;
+}
+
+.tour-schema-item img {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+  pointer-events: none;
+}
+
+.tour-schema-item.lifted {
+  opacity: 0.3;
+}
+
+.tour-schema-item.taken {
+  opacity: 0.25;
+  pointer-events: none;
+}
+
+.tour-schema-drop {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  gap: 6px;
+  padding: 8px;
+  transform: translateY(105%);
+  transition: transform 0.22s cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
+.tour-schema.dragging .tour-schema-drop {
+  transform: none;
+}
+
+.tour-schema-zone {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 58px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 7px 9px;
+  border-radius: var(--r-md);
+  background: var(--p-pill);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25), inset 0 0 0 1px rgba(var(--ink-rgb), 0.06);
+  font-size: 13px;
+  color: var(--p-text);
+  transition: transform 0.12s, background-color 0.12s;
+}
+
+.tour-schema-zone span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tour-schema-zone.over {
+  background: rgba(var(--accent-rgb), 0.28);
+  transform: translateY(-4px);
+}
+
+.tour-schema-zone.flash {
+  animation: tour-flash 0.8s ease;
+}
+
+@keyframes tour-flash {
+  from {
+    background: rgba(var(--accent-rgb), 0.35);
+  }
+}
+
+.tour-schema-cursor {
+  position: absolute;
+  left: 0;
+  top: 0;
+  z-index: 5;
+  width: 22px;
+  height: 22px;
+  opacity: 0;
+  pointer-events: none;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.6));
+}
+
+.tour-schema-ghost {
+  position: fixed;
+  z-index: 200;
+  width: 80px;
+  pointer-events: none;
+  transform: translate(-50%, -55%) rotate(-3deg);
+  filter: drop-shadow(0 16px 30px rgba(0, 0, 0, 0.45));
+}
+
+.tour-schema-ghost.local {
+  position: absolute;
+  z-index: 4;
+}
+
+.tour-schema-ghost img {
+  display: block;
+  width: 100%;
+  border-radius: 3px;
+}
+
+/* Demo-Bibliothek: kleine Marke oben rechts */
+body.demo-lib::after {
+  content: "Demo";
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  z-index: 31;
+  height: 20px;
+  padding: 0 9px;
+  display: flex;
+  align-items: center;
+  border-radius: 99px;
+  background: rgba(var(--accent-rgb), 0.2);
+  box-shadow: inset 0 0 0 1px rgba(var(--accent-rgb), 0.8);
+  font-family: var(--p-mono);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--p-text);
+  pointer-events: none;
+}
+
+/* ---- Licht-Öffnung (reveal.js) ---- */
+
+.reveal-cover,
+.reveal {
+  position: fixed;
+  inset: 0;
+  z-index: 300;
+  pointer-events: none;
+}
+
+.reveal-cover {
+  background: #04060d;
+}
+
+.reveal canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+/* Offenes Blatt rechts: Navigation bleibt über dem Inhalt */
+html[data-nav="tr"] .page-open .p-top,
+html[data-nav^="b"] .page-open .p-top {
+  right: var(--sheet-w);
+}
+
+html[data-nav="tc"] .page-open .p-top {
+  right: var(--sheet-w);
+}
+
+.p-choice .p-link {
+  margin-left: 10px;
+}
+
+/* ---- Studio (0.20): Notiz, Rechte, eigene Reihenfolge ---- */
+
+/* Notiz und Rechte im Infopanel: ruhige Felder ohne Rahmen, Linie erst beim Schreiben */
+.note-field {
+  width: 100%;
+  min-width: 0;
+  padding: 2px 0;
+  border: none;
+  border-bottom: 1px dashed transparent;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: inherit;
+  outline: none;
+  user-select: text;
+  -webkit-user-select: text;
+  transition: border-color 0.15s ease;
+}
+
+.note-field::placeholder {
+  color: var(--muted);
+}
+
+.note-field:hover {
+  border-bottom-color: var(--line);
+}
+
+.note-field:focus {
+  border-bottom-color: var(--dash);
+}
+
+.note-text {
+  display: block;
+  padding: 9px 0;
+  border-top: 1px solid var(--line);
+  resize: none;
+  overflow: hidden;
+  line-height: 1.45;
+  text-align: left;
+}
+
+.lb-row-value .note-field {
+  text-align: right;
+}
+
+.p-block-side .note-field {
+  width: 200px;
+  text-align: right;
+}
+
+.p-studio-lead {
+  margin: -6px 0 18px;
+}
+
+/* „nur intern“: kleiner Punkt oben rechts auf der Karte */
+.card-internal::after {
+  content: "";
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--danger);
+  box-shadow: 0 0 0 1.5px rgba(0, 0, 0, 0.5);
+}
+
+/* PDF-Ersteller: Notiz unter der Bildunterschrift (wie pdf.rs NOTE_LINES) */
+.pdf-page.with-notes .pdf-cap {
+  height: calc(var(--u) * 47);
+}
+
+.pdf-cap .pdf-note {
+  color: #4d4d4d;
+  white-space: normal;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  margin-top: calc(var(--u) * 2);
+}
+
+/* Moodboard: eine Seite, Objekte frei gesetzt */
+.pdf-stage.board {
+  grid-template-columns: minmax(0, 1fr);
+  max-width: 1100px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.pdf-stage.board.portrait {
+  max-width: 640px;
+}
+
+.pdf-page.board.dark {
+  background: #121212;
+  color: #ffffff;
+}
+
+.pdf-page.board.dark .pdf-head span,
+.pdf-page.board.dark .pdf-foot,
+.pdf-page.board.dark .pdf-bnote {
+  color: #999999;
+}
+
+.pdf-board {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  margin: 0 calc(var(--u) * 40);
+}
+
+.pdf-bcell {
+  position: absolute;
+  cursor: grab;
+}
+
+.pdf-bcell img,
+.pdf-bcell .pdf-bquote {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  user-select: none;
+  pointer-events: none;
+}
+
+.pdf-bquote {
+  position: relative;
+  overflow: hidden;
+  container-type: size;
+  padding: 6cqw;
+}
+
+.pdf-bquote .ts-label,
+.pdf-bquote .ts-foot {
+  font-size: max(5px, 4cqw);
+}
+
+.pdf-bquote .ts-body {
+  flex: 1;
+  margin-top: 4cqw;
+  font-size: 8cqw;
+  font-weight: 500;
+  line-height: 1.25;
+  overflow: hidden;
+}
+
+.pdf-bnote {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  padding-top: calc(var(--u) * 3);
+  font-size: calc(var(--u) * 7.5);
+  line-height: 1.25;
+  color: #4d4d4d;
+  pointer-events: none;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.pdf-bcell.lifted {
+  outline: 1px dashed var(--accent);
+  outline-offset: 2px;
+  z-index: 5;
+}
+
+.pdf-grip {
+  position: absolute;
+  right: -5px;
+  bottom: -5px;
+  width: 12px;
+  height: 12px;
+  border: 1px solid var(--accent);
+  background: #ffffff;
+  cursor: nwse-resize;
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+
+.pdf-bcell:hover .pdf-grip,
+.pdf-bcell:hover .pdf-remove {
+  opacity: 1;
+}
+
+.pdf-maker.moving .pdf-grip {
+  opacity: 0;
+}
+
+/* ---- Bibliotheken (Einstellungen › Bibliothek) ---- */
+.p-lib-name {
+  cursor: text;
+}
+.p-lib-name.empty,
+.p-lib-path {
+  color: var(--p-dim);
+}
+.p-lib-path {
+  margin-top: 2px;
+}
+.p-lib-row .p-lib-active {
+  color: var(--p-text);
+}
+.p-lib-name input {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--p-rule);
+  outline: none;
+  padding: 0;
+  width: 100%;
+}
+body.lib-loading {
+  cursor: progress;
+}
+
+/* Standard-Zone (Einstellungen › Bibliothek) */
+.p-select {
+  appearance: none;
+  -webkit-appearance: none;
+  min-width: 160px;
+  max-width: 260px;
+  text-overflow: ellipsis;
+  padding: 3px 22px 3px 0;
+  border: none;
+  border-bottom: 1px solid var(--p-rule);
+  border-radius: 0;
+  background: transparent
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%238a8a8f'/%3E%3C/svg%3E")
+    no-repeat right 2px center;
+  color: var(--p-text);
+  text-align: right;
+  outline: none;
+  cursor: pointer;
+}
+
+.p-skip-input {
+  width: 260px;
+  max-width: 100%;
+  padding: 3px 0;
+  border: none;
+  border-bottom: 1px solid var(--p-rule);
+  background: transparent;
+  color: var(--p-text);
+  text-align: right;
+  outline: none;
+}
+
+/* Karten-Ansicht: lange Pfade kürzen, Datum bleibt in einer Zeile */
+.p-card-group {
+  min-width: 0;
+  overflow: hidden;
+}
+.p-card-row-text {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.p-card-row-text .zone-card-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.p-card-row-right {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.p-block-row:has(.p-select) .p-block-main,
+.p-block-row:has(.p-skip-input) .p-block-main {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+.p-block-row:has(.p-select) .p-block-side,
+.p-block-row:has(.p-skip-input) .p-block-side {
+  flex: 1 1 auto;
+  min-width: 0;
+  justify-content: flex-end;
+}
+
+/* ---- Ordner in einer Zone: Chips, Mosaik oder Abschnitte (0.24) ---- */
+.p-folder-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 2px;
+  min-width: 0;
+  flex: 0 1 auto;
+}
+.p-folder-section + .p-folder-section {
+  margin-top: 40px;
+}
+.p-folder-head {
+  font-size: 17px;
+  padding-bottom: 12px;
+}
+
+/* Karten: Raster, alle Karten einer Reihe gleich hoch (auch „+ New zone“) */
+.p-cards.p-cards-grid {
+  display: grid;
+  grid-template-columns: repeat(var(--card-cols, 3), minmax(0, 1fr));
+  align-items: stretch;
+}
+.p-cards-grid > .p-card {
+  display: flex;
+  flex-direction: column;
+}
+.p-cards-grid > .p-card > .p-card-body {
+  flex: 1 0 auto;
+}
+.p-card-cover.empty {
+  background: rgba(var(--ink-rgb), 0.04);
+}
+.p-card.p-new.p-new-card {
+  padding: 0;
+}
+.p-card.p-new.p-new-card .p-card-cover.empty {
+  background: transparent;
+}
+.p-card.p-card-group {
+  padding: 0 0 4px;
+}
+.p-card-group .p-card-group-title {
+  padding: 14px 16px 12px;
+}
+.p-card-group .p-card-row {
+  margin: 0 10px 0 16px;
+}
+
+/* Aktive Bibliothek: einzelner Reiter oben rechts, zurückgenommen (0.24) */
+.p-lib-tab {
+  position: fixed;
+  top: calc((var(--top-h) - 36px) / 2);
+  right: var(--p-pad, 20px);
+  z-index: 31;
+  padding: 4px;
+  border-radius: var(--r-md);
+  box-shadow: inset 0 0 0 1px rgba(var(--ink-rgb), 0.04);
+}
+.p-lib-tab[hidden] {
+  display: none;
+}
+.p-lib-tab .p-nav-btn {
+  height: 28px;
+  padding: 0 12px;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--p-dim);
+  font-weight: 400;
+}
+.p-lib-tab .p-nav-btn:hover,
+.p-lib-tab .p-nav-btn.active {
+  color: var(--p-text);
+  background: rgba(var(--ink-rgb), 0.06);
+}
+.p-lib-tab .zone-menu {
+  top: calc(100% + 8px);
+  right: 0;
+}
+/* Leiste oben rechts: der Reiter weicht nach links */
+html[data-nav="tr"] .p-lib-tab {
+  right: auto;
+  left: 84px;
+}
+html.fullscreen[data-nav="tr"] .p-lib-tab {
+  left: var(--p-pad);
+}
+body.lightbox-open .p-lib-tab,
+.page-open .p-lib-tab {
+  display: none;
+}
+
+/* Pfade (Info › App, Bibliotheken): einzeilig, Label bricht nie um */
+.p-path {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.p-block-row:has(> .p-block-side .p-path) .p-block-main {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+.p-block-row:has(> .p-block-side .p-path) .p-block-side {
+  flex: 1 1 auto;
+  min-width: 0;
+  justify-content: flex-end;
+}
+.p-block-main:has(> .p-path) {
+  flex: 1 1 auto;
+}
+
+/* Code direkt im Sperr-Hinweis eingeben (0.24) */
+.p-lock-form {
+  width: 100%;
+  min-width: 280px;
+}
+.p-lock-form .p-unlock-form {
+  padding: 6px 0 0;
+}
+
+/* ---- 0.24.2: Navigation kompakt, Fensterknöpfe, Leiste und Bibliotheks-Reiter auf einer Mittellinie ---- */
+:root {
+  --top-h: 72px;
+  --nav-h: 36px;
+  --nav-rim: 5px;
+  /* Oberkante der Leiste = Oberkante der Fensterknöpfe (0.24.3) */
+  --nav-top: 17px;
+}
+
+.p-top {
+  align-items: flex-start;
+  padding-top: var(--nav-top);
+  padding-left: 88px;
+}
+
+.p-nav {
+  gap: 3px;
+  padding: var(--nav-rim);
+}
+
+.p-nav-main {
+  gap: 3px;
+}
+
+.p-nav-btn,
+.p-nav-search {
+  height: var(--nav-h);
+  padding: 0 14px;
+  font-size: 13.5px;
+}
+
+.p-nav-main .p-nav-zone,
+.p-nav-main .p-nav-home,
+#navMore {
+  padding: 0 14px;
+}
+
+#navMore::before {
+  width: 18px;
+  box-shadow: 0 -5.5px 0 currentColor, 0 5.5px 0 currentColor;
+}
+
+.p-lib-tab {
+  top: var(--nav-top);
+  padding: var(--nav-rim);
+}
+
+.p-lib-tab .p-nav-btn {
+  height: var(--nav-h);
+  padding: 0 14px;
+}
+
+/* ≡-Menü: hängt an der ganzen Leiste, bündig mit ihrer Kante, so breit wie sie */
+.p-nav-more {
+  position: static;
+}
+
+.p-more-menu.zone-menu {
+  top: calc(100% + 6px);
+  bottom: auto;
+  left: 0;
+  right: auto;
+  min-width: max(100%, 240px);
+}
+
+html[data-nav$="r"] .p-more-menu.zone-menu {
+  left: auto;
+  right: 0;
+}
+
+html[data-nav^="b"] .p-more-menu.zone-menu {
+  top: auto;
+  bottom: calc(100% + 6px);
+}
+
+/* Rechtsklick „Ablegen in“: eine Spalte untereinander */
+.p-ctx-zones {
+  grid-template-columns: 1fr;
+  gap: 2px;
+  max-height: 340px;
+}
+
+.zone-menu.p-ctx-menu {
+  min-width: 240px;
+}
+
+.p-ctx-zone {
+  padding: 8px 10px;
+}
+
+/* ---- 0.24.3: Ordner als Karten oben in der Zone ---- */
+.p-folder-cards {
+  --card-cols: 6;
+  margin: 36px 0 28px;
+}
+.p-folder-card {
+  cursor: pointer;
+}
+.p-folder-card .p-card-cover {
+  height: auto;
+  aspect-ratio: 2 / 1;
+  overflow: hidden;
+  grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
+}
+.p-folder-card .p-card-cover:not(.trio) {
+  grid-template-rows: minmax(0, 1fr);
+}
+.p-folder-card .p-card-cover > * {
+  min-height: 0;
+  min-width: 0;
+}
+.p-folder-card .p-card-body {
+  padding: 10px 12px 12px;
+}
+.p-folder-card .zone-card-name {
+  font-size: 13px;
+}
+.p-folder-card .p-card-meta {
+  font-size: 12px;
+}
+.p-folder-card.kbd-focus,
+.p-folder-card.active {
+  outline: 1px dashed var(--p-text);
+  outline-offset: 3px;
+}
+
+html[data-nav="tc"] .p-top,
+html[data-nav="tr"] .p-top {
+  padding-top: var(--nav-top);
+}
+
+/* ---- 0.24.3: PDF-Vorschau passt jede Seite ganz ins Fenster, mittig, Seiten untereinander ---- */
+.pdf-stage,
+.pdf-stage.portrait,
+.pdf-stage.board,
+.pdf-stage.board.portrait {
+  --fit-h: calc(100vh - 116px);
+  grid-template-columns: minmax(0, 1fr);
+  justify-items: center;
+  max-width: none;
+  margin: 0;
+}
+
+.pdf-stage .pdf-page {
+  width: min(100%, calc(var(--fit-h) * 842 / 595));
+}
+
+.pdf-stage.portrait .pdf-page {
+  width: min(100%, calc(var(--fit-h) * 595 / 842));
+}
+
+/* ---- 0.24.4: Inhalt läuft unter der Leiste weich aus ----
+   fade: der Inhalt selbst blendet oben nach transparent aus (weich gerechnet, ohne Knick)
+   glass: Unschärfe über dem Inhalt, die nach unten ausläuft, dazu ein leichtes Ausblenden */
+html[data-topfade] #zones {
+  height: 100%;
+  margin-top: 0;
+}
+
+html[data-topfade] #zones > .p-page {
+  padding-top: calc(var(--top-h) + 26px);
+}
+
+html[data-topfade="fade"] #zones {
+  -webkit-mask-image: linear-gradient(to bottom, rgba(0, 0, 0, 0) 0, rgba(0, 0, 0, 0.000) calc(calc(var(--top-h) * 0.35) + (calc(var(--top-h) + 72px) - calc(var(--top-h) * 0.35)) * 0.000), rgba(0, 0, 0, 0.020) calc(calc(var(--top-h) * 0.35) + (calc(var(--top-h) + 72px) - calc(var(--top-h) * 0.35)) * 0.083), rgba(0, 0, 0, 0.074) calc(calc(var(--top-h) * 0.35) + (calc(var(--top-h) + 72px) - calc(var(--top-h) * 0.35)) * 0.167), rgba(0, 0, 0, 0.156) calc(calc(var(--top-h) * 0.35) + (calc(var(--top-h) + 72px) - calc(var(--top-h) * 0.35)) * 0.250), rgba(0, 0, 0, 0.259) calc(calc(var(--top-h) * 0.35) + (calc(var(--top-h) + 72px) - calc(var(--top-h) * 0.35)) * 0.333), rgba(0, 0, 0, 0.376) calc(calc(var(--top-h) * 0.35) + (calc(var(--top-h) + 72px) - calc(var(--top-h) * 0.35)) * 0.417), rgba(0, 0, 0, 0.500) calc(calc(var(--top-h) * 0.35) + (calc(var(--top-h) + 72px) - calc(var(--top-h) * 0.35)) * 0.500), rgba(0, 0, 0, 0.624) calc(calc(var(--top-h) * 0.35) + (calc(var(--top-h) + 72px) - calc(var(--top-h) * 0.35)) * 0.583), rgba(0, 0, 0, 0.741) calc(calc(var(--top-h) * 0.35) + (calc(var(--top-h) + 72px) - calc(var(--top-h) * 0.35)) * 0.667), rgba(0, 0, 0, 0.844) calc(calc(var(--top-h) * 0.35) + (calc(var(--top-h) + 72px) - calc(var(--top-h) * 0.35)) * 0.750), rgba(0, 0, 0, 0.926) calc(calc(var(--top-h) * 0.35) + (calc(var(--top-h) + 72px) - calc(var(--top-h) * 0.35)) * 0.833), rgba(0, 0, 0, 0.980) calc(calc(var(--top-h) * 0.35) + (calc(var(--top-h) + 72px) - calc(var(--top-h) * 0.35)) * 0.917), rgba(0, 0, 0, 1.000) calc(calc(var(--top-h) * 0.35) + (calc(var(--top-h) + 72px) - calc(var(--top-h) * 0.35)) * 1.000));
+  mask-image: linear-gradient(to bottom, rgba(0, 0, 0, 0) 0, rgba(0, 0, 0, 0.000) calc(calc(var(--top-h) * 0.35) + (calc(var(--top-h) + 72px) - calc(var(--top-h) * 0.35)) * 0.000), rgba(0, 0, 0, 0.020) calc(calc(var(--top-h) * 0.35) + (calc(var(--top-h) + 72px) - calc(var(--top-h) * 0.35)) * 0.083), rgba(0, 0, 0, 0.074) calc(calc(var(--top-h) * 0.35) + (calc(var(--top-h) + 72px) - calc(var(--top-h) * 0.35)) * 0.167), rgba(0, 0, 0, 0.156) calc(calc(var(--top-h) * 0.35) + (calc(var(--top-h) + 72px) - calc(var(--top-h) * 0.35)) * 0.250), rgba(0, 0, 0, 0.259) calc(calc(var(--top-h) * 0.35) + (calc(var(--top-h) + 72px) - calc(var(--top-h) * 0.35)) * 0.333), rgba(0, 0, 0, 0.376) calc(calc(var(--top-h) * 0.35) + (calc(var(--top-h) + 72px) - calc(var(--top-h) * 0.35)) * 0.417), rgba(0, 0, 0, 0.500) calc(calc(var(--top-h) * 0.35) + (calc(var(--top-h) + 72px) - calc(var(--top-h) * 0.35)) * 0.500), rgba(0, 0, 0, 0.624) calc(calc(var(--top-h) * 0.35) + (calc(var(--top-h) + 72px) - calc(var(--top-h) * 0.35)) * 0.583), rgba(0, 0, 0, 0.741) calc(calc(var(--top-h) * 0.35) + (calc(var(--top-h) + 72px) - calc(var(--top-h) * 0.35)) * 0.667), rgba(0, 0, 0, 0.844) calc(calc(var(--top-h) * 0.35) + (calc(var(--top-h) + 72px) - calc(var(--top-h) * 0.35)) * 0.750), rgba(0, 0, 0, 0.926) calc(calc(var(--top-h) * 0.35) + (calc(var(--top-h) + 72px) - calc(var(--top-h) * 0.35)) * 0.833), rgba(0, 0, 0, 0.980) calc(calc(var(--top-h) * 0.35) + (calc(var(--top-h) + 72px) - calc(var(--top-h) * 0.35)) * 0.917), rgba(0, 0, 0, 1.000) calc(calc(var(--top-h) * 0.35) + (calc(var(--top-h) + 72px) - calc(var(--top-h) * 0.35)) * 1.000));
+}
+
+html[data-topfade="glass"] #zones {
+  -webkit-mask-image: linear-gradient(to bottom, rgba(0, 0, 0, 0) 0, rgba(0, 0, 0, 0.000) calc(calc(var(--top-h) * 0.15) + (calc(var(--top-h) + 40px) - calc(var(--top-h) * 0.15)) * 0.000), rgba(0, 0, 0, 0.020) calc(calc(var(--top-h) * 0.15) + (calc(var(--top-h) + 40px) - calc(var(--top-h) * 0.15)) * 0.083), rgba(0, 0, 0, 0.074) calc(calc(var(--top-h) * 0.15) + (calc(var(--top-h) + 40px) - calc(var(--top-h) * 0.15)) * 0.167), rgba(0, 0, 0, 0.156) calc(calc(var(--top-h) * 0.15) + (calc(var(--top-h) + 40px) - calc(var(--top-h) * 0.15)) * 0.250), rgba(0, 0, 0, 0.259) calc(calc(var(--top-h) * 0.15) + (calc(var(--top-h) + 40px) - calc(var(--top-h) * 0.15)) * 0.333), rgba(0, 0, 0, 0.376) calc(calc(var(--top-h) * 0.15) + (calc(var(--top-h) + 40px) - calc(var(--top-h) * 0.15)) * 0.417), rgba(0, 0, 0, 0.500) calc(calc(var(--top-h) * 0.15) + (calc(var(--top-h) + 40px) - calc(var(--top-h) * 0.15)) * 0.500), rgba(0, 0, 0, 0.624) calc(calc(var(--top-h) * 0.15) + (calc(var(--top-h) + 40px) - calc(var(--top-h) * 0.15)) * 0.583), rgba(0, 0, 0, 0.741) calc(calc(var(--top-h) * 0.15) + (calc(var(--top-h) + 40px) - calc(var(--top-h) * 0.15)) * 0.667), rgba(0, 0, 0, 0.844) calc(calc(var(--top-h) * 0.15) + (calc(var(--top-h) + 40px) - calc(var(--top-h) * 0.15)) * 0.750), rgba(0, 0, 0, 0.926) calc(calc(var(--top-h) * 0.15) + (calc(var(--top-h) + 40px) - calc(var(--top-h) * 0.15)) * 0.833), rgba(0, 0, 0, 0.980) calc(calc(var(--top-h) * 0.15) + (calc(var(--top-h) + 40px) - calc(var(--top-h) * 0.15)) * 0.917), rgba(0, 0, 0, 1.000) calc(calc(var(--top-h) * 0.15) + (calc(var(--top-h) + 40px) - calc(var(--top-h) * 0.15)) * 1.000));
+  mask-image: linear-gradient(to bottom, rgba(0, 0, 0, 0) 0, rgba(0, 0, 0, 0.000) calc(calc(var(--top-h) * 0.15) + (calc(var(--top-h) + 40px) - calc(var(--top-h) * 0.15)) * 0.000), rgba(0, 0, 0, 0.020) calc(calc(var(--top-h) * 0.15) + (calc(var(--top-h) + 40px) - calc(var(--top-h) * 0.15)) * 0.083), rgba(0, 0, 0, 0.074) calc(calc(var(--top-h) * 0.15) + (calc(var(--top-h) + 40px) - calc(var(--top-h) * 0.15)) * 0.167), rgba(0, 0, 0, 0.156) calc(calc(var(--top-h) * 0.15) + (calc(var(--top-h) + 40px) - calc(var(--top-h) * 0.15)) * 0.250), rgba(0, 0, 0, 0.259) calc(calc(var(--top-h) * 0.15) + (calc(var(--top-h) + 40px) - calc(var(--top-h) * 0.15)) * 0.333), rgba(0, 0, 0, 0.376) calc(calc(var(--top-h) * 0.15) + (calc(var(--top-h) + 40px) - calc(var(--top-h) * 0.15)) * 0.417), rgba(0, 0, 0, 0.500) calc(calc(var(--top-h) * 0.15) + (calc(var(--top-h) + 40px) - calc(var(--top-h) * 0.15)) * 0.500), rgba(0, 0, 0, 0.624) calc(calc(var(--top-h) * 0.15) + (calc(var(--top-h) + 40px) - calc(var(--top-h) * 0.15)) * 0.583), rgba(0, 0, 0, 0.741) calc(calc(var(--top-h) * 0.15) + (calc(var(--top-h) + 40px) - calc(var(--top-h) * 0.15)) * 0.667), rgba(0, 0, 0, 0.844) calc(calc(var(--top-h) * 0.15) + (calc(var(--top-h) + 40px) - calc(var(--top-h) * 0.15)) * 0.750), rgba(0, 0, 0, 0.926) calc(calc(var(--top-h) * 0.15) + (calc(var(--top-h) + 40px) - calc(var(--top-h) * 0.15)) * 0.833), rgba(0, 0, 0, 0.980) calc(calc(var(--top-h) * 0.15) + (calc(var(--top-h) + 40px) - calc(var(--top-h) * 0.15)) * 0.917), rgba(0, 0, 0, 1.000) calc(calc(var(--top-h) * 0.15) + (calc(var(--top-h) + 40px) - calc(var(--top-h) * 0.15)) * 1.000));
+}
+
+html[data-topfade="glass"] .p-drag {
+  z-index: 25;
+}
+
+html[data-topfade="glass"] .p-drag::after {
+  content: "";
+  position: absolute;
+  left: -40px;
+  right: -40px;
+  top: -40px;
+  height: calc(100% + 136px);
+  pointer-events: none;
+  -webkit-backdrop-filter: blur(28px) saturate(1.2);
+  backdrop-filter: blur(28px) saturate(1.2);
+  -webkit-mask-image: linear-gradient(to bottom, rgba(0, 0, 0, 1.000) 0, rgba(0, 0, 0, 1.000) calc(0px + (calc(var(--top-h) + 96px) - 0px) * 0.000), rgba(0, 0, 0, 0.980) calc(0px + (calc(var(--top-h) + 96px) - 0px) * 0.083), rgba(0, 0, 0, 0.926) calc(0px + (calc(var(--top-h) + 96px) - 0px) * 0.167), rgba(0, 0, 0, 0.844) calc(0px + (calc(var(--top-h) + 96px) - 0px) * 0.250), rgba(0, 0, 0, 0.741) calc(0px + (calc(var(--top-h) + 96px) - 0px) * 0.333), rgba(0, 0, 0, 0.624) calc(0px + (calc(var(--top-h) + 96px) - 0px) * 0.417), rgba(0, 0, 0, 0.500) calc(0px + (calc(var(--top-h) + 96px) - 0px) * 0.500), rgba(0, 0, 0, 0.376) calc(0px + (calc(var(--top-h) + 96px) - 0px) * 0.583), rgba(0, 0, 0, 0.259) calc(0px + (calc(var(--top-h) + 96px) - 0px) * 0.667), rgba(0, 0, 0, 0.156) calc(0px + (calc(var(--top-h) + 96px) - 0px) * 0.750), rgba(0, 0, 0, 0.074) calc(0px + (calc(var(--top-h) + 96px) - 0px) * 0.833), rgba(0, 0, 0, 0.020) calc(0px + (calc(var(--top-h) + 96px) - 0px) * 0.917), rgba(0, 0, 0, 0.000) calc(0px + (calc(var(--top-h) + 96px) - 0px) * 1.000));
+  mask-image: linear-gradient(to bottom, rgba(0, 0, 0, 1.000) 0, rgba(0, 0, 0, 1.000) calc(0px + (calc(var(--top-h) + 96px) - 0px) * 0.000), rgba(0, 0, 0, 0.980) calc(0px + (calc(var(--top-h) + 96px) - 0px) * 0.083), rgba(0, 0, 0, 0.926) calc(0px + (calc(var(--top-h) + 96px) - 0px) * 0.167), rgba(0, 0, 0, 0.844) calc(0px + (calc(var(--top-h) + 96px) - 0px) * 0.250), rgba(0, 0, 0, 0.741) calc(0px + (calc(var(--top-h) + 96px) - 0px) * 0.333), rgba(0, 0, 0, 0.624) calc(0px + (calc(var(--top-h) + 96px) - 0px) * 0.417), rgba(0, 0, 0, 0.500) calc(0px + (calc(var(--top-h) + 96px) - 0px) * 0.500), rgba(0, 0, 0, 0.376) calc(0px + (calc(var(--top-h) + 96px) - 0px) * 0.583), rgba(0, 0, 0, 0.259) calc(0px + (calc(var(--top-h) + 96px) - 0px) * 0.667), rgba(0, 0, 0, 0.156) calc(0px + (calc(var(--top-h) + 96px) - 0px) * 0.750), rgba(0, 0, 0, 0.074) calc(0px + (calc(var(--top-h) + 96px) - 0px) * 0.833), rgba(0, 0, 0, 0.020) calc(0px + (calc(var(--top-h) + 96px) - 0px) * 0.917), rgba(0, 0, 0, 0.000) calc(0px + (calc(var(--top-h) + 96px) - 0px) * 1.000));
+}
+
+/* ---- 0.24.5: Ordner rechts neben dem Titel, am Bildraster ausgerichtet ----
+   Karten über 3/6, Liste über 2/6. Aktiv heißt immer Outline, Filter nur hell/dunkel. */
+.p-head-row {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  column-gap: 6px;
+  align-items: end;
+  margin: 0 0 28px;
+}
+.p-head-row > .p-head {
+  margin: 0;
+  align-self: end;
+}
+.p-head-row.is-cards > .p-head { grid-column: 1 / 4; }
+.p-head-row.is-list > .p-head { grid-column: 1 / 5; }
+.p-head-row .p-folder-cards {
+  margin: 0;
+}
+.p-head-row.is-cards .p-folder-cards {
+  grid-column: 4 / 7;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+/* 0.24.6: von rechts aus, je Karte eine Bildspalte; weniger als drei lassen links Platz statt rechts */
+.p-head-row.is-cards .p-folder-card {
+  flex: 0 0 calc((100% - 12px) / 3);
+  min-width: 0;
+}
+.p-head-row.is-list .p-folder-cards {
+  grid-column: 5 / 7;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.p-head-row.is-list .p-folder-cards .p-folder-card {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  text-align: left;
+  gap: 14px;
+  padding: 6px;
+  background: transparent;
+  border-radius: var(--r-sm);
+  overflow: visible;
+}
+.p-head-row.is-list .p-folder-card:hover {
+  background: rgba(var(--ink-rgb), 0.05);
+}
+.p-head-row.is-list .p-folder-card .p-card-cover {
+  display: block;
+  flex: 0 0 56px;
+  width: 56px;
+  height: 56px;
+  aspect-ratio: auto;
+  border-radius: 2px;
+  overflow: hidden;
+}
+.p-head-row.is-list .p-folder-card .p-card-cover > *:not(:first-child) { display: none; }
+.p-head-row.is-list .p-folder-card .p-card-cover > *:first-child {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.p-head-row.is-list .p-folder-card .p-card-body {
+  flex: 1;
+  padding: 0;
+  background: transparent;
+}
+.p-head-row.is-list .p-folder-card .p-card-body > div {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+}
+.p-head-row.is-list .p-folder-card .zone-card-name { font-size: 14px; }
+.p-head-row.is-list .p-folder-card.kbd-focus,
+.p-head-row.is-list .p-folder-card.active {
+  outline-offset: 0;
+}
+
+/* ---- 0.24.6: Einstellungen › Zonen per Ziehen sortieren ---- */
+.p-zone-row {
+  cursor: grab;
+}
+.p-zone-row .p-zone-name.editable {
+  cursor: text;
+}
+.p-zone-row.lifted {
+  cursor: grabbing;
+  position: relative;
+  z-index: 2;
+  background: rgba(var(--ink-rgb), 0.06);
+  outline: 1px dashed var(--p-text);
+  outline-offset: -1px;
+  border-radius: var(--r-sm);
+}
+
+/* Im Unterordner: Zonenname führt zurück */
+.p-head-back {
+  cursor: pointer;
+  color: var(--p-dim);
+  transition: color 0.12s ease;
+}
+.p-head-back:hover {
+  color: var(--p-text);
+}
+.p-hot-card.swap-out,
+.p-row.swap-out {
+  opacity: 0.35;
+  transition: opacity 0.18s ease;
+}
+
+/* ---- 0.24.7: Glas der Zonenleiste ohne Verzögerung ----
+   WebKit zeichnet backdrop-filter erst, wenn keine Deckkraft-Animation mehr
+   darüber liegt. Deshalb blendet nicht die Leiste per opacity ein, sondern
+   --hot-in steuert Glas, Unschärfe, Schatten und Inhalt direkt. */
+@property --hot-in {
+  syntax: "<number>";
+  inherits: true;
+  initial-value: 1;
+}
+.p-dropbar {
+  animation: hot-glass-in 0.14s ease-out;
+}
+.p-dropbar.leaving {
+  animation: hot-glass-out 0.2s ease 0.3s forwards;
+}
+@keyframes hot-glass-in {
+  from {
+    --hot-in: 0;
+  }
+}
+@keyframes hot-glass-out {
+  to {
+    --hot-in: 0;
+  }
+}
+.p-hot {
+  --hot-shadow: 0.5;
+  background: color-mix(in srgb, var(--menu-bg) calc(var(--zone-alpha, 0.97) * var(--hot-in) * 100%), transparent);
+  -webkit-backdrop-filter: blur(calc(24px * var(--hot-in))) saturate(calc(1 + 0.4 * var(--hot-in)));
+  backdrop-filter: blur(calc(24px * var(--hot-in))) saturate(calc(1 + 0.4 * var(--hot-in)));
+  box-shadow:
+    0 14px 44px rgba(0, 0, 0, calc(var(--hot-shadow) * var(--hot-in))),
+    inset 0 0 0 1px rgba(var(--ink-rgb), calc(0.07 * var(--hot-in)));
+}
+html.light .p-hot {
+  --hot-shadow: 0.14;
+}
+.p-hot > :not(.p-hot-hint) {
+  opacity: var(--hot-in);
+}
+/* Herkunftszone: zurückgenommen über den Inhalt, das Glas bleibt Glas */
+.p-hot.is-home {
+  opacity: 1;
+}
+.p-hot.is-home > :not(.p-hot-hint) {
+  opacity: calc(0.45 * var(--hot-in));
+}
+
+/* ---- 0.24.8: Eine Fokus-Sprache ----
+   Auswahl, Tastaturfokus, Tauschziel, Umsortier-Ziel und Ablageziel der
+   Active Zones zeigen denselben gestrichelten Ring. Er liegt als ::after
+   über dem Element, folgt der Eckenrundung (Einstellungen › Rundung) und
+   läuft bei „Umlaufend“ langsam im Uhrzeigersinn. Gezeichnet als SVG-Maske,
+   weil outline in älterem WebKit die Rundung nicht kennt und sich nicht
+   animieren lässt. --ring-lg: Karten mit Abstand, --ring-in: Karten bündig,
+   --ring-0: eckige Objekte und Zeilen. */
+:root {
+  --ring-lg: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Crect x='.5' y='.5' rx='11' style='width:calc(100%25 - 1px);height:calc(100%25 - 1px)' fill='none' stroke='black' stroke-dasharray='4 4'/%3E%3C/svg%3E");
+  --ring-in: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Crect x='.5' y='.5' rx='8' style='width:calc(100%25 - 1px);height:calc(100%25 - 1px)' fill='none' stroke='black' stroke-dasharray='4 4'/%3E%3C/svg%3E");
+  --ring-0: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Crect x='.5' y='.5' rx='0' style='width:calc(100%25 - 1px);height:calc(100%25 - 1px)' fill='none' stroke='black' stroke-dasharray='4 4'/%3E%3C/svg%3E");
+}
+:root[data-radius="square"] {
+  --ring-lg: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Crect x='.5' y='.5' rx='0' style='width:calc(100%25 - 1px);height:calc(100%25 - 1px)' fill='none' stroke='black' stroke-dasharray='4 4'/%3E%3C/svg%3E");
+  --ring-in: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Crect x='.5' y='.5' rx='0' style='width:calc(100%25 - 1px);height:calc(100%25 - 1px)' fill='none' stroke='black' stroke-dasharray='4 4'/%3E%3C/svg%3E");
+}
+:root[data-radius="soft"] {
+  --ring-lg: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Crect x='.5' y='.5' rx='7' style='width:calc(100%25 - 1px);height:calc(100%25 - 1px)' fill='none' stroke='black' stroke-dasharray='4 4'/%3E%3C/svg%3E");
+  --ring-in: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Crect x='.5' y='.5' rx='4' style='width:calc(100%25 - 1px);height:calc(100%25 - 1px)' fill='none' stroke='black' stroke-dasharray='4 4'/%3E%3C/svg%3E");
+}
+:root[data-radius="xl"] {
+  --ring-lg: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Crect x='.5' y='.5' rx='17' style='width:calc(100%25 - 1px);height:calc(100%25 - 1px)' fill='none' stroke='black' stroke-dasharray='4 4'/%3E%3C/svg%3E");
+  --ring-in: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Crect x='.5' y='.5' rx='14' style='width:calc(100%25 - 1px);height:calc(100%25 - 1px)' fill='none' stroke='black' stroke-dasharray='4 4'/%3E%3C/svg%3E");
+}
+@media (prefers-reduced-motion: no-preference) {
+  :root[data-focusanim] {
+    --ring-lg: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Cstyle%3Erect{animation:a 1.6s linear infinite}%40keyframes a{to{stroke-dashoffset:-8}}%3C/style%3E%3Crect x='.5' y='.5' rx='11' style='width:calc(100%25 - 1px);height:calc(100%25 - 1px)' fill='none' stroke='black' stroke-dasharray='4 4'/%3E%3C/svg%3E");
+    --ring-in: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Cstyle%3Erect{animation:a 1.6s linear infinite}%40keyframes a{to{stroke-dashoffset:-8}}%3C/style%3E%3Crect x='.5' y='.5' rx='8' style='width:calc(100%25 - 1px);height:calc(100%25 - 1px)' fill='none' stroke='black' stroke-dasharray='4 4'/%3E%3C/svg%3E");
+    --ring-0: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Cstyle%3Erect{animation:a 1.6s linear infinite}%40keyframes a{to{stroke-dashoffset:-8}}%3C/style%3E%3Crect x='.5' y='.5' rx='0' style='width:calc(100%25 - 1px);height:calc(100%25 - 1px)' fill='none' stroke='black' stroke-dasharray='4 4'/%3E%3C/svg%3E");
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  :root[data-focusanim][data-radius="square"] {
+    --ring-lg: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Cstyle%3Erect{animation:a 1.6s linear infinite}%40keyframes a{to{stroke-dashoffset:-8}}%3C/style%3E%3Crect x='.5' y='.5' rx='0' style='width:calc(100%25 - 1px);height:calc(100%25 - 1px)' fill='none' stroke='black' stroke-dasharray='4 4'/%3E%3C/svg%3E");
+    --ring-in: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Cstyle%3Erect{animation:a 1.6s linear infinite}%40keyframes a{to{stroke-dashoffset:-8}}%3C/style%3E%3Crect x='.5' y='.5' rx='0' style='width:calc(100%25 - 1px);height:calc(100%25 - 1px)' fill='none' stroke='black' stroke-dasharray='4 4'/%3E%3C/svg%3E");
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  :root[data-focusanim][data-radius="soft"] {
+    --ring-lg: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Cstyle%3Erect{animation:a 1.6s linear infinite}%40keyframes a{to{stroke-dashoffset:-8}}%3C/style%3E%3Crect x='.5' y='.5' rx='7' style='width:calc(100%25 - 1px);height:calc(100%25 - 1px)' fill='none' stroke='black' stroke-dasharray='4 4'/%3E%3C/svg%3E");
+    --ring-in: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Cstyle%3Erect{animation:a 1.6s linear infinite}%40keyframes a{to{stroke-dashoffset:-8}}%3C/style%3E%3Crect x='.5' y='.5' rx='4' style='width:calc(100%25 - 1px);height:calc(100%25 - 1px)' fill='none' stroke='black' stroke-dasharray='4 4'/%3E%3C/svg%3E");
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  :root[data-focusanim][data-radius="xl"] {
+    --ring-lg: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Cstyle%3Erect{animation:a 1.6s linear infinite}%40keyframes a{to{stroke-dashoffset:-8}}%3C/style%3E%3Crect x='.5' y='.5' rx='17' style='width:calc(100%25 - 1px);height:calc(100%25 - 1px)' fill='none' stroke='black' stroke-dasharray='4 4'/%3E%3C/svg%3E");
+    --ring-in: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Cstyle%3Erect{animation:a 1.6s linear infinite}%40keyframes a{to{stroke-dashoffset:-8}}%3C/style%3E%3Crect x='.5' y='.5' rx='14' style='width:calc(100%25 - 1px);height:calc(100%25 - 1px)' fill='none' stroke='black' stroke-dasharray='4 4'/%3E%3C/svg%3E");
+  }
+}
+
+/* Wer einen Ring trägt */
+.card.selected:not(.original .card),
+.card.drop-target,
+.p-home .kbd-focus,
+.p-card.kbd-focus,
+.p-folder-card.active,
+.p-hot-card.swap-target,
+.p-row.swap-target,
+.p-card.drop-target,
+.p-dropbar .p-hot.drop-active {
+  --ring: var(--ring-lg);
+  --ring-gap: 3px;
+  position: relative;
+  overflow: visible;
+  outline: none !important;
+}
+.card.selected:not(.original .card),
+.card.drop-target {
+  --ring: var(--ring-0);
+  --ring-gap: 2px;
+}
+.p-home .p-row.kbd-focus,
+.p-home .p-card-row.kbd-focus,
+.p-row.swap-target {
+  --ring: var(--ring-0);
+  --ring-gap: -2px;
+}
+.p-head-row.is-list .p-folder-card.kbd-focus,
+.p-head-row.is-list .p-folder-card.active {
+  --ring: var(--ring-in);
+  --ring-gap: 0px;
+}
+.card.selected:not(.original .card)::after,
+.card.drop-target::after,
+.p-home .kbd-focus::after,
+.p-card.kbd-focus::after,
+.p-folder-card.active::after,
+.p-hot-card.swap-target::after,
+.p-row.swap-target::after,
+.p-card.drop-target::after,
+.p-dropbar .p-hot.drop-active::after {
+  content: "";
+  position: absolute;
+  inset: calc(-1 * var(--ring-gap));
+  z-index: 4;
+  pointer-events: none;
+  background: var(--p-text, var(--ink));
+  -webkit-mask: var(--ring) 0 0 / 100% 100% no-repeat;
+  mask: var(--ring) 0 0 / 100% 100% no-repeat;
+  animation: none;
+}
+/* Karten öffnen overflow für den Ring, das Cover behält die Rundung */
+.p-card.kbd-focus .p-card-cover,
+.p-folder-card.active .p-card-cover,
+.p-hot-card.swap-target .p-card-cover,
+.p-card.drop-target .p-card-cover {
+  border-radius: var(--r-lg) var(--r-lg) 0 0;
+  overflow: hidden;
+}
+/* Ziele leicht aufgehellt, ohne Linie über oder unter dem Objekt */
+.p-hot-card.swap-target,
+.p-row.swap-target,
+.p-card.drop-target {
+  background: rgba(var(--ink-rgb), 0.08);
+}
+.card.drop-target img,
+.card.drop-target video,
+.card.drop-target canvas {
+  opacity: 0.6;
+  transition: opacity 0.1s ease;
+}
+.p-dropbar .p-hot.drop-active {
+  outline: none !important;
+}
+
+/* ---- 0.24.8: ⌘R mit Welle (Einstellungen › Aussehen › Neu laden) ---- */
+.p-wave {
+  animation: p-wave 0.3s cubic-bezier(0.2, 0.7, 0.3, 1) both;
+}
+@keyframes p-wave {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+
+/* ---- 0.24.8: Fensterhintergrund (Einstellungen › Aussehen), getrennt von den Zonen ----
+   --bg-solid ist die Grundfarbe je Schema, --win-alpha deckt sie über der macOS-Unschärfe. */
+:root {
+  --bg-solid: #101010;
+}
+html.light {
+  --bg-solid: #d6d6d6;
+}
+html[data-scheme="sage"] {
+  --bg-solid: #2b312e;
+}
+html[data-scheme="sage"].light {
+  --bg-solid: #e9ece9;
+}
+html.mac[data-winalpha] {
+  --bg: color-mix(in srgb, var(--bg-solid) calc(var(--win-alpha, 0.6) * 100%), transparent);
+}
+html.mac[data-winalpha].light,
+html.mac[data-winalpha][data-scheme] {
+  --bg: color-mix(in srgb, var(--bg-solid) calc(var(--win-alpha, 0.6) * 100%), transparent);
+}
+/* html und body malen sonst beide --bg; mit eigenem Wert nur der body, damit der Prozentwert stimmt */
+html.mac[data-winalpha] {
+  background: transparent;
+}
+
+/* ---- 0.24.8: Noch nicht geladene Bilder als Glasfläche ---- */
+.card {
+  transition: background-color 0.45s ease, box-shadow 0.45s ease;
+}
+.card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background: linear-gradient(135deg, rgba(var(--ink-rgb), 0.07), transparent 55%);
+  opacity: 0;
+  transition: opacity 0.45s ease;
+}
+.card.loading {
+  background-color: color-mix(in srgb, var(--menu-bg) calc(var(--zone-alpha, 0.97) * 60%), transparent);
+  box-shadow: inset 0 0 0 1px rgba(var(--ink-rgb), 0.07);
+}
+.card.loading::before {
+  opacity: 1;
+}
+.card img {
+  transition: opacity 0.45s ease, filter 0.18s ease;
+}
+.card.loading img {
+  opacity: 0 !important;
+}
+
+/* ---- 0.24.8: Geteilte Bibliothek, neu von anderen ---- */
+.card-fresh {
+  display: none;
+}
+.card.fresh .card-fresh {
+  display: block;
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 3;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #ffffff;
+  box-shadow: 0 0 0 1.5px rgba(0, 0, 0, 0.35), 0 1px 4px rgba(0, 0, 0, 0.3);
+  pointer-events: none;
+}
+.p-fresh-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-left: 7px;
+  border-radius: 50%;
+  background: var(--p-text);
+  vertical-align: 0.2em;
+}
+
+/* ---- 0.25.0: Neues Hell ----
+   Neutrales Hellgrau ohne Farbstich (R = G = B), damit weiße Bilder eine Kante
+   haben. Übersetzt aus Dunkel: gleiche Kontraste, Karten eine Stufe vom Grund
+   abgesetzt, Navigation als weißes Glas, Zonenkarten beim Ziehen als helles
+   Glas ohne Sättigung (Deckkraft über den Regler). Salbei bleibt unverändert. */
+html.light:not([data-scheme="sage"]) {
+  --bg-solid: #f4f4f4;
+  --bg: #f4f4f4;
+  --panel: #f4f4f4;
+  --sheet-bg: #f4f4f4;
+  --splash-bg: #f4f4f4;
+  --lightbox-bg: rgba(244, 244, 244, 0.98);
+  --ink: #111111;
+  --ink-rgb: 17, 17, 17;
+  --ink-inverse: #f4f4f4;
+  --p-text: #111111;
+  --p-dim: #5c5c5c;
+  --muted: #5c5c5c;
+  --p-faint: #8f8f8f;
+  --p-rule: rgba(0, 0, 0, 0.1);
+  --p-rule-strong: rgba(0, 0, 0, 0.55);
+  --p-pill: rgba(255, 255, 255, 0.78);
+  --thumb-bg: #e8e8e8;
+  --card-bg: rgba(0, 0, 0, 0.045);
+  --menu-bg: rgba(250, 250, 250, 0.97);
+  --menu-shadow: 0 14px 44px rgba(0, 0, 0, 0.14), inset 0 0 0 1px rgba(0, 0, 0, 0.06);
+}
+html.mac[data-winalpha].light:not([data-scheme="sage"]) {
+  --bg: color-mix(in srgb, var(--bg-solid) calc(var(--win-alpha, 0.6) * 100%), transparent);
+}
+html.light:not([data-scheme="sage"]) .p-nav {
+  background: var(--p-pill);
+  -webkit-backdrop-filter: blur(24px) saturate(0);
+  backdrop-filter: blur(24px) saturate(0);
+  box-shadow: 0 10px 34px rgba(0, 0, 0, 0.08), inset 0 0 0 1px rgba(0, 0, 0, 0.05);
+}
+html.light:not([data-scheme="sage"]) .p-nav-btn.active {
+  background: rgba(0, 0, 0, 0.08);
+}
+html.light:not([data-scheme="sage"]) .p-nav > .p-nav-glide {
+  background: rgba(0, 0, 0, 0.06);
+}
+html.light:not([data-scheme="sage"]) .p-lib-tab {
+  background: transparent;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.08);
+}
+html.light:not([data-scheme="sage"]) .p-card {
+  background: rgba(0, 0, 0, 0.045);
+}
+html.light:not([data-scheme="sage"]) .p-card:hover {
+  background: rgba(0, 0, 0, 0.07);
+}
+html.light:not([data-scheme="sage"]) .p-dropbar .p-hot {
+  --menu-bg: #fafafa;
+  --hot-shadow: 0.16;
+  -webkit-backdrop-filter: blur(calc(28px * var(--hot-in))) saturate(0);
+  backdrop-filter: blur(calc(28px * var(--hot-in))) saturate(0);
+  box-shadow:
+    0 14px 44px rgba(0, 0, 0, calc(0.16 * var(--hot-in))),
+    inset 0 0 0 1px rgba(255, 255, 255, calc(0.7 * var(--hot-in))),
+    inset 0 0 0 0.5px rgba(0, 0, 0, calc(0.08 * var(--hot-in)));
+}

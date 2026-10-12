@@ -18,7 +18,9 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use walkdir::WalkDir;
 
 pub const META_DIR: &str = ".archiver";
-pub const INBOX: &str = "Inbox";
+pub const INBOX: &str = "Unsorted";
+/// Frühere Standard-Zone (bis 0.23); wird beim Öffnen zu „Unsorted“ umbenannt.
+pub const LEGACY_INBOX: &str = "Inbox";
 /// Zwischenordner der Extension in den Downloads (wird nach der Übernahme geleert).
 pub const TRANSFER_DIR: &str = "Archiver-Transfer";
 const THUMB_SIZE: u32 = 720;
@@ -39,10 +41,14 @@ pub const VIDEO_EXTS: &[&str] = &["mp4", "m4v", "mov", "webm"];
 /// Audio: Vorschau ist das eingebettete Cover oder eine Wellenform,
 /// Dauer, Titel und Format kommen aus AVFoundation (macos.rs).
 pub const AUDIO_EXTS: &[&str] = &["wav", "mp3", "aif", "aiff", "m4a", "flac"];
+/// Textkarten liegen als reine Textdatei in der Zone; die Oberfläche zeigt
+/// sie als farbige Karte (Text aus der Quelle oder aus der Datei selbst).
+pub const TEXT_EXTS: &[&str] = &["txt"];
+const TEXT_MAX_CHARS: usize = 20_000;
 
 pub type Result<T> = std::result::Result<T, String>;
 
-fn err<E: std::fmt::Display>(e: E) -> String {
+pub(crate) fn err<E: std::fmt::Display>(e: E) -> String {
     e.to_string()
 }
 
@@ -60,6 +66,8 @@ pub struct Item {
     pub path: String,
     pub abs: String,
     pub zone: String,
+    /// Ordner innerhalb der Zone (erste Ebene darunter), leer für lose Dateien
+    pub folder: String,
     pub filename: String,
     pub hash: String,
     pub bytes: i64,
@@ -93,6 +101,16 @@ pub struct Item {
     pub sample_rate: Option<i64>,
     pub bit_depth: Option<i64>,
     pub channels: Option<i64>,
+    /// Notiz zum Objekt (das Warum einer Referenz)
+    pub note: Option<String>,
+    /// Rechte: Urheber, Lizenz, nur intern verwenden
+    pub credit: Option<String>,
+    pub license: Option<String>,
+    pub internal: bool,
+    /// Wer das Objekt abgelegt hat (geteilte Bibliothek)
+    pub added_by: Option<String>,
+    /// Farbe der Textkarte, falls gewählt
+    pub tone: Option<String>,
 }
 
 /// Seitenzahl, Dauer und Maße eines PDFs oder Videos, bei Audio dazu Titel und Format.
@@ -143,9 +161,16 @@ pub struct ImportReport {
 
 pub struct Library {
     pub root: PathBuf,
-    conn: Mutex<Connection>,
+    pub(crate) conn: Mutex<Connection>,
     scan_lock: Mutex<()>,
     failed_thumbs: Mutex<HashSet<String>>,
+    /// Geteilte Bibliothek (Server, NAS, Dropbox): Datenbank liegt lokal,
+    /// Angaben gehen über eine Datei pro Person in .archiver/people/.
+    pub shared: bool,
+    /// Name oder Kürzel dieser Person; wird bei neuen Objekten als „abgelegt von“ gemerkt.
+    pub(crate) user: Mutex<Option<String>>,
+    /// Stand der Personen-Dateien beim letzten Abgleich
+    pub(crate) people_sig: Mutex<u64>,
 }
 
 pub fn now_ms() -> i64 {
@@ -181,9 +206,13 @@ fn is_av(path: &Path) -> bool {
     is_pdf(path) || is_video(path) || is_audio(path)
 }
 
-/// Alles, was in die Bibliothek gehört: Bilder, PDFs, Videos, Audio.
+pub fn is_text(path: &Path) -> bool {
+    TEXT_EXTS.contains(&ext_of(path).as_str())
+}
+
+/// Alles, was in die Bibliothek gehört: Bilder, PDFs, Videos, Audio, Textkarten.
 pub fn is_media(path: &Path) -> bool {
-    is_image(path) || is_pdf(path) || is_video(path) || is_audio(path)
+    is_image(path) || is_pdf(path) || is_video(path) || is_audio(path) || is_text(path)
 }
 
 /// Endung aus den ersten Bytes, wenn der Name keine passende hat (PDF, Video, Bild).
@@ -257,6 +286,99 @@ fn parent_rel(rel: &str) -> String {
     rel.rsplit_once('/').map(|(p, _)| p.to_string()).unwrap_or_default()
 }
 
+/// Zone eines Ordners: nur die ersten `depth` Ebenen. Tiefere Unterordner
+/// gehören zu ihrer Zone (bestehende Projektordner werden nicht zerfasert).
+fn zone_at(dir: &str, depth: usize) -> String {
+    if dir.is_empty() {
+        return String::new();
+    }
+    dir.split('/').take(depth.max(1)).collect::<Vec<_>>().join("/")
+}
+
+/// Kleines Bild über Quick Look (`qlmanage -t`), höchstens 5 s
+pub(crate) fn ql_image(src: &Path, size: u32, tmp: &Path) -> Option<image::DynamicImage> {
+    let _ = fs::remove_dir_all(tmp);
+    fs::create_dir_all(tmp).ok()?;
+    let img = (|| {
+        let mut child = std::process::Command::new("/usr/bin/qlmanage")
+            .args(["-t", "-s", &size.to_string(), "-o"])
+            .arg(tmp)
+            .arg(src)
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .spawn()
+            .ok()?;
+        let start = std::time::Instant::now();
+        while child.try_wait().ok()?.is_none() {
+            if start.elapsed() > std::time::Duration::from_secs(5) {
+                let _ = child.kill();
+                return None;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(30));
+        }
+        let png = fs::read_dir(tmp).ok()?.filter_map(|e| e.ok()).map(|e| e.path()).find(|p| ext_of(p) == "png")?;
+        image::open(png).ok()
+    })();
+    let _ = fs::remove_dir_all(tmp);
+    img
+}
+
+/// Erster Ordner unterhalb der Zone, in dem eine Datei liegt ("" = direkt in der Zone)
+fn folder_in(dir: &str, zone: &str) -> String {
+    let rest = if zone.is_empty() { dir } else { dir.strip_prefix(zone).and_then(|r| r.strip_prefix('/')).unwrap_or("") };
+    rest.split('/').next().unwrap_or("").to_string()
+}
+
+/// Ordner, die Archiver in bestehenden Projekten überspringt (Layout-Links,
+/// Schriften, Backups, Ableton-Technik). Einträge mit "/" passen auf das Pfadende.
+pub const DEFAULT_SKIP: &[&str] = &["Links", "Document fonts", "Backup", "Ableton Project Info", "Presets", "Samples/Imported"];
+pub const DEFAULT_DEPTH: usize = 2;
+
+/// Pakete, die im Finder wie Dateien aussehen (Programme, Mediatheken, Projekte)
+const PACKAGE_EXTS: &[&str] = &["app", "photoslibrary", "logicx", "fcpbundle", "band", "rtfd", "pages", "key", "numbers", "imovielibrary", "lrdata", "bundle", "framework", "plugin"];
+
+/// Ordnerregeln einer Bibliothek: Zonentiefe und übersprungene Ordner
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct Structure {
+    pub depth: usize,
+    pub skip: Vec<String>,
+    /// Unterordner als eigene Zonen (bis `depth`). Aus: jeder Ordner der
+    /// obersten Ebene ist eine Zone, Unterordner erscheinen darin als Ordner.
+    #[serde(default)]
+    pub subzones: bool,
+}
+
+impl Structure {
+    /// Ebenen, die eine Zone bilden
+    pub fn zone_depth(&self) -> usize {
+        if self.subzones {
+            self.depth.clamp(2, 3)
+        } else {
+            1
+        }
+    }
+
+    /// Wird dieser Ordner (relativer Pfad) übersprungen?
+    pub fn skips(&self, rel: &str) -> bool {
+        let name = rel.rsplit('/').next().unwrap_or(rel);
+        if let Some((_, ext)) = name.rsplit_once('.') {
+            if PACKAGE_EXTS.contains(&ext.to_lowercase().as_str()) {
+                return true;
+            }
+        }
+        let lower = rel.to_lowercase();
+        self.skip.iter().any(|s| {
+            let s = s.trim().trim_matches('/').to_lowercase();
+            !s.is_empty() && (lower == s || lower.ends_with(&format!("/{s}")))
+        })
+    }
+}
+
+/// Ordner ohne sichtbaren Inhalt
+fn dir_is_empty(dir: &Path) -> bool {
+    fs::read_dir(dir).map(|rd| rd.filter_map(|e| e.ok()).all(|e| is_hidden(&e.file_name()))).unwrap_or(true)
+}
+
 fn file_name(rel: &str) -> String {
     rel.rsplit_once('/').map(|(_, f)| f.to_string()).unwrap_or_else(|| rel.to_string())
 }
@@ -286,7 +408,7 @@ pub fn clean_segment(name: &str) -> String {
 }
 
 /// Freier Dateiname im Zielordner: "bild.jpg", "bild 2.jpg", "bild 3.jpg" …
-fn unique_path(dir: &Path, filename: &str) -> PathBuf {
+pub(crate) fn unique_path(dir: &Path, filename: &str) -> PathBuf {
     let candidate = dir.join(filename);
     if !candidate.exists() {
         return candidate;
@@ -410,7 +532,7 @@ pub fn hash_file(path: &Path) -> Result<String> {
     Ok(hasher.finalize().to_hex()[..32].to_string())
 }
 
-const SCHEMA: &str = "
+pub(crate) const SCHEMA: &str = "
 CREATE TABLE IF NOT EXISTS item (
   path     TEXT PRIMARY KEY,
   hash     TEXT NOT NULL,
@@ -452,20 +574,34 @@ CREATE TABLE IF NOT EXISTS analysis (
   text   TEXT NOT NULL,
   colors TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS note (
+  hash       TEXT PRIMARY KEY,
+  note       TEXT,
+  credit     TEXT,
+  license    TEXT,
+  internal   INTEGER,
+  added_by   TEXT,
+  updated_at INTEGER NOT NULL DEFAULT 0,
+  tone       TEXT
+);
 ";
 
 impl Library {
     /// Öffnet (und legt bei Bedarf an) eine Bibliothek in `root`.
     pub fn open(root: &Path) -> Result<Library> {
         fs::create_dir_all(root.join(META_DIR).join("thumbs")).map_err(err)?;
-        fs::create_dir_all(root.join(INBOX)).map_err(err)?;
-        let conn = Connection::open(root.join(META_DIR).join("library.db")).map_err(err)?;
+        let shared = crate::studio::is_shared(root);
+        // Geteilt: SQLite gehört nicht auf ein Netzlaufwerk, jede Person hat ihren eigenen Cache.
+        let db = if shared { crate::studio::local_db(root)? } else { root.join(META_DIR).join("library.db") };
+        let conn = Connection::open(db).map_err(err)?;
         // Die Brücke zur Extension öffnet dieselbe Datenbank parallel zur App.
         conn.busy_timeout(std::time::Duration::from_secs(5)).map_err(err)?;
         conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL;").map_err(err)?;
         conn.execute_batch(SCHEMA).map_err(err)?;
         // ab 0.9: Text der Zitat-Karten (ältere Datenbanken bekommen die Spalte nachgereicht)
         let _ = conn.execute("ALTER TABLE source ADD COLUMN quote TEXT", []);
+        // ab 0.20.1: Farbe der Textkarten
+        let _ = conn.execute("ALTER TABLE note ADD COLUMN tone TEXT", []);
         // ab 0.12: Audio-Eckdaten (ältere Datenbanken bekommen die Spalten nachgereicht)
         for col in ["title TEXT", "artist TEXT", "album TEXT", "sample_rate INTEGER", "bit_depth INTEGER", "channels INTEGER"] {
             let _ = conn.execute(&format!("ALTER TABLE media ADD COLUMN {col}"), []);
@@ -486,12 +622,25 @@ impl Library {
             conn: Mutex::new(conn),
             scan_lock: Mutex::new(()),
             failed_thumbs: Mutex::new(HashSet::new()),
+            shared,
+            user: Mutex::new(None),
+            people_sig: Mutex::new(0),
         };
+        // Inbox nur in einer neuen Bibliothek. In einem bestehenden Ordnersystem
+        // entsteht sie erst, wenn wirklich etwas ohne Ziel hereinkommt.
+        let has_folders = fs::read_dir(root)
+            .map(|rd| rd.filter_map(|e| e.ok()).any(|e| e.path().is_dir() && !is_hidden(&e.file_name())))
+            .unwrap_or(false);
+        if !has_folders {
+            fs::create_dir_all(root.join(lib.default_zone())).map_err(err)?;
+        }
+        lib.migrate_inbox()?;
         lib.restore_metadata()?;
+        lib.merge_people()?;
         Ok(lib)
     }
 
-    fn metadata_path(&self) -> PathBuf {
+    pub(crate) fn metadata_path(&self) -> PathBuf {
         self.root.join(META_DIR).join("metadata.json")
     }
 
@@ -517,11 +666,116 @@ impl Library {
     }
 
     /// Speichert Reihenfolge und Hot Zones; schreibt nur bei Änderung.
+    /// Weitere Schlüssel in zones.json (z. B. "alpha") bleiben erhalten.
     pub fn set_zone_order(&self, order: &[String], hot: &[String]) -> Result<()> {
         if self.zone_order() == (order.to_vec(), hot.to_vec()) {
             return Ok(());
         }
-        let body = serde_json::to_vec_pretty(&serde_json::json!({ "order": order, "hot": hot })).map_err(err)?;
+        let mut v = self.zone_file();
+        v["order"] = serde_json::json!(order);
+        v["hot"] = serde_json::json!(hot);
+        self.write_zone_file(&v)
+    }
+
+    /// Standard-Zone: hierhin kommt alles, was ohne Ziel gesammelt wird
+    /// (Extension ohne Zone, lose Bilder beim Import). Ohne Wahl die Inbox.
+    pub fn default_zone(&self) -> String {
+        self.zone_file()
+            .get("default")
+            .and_then(|z| z.as_str())
+            .filter(|z| !z.is_empty() && self.root.join(z).is_dir())
+            .map(String::from)
+            .unwrap_or_else(|| {
+                if !self.root.join(INBOX).is_dir() && self.root.join(LEGACY_INBOX).is_dir() {
+                    LEGACY_INBOX.to_string()
+                } else {
+                    INBOX.to_string()
+                }
+            })
+    }
+
+    /// Bis 0.23 hieß die Standard-Zone „Inbox“. In eigenen Bibliotheken wird
+    /// sie zu „Unsorted“, sofern sie Standard ist und es „Unsorted“ noch nicht gibt.
+    fn migrate_inbox(&self) -> Result<()> {
+        if self.shared || self.root.join(INBOX).exists() || !self.root.join(LEGACY_INBOX).is_dir() {
+            return Ok(());
+        }
+        let stored = self.zone_file().get("default").and_then(|z| z.as_str()).map(String::from);
+        if stored.as_deref().is_some_and(|z| z != LEGACY_INBOX && self.root.join(z).is_dir()) {
+            return Ok(());
+        }
+        let new_zone = self.rename_zone(LEGACY_INBOX, INBOX)?;
+        let mut v = self.zone_file();
+        v["default"] = serde_json::json!(new_zone);
+        for key in ["order", "hot"] {
+            if let Some(list) = v.get_mut(key).and_then(|a| a.as_array_mut()) {
+                for z in list.iter_mut() {
+                    if z.as_str() == Some(LEGACY_INBOX) {
+                        *z = serde_json::json!(new_zone);
+                    }
+                }
+            }
+        }
+        self.write_zone_file(&v)
+    }
+
+    pub fn set_default_zone(&self, zone: &str) -> Result<()> {
+        let dir = safe_join(&self.root, zone)?;
+        if zone.is_empty() || !dir.is_dir() {
+            return Err(format!("Zone nicht gefunden: {zone}"));
+        }
+        let mut v = self.zone_file();
+        v["default"] = serde_json::json!(zone);
+        self.write_zone_file(&v)
+    }
+
+    pub fn structure(&self) -> Structure {
+        let v = self.zone_file();
+        let depth = v.get("depth").and_then(|d| d.as_u64()).map(|d| d as usize).filter(|d| (2..=3).contains(d)).unwrap_or(DEFAULT_DEPTH);
+        let skip = v
+            .get("skip")
+            .and_then(|a| a.as_array())
+            .map(|a| a.iter().filter_map(|s| s.as_str().map(String::from)).collect())
+            .unwrap_or_else(|| DEFAULT_SKIP.iter().map(|s| s.to_string()).collect());
+        let subzones = v.get("subzones").and_then(|b| b.as_bool()).unwrap_or(false);
+        Structure { depth, skip, subzones }
+    }
+
+    pub fn set_structure(&self, st: &Structure) -> Result<()> {
+        let mut v = self.zone_file();
+        v["depth"] = serde_json::json!(st.depth.clamp(2, 3));
+        v["subzones"] = serde_json::json!(st.subzones);
+        v["skip"] = serde_json::json!(st.skip.iter().map(|s| s.trim()).filter(|s| !s.is_empty()).collect::<Vec<_>>());
+        self.write_zone_file(&v)?;
+        self.scan()?;
+        Ok(())
+    }
+
+    /// Deckkraft der Zonen beim Ziehen (0.3–1.0), gilt in App und Extension.
+    pub fn drag_alpha(&self) -> Option<f64> {
+        self.zone_file().get("alpha").and_then(|a| a.as_f64())
+    }
+
+    pub fn set_drag_alpha(&self, alpha: f64) -> Result<()> {
+        let mut v = self.zone_file();
+        v["alpha"] = serde_json::json!(alpha.clamp(0.3, 1.0));
+        self.write_zone_file(&v)
+    }
+
+    pub(crate) fn zone_file(&self) -> serde_json::Value {
+        let v: serde_json::Value = fs::read(self.zone_order_path())
+            .ok()
+            .and_then(|b| serde_json::from_slice(&b).ok())
+            .unwrap_or_default();
+        if v.is_object() {
+            v
+        } else {
+            serde_json::json!({})
+        }
+    }
+
+    pub(crate) fn write_zone_file(&self, v: &serde_json::Value) -> Result<()> {
+        let body = serde_json::to_vec_pretty(v).map_err(err)?;
         fs::write(self.zone_order_path(), body).map_err(err)
     }
 
@@ -530,31 +784,39 @@ impl Library {
     }
 
     /// Neue oder geleerte Datenbank: Quellen aus metadata.json zurückholen.
+    /// Notizen und Rechte werden immer abgeglichen (neuere gewinnt).
     fn restore_metadata(&self) -> Result<()> {
-        let conn = self.conn.lock().unwrap();
-        let count: i64 = conn.query_row("SELECT COUNT(*) FROM source", [], |r| r.get(0)).map_err(err)?;
-        if count > 0 {
-            return Ok(());
-        }
         let Ok(text) = fs::read_to_string(self.metadata_path()) else { return Ok(()) };
-        #[derive(Deserialize)]
-        struct Meta {
-            #[serde(default)]
-            sources: HashMap<String, Source>,
-        }
-        let Ok(meta) = serde_json::from_str::<Meta>(&text) else { return Ok(()) };
+        let Ok(meta) = serde_json::from_str::<crate::studio::MetaDoc>(&text) else { return Ok(()) };
+        self.merge_notes(&meta.notes)?;
+        // Fehlende Quellen ergänzen (z. B. nach dem Wechsel zurück von einer geteilten Bibliothek)
+        let mut conn = self.conn.lock().unwrap();
+        let tx = conn.transaction().map_err(err)?;
         for (hash, s) in meta.sources {
-            conn.execute(
-                "INSERT OR REPLACE INTO source (hash, image_url, page_url, page_title, captured_at, quote) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            tx.execute(
+                "INSERT INTO source (hash, image_url, page_url, page_title, captured_at, quote) VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+                 ON CONFLICT(hash) DO UPDATE SET
+                   image_url = COALESCE(source.image_url, ?2),
+                   page_url = COALESCE(source.page_url, ?3),
+                   page_title = COALESCE(source.page_title, ?4),
+                   captured_at = COALESCE(source.captured_at, ?5),
+                   quote = COALESCE(source.quote, ?6)",
                 params![hash, s.image_url, s.page_url, s.page_title, s.captured_at, s.quote],
             )
             .map_err(err)?;
         }
-        Ok(())
+        tx.commit().map_err(err)
     }
 
     /// Schreibt alle Quellen nach .archiver/metadata.json, damit nichts an der DB hängt.
+    /// Geteilt: in die eigene Datei unter .archiver/people/.
     pub fn write_metadata(&self) -> Result<()> {
+        let target = if self.shared { self.person_file() } else { self.metadata_path() };
+        self.write_metadata_to(&target)
+    }
+
+    /// Wie write_metadata, aber in eine bestimmte Datei (Wechsel geteilt ↔ allein).
+    pub fn write_metadata_to(&self, target: &Path) -> Result<()> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn
             .prepare("SELECT hash, image_url, page_url, page_title, captured_at, quote FROM source ORDER BY hash")
@@ -578,10 +840,20 @@ impl Library {
             let (hash, s) = row.map_err(err)?;
             sources.insert(hash, serde_json::to_value(s).map_err(err)?);
         }
-        let doc = serde_json::json!({ "version": 1, "sources": sources });
-        let tmp = self.metadata_path().with_extension("json.tmp");
+        drop(stmt);
+        drop(conn);
+        let notes = self.all_notes()?;
+        let doc = serde_json::json!({ "version": 1, "sources": sources, "notes": notes });
+        // Geteilt: jede Person schreibt nur ihre eigene Datei, so überschreibt niemand den anderen.
+        if let Some(dir) = target.parent() {
+            fs::create_dir_all(dir).map_err(err)?;
+        }
+        let tmp = target.with_extension("json.tmp");
         fs::write(&tmp, serde_json::to_vec_pretty(&doc).map_err(err)?).map_err(err)?;
-        fs::rename(tmp, self.metadata_path()).map_err(err)?;
+        fs::rename(tmp, target).map_err(err)?;
+        if self.shared {
+            *self.people_sig.lock().unwrap() = self.people_signature();
+        }
         Ok(())
     }
 
@@ -600,10 +872,12 @@ impl Library {
 
         let mut seen = HashSet::new();
         let mut changed = false;
+        let st = self.structure();
+        let root = self.root.clone();
         let walker = WalkDir::new(&self.root)
             .min_depth(1)
             .into_iter()
-            .filter_entry(|e| !is_hidden(e.file_name()));
+            .filter_entry(|e| !is_hidden(e.file_name()) && !(e.file_type().is_dir() && st.skips(&rel_path(&root, e.path()))));
         for entry in walker.filter_map(|e| e.ok()) {
             if !entry.file_type().is_file() || !is_media(entry.path()) {
                 continue;
@@ -628,6 +902,10 @@ impl Library {
             for p in gone {
                 conn.execute("DELETE FROM item WHERE path = ?1", params![p]).map_err(err)?;
             }
+            changed = true;
+        }
+        // Geteilt: Angaben der anderen übernehmen, sobald sich ihre Dateien ändern
+        if self.merge_people()? {
             changed = true;
         }
         Ok(changed)
@@ -656,9 +934,10 @@ impl Library {
         let conn = self.conn.lock().unwrap();
         conn.query_row(
             "SELECT (SELECT COUNT(*) FROM item), (SELECT TOTAL(LENGTH(path)) FROM item),
-                    (SELECT TOTAL(mtime % 1000003) FROM item), (SELECT COUNT(*) FROM source)",
+                    (SELECT TOTAL(mtime % 1000003) FROM item),
+                    (SELECT COUNT(*) FROM source) + (SELECT TOTAL(updated_at % 1000003) FROM note)",
             [],
-            |r| Ok((r.get(0)?, r.get::<_, f64>(1)? as i64, r.get::<_, f64>(2)? as i64, r.get(3)?)),
+            |r| Ok((r.get(0)?, r.get::<_, f64>(1)? as i64, r.get::<_, f64>(2)? as i64, r.get::<_, f64>(3)? as i64)),
         )
         .unwrap_or_default()
     }
@@ -666,28 +945,38 @@ impl Library {
     /// Alle Zonen: jeder sichtbare Unterordner, Inbox zuerst, dann alphabetisch.
     /// Liegen Bilder direkt im Bibliotheksordner, gibt es zusätzlich die Zone "".
     pub fn zones(&self) -> Result<Vec<Zone>> {
+        let default = self.default_zone();
+        let st = self.structure();
         let mut counts: HashMap<String, usize> = HashMap::new();
         {
             let conn = self.conn.lock().unwrap();
             let mut stmt = conn.prepare("SELECT path FROM item").map_err(err)?;
             let rows = stmt.query_map([], |r| r.get::<_, String>(0)).map_err(err)?;
             for p in rows {
-                *counts.entry(parent_rel(&p.map_err(err)?)).or_default() += 1;
+                *counts.entry(zone_at(&parent_rel(&p.map_err(err)?), st.zone_depth())).or_default() += 1;
             }
         }
+        let root = self.root.clone();
         let mut zones: Vec<Zone> = WalkDir::new(&self.root)
             .min_depth(1)
+            .max_depth(st.zone_depth())
             .into_iter()
-            .filter_entry(|e| !is_hidden(e.file_name()))
+            .filter_entry(|e| !is_hidden(e.file_name()) && !(e.file_type().is_dir() && st.skips(&rel_path(&root, e.path()))))
             .filter_map(|e| e.ok())
             .filter(|e| e.file_type().is_dir())
-            .map(|e| {
+            .filter_map(|e| {
                 let path = rel_path(&self.root, e.path());
-                Zone { count: counts.get(&path).copied().unwrap_or(0), name: path.clone(), path }
+                let count = counts.get(&path).copied().unwrap_or(0);
+                // Ordner ohne Bilder & Co., in denen aber anderes liegt (Projekt-
+                // ordner, Technik): keine Zone. Ganz leere Ordner (neue Zonen) bleiben.
+                if count == 0 && path != default && !dir_is_empty(e.path()) {
+                    return None;
+                }
+                Some(Zone { count, name: path.clone(), path })
             })
             .collect();
         zones.sort_by(|a, b| {
-            let rank = |z: &Zone| if z.path == INBOX { 0 } else { 1 };
+            let rank = |z: &Zone| if z.path == default { 0 } else { 1 };
             rank(a).cmp(&rank(b)).then_with(|| a.path.to_lowercase().cmp(&b.path.to_lowercase()))
         });
         if let Some(&count) = counts.get("") {
@@ -699,6 +988,7 @@ impl Library {
 
     /// Alle Einträge mit Quelle und Vorschaubild, neueste zuerst.
     pub fn items(&self) -> Result<Vec<Item>> {
+        let depth = self.structure().zone_depth();
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn
             .prepare(
@@ -706,8 +996,10 @@ impl Library {
                         COALESCE(i.width, m.width), COALESCE(i.height, m.height), i.format,
                         s.image_url, s.page_url, s.page_title, s.captured_at, t.file,
                         a.labels, a.text, a.colors, m.pages, m.duration, s.quote,
-                        m.title, m.artist, m.album, m.sample_rate, m.bit_depth, m.channels
+                        m.title, m.artist, m.album, m.sample_rate, m.bit_depth, m.channels,
+                        n.note, n.credit, n.license, n.internal, n.added_by, n.tone
                  FROM item i
+                 LEFT JOIN note n ON n.hash = i.hash
                  LEFT JOIN source s ON s.hash = i.hash
                  LEFT JOIN thumb t ON t.hash = i.hash
                  LEFT JOIN analysis a ON a.hash = i.hash
@@ -720,9 +1012,11 @@ impl Library {
             .query_map([], |r| {
                 let path: String = r.get(0)?;
                 let thumb: Option<String> = r.get(12)?;
+                let zone = zone_at(&parent_rel(&path), depth);
                 Ok(Item {
+                    folder: folder_in(&parent_rel(&path), &zone),
                     abs: self.root.join(&path).to_string_lossy().into_owned(),
-                    zone: parent_rel(&path),
+                    zone,
                     filename: file_name(&path),
                     hash: r.get(1)?,
                     bytes: r.get(2)?,
@@ -748,11 +1042,27 @@ impl Library {
                     sample_rate: r.get(22)?,
                     bit_depth: r.get(23)?,
                     channels: r.get(24)?,
+                    note: r.get(25)?,
+                    credit: r.get(26)?,
+                    license: r.get(27)?,
+                    internal: r.get::<_, Option<i64>>(28)?.unwrap_or(0) != 0,
+                    added_by: r.get(29)?,
+                    tone: r.get(30)?,
                     path,
                 })
             })
             .map_err(err)?;
-        rows.collect::<std::result::Result<_, _>>().map_err(err)
+        let mut items: Vec<Item> = rows.collect::<std::result::Result<_, _>>().map_err(err)?;
+        // Textdatei ohne gespeicherten Text (z. B. im Finder angelegt): Inhalt lesen
+        for item in items.iter_mut().filter(|i| i.quote.is_none() && TEXT_EXTS.contains(&i.format.as_str())) {
+            if let Ok(text) = fs::read_to_string(&item.abs) {
+                let text: String = text.trim().chars().take(TEXT_MAX_CHARS).collect();
+                if !text.is_empty() {
+                    item.quote = Some(text);
+                }
+            }
+        }
+        Ok(items)
     }
 
     // ---- Vorschaubilder ----
@@ -953,10 +1263,29 @@ impl Library {
 
     /// Kleines Bild für den Drag-Cursor (max. 96 px), damit beim Ziehen die Zonen sichtbar bleiben.
     pub fn drag_icon(&self, hash: &str, src: &Path) -> Option<String> {
+        if is_text(src) {
+            return None;
+        }
         let out = self.thumbs_dir().join(format!("{hash}-drag.png"));
         if !out.is_file() {
-            let img = image::open(src).ok()?;
+            // Was das image-Crate nicht liest (AVIF, HEIC, manche WebP): Quick Look
+            let img = image::open(src).ok().or_else(|| ql_image(src, DRAG_ICON_SIZE, &self.thumbs_dir().join(format!("ql-drag-{hash}"))))?;
             img.thumbnail(DRAG_ICON_SIZE, DRAG_ICON_SIZE).to_rgba8().save(&out).ok()?;
+        }
+        Some(out.to_string_lossy().into_owned())
+    }
+
+    /// Ziehbild einer Textkarte: Fläche in der Kartenfarbe (#rrggbb)
+    pub fn color_icon(&self, color: &str) -> Option<String> {
+        let hex = color.trim_start_matches('#');
+        if hex.len() != 6 || !hex.chars().all(|c| c.is_ascii_hexdigit()) {
+            return None;
+        }
+        let out = self.thumbs_dir().join(format!("tone-{}.png", hex.to_lowercase()));
+        if !out.is_file() {
+            let c = |i: usize| u8::from_str_radix(&hex[i..i + 2], 16).unwrap_or(0);
+            let (w, h) = (DRAG_ICON_SIZE, DRAG_ICON_SIZE * 3 / 4);
+            image::RgbaImage::from_pixel(w, h, image::Rgba([c(0), c(2), c(4), 255])).save(&out).ok()?;
         }
         Some(out.to_string_lossy().into_owned())
     }
@@ -1038,10 +1367,11 @@ impl Library {
         if !target.is_dir() {
             return Err(format!("Zone nicht gefunden: {zone}"));
         }
+        let depth = self.structure().zone_depth();
         let mut moved = Vec::new();
         for rel in paths {
             let src = safe_join(&self.root, rel)?;
-            if parent_rel(rel) == zone || !src.is_file() {
+            if zone_at(&parent_rel(rel), depth) == zone || !src.is_file() {
                 continue;
             }
             let dst = unique_path(&target, &file_name(rel));
@@ -1059,24 +1389,61 @@ impl Library {
         Ok(moved)
     }
 
-    /// Legt Dateien in den macOS-Papierkorb (wiederherstellbar).
-    pub fn trash_items(&self, paths: &[String]) -> Result<usize> {
-        let abs: Vec<PathBuf> = paths
-            .iter()
-            .map(|p| safe_join(&self.root, p))
-            .collect::<Result<Vec<_>>>()?
-            .into_iter()
-            .filter(|p| p.is_file())
-            .collect();
-        if abs.is_empty() {
-            return Ok(0);
+    /// Legt Dateien in den macOS-Papierkorb (wiederherstellbar). Gibt je Datei
+    /// (Pfad in der Bibliothek, Ort im Papierkorb) zurück, soweit bekannt (für ⌘Z).
+    pub fn trash_items(&self, paths: &[String]) -> Result<Vec<(String, String)>> {
+        #[allow(unused_mut)]
+        let mut done = Vec::new();
+        let mut plain = Vec::new();
+        for rel in paths {
+            let abs = safe_join(&self.root, rel)?;
+            if !abs.is_file() {
+                continue;
+            }
+            #[cfg(target_os = "macos")]
+            {
+                if let Some(at) = crate::macos::trash_with_location(&abs)? {
+                    done.push((rel.clone(), at));
+                    continue;
+                }
+                plain.push(rel.clone());
+            }
+            #[cfg(not(target_os = "macos"))]
+            {
+                trash::delete(&abs).map_err(err)?;
+                plain.push(rel.clone());
+            }
         }
-        trash::delete_all(&abs).map_err(err)?;
         let conn = self.conn.lock().unwrap();
-        for p in paths {
+        for p in done.iter().map(|(p, _)| p).chain(plain.iter()) {
             conn.execute("DELETE FROM item WHERE path = ?1", params![p]).map_err(err)?;
         }
-        Ok(abs.len())
+        Ok(done)
+    }
+
+    /// ⌘Z nach dem Löschen: Dateien aus dem Papierkorb zurück an ihren Platz.
+    pub fn restore_items(&self, items: &[(String, String)]) -> Result<usize> {
+        let mut n = 0;
+        for (rel, from) in items {
+            let src = PathBuf::from(from);
+            let dst = safe_join(&self.root, rel)?;
+            if !src.is_file() {
+                continue;
+            }
+            if let Some(dir) = dst.parent() {
+                fs::create_dir_all(dir).map_err(err)?;
+            }
+            let dst = if dst.exists() { unique_path(dst.parent().unwrap_or(&self.root), &file_name(rel)) } else { dst };
+            if fs::rename(&src, &dst).is_err() {
+                fs::copy(&src, &dst).map_err(err)?;
+                let _ = fs::remove_file(&src);
+            }
+            n += 1;
+        }
+        if n > 0 {
+            self.scan()?;
+        }
+        Ok(n)
     }
 
     pub fn create_zone(&self, name: &str) -> Result<String> {
@@ -1111,12 +1478,14 @@ impl Library {
             params![zone, new_zone],
         )
         .map_err(err)?;
+        drop(conn);
+        self.rename_item_order(zone, &new_zone)?;
         Ok(new_zone)
     }
 
     /// Legt eine Zone samt Inhalt in den Papierkorb. Inbox und Bibliotheksordner bleiben.
     pub fn trash_zone(&self, zone: &str) -> Result<()> {
-        if zone.is_empty() || zone == INBOX {
+        if zone.is_empty() || zone == self.default_zone() {
             return Err("Diese Zone lässt sich nicht löschen".into());
         }
         let dir = safe_join(&self.root, zone)?;
@@ -1202,6 +1571,7 @@ impl Library {
         let mtime = time_ms(meta.modified()).unwrap_or(0);
         let added = source.and_then(|s| s.captured_at).unwrap_or_else(now_ms);
         self.upsert_item(&rel_path(&self.root, &dst), &hash, meta.len() as i64, mtime, added, &dst)?;
+        self.mark_added_by(&hash)?;
         report.imported += 1;
         Ok(())
     }
@@ -1242,6 +1612,7 @@ impl Library {
         let added = source.captured_at.unwrap_or_else(now_ms);
         let rel = rel_path(&self.root, &dst);
         self.upsert_item(&rel, &hash, meta.len() as i64, mtime, added, &dst)?;
+        self.mark_added_by(&hash)?;
         self.write_metadata()?;
         Ok((rel, false))
     }
@@ -1251,6 +1622,9 @@ impl Library {
         let mut report = ImportReport::default();
         for f in files.iter().filter(|f| is_media(f)) {
             self.import_one(f, zone, None, &mut report)?;
+        }
+        if report.imported > 0 && self.user.lock().unwrap().is_some() {
+            self.write_metadata()?;
         }
         Ok(report)
     }
@@ -1265,7 +1639,7 @@ impl Library {
             }
             let rel = rel_path(dir, entry.path());
             let zone = match parent_rel(&rel) {
-                p if p.is_empty() => INBOX.to_string(),
+                p if p.is_empty() => self.default_zone(),
                 p => p.split('/').map(clean_segment).collect::<Vec<_>>().join("/"),
             };
             self.import_one(entry.path(), &zone, None, &mut report)?;
@@ -1295,9 +1669,10 @@ impl Library {
         }
         let text = fs::read_to_string(json_path).map_err(err)?;
         let export: Export = serde_json::from_str(&text).map_err(|e| format!("Keine gültige Export-Datei: {e}"))?;
+        let default = self.default_zone();
         let zone_for = |z: &str| -> String {
             let cleaned = z.split('/').map(clean_segment).filter(|s| !s.is_empty()).collect::<Vec<_>>().join("/");
-            if cleaned.is_empty() { INBOX.to_string() } else { cleaned }
+            if cleaned.is_empty() { default.clone() } else { cleaned }
         };
         for z in &export.zones {
             let _ = fs::create_dir_all(safe_join(&self.root, &zone_for(z))?);
@@ -1368,7 +1743,7 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let lib = Library::open(&tmp.path().join("Bib")).unwrap();
         assert_eq!(lib.zone_order(), (vec![], vec![]));
-        let order: Vec<String> = ["Typo", "Inbox", "Farbe"].map(String::from).to_vec();
+        let order: Vec<String> = ["Typo", "Unsorted", "Farbe"].map(String::from).to_vec();
         let hot: Vec<String> = order[..2].to_vec();
         lib.set_zone_order(&order, &hot).unwrap();
         assert_eq!(lib.zone_order(), (order, hot));
@@ -1379,14 +1754,14 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let root = tmp.path().join("Bib");
         let lib = Library::open(&root).unwrap();
-        write_png(&root.join("Inbox/a.png"), 40, 20, 10);
+        write_png(&root.join("Unsorted/a.png"), 40, 20, 10);
         write_png(&root.join("Projekt 1/b.png"), 10, 30, 20);
         write_png(&root.join(".archiver/thumbs/ignore.png"), 2, 2, 1);
         assert!(lib.scan().unwrap());
         assert!(!lib.scan().unwrap(), "zweiter Scan ohne Änderung");
 
         let zones = lib.zones().unwrap();
-        assert_eq!(zones.iter().map(|z| z.path.as_str()).collect::<Vec<_>>(), ["Inbox", "Projekt 1"]);
+        assert_eq!(zones.iter().map(|z| z.path.as_str()).collect::<Vec<_>>(), ["Unsorted", "Projekt 1"]);
         assert_eq!(zones[0].count, 1);
 
         let items = lib.items().unwrap();
@@ -1396,7 +1771,7 @@ mod tests {
 
         // Quelle hängt am Hash und überlebt das Verschieben
         lib.set_source(&a.hash, &Source { page_url: Some("https://example.com/x".into()), ..Default::default() }).unwrap();
-        let moved = lib.move_items(&["Inbox/a.png".into()], "Projekt 1").unwrap();
+        let moved = lib.move_items(&["Unsorted/a.png".into()], "Projekt 1").unwrap();
         assert_eq!(moved, ["Projekt 1/a.png"]);
         assert!(!lib.scan().unwrap(), "Verschieben hält die DB aktuell");
         let a2 = lib.items().unwrap().into_iter().find(|i| i.filename == "a.png").unwrap();
@@ -1404,9 +1779,9 @@ mod tests {
         assert_eq!(a2.page_url.as_deref(), Some("https://example.com/x"));
 
         // Namenskonflikt beim Verschieben
-        write_png(&root.join("Inbox/b.png"), 5, 5, 99);
+        write_png(&root.join("Unsorted/b.png"), 5, 5, 99);
         lib.scan().unwrap();
-        let moved = lib.move_items(&["Inbox/b.png".into()], "Projekt 1").unwrap();
+        let moved = lib.move_items(&["Unsorted/b.png".into()], "Projekt 1").unwrap();
         assert_eq!(moved, ["Projekt 1/b 2.png"]);
 
         // Im Finder umbenannt: Scan findet die Quelle über den Hash wieder
@@ -1421,8 +1796,8 @@ mod tests {
         assert!(!lib.scan().unwrap());
         assert!(lib.items().unwrap().iter().all(|i| i.zone != "Projekt 1"));
 
-        assert!(lib.move_items(&["../x.png".into()], "Inbox").is_err());
-        assert!(lib.trash_zone("Inbox").is_err());
+        assert!(lib.move_items(&["../x.png".into()], "Unsorted").is_err());
+        assert!(lib.trash_zone("Unsorted").is_err());
         assert!(lib.trash_zone("").is_err());
     }
 
@@ -1431,8 +1806,8 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let root = tmp.path().join("Bib");
         let lib = Library::open(&root).unwrap();
-        write_png(&root.join("Inbox/gross.png"), 2000, 1000, 50);
-        fs::write(root.join("Inbox/kaputt.jpg"), b"nope").unwrap();
+        write_png(&root.join("Unsorted/gross.png"), 2000, 1000, 50);
+        fs::write(root.join("Unsorted/kaputt.jpg"), b"nope").unwrap();
         lib.scan().unwrap();
         let missing = lib.missing_thumbs().unwrap();
         assert_eq!(missing.len(), 2);
@@ -1492,7 +1867,7 @@ mod tests {
         let x = items.iter().find(|i| i.filename == "x.png").unwrap();
         assert_eq!(x.zone, "Projekt 1");
         assert_eq!(x.page_title.as_deref(), Some("Seite X"));
-        assert_eq!(items.iter().find(|i| i.filename == "lose.png").unwrap().zone, "Inbox");
+        assert_eq!(items.iter().find(|i| i.filename == "lose.png").unwrap().zone, "Unsorted");
         assert!(root.join(".archiver/metadata.json").is_file());
 
         let r = lib.import_folder(&downloads).unwrap();
@@ -1526,23 +1901,23 @@ mod tests {
 
         // gleiches Bild nochmal: keine Kopie, vorhandener Pfad
         write_png(&dl.join("nochmal.png"), 900, 500, 30);
-        assert_eq!(lib.adopt_file(&dl.join("nochmal.png"), None, "Inbox", &source).unwrap(), (rel.clone(), true));
+        assert_eq!(lib.adopt_file(&dl.join("nochmal.png"), None, "Unsorted", &source).unwrap(), (rel.clone(), true));
         assert!(!dl.join("nochmal.png").exists());
 
         // ohne Endung (z. B. Download-ID als Name): Endung aus dem Inhalt
         image::RgbImage::from_pixel(30, 30, image::Rgb([90, 0, 0]))
             .save_with_format(dl.join("1234-abcd"), image::ImageFormat::Png)
             .unwrap();
-        assert_eq!(lib.adopt_file(&dl.join("1234-abcd"), Some("wunsch"), "Inbox", &source).unwrap().0, "Inbox/wunsch.png");
+        assert_eq!(lib.adopt_file(&dl.join("1234-abcd"), Some("wunsch"), "Unsorted", &source).unwrap().0, "Unsorted/wunsch.png");
 
         // PDF und Video ohne Endung: am Inhalt erkannt, als Eintrag gezählt
         std::fs::write(dl.join("dl-1"), b"%PDF-1.7\n%...").unwrap();
-        assert_eq!(lib.adopt_file(&dl.join("dl-1"), Some("katalog"), "Inbox", &source).unwrap().0, "Inbox/katalog.pdf");
+        assert_eq!(lib.adopt_file(&dl.join("dl-1"), Some("katalog"), "Unsorted", &source).unwrap().0, "Unsorted/katalog.pdf");
         std::fs::write(dl.join("dl-2"), b"\0\0\0\x18ftypisom\0\0\x02\0isomiso2").unwrap();
-        assert_eq!(lib.adopt_file(&dl.join("dl-2"), Some("clip"), "Inbox", &source).unwrap().0, "Inbox/clip.mp4");
+        assert_eq!(lib.adopt_file(&dl.join("dl-2"), Some("clip"), "Unsorted", &source).unwrap().0, "Unsorted/clip.mp4");
         std::fs::write(dl.join("dl-3"), b"%PDF-1.4\n").unwrap();
-        assert_eq!(lib.adopt_file(&dl.join("dl-3"), Some("download.jpg"), "Inbox", &source).unwrap().0, "Inbox/download.pdf");
-        let pdf = lib.items().unwrap().into_iter().find(|i| i.path == "Inbox/katalog.pdf").unwrap();
+        assert_eq!(lib.adopt_file(&dl.join("dl-3"), Some("download.jpg"), "Unsorted", &source).unwrap().0, "Unsorted/download.pdf");
+        let pdf = lib.items().unwrap().into_iter().find(|i| i.path == "Unsorted/katalog.pdf").unwrap();
         assert_eq!((pdf.format.as_str(), pdf.pages, pdf.width), ("pdf", None, None));
         assert!(!lib.scan().unwrap(), "PDF und Video bleiben beim Scan erhalten");
         assert_eq!(lib.items().unwrap().len(), 5);
@@ -1552,5 +1927,111 @@ mod tests {
         assert_eq!(mime, "image/jpeg");
         let img = image::load_from_memory(&bytes).unwrap();
         assert_eq!((img.width(), img.height()), (400, 222));
+    }
+
+    #[test]
+    fn text_cards_as_files() {
+        let tmp = tempfile::tempdir().unwrap();
+        let lib = Library::open(&tmp.path().join("Bib")).unwrap();
+        let dl = tmp.path().join("dl");
+        std::fs::create_dir_all(&dl).unwrap();
+        std::fs::write(dl.join("x"), "Weniger, aber besser\n").unwrap();
+        let source = Source { quote: Some("Weniger, aber besser".into()), ..Default::default() };
+        let (rel, _) = lib.adopt_file(&dl.join("x"), Some("Weniger aber besser.txt"), "Zitate", &source).unwrap();
+        assert_eq!(rel, "Zitate/Weniger aber besser.txt");
+        // im Finder angelegt: Text kommt aus der Datei
+        std::fs::write(lib.root.join("Zitate/notiz.txt"), "  Gute Form  ").unwrap();
+        lib.scan().unwrap();
+        let items = lib.items().unwrap();
+        assert_eq!(items.len(), 2);
+        let own = items.iter().find(|i| i.path == "Zitate/notiz.txt").unwrap();
+        assert_eq!(own.quote.as_deref(), Some("Gute Form"));
+        assert!(lib.missing_thumbs().unwrap().is_empty(), "keine Vorschaubilder für Text");
+    }
+
+    #[test]
+    fn default_zone_replaces_inbox() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path().join("Bib");
+        let lib = Library::open(&root).unwrap();
+        assert_eq!(lib.default_zone(), INBOX);
+        lib.create_zone("Sammeln").unwrap();
+        lib.set_default_zone("Sammeln").unwrap();
+        assert_eq!(lib.default_zone(), "Sammeln");
+        assert!(lib.trash_zone("Sammeln").is_err(), "Standard-Zone bleibt");
+        let src = tmp.path().join("lose");
+        std::fs::create_dir_all(&src).unwrap();
+        write_png(&src.join("a.png"), 40, 40, 3);
+        lib.import_folder(&src).unwrap();
+        assert!(root.join("Sammeln/a.png").is_file());
+        assert_eq!(lib.zones().unwrap()[0].path, "Sammeln");
+        // ohne Inbox-Ordner erneut öffnen: keine neue Inbox
+        std::fs::remove_dir_all(root.join(INBOX)).unwrap();
+        drop(lib);
+        let _ = Library::open(&root).unwrap();
+        assert!(!root.join(INBOX).exists());
+    }
+
+    #[test]
+    fn existing_folder_system() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path().join("Work");
+        let deep = root.join("01_Outra/02_Layout/04_Products/_Mock/Cap");
+        std::fs::create_dir_all(&deep).unwrap();
+        write_png(&deep.join("cap.png"), 40, 40, 1);
+        write_png(&root.join("01_Outra/02_Layout/logo.png"), 40, 40, 2);
+        std::fs::create_dir_all(root.join("01_Outra/02_Layout/Links")).unwrap();
+        write_png(&root.join("01_Outra/02_Layout/Links/placed.png"), 40, 40, 3);
+        std::fs::create_dir_all(root.join("01_Outra/01_Intern")).unwrap();
+        std::fs::write(root.join("01_Outra/01_Intern/brief.indd"), "x").unwrap();
+        std::fs::create_dir_all(root.join("Plugin.app/Contents")).unwrap();
+        write_png(&root.join("Plugin.app/Contents/icon.png"), 40, 40, 4);
+        std::fs::create_dir_all(root.join("Neu")).unwrap();
+
+        let lib = Library::open(&root).unwrap();
+        assert!(!root.join(INBOX).exists(), "keine Inbox in bestehenden Ordnern");
+        lib.scan().unwrap();
+        let items = lib.items().unwrap();
+        assert_eq!(items.len(), 2, "Links und Pakete übersprungen");
+        assert!(items.iter().all(|i| i.zone == "01_Outra"), "eine Zone pro Ordner der obersten Ebene");
+        let mut folders: Vec<&str> = items.iter().map(|i| i.folder.as_str()).collect();
+        folders.sort();
+        assert_eq!(folders, ["02_Layout", "02_Layout"], "Unterordner als Ordner der Zone");
+        let zones: Vec<String> = lib.zones().unwrap().into_iter().map(|z| z.path).collect();
+        assert_eq!(zones, vec!["01_Outra".to_string(), "Neu".to_string()]);
+
+        lib.set_structure(&Structure { depth: 2, skip: DEFAULT_SKIP.iter().map(|s| s.to_string()).collect(), subzones: true }).unwrap();
+        let items = lib.items().unwrap();
+        assert!(items.iter().all(|i| i.zone == "01_Outra/02_Layout"));
+        assert!(items.iter().any(|i| i.folder == "04_Products") && items.iter().any(|i| i.folder.is_empty()));
+        let zones: Vec<String> = lib.zones().unwrap().into_iter().map(|z| z.path).collect();
+        assert_eq!(zones, vec!["01_Outra/02_Layout".to_string(), "Neu".to_string()], "nur Ebene 2, ohne reine Projektordner");
+
+        lib.set_structure(&Structure { depth: 3, skip: vec![], subzones: true }).unwrap();
+        let items = lib.items().unwrap();
+        assert_eq!(items.len(), 3, "Links wieder dabei");
+        assert!(items.iter().any(|i| i.zone == "01_Outra/02_Layout/04_Products"));
+    }
+
+    #[test]
+    fn inbox_becomes_unsorted() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path().join("Alt");
+        write_png(&root.join("Inbox/a.png"), 20, 20, 1);
+        write_png(&root.join("Typo/b.png"), 20, 20, 2);
+        std::fs::create_dir_all(root.join(META_DIR)).unwrap();
+        std::fs::write(root.join(META_DIR).join("zones.json"), r#"{"order":["Typo","Inbox"],"hot":["Inbox"]}"#).unwrap();
+        let lib = Library::open(&root).unwrap();
+        assert!(root.join("Unsorted/a.png").exists() && !root.join("Inbox").exists());
+        assert_eq!(lib.default_zone(), "Unsorted");
+        assert_eq!(lib.zone_order(), (vec!["Typo".to_string(), "Unsorted".to_string()], vec!["Unsorted".to_string()]));
+        // eine andere gewählte Standard-Zone: Inbox bleibt, wie sie ist
+        let root2 = tmp.path().join("Eigen");
+        write_png(&root2.join("Inbox/a.png"), 20, 20, 1);
+        std::fs::create_dir_all(root2.join("Typo")).unwrap();
+        std::fs::create_dir_all(root2.join(META_DIR)).unwrap();
+        std::fs::write(root2.join(META_DIR).join("zones.json"), r#"{"default":"Typo"}"#).unwrap();
+        Library::open(&root2).unwrap();
+        assert!(root2.join("Inbox").is_dir());
     }
 }

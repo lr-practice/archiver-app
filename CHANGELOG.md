@@ -1,5 +1,219 @@
 # Changelog
 
+## App 0.25.0 (12.10.2026)
+
+- Neues Hell: neutrales Hellgrau (#F4F4F4) ohne Farbstich, alle Grautöne ohne Sättigung. Weiße Bilder behalten ihre Kante.
+- Übersetzt aus Dunkel: Schrift mit denselben Kontrasten, Karten eine Stufe vom Grund abgesetzt, Bibliotheks-Reiter zurückgenommen.
+- Navigation als weißes Glas mit leichtem Schatten.
+- Zonenkarten beim Ziehen als helles Glas ohne Sättigung; wie stark sie decken, regelt weiter Einstellungen › Aussehen.
+- Salbei bleibt unverändert.
+
+## App 0.24.9 · Extension 3.20.0 (12.10.2026)
+
+Extension auf dem Stand der App:
+- Ziehen: Die Zonenleiste sieht aus wie in der App (Glas, Nummer 01–04, Name und Zahl, Geist-Schrift) und erscheint ohne Verzögerung.
+- Shift beim Ziehen wechselt die Bibliothek. Die Bibliotheksleiste ist nur sichtbar, solange Shift gehalten wird; abgelegt wird in die gewählte Bibliothek. Mit nur einer Bibliothek legt Shift wie bisher in Downloads ab.
+- Rechtsklick-Menü: oben die drei zuletzt genutzten Zonen, darunter alle Zonen mit ihren Ordnern und Unterordnern.
+- Übersicht und Zone im Layout der App: Kopfzeile „Active Zones“, Nummern an den Karten, „n Objekte · Datum“, größeres Raster, Bibliothek oben rechts.
+
+App:
+- Die Brücke zur Extension liefert die Bibliotheken und die Ordner jeder Zone und nimmt Objekte für eine andere eingetragene Bibliothek an.
+
+## App 0.24.8 (12.10.2026)
+
+- Eine Fokus-Sprache: Auswahl, Tastaturfokus, Tausch- und Umsortier-Ziel sowie das Ablageziel in der Zonenleiste zeigen denselben gestrichelten Ring. Er folgt der Eckenrundung, „Umlaufend“ gilt überall.
+- Objekte umsortieren: Statt einer Linie über oder unter dem Objekt trägt das Ziel den Ring, die gezogenen Objekte nehmen seinen Platz ein.
+- Ordner ebenenweise: Im Ordner stehen nur seine eigenen Unterordner, der Pfad „Zone / Ordner / Unterordner“ führt auf jede Ebene. Esc und ⌘↑ gehen eine Ebene hoch.
+- ⌘R lädt die Objekte neu. Einstellungen › Aussehen › Neu laden: Sofort oder Welle (diagonal, schnell).
+- Einstellungen › Aussehen › Fensterhintergrund: wie stark die Farbe die macOS-Unschärfe deckt, getrennt von den Zonen.
+- Übersicht (Karten-Cover, Index-Thumbs, Vorschau) folgt der eigenen Reihenfolge einer Zone.
+- Noch nicht geladene Bilder erscheinen als Glasfläche, beim Laden blendet das Glas weich aus.
+- Geteilte Bibliothek: Punkt „neu von anderen“ an Objekten und Zonen bis zum ersten Ansehen. In „Alle Objekte“ Filter „Neu von anderen“ und „Von“ (z. B. JP).
+- iCloud-Konfliktkopien mit gleichem Inhalt („Bild 2.jpg“) werden erkannt; „Doppel zusammenführen“ legt sie in den Papierkorb (rückgängig machbar).
+
+## App 0.24.7 (12.10.2026)
+
+- Zonenleiste beim Ziehen: Das Glas ist sofort da und blendet mit ein, statt erst nach dem Einblenden scharf zu werden. Die Herkunftszone bleibt Glas und nimmt nur die Schrift zurück.
+
+## App 0.24.6 (12.10.2026)
+
+- Einstellungen neu geordnet: Bibliothek, Ansicht, Aussehen, Start (Öffnung und Startton), Studio, Extension & Observer, Allgemein. Studio enthält nur noch Projekt- und Team-Werkzeuge (Name, geteilte Bibliothek, Notiz, Rechte, Zone als Paket). Moodboard und eigene Reihenfolge sind immer an.
+- Einstellungen › Bibliothek › Zonen: Zonen lassen sich wieder per Ziehen sortieren, die anderen rücken nach.
+- Active Zones stehen in jeder Übersicht oben: in Karten als Karten, in Vorschau und Index als eigene Zeilen.
+- Tausch mit einer Active Zone sichtbar: Beim Ziehen rückt das Ziel an den frei werdenden Platz, beim Loslassen gleiten beide an ihre neuen Plätze.
+- Im Unterordner steht „Zone / Ordner“ in der Kopfzeile, ein Klick auf die Zone führt zurück.
+- Ordnerkarten richten sich von rechts aus, ohne Lücke am Rand.
+- Geteilte Bibliothek: Objekte anderer zeigen im Hover-Schild das Kürzel, z. B. „JP · pinterest.com“.
+
+## App 0.24.5 (12.10.2026)
+
+- Ordner sitzen rechts neben dem Zonentitel und richten sich am Bildraster aus: als Karten über drei Sechstel oder als Liste über zwei Sechstel (Vorschau, Name, Anzahl rechtsbündig). Einstellungen › Darstellung › Ordner in einer Zone: Karten (Standard) oder Liste. In der Liste wandern ↑↓ durch die Einträge.
+- Aktiv-Zustände einheitlich: Karten und Listeneinträge zeigen eine Outline, Filter wechseln nur zwischen hell und dunkel.
+- Einstellungen › Darstellung › Auswahl-Outline: Ruhig (Standard) oder Umlaufend. Umlaufend wandert die gestrichelte Linie langsam um ausgewählte Objekte und aktive Ordner.
+- Kopfzeile: kein doppelter Punkt mehr nach abgekürztem Monat („10. Okt.“).
+
+## App 0.24.4 (11.10.2026)
+
+- Ordnerkarten oben in der Zone: ein Sechstel breit, Bild im Verhältnis 2:1 wie die Zonenkarten, mehr Luft darüber. ↑ aus der obersten Bildreihe springt auf die Karten, ←→ wechselt, Enter filtert, ↓ oder Esc führt zurück.
+- Beim Scrollen läuft der Inhalt unter der Navigation weich aus, ohne Kante. Einstellungen › Darstellung › Oberkante beim Scrollen: Verlauf (Standard) oder Glas.
+
+## App 0.24.3 (11.10.2026)
+
+- Navigation und Bibliotheks-Reiter beginnen auf der Oberkante der Fensterknöpfe. Der Abstand vom grünen Knopf zur Leiste entspricht dem Abstand vom Fensterrand zum roten Knopf.
+- Zonen mit Unterordnern zeigen oben die Ordner als Karten (Vorschau, Name, Anzahl). Ein Klick filtert auf den Ordner, ein zweiter hebt den Filter auf.
+- PDF-Ersteller: Jede Seite passt in der Vorschau ganz ins Fenster und sitzt mittig, für Kontaktbogen, Plakat und Moodboard, quer und hoch.
+
+## App 0.24.2 (11.10.2026)
+
+- Navigation etwas kompakter (Knöpfe 36 px, Rand 5 px, Innenabstand 14 px). Fensterknöpfe, Leiste und Bibliotheks-Reiter liegen auf einer Mittellinie.
+- ≡-Menü hängt an der ganzen Leiste: bündig mit ihrer Kante, mindestens so breit wie sie.
+- Rechtsklick auf ein Objekt: „Ablegen in“ als eine Spalte untereinander.
+- Rechtsklick auf eine Zone in der Übersicht (Karte oder Index-Zeile): Öffnen, Zur Active Zone machen, Als PDF ausgeben, dazu die Einträge aus dem ⋯-Menü.
+
+## App 0.24.1 (11.10.2026)
+
+- Navigation wieder in der großen Fassung wie die Extension-Leiste: Knöpfe 40 px hoch, 16 px Innenabstand, 6 px Rand, Schrift 13,5 px, Menü-Zeichen 20 px. Titelzeile und Fensterknöpfe entsprechend tiefer, Bibliotheks-Reiter gleich hoch.
+- Reiter „Objekte“ heißt „Alle Objekte“ (EN „All objects“).
+
+## App 0.24.0 · Extension 3.19.0 (11.10.2026)
+
+Zonen und Ordner:
+- Eine Karte pro Zone: Jeder Ordner der obersten Ebene ist eine Zone, seine Unterordner erscheinen darin als Ordner. Unterordner als eigene Zonen gibt es nur noch, wenn sie unter Einstellungen › Bibliothek › Ordnerstruktur eingeschaltet sind (Ebene 2 oder 3).
+- In einer Zone mit Ordnern: Chips unter dem Titel filtern nach Ordner (Alle, je Ordner, Ohne Ordner). Umschalter Mosaik (ein Raster) oder Abschnitte (je Ordner eine Kopfzeile), pro Zone gemerkt.
+- Karten-Ansicht als Raster: alle Karten einer Reihe gleich hoch, auch „+ Neue Zone“ und Zonen ohne Bild. Karten zeigen die Zahl der Ordner.
+- Index-Ansicht: Die Zeile „+ Neue Zone“ ist so hoch wie die übrigen Zeilen.
+- Die Standard-Zone heißt jetzt „Unsorted“. Eine bestehende Inbox wird beim Öffnen umbenannt, wenn sie die Standard-Zone ist (nicht in geteilten Bibliotheken).
+
+Oberfläche:
+- Oben rechts steht die aktive Bibliothek als zurückgenommener Reiter; ein Klick zeigt die anderen und „Bibliotheken verwalten“.
+- Info › App: Lange Bibliothekspfade (z. B. Google Drive) bleiben einzeilig und gekürzt, der volle Pfad steht im Tooltip. Gleiches in Einstellungen › Bibliotheken.
+- Freischalt-Code direkt im Sperr-Hinweis eingeben.
+- Einstellungen › Darstellung: Video und Audio beim Öffnen abspielen (je An/Aus, Standard Aus), in Lightbox und Betrachter.
+
+Ziehen:
+- Große WebP-Bilder werden nicht mehr riesig gezogen: In der App kommt das Ziehbild notfalls über Quick Look, in der Extension wird es auf 220 px verkleinert.
+- ⌘Z nach dem Verschieben legt Objekte wieder in ihren genauen Unterordner.
+
+## App 0.23.0 (11.10.2026)
+
+Bestehende Ordnersysteme als Bibliothek:
+- Zonen nur bis zur zweiten Ebene (einstellbar 1–3 unter Einstellungen › Bibliothek › Ordnerstruktur). Tiefere Unterordner gehören zu ihrer Zone, die Details zeigen den Unterordner.
+- Ordner ohne Bilder, PDFs, Video, Audio oder Text erscheinen nicht als Zone; ganz leere Ordner (neue Zonen) schon.
+- Übersprungen werden Links, Document fonts, Backup, Ableton Project Info, Presets, Samples/Imported sowie Programm- und Mediathek-Pakete. Die Liste ist anpassbar.
+- In einem bestehenden Ordnersystem legt Archiver keine leere Inbox an.
+- Ordner in Google Drive, Dropbox, OneDrive und iCloud Drive lassen sich wieder als Bibliothek wählen (wurden fälschlich als Systemordner abgelehnt).
+- Karten-Ansicht: lange Pfade werden gekürzt (voller Name beim Überfahren), das Datum bleibt in einer Zeile.
+
+## App 0.22.0 · Extension 3.18.0 (11.10.2026)
+
+- ⌘Z macht Verschieben, Löschen (holt die Dateien aus dem Papierkorb zurück) und Umbenennen von Zonen rückgängig, mehrfach hintereinander.
+- Standard-Zone: In Einstellungen › Bibliothek wählbar, wohin alles ohne Ziel kommt (Extension ohne Zone, lose Bilder beim Import). Ersetzt die Inbox; die Inbox lässt sich dann wie jede Zone löschen.
+- Textkarte › Quelle: Die Webseite öffnet sich an der zitierten Stelle, die Stelle ist markiert.
+- Öffnungsanimation ohne das blaue Licht am Anfang.
+- Kartenfarben wieder so kräftig wie in 0.20.0.
+- Neuer Freischalt-Code; der bisherige gilt weiter.
+
+## App 0.21.0 · Extension 3.17.0 (11.10.2026)
+
+- Drei Bibliotheken: In Einstellungen › Bibliothek gibt es drei Plätze mit Name und Ordner. Umschalten mit ⌘1, ⌘2, ⌘3 oder im Menü. Zonen und Hot Zones gehören jeweils zur Bibliothek, die Extension sammelt in die aktive.
+- Startschutz: Das Fenster erscheint sofort, die Bibliothek lädt im Hintergrund. Benutzerordner, Laufwerke und Systemordner werden als Bibliothek abgelehnt, ebenso Ordner mit mehr als 20.000 Dateien oder solche, die sich nicht innerhalb von 10 Sekunden lesen lassen. Archiver zeigt dann einen Hinweis statt zu hängen.
+- Textkarten liegen als Textdatei (.txt) im Zonenordner und sind im Finder lesbar. Archiver zeigt sie weiter als farbige Karte. Auch im Finder angelegte .txt-Dateien erscheinen als Textkarte.
+- Kartenfarben wieder kräftiger.
+- Extension: Beim Ziehen von markiertem Text hängt die spätere Textkarte am Zeiger, in ihrer Farbe.
+- Zonen ruhiger: kein blaues Glühen beim Ablegen, kein Hochfahren und Anheben, die Leiste blendet nur ein und aus.
+
+## App 0.20.1 · Extension 3.16.5 (11.10.2026)
+
+- Textkarten: Die Farbe wird zu Beginn jeder Markierung im Web zufällig bestimmt, die Markierung zeigt sie sofort (Hintergrund und Schrift wie in der App). Kein Abdunkeln, kein Rahmen mehr. Die gesicherte Karte hat dieselbe Farbe.
+- In den Details (Info) lässt sich die Farbe einer Textkarte umstellen: Rot, Grün, Violett, Cyan, Gelb oder Weiß.
+- Farben angeglichen und ruhiger (das Rot war zu grell), Schrift im Farbton dunkler.
+- Textkarten in der Lightbox größer.
+- Zonen-Karten, Mosaik und Index zeigen Textkarten farbig statt weiß.
+
+## App 0.20.0 (11.10.2026)
+
+Neu: Einstellungen › Studio, jede Funktion einzeln abschaltbar.
+- Notiz: Feld „Warum diese Referenz?“ im Infopanel, durchsuchbar, im PDF über „Mit Notiz“.
+- Moodboard: dritter Stil im PDF-Ersteller. Frei verschieben, über die Ecke skalieren, Doppelklick holt nach vorn, „Anordnen“ setzt neu. Hintergrund hell oder dunkel, Anordnung je Auswahl gemerkt.
+- Eigene Reihenfolge: Objekte einer Zone per Ziehen umsortieren, Einfügelinie gestrichelt. Zurücksetzen über ⋯ › „Reihenfolge zurücksetzen“.
+- Rechte: Urheber, Lizenz, „nur intern“ (roter Punkt auf der Karte).
+- Zone als Paket: ⋯ › „Als Paket exportieren …“, auch für eine Auswahl. Ordner mit Dateien, Quellen.csv, Quellen.md und Kontaktbogen.pdf.
+- Geteilte Bibliothek (Server/NAS/Dropbox): Datenbank lokal pro Mac, eine Datei pro Person in .archiver/people/, die neuere Fassung gewinnt. „Abgelegt von“ an neuen Objekten.
+- Text- und Zitatkarten in naiven Grundfarben (Rot, Grün, Violett, Cyan, Gelb), Schrift Ton in Ton.
+
+## App 0.19.4 (11.10.2026)
+
+- Lightbox „Ablegen in“: Passen nicht alle Zonen in eine Zeile, verteilen sie sich auf gleich lange Zeilen statt eines einzelnen Rests.
+- Bilder lassen sich aus der Lightbox wieder ziehen: die Zonen klappen auf, Loslassen auf einer Zone legt das Bild dorthin (auch in den Finder).
+
+## App 0.19.3 (11.10.2026)
+
+- Öffnung nach der Tour ohne die helle Querlinie: nur das Licht von den Seiten, dann öffnet sich die Oberfläche. Der Startton setzt mit dem Öffnen ein.
+- Startton beim App-Start etwas später, im Takt mit der einfahrenden Wortmarke.
+
+## App 0.19.2 · Extension 3.16.3 (11.10.2026)
+
+- Getting Started läuft im normalen Fenster, kein erzwungenes Vollbild mehr.
+- Im Kapitel zu den Active Zones bleibt die Leiste unten stehen, bis man weitergeht.
+- Neue Öffnung nach der Tour: Im Dunkel drückt blaues Licht von den Seiten herein, eine helle Linie teilt die Fläche quer, dann öffnet sich die Oberfläche (Welle oder Lid).
+- Extension: Bild mit gedrückter Shift-Taste auf eine Zone ziehen legt es schlicht in den Download-Ordner, am Archiv vorbei. Die Zonen zeigen dabei „In Downloads sichern“.
+- Active Zones beim Darüberziehen: bleiben gläsern und hell wie im Ruhezustand, nur feiner Rand und leicht angehoben, statt dunkelblau (App und Extension).
+
+## App 0.19.1 · Extension 3.16.2 (10.10.2026)
+
+- Getting Started: Die Demo-Bibliothek füllt sich mit Kopien aus der eigenen Bibliothek (vier Active Zones, Inbox, Bilder für das Browser-Schema). Mitgelieferte Grafiken nur, wenn die eigene Bibliothek noch zu leer ist. Suchvorschläge kommen aus der Bildanalyse.
+- Öffnung nach der Tour ohne Lichtring und ohne Schriftzug: das Dunkel weicht weich von der Mitte, dann glänzt die Oberfläche blau.
+- Gestrichelte Linien sind zurück (App, Observer, Extension).
+- Updates werden auch im laufenden Betrieb gesucht: alle 30 Minuten und beim Zurückkehren ins Fenster.
+
+## App 0.19.0 (10.10.2026)
+
+- Getting Started neu: neun Kapitel, fünf zum Mitmachen, im Vollbild. Auf Wunsch in einer Demo-Bibliothek (~/Archiver Demo/, 28 eigene Grafiken in fünf Zonen), getrennt von der eigenen Bibliothek. Am Ende wandert Selbstgesammeltes in die Inbox, die Demo in den Papierkorb.
+- Sammeln im Browser als Schema in der Tour: die Geste spielt dreimal von selbst, dann zieht man selbst.
+- Nach der Tour verlässt die App das Vollbild, Licht öffnet die Oberfläche (WebGL, Blau, synchron zum Startton). Form Welle oder Lid unter Einstellungen › Darstellung › Öffnung, dort auch zum Abspielen.
+- „Archiver“ in der Navigation: kein Hover mehr, auf der Startseite aktiv wie die anderen Einträge.
+- Neue Einstellung Navigation: oben oder unten, jeweils links, Mitte oder rechts. Unten weicht sie beim Ziehen den Active Zones aus.
+
+## App 0.18.2 (10.10.2026)
+
+- PDF-Ersteller: neuer Stil „Plakat“. Bilder randlos im Raster, angeschnitten, Name und Quelle klein in Schreibmaschinenschrift im Bild (hell oder dunkel je nach Untergrund). Dazu 16 pro Seite.
+
+## App 0.18.1 · Extension 3.16.1 (10.10.2026)
+
+- Der Betrachter heißt jetzt Observer.
+- Neues App-Icon ohne gestrichelten Rahmen, als runde Mac-Kachel.
+- Gestrichelte Linien überall durch feine durchgehende ersetzt (App, Observer, Extension).
+
+## App 0.18.0 · Extension 3.16.0 (10.10.2026)
+
+- Freischalt-Code: Archiver funktioniert erst nach Eingabe des Codes, unten in den Einstellungen.
+- Einstellungen aufgeräumt: Bibliothek, Darstellung, Extension & Betrachter, Startton und Allgemein als Untermenüs.
+- Zonen beim Ziehen: Deckkraft einstellbar (Darstellung), gilt in App und Extension.
+- Neues Farbschema „Salbei“ als Option: Periwinkle auf Grau-Grün. Standard bleibt wie bisher.
+
+## App 0.17.6 (10.10.2026)
+
+- Zonen-Menü (⋯) auf Karten wird nicht mehr abgeschnitten, es schwebt über der Seite.
+- Einheitlich „Objekte“ statt „Bilder“ bei Zählern, leeren Zonen und Meldungen.
+- Einstellungen öffnen verschiebt die Navigation nicht mehr unter die Fensterknöpfe.
+- Mehrfachauswahl wie im Finder: Shift + Pfeiltasten erweitert die Auswahl, Shift-Klick wählt einen Bereich auch über Zonen hinweg.
+- Übersicht: ⌫ oder Entf löscht die gewählte bzw. überfahrene Zone, nach kurzer Rückfrage.
+
+## App 0.17.5 (10.10.2026)
+
+- Objekte: Filter nach Art oben in der Filterleiste: Bilder, Tracks, Video, PDF.
+- Player: minimale Waveform statt Linie, gespielt in voller Farbe (Songs und Videos mit Ton).
+- Videos lassen sich zoomen wie Bilder: Z, Doppelklick, ⌘ +/−, Zwei-Finger-Zoom, Ziehen verschiebt.
+- Songs: Cover in Lightbox und Vorschau deutlich größer.
+- Lightbox: Leiste mit fester Breite, lange Namen gekürzt, kein Umbruch mehr bei Videos.
+
+## App 0.17.4 · Extension 3.15.4 (10.10.2026)
+
+- Navigation: „Finden“ heißt jetzt „Objekte“. Der Zonen-Button entfällt, ein Klick auf „Archiver“ führt zur Übersicht.
+- Ablegen: Die Zielkarte glüht kurz zart blau von hinten nach, dann blendet die Leiste aus (App und Extension).
+- Vorschau: Die Leiste unten hat eine feste Breite, lange Dateinamen werden gekürzt und bricht bei Videos nicht mehr um.
+- Instagram: Als Quelle wird der Beitrag gespeichert (instagram.com/p/… bzw. /reel/…), nicht mehr der Feed.
+
 ## App 0.17.3
 - Rechtsklick-Menü: alle Zonen direkt sichtbar als Kästchen in zwei Spalten, Active Zones zuerst mit Taste 1–4, kein Untermenü mehr.
 

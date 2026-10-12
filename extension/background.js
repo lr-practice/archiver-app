@@ -227,7 +227,7 @@ async function appBridge() {
   let info = null;
   try {
     const r = await hostCall("hello");
-    if (r.library) info = { library: r.library, name: r.name || "Archiver", version: r.version };
+    if (r.library) info = { library: r.library, name: r.name || "Archiver", version: r.version, libraries: Array.isArray(r.libraries) ? r.libraries : [] };
   } catch {}
   bridgeCache = { at: Date.now(), info };
   return info;
@@ -237,14 +237,44 @@ async function appBridge() {
 // legt die Übersicht der App fest; nur sie erscheinen beim Ziehen.
 // Das Ergebnis liegt zusätzlich in storage.local "appZones", damit offene
 // Oberflächen neu zeichnen, wenn sich etwas ändert.
+let bridgeDefaultZone = null; // Standard-Zone der App (Standard: Unsorted)
+let bridgeFolders = {}; // Zone → Ordner darin (bis zwei Ebenen), fürs Rechtsklickmenü
+
+// Zonen einer anderen Bibliothek (⇧ beim Ziehen): nur die Active Zones zählen
+async function libraryZones(library) {
+  const info = await appBridge();
+  if (!info) return { app: false };
+  const libraries = info.libraries || [];
+  const r = await hostCall("zones", { library: library || null });
+  const zones = (r.zones || []).map((z) => z.path);
+  const hot = Array.isArray(r.hot) && r.hot.length ? r.hot.filter((n) => zones.includes(n)) : zones.slice(0, 4);
+  return { app: true, libraries, library: library || null, zones, hot, alpha: typeof r.alpha === "number" ? r.alpha : null };
+}
+
+// Zuletzt genutzte Zonen (oben im Rechtsklickmenü)
+async function rememberRecent(zone) {
+  if (!zone) return;
+  const { recentZones } = await storageGet({ recentZones: [] });
+  const list = [zone, ...(Array.isArray(recentZones) ? recentZones : []).filter((z) => z !== zone)].slice(0, 3);
+  if (JSON.stringify(list) !== JSON.stringify(recentZones)) {
+    await storageSet({ recentZones: list });
+    buildMenus();
+  }
+}
+
 async function getZones() {
   const info = await appBridge();
   if (info) {
     try {
       const r = await hostCall("zones");
       const zones = (r.zones || []).map((z) => z.path);
+      bridgeDefaultZone = r.default || null;
       const hot = Array.isArray(r.hot) ? r.hot.filter((n) => zones.includes(n)) : zones.slice(0, 4);
+      bridgeFolders = r.folders && typeof r.folders === "object" ? r.folders : {};
       await publishAppZones({ zones, hot });
+      const alpha = typeof r.alpha === "number" ? r.alpha : null;
+      const { appZoneAlpha } = await storageGet({ appZoneAlpha: null });
+      if (appZoneAlpha !== alpha) await storageSet({ appZoneAlpha: alpha });
       return { app: true, library: info.name, zones, hot };
     } catch {}
   }
@@ -260,8 +290,8 @@ async function publishAppZones(zones) {
 async function saveToApp(message, sender) {
   const tabId = sender.tab && sender.tab.id;
   const frameId = sender.frameId;
-  const zone = message.folder ? sanitizePath(message.folder) : "Inbox";
-  const label = zone.split("/").pop();
+  // ohne Zone entscheidet die App (Standard-Zone, sonst Unsorted)
+  const zone = message.folder ? sanitizePath(message.folder) : null;
   const filename = buildFilename(message.url, message.suggestedName, TRANSFER_DIR);
 
   let id;
@@ -287,13 +317,16 @@ async function saveToApp(message, sender) {
       pageUrl: cleanPageUrl(message.pageUrl),
       pageTitle: message.pageTitle ? String(message.pageTitle).slice(0, 300) : null,
       quote: message.quote ? String(message.quote).slice(0, 20000) : null,
+      tone: message.tone || null,
       capturedAt: Date.now(),
+      library: message.library || null,
     });
+    if (!message.library) rememberRecent(zone || bridgeDefaultZone);
     await eraseDownload(id); // Datei liegt jetzt in der Bibliothek, Eintrag im Verlauf wäre tot
     // Gleiches Bild schon in der Bibliothek: nicht doppelt ablegen, sagen wo es liegt
-    const where = String(r.path || "").split("/").slice(0, -1).pop() || "Inbox";
+    const where = String(r.path || "").split("/").slice(0, -1).pop() || "Unsorted";
     if (r.duplicate) sendFeedback(tabId, frameId, t("duplicateIn", [where]), true);
-    else if (!message.quiet) sendFeedback(tabId, frameId, t("savedIn", [label]), true);
+    else if (!message.quiet) sendFeedback(tabId, frameId, t("savedIn", [where]), true);
     return { ok: true, id: r.path };
   } catch (err) {
     console.warn("[Archiver] Übergabe an die App fehlgeschlagen:", err.message);
@@ -304,18 +337,53 @@ async function saveToApp(message, sender) {
 }
 
 async function listAppFolder(zone) {
-  const r = await hostCall("list", { zone: zone || "Inbox" });
+  const r = await hostCall("list", { zone: zone || null });
   const items = await Promise.all(
     (r.items || []).map(async (it) => ({
       id: it.path,
-      url: (await appPreview(it)) || it.imageUrl || "",
+      url: it.quote ? textPreview(it.quote, it.tone, it.hash) : (await appPreview(it)) || it.imageUrl || "",
       filename: it.path,
       inHistory: true,
       pageUrl: it.pageUrl || null,
       pageTitle: it.pageTitle || null,
+      ts: it.ts || null,
     }))
   );
   return { items };
+}
+
+// Textkarte (.txt) für die Galerie: kleines SVG in der Kartenfarbe (content.js CARD_TONES)
+const PREVIEW_TONES = {
+  red: ["#ff0000", "#5c0000"],
+  green: ["#00b050", "#003d1c"],
+  violet: ["#7030a0", "#e2c8f5"],
+  cyan: ["#00b0f0", "#003d54"],
+  yellow: ["#ffff00", "#5c5c00"],
+  white: ["#f4f3ef", "#141414"],
+};
+function textPreview(quote, tone, hash) {
+  const keys = Object.keys(PREVIEW_TONES).slice(0, 5);
+  let h = 0;
+  for (const c of String(hash || quote)) h = (h * 31 + c.charCodeAt(0)) >>> 0;
+  const [bg, fg] = PREVIEW_TONES[tone] || PREVIEW_TONES[keys[h % keys.length]];
+  const esc = (s) => s.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c]);
+  const words = String(quote).trim().split(/\s+/);
+  const lines = [];
+  let line = "";
+  for (const w of words) {
+    if ((line + " " + w).trim().length > 22) {
+      lines.push(line.trim());
+      line = w;
+      if (lines.length === 7) break;
+    } else line += " " + w;
+  }
+  if (lines.length < 7 && line.trim()) lines.push(line.trim());
+  const text = lines.map((l, i) => `<tspan x="24" dy="${i ? 30 : 0}">${esc(l)}</tspan>`).join("");
+  const svg =
+    `<svg xmlns="http://www.w3.org/2000/svg" width="300" height="300" viewBox="0 0 300 300">` +
+    `<rect width="300" height="300" fill="${bg}"/>` +
+    `<text x="24" y="52" fill="${fg}" font-family="-apple-system, Helvetica, Arial, sans-serif" font-size="24" font-weight="500">${text}</text></svg>`;
+  return "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg);
 }
 
 async function appPreview(it) {
@@ -332,7 +400,7 @@ async function appPreview(it) {
 
 async function moveInApp(path, targetZone) {
   try {
-    const r = await hostCall("move", { paths: [path], zone: targetZone || "Inbox" });
+    const r = await hostCall("move", { paths: [path], zone: targetZone || bridgeDefaultZone || "Unsorted" });
     return { ok: true, newId: (r.moved || [])[0] || path };
   } catch (err) {
     return { ok: false, error: err.message || t("moveFailed") };
@@ -364,10 +432,14 @@ let menuBuild = Promise.resolve();
 
 async function menuZoneList() {
   const z = await getZones().catch(() => ({ app: false }));
-  if (z.app) return z.zones.map((name) => ({ name, folder: name }));
+  if (z.app) return z.zones.map((name) => ({ name, folder: name, folders: bridgeFolders[name] || [] }));
   const { zones } = await new Promise((r) => chrome.storage.sync.get({ zones: null, projects: null }, r));
   const names = (Array.isArray(zones) && zones.length ? zones : ["Projekt 1", "Projekt 2", "Projekt 3", "Downloads"]).filter(Boolean);
   return names.map((name) => ({ name, folder: String(name).trim().toLowerCase() === "downloads" ? null : name }));
+}
+
+function lastName(path) {
+  return String(path).split("/").pop();
 }
 
 function buildMenus() {
@@ -375,9 +447,48 @@ function buildMenus() {
     menuZones = await menuZoneList();
     await new Promise((r) => chrome.contextMenus.removeAll(r));
     chrome.contextMenus.create({ id: "archiver", title: t("menuDropIn"), contexts: MENU_CONTEXTS });
-    menuZones.forEach((zone, i) => {
-      const label = String(zone.name).split("/").join(" / ");
-      chrome.contextMenus.create({ id: "zone:" + i, parentId: "archiver", title: label, contexts: MENU_CONTEXTS });
+    // Ziele als flache Liste; die Menü-IDs zeigen auf ihren Index
+    const zones = menuZones;
+    menuZones = [];
+    const target = (entry) => menuZones.push(entry) - 1;
+    const pretty = (path) => String(path).split("/").join(" / ");
+    // Oben die drei zuletzt genutzten Zonen bzw. Ordner
+    const { recentZones } = await storageGet({ recentZones: [] });
+    const known = new Set(zones.flatMap((z) => [z.folder, ...(z.folders || []).map((f) => z.folder + "/" + f)]));
+    const recent = (Array.isArray(recentZones) ? recentZones : []).filter((r) => known.has(r)).slice(0, 3);
+    for (const r of recent) {
+      chrome.contextMenus.create({ id: "zone:" + target({ name: r, folder: r }), parentId: "archiver", title: pretty(r), contexts: MENU_CONTEXTS });
+    }
+    if (recent.length) chrome.contextMenus.create({ id: "sep-recent", parentId: "archiver", type: "separator", contexts: MENU_CONTEXTS });
+    // Darunter alle Zonen, Zonen mit Ordnern klappen auf (Zone selbst, dann Ordner › Unterordner)
+    zones.forEach((zone, zi) => {
+      const label = pretty(zone.name);
+      const folders = zone.folders || [];
+      if (!folders.length) {
+        chrome.contextMenus.create({ id: "zone:" + target(zone), parentId: "archiver", title: label, contexts: MENU_CONTEXTS });
+        return;
+      }
+      const parent = "group:" + zi;
+      chrome.contextMenus.create({ id: parent, parentId: "archiver", title: label, contexts: MENU_CONTEXTS });
+      chrome.contextMenus.create({ id: "zone:" + target(zone), parentId: parent, title: t("menuZoneItself", [lastName(zone.name)]), contexts: MENU_CONTEXTS });
+      chrome.contextMenus.create({ id: parent + ":sep", parentId: parent, type: "separator", contexts: MENU_CONTEXTS });
+      const tops = folders.filter((f) => !f.includes("/"));
+      for (const top of tops) {
+        const subs = folders.filter((f) => f.startsWith(top + "/"));
+        const entry = { name: zone.name + "/" + top, folder: zone.folder + "/" + top };
+        if (!subs.length) {
+          chrome.contextMenus.create({ id: "zone:" + target(entry), parentId: parent, title: top, contexts: MENU_CONTEXTS });
+          continue;
+        }
+        const sub = parent + ":" + top;
+        chrome.contextMenus.create({ id: sub, parentId: parent, title: top, contexts: MENU_CONTEXTS });
+        chrome.contextMenus.create({ id: "zone:" + target(entry), parentId: sub, title: t("menuZoneItself", [top]), contexts: MENU_CONTEXTS });
+        chrome.contextMenus.create({ id: sub + ":sep", parentId: sub, type: "separator", contexts: MENU_CONTEXTS });
+        for (const f of subs) {
+          const e = { name: zone.name + "/" + f, folder: zone.folder + "/" + f };
+          chrome.contextMenus.create({ id: "zone:" + target(e), parentId: sub, title: f.slice(top.length + 1), contexts: MENU_CONTEXTS });
+        }
+      }
     });
     chrome.contextMenus.create({ id: "sep", parentId: "archiver", type: "separator", contexts: MENU_CONTEXTS });
     chrome.contextMenus.create({ id: "area", parentId: "archiver", title: t("menuArea"), contexts: MENU_CONTEXTS });
@@ -507,7 +618,7 @@ async function captureVisible(message, sender) {
   const base = String(message.pageTitle || tab.title || "Seite").replace(/\s+/g, " ").trim().slice(0, 80) || "Seite";
   const name = (r ? t("captureNameArea") + " " : "") + base + ".png";
   return handleDownload(
-    { url: dataUrl, suggestedName: name, folder: message.folder, pageUrl: message.pageUrl || tab.url, pageTitle: message.pageTitle || tab.title },
+    { url: dataUrl, suggestedName: name, folder: message.folder, library: message.library || null, pageUrl: message.pageUrl || tab.url, pageTitle: message.pageTitle || tab.title },
     sender
   );
 }
@@ -519,6 +630,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   if (message.type === "download-image" && message.url) {
     handleDownload(message, sender).then(sendResponse);
+    return true;
+  }
+
+  // ⇧ beim Ziehen: Liste der Bibliotheken und Active Zones der gewählten
+  if (message.type === "library-zones") {
+    libraryZones(message.library).then(sendResponse, () => sendResponse({ app: false }));
     return true;
   }
 
@@ -656,8 +773,40 @@ async function exportForApp() {
 
 // ---- Download ----
 
+// Mit Shift abgelegt: schlicht in den Download-Ordner, ohne Archiv und Galerie
+async function saveToDownloads(message, sender) {
+  const tabId = sender.tab && sender.tab.id;
+  const frameId = sender.frameId;
+  const filename = buildFilename(message.url, message.suggestedName, "");
+  let id;
+  try {
+    id = await startDownload({ url: message.url, filename, saveAs: false, conflictAction: "uniquify" });
+  } catch (err) {
+    console.warn("[Archiver] Download fehlgeschlagen:", err.message);
+    sendFeedback(tabId, frameId, t("downloadFailed"), false);
+    return { ok: false };
+  }
+  const { state } = await waitForDownload(id);
+  if (state !== "complete") {
+    if (state === "interrupted") await eraseDownload(id);
+    sendFeedback(tabId, frameId, t("downloadFailed"), false);
+    return { ok: false };
+  }
+  sendFeedback(tabId, frameId, t("savedIn", ["Downloads"]), true);
+  return { ok: true };
+}
+
+// Textkarte als reine Textdatei: im Finder lesbar, Archiver zeigt sie als farbige Karte.
+// Ohne App bleibt es die Bildkarte, damit die Galerie der Extension sie zeigen kann.
+function asTextFile(message) {
+  if (!message.textCard || !message.quote) return message;
+  const base = String(message.suggestedName || "Text").replace(/\.png$/i, "");
+  return { ...message, url: "data:text/plain;charset=utf-8," + encodeURIComponent(String(message.quote).trim() + "\n"), suggestedName: base + ".txt" };
+}
+
 async function handleDownload(message, sender) {
-  if (await appBridge()) return saveToApp(message, sender);
+  if (message.toDownloads) return saveToDownloads(message, sender);
+  if (await appBridge()) return saveToApp(asTextFile(message), sender);
   const folderKey = message.folder ? sanitizePath(message.folder) : "";
   const filename = buildFilename(message.url, message.suggestedName, folderKey);
   const tabId = sender.tab && sender.tab.id;

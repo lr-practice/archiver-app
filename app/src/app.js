@@ -62,6 +62,36 @@
     else delete document.documentElement.dataset.radius;
   }
 
+  // Oben beim Scrollen: Inhalt läuft unter der Leiste aus, als Verlauf (Standard) oder Glas
+  function applyTopFade(id) {
+    document.documentElement.dataset.topfade = id === "glass" ? "glass" : "fade";
+  }
+
+  // Auswahl: ruhige gestrichelte Outline oder eine, die langsam um das Objekt läuft
+  // Fensterhintergrund (Mac): wie stark die Farbe die macOS-Unschärfe deckt, getrennt von den Zonen
+  function applyWinAlpha(v) {
+    const root = document.documentElement;
+    if (typeof v !== "number") {
+      delete root.dataset.winalpha;
+      root.style.removeProperty("--win-alpha");
+    } else {
+      root.dataset.winalpha = "on";
+      root.style.setProperty("--win-alpha", String(v));
+    }
+  }
+
+  function applyFocusAnim(on) {
+    if (on) document.documentElement.dataset.focusanim = "on";
+    else delete document.documentElement.dataset.focusanim;
+  }
+
+  // Position der Navigation: oben/unten, jeweils links, Mitte, rechts
+  const NAV_POS = ["tl", "tc", "tr", "bl", "bc", "br"];
+  function applyNavPos(id) {
+    if (id && id !== "tl" && NAV_POS.includes(id)) document.documentElement.dataset.nav = id;
+    else delete document.documentElement.dataset.nav;
+  }
+
   function pref(key, fallback) {
     try {
       const v = localStorage.getItem("archiver." + key);
@@ -75,6 +105,41 @@
     try {
       localStorage.setItem("archiver." + key, JSON.stringify(value));
     } catch {}
+  }
+
+  // Studio-Funktionen (Einstellungen › Studio): jede einzeln abschaltbar, Standard an.
+  // Die geteilte Bibliothek ist kein Schalter hier, sie hängt an der Bibliothek selbst.
+  // Schaltbare Studio-Werkzeuge. Moodboard und eigene Reihenfolge sind seit 0.24.6 immer an.
+  const FEATURES = ["notes", "rights", "package"];
+  function feat(id) {
+    if (!FEATURES.includes(id)) return true;
+    return pref("feat." + id, true) !== false;
+  }
+
+  // ---- Freischalten: ein gemeinsamer Code, nur sein Hash steht im Code ----
+
+  // Gültige Codes (nur Hashes): der aktuelle und der bisherige, damit niemand gesperrt wird
+  const UNLOCK_HASHES = ["12004fa6495855edcff5595961e8da1e62e9eed6502338060283a8bb0efa5646", "4ffbc1224a6cd30617b443e4665695d19c63d76ba51f6b16bdcdc8b28a2d1e13"];
+
+  function isUnlocked() {
+    return UNLOCK_HASHES.includes(pref("unlock", null));
+  }
+
+  async function unlockHash(code) {
+    const clean = String(code).toUpperCase().replace(/[^A-Z0-9]/g, "");
+    const data = new TextEncoder().encode("archiver-unlock:" + clean);
+    const buf = await crypto.subtle.digest("SHA-256", data);
+    return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("");
+  }
+
+  function applyLock() {
+    const locked = !isUnlocked();
+    document.body.classList.toggle("locked", locked);
+    $("lock").hidden = !locked;
+    if (locked && !$("lockForm").firstChild) {
+      $("lockForm").appendChild(unlockForm());
+      setTimeout(() => $("lockForm").querySelector("input")?.focus(), 60);
+    }
   }
 
   // ---- Zustand ----
@@ -91,6 +156,10 @@
   ]; // state.focus für „Alle Bilder“
 
   applyRadius(pref("radius", "round"));
+  applyTopFade(pref("topFade", "fade"));
+  applyFocusAnim(pref("focusAnim", false));
+  applyWinAlpha(pref("winAlpha", null));
+  applyNavPos(pref("navPos", "tl"));
 
   const state = {
     root: "",
@@ -107,18 +176,29 @@
     homeSizes: pref("homeSizes", null) || { index: pref("homeSize", 1), preview: pref("homeSize", 1), cards: pref("homeSize", 1) },
     // (Übersicht: Größe wie die Karten, solange nichts eigenes gespeichert ist)
     query: "",
-    filters: { color: null, orient: null, format: null, period: null, dup: false, label: null, site: null },
+    filters: { kind: null, color: null, orient: null, format: null, period: null, dup: false, label: null, site: null, by: null, fresh: false },
     found: null, // Seite „Finden“: Treffer nach Rangfolge, null ohne Suche und Filter
     view: pref("view", "grid"),
     size: pref("size", 120),
     infoOpen: pref("infoOpen", false),
     selection: new Set(),
     anchor: null,
+    lead: null, // bewegliches Ende einer Shift-Auswahl
     lists: new Map(), // Zone → sichtbare Einträge (nach Suche)
     lightbox: null, // { zone, index }
+    order: {}, // Zone → Hashes in eigener Reihenfolge (zones.json, Schlüssel "sort")
+    shared: false, // geteilte Bibliothek (studio.rs)
+    user: "", // Name für „abgelegt von“
+    folder: null, // gewählter Ordner in der offenen Zone (Chips), null = alle
   };
 
   // ---- Helfer ----
+
+  // Kürzel wie „JP“: kurze Eingaben bleiben, wie sie sind, sonst Anfangsbuchstaben
+  function byInitials(name) {
+    const v = String(name).trim();
+    return v.length <= 3 && !/\s/.test(v) ? v.toUpperCase() : monogram(v);
+  }
 
   function monogram(name) {
     const words = String(name || "").trim().split(/\s+/).filter(Boolean);
@@ -129,6 +209,12 @@
   function zoneLabel(path) {
     if (path === "") return state.name;
     return path.split("/").join(" / ");
+  }
+
+  // Liegt das Objekt tiefer als seine Zone (bestehende Ordner): der Rest des Pfads
+  function subfolderOf(item) {
+    const dir = item.path.includes("/") ? item.path.slice(0, item.path.lastIndexOf("/")) : "";
+    return item.zone && dir.startsWith(item.zone + "/") ? dir.slice(item.zone.length + 1) : "";
   }
 
   function lastSegment(path) {
@@ -168,6 +254,18 @@
     return fileSrc(item.abs);
   }
 
+  // Quelle öffnen. Bei Textkarten springt der Browser zur zitierten Stelle und
+  // markiert sie (Text-Fragment #:~:text=Anfang,Ende; Chrome, Safari, Edge).
+  function sourceUrl(item) {
+    const url = item.pageUrl;
+    const quote = (item.quote || "").replace(/\s+/g, " ").trim();
+    if (!url || !quote || /#:~:/.test(url)) return url;
+    const enc = (t) => encodeURIComponent(t).replace(/-/g, "%2D").replace(/,/g, "%2C").replace(/&/g, "%26");
+    const words = quote.split(" ");
+    const frag = words.length <= 10 ? enc(quote) : enc(words.slice(0, 5).join(" ")) + "," + enc(words.slice(-5).join(" "));
+    return url.replace(/#.*$/, "") + "#:~:text=" + frag;
+  }
+
   // Textkarte: der gespeicherte Text. Ältere Karten (vor 0.9.0) haben ihn
   // nur als Bild; dann aus der Texterkennung („TEXT … domain · Datum“).
   function quoteOf(item) {
@@ -177,10 +275,41 @@
     return m ? m[1].trim() : "";
   }
 
+  // Naive Grundfarben (Rot, Grün, Violett, Cyan, Gelb), Schrift Ton in Ton.
+  // Die Farbe hängt am Hash: dieselbe Karte bleibt immer gleich.
+  // Farben der Textkarten: Hintergrund, Schrift Ton in Ton, Deckkraft für Kennung und Fuß.
+  // Gleiche Werte in der Extension (content.js CARD_TONES).
+  const QUOTE_TONES = {
+    red: ["#ff0000", "#5c0000", 0.7],
+    green: ["#00b050", "#003d1c", 0.7],
+    violet: ["#7030a0", "#e2c8f5", 0.75],
+    cyan: ["#00b0f0", "#003d54", 0.7],
+    yellow: ["#ffff00", "#5c5c00", 0.75],
+    white: ["#f4f3ef", "#141414", 0.5],
+  };
+  const RANDOM_TONES = ["red", "green", "violet", "cyan", "yellow"];
+  // Eigene Farbe (beim Markieren im Web bestimmt oder in den Details gewählt),
+  // sonst fest aus dem Inhalt abgeleitet
+  function quoteTone(item) {
+    if (QUOTE_TONES[item.tone]) return QUOTE_TONES[item.tone];
+    const key = String(item.hash || item.path || "");
+    let h = 0;
+    for (let i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) >>> 0;
+    return QUOTE_TONES[RANDOM_TONES[h % RANDOM_TONES.length]];
+  }
+  function toneKey(item) {
+    if (QUOTE_TONES[item.tone]) return item.tone;
+    return RANDOM_TONES.find((k) => QUOTE_TONES[k] === quoteTone(item));
+  }
+
   // Textkarte als Text statt Bild: Kennung, Zitat, Quelle und Datum
   function textSheet(item, cls) {
     const len = quoteOf(item).length;
     const sheet = el("div", cls + (len < 140 ? " short" : len < 400 ? " medium" : " long"));
+    const [bg, fg, dim] = quoteTone(item);
+    sheet.style.setProperty("--ts-bg", bg);
+    sheet.style.setProperty("--ts-fg", fg);
+    sheet.style.setProperty("--ts-dim", dim);
     sheet.appendChild(el("div", "ts-label", "TEXT"));
     sheet.appendChild(el("div", "ts-body", quoteOf(item)));
     const date = new Date(item.capturedAt || item.addedAt || 0).toLocaleDateString(lang === "de" ? "de-DE" : "en-GB");
@@ -243,8 +372,10 @@
   function orderZones(zones) {
     const order = pref("zoneOrder", []);
     if (!order.length) return zones;
+    // Zone, die früher in Unterzonen geteilt war: Platz ihrer ersten Unterzone
     const rank = (z) => {
-      const i = order.indexOf(z.path);
+      let i = order.indexOf(z.path);
+      if (i < 0 && z.path) i = order.findIndex((p) => p.startsWith(z.path + "/"));
       return i < 0 ? order.length : i;
     };
     return zones.map((z, i) => [z, i]).sort((a, b) => rank(a[0]) - rank(b[0]) || a[1] - b[1]).map(([z]) => z);
@@ -291,6 +422,11 @@
     syncZoneOrder();
     state.items = snap.items;
     state.byPath = new Map(snap.items.map((i) => [i.path, i]));
+    state.order = snap.order || {};
+    state.shared = !!snap.shared;
+    state.defaultZone = snap.defaultZone || "Unsorted";
+    state.structure = snap.structure || { depth: 2, skip: [], subzones: false };
+    state.user = snap.user || "";
     if (isZone(state.focus) && !state.zones.some((z) => z.path === state.focus)) state.focus = null;
     for (const p of [...state.selection]) if (!state.byPath.has(p)) state.selection.delete(p);
     // Offenes Menü nicht unter der Maus wegzeichnen (z. B. während „Wirklich löschen?“)
@@ -299,6 +435,33 @@
   }
 
   let pendingRender = false;
+
+  // ⌘R: Bibliothek neu einlesen. Mit „Welle“ blenden die sichtbaren Objekte
+  // diagonal von oben links nach unten rechts ein, schnell und ohne Einzelauftritt.
+  async function reloadObjects() {
+    await refresh();
+    if (pref("reloadAnim", "plain") === "wave") reloadWave(document.getElementById("zones") || document.body);
+  }
+
+  function reloadWave(root) {
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    const nodes = root.querySelectorAll(".card, .p-card, .p-row:not(.p-row-head), .p-block-row");
+    for (const n of nodes) {
+      const r = n.getBoundingClientRect();
+      if (r.bottom < 0 || r.top > vh || r.width === 0) continue;
+      const d = Math.round((Math.max(0, r.top) / vh) * 160 + (Math.max(0, r.left) / vw) * 120);
+      n.classList.remove("p-wave");
+      void n.offsetWidth;
+      n.style.animationDelay = d + "ms";
+      n.classList.add("p-wave");
+      setTimeout(() => {
+        n.classList.remove("p-wave");
+        n.style.animationDelay = "";
+      }, d + 400);
+    }
+  }
 
   function applyThumbs(list) {
     let media = false;
@@ -400,7 +563,7 @@
       zone: tokens(item.zone),
       site: tokens(domainOf(item.pageUrl) + " " + domainOf(item.imageUrl)),
       labels: String(item.labels || "").toLowerCase().split(",").map((l) => l.trim()).filter(Boolean),
-      text: tokens([item.text, item.quote].join(" ")),
+      text: tokens([item.text, item.quote, feat("notes") ? item.note : "", feat("rights") ? item.credit : "", item.addedBy].join(" ")),
       colors,
     };
     return item._idx;
@@ -458,7 +621,7 @@
 
   function filtersActive() {
     const f = state.filters;
-    return filtersShown() && !!(f.color || f.orient || f.format || f.period || f.dup || f.label || f.site);
+    return filtersShown() && !!(f.kind || f.color || f.orient || f.format || f.period || f.dup || f.label || f.site || f.by || f.fresh);
   }
 
   function orientation(item) {
@@ -469,6 +632,7 @@
 
   function passesFilters(item, dupes) {
     const f = state.filters;
+    if (f.kind && kindOf(item) !== f.kind) return false;
     if (f.color && !((searchIndex(item).colors.get(f.color) || 0) >= COLOR_SHARE)) return false;
     if (f.label && !searchIndex(item).labels.includes(f.label)) return false;
     if (f.site && domainOf(item.pageUrl) !== f.site) return false;
@@ -476,7 +640,48 @@
     if (f.format && formatKey(item) !== f.format) return false;
     if (f.period && Date.now() - itemTime(item) > PERIODS[f.period] * 864e5) return false;
     if (f.dup && !dupes.has(item.hash)) return false;
+    if (f.by && item.addedBy !== f.by) return false;
+    if (f.fresh && !isFresh(item)) return false;
     return true;
+  }
+
+  // ---- Geteilte Bibliothek: „neu von anderen“ bis zum ersten Ansehen ----
+  // Gesehen gilt ein Objekt, sobald man seine Zone wieder verlässt oder es groß öffnet.
+  // Beim ersten Mal zählt alles Vorhandene als gesehen, damit nicht alles leuchtet.
+  let seenHashes = null;
+  function seenSet() {
+    if (seenHashes) return seenHashes;
+    const stored = pref("seenOthers", null);
+    if (Array.isArray(stored)) seenHashes = new Set(stored);
+    else {
+      seenHashes = new Set(state.items.filter(byOther).map((i) => i.hash));
+      setPref("seenOthers", [...seenHashes]);
+    }
+    return seenHashes;
+  }
+
+  function byOther(item) {
+    return !!(item.addedBy && state.user && item.addedBy !== state.user);
+  }
+
+  function isFresh(item) {
+    return state.shared && byOther(item) && !seenSet().has(item.hash);
+  }
+
+  function zoneHasFresh(path) {
+    return state.shared && state.items.some((i) => i.zone === path && isFresh(i));
+  }
+
+  function markSeen(items) {
+    const seen = seenSet();
+    let changed = false;
+    for (const i of items) {
+      if (byOther(i) && !seen.has(i.hash)) {
+        seen.add(i.hash);
+        changed = true;
+      }
+    }
+    if (changed) setPref("seenOthers", [...seen]);
   }
 
   function formatKey(item) {
@@ -499,6 +704,10 @@
     const f = state.filters;
     const bar = el("div", "p-bar p-filters");
     bar.appendChild(mono("(" + t("filterTitle") + ")", "dim p-facet-title"));
+    // Art zuerst: Bilder, Tracks, Video, PDF
+    for (const k of ["image", "audio", "video", "pdf"])
+      bar.appendChild(chip("(" + t("kind_" + k) + ")", f.kind === k, () => setFilter("kind", k)));
+    bar.appendChild(el("span", "p-filter-gap"));
     const dots = el("span", "p-colors");
     for (const [name, hex] of COLORS) {
       const b = button("p-color" + (f.color === name ? " active" : ""), "", () => setFilter("color", name));
@@ -518,11 +727,18 @@
       bar.appendChild(chip("(" + t("period_" + p) + ")", f.period === p, () => setFilter("period", p)));
     bar.appendChild(el("span", "p-filter-gap"));
     bar.appendChild(chip("(" + t("filterDup") + ")", f.dup, () => setFilter("dup", true)));
+    if (state.shared) {
+      const fresh = state.items.filter(isFresh).length;
+      if (fresh || f.fresh) {
+        bar.appendChild(el("span", "p-filter-gap"));
+        bar.appendChild(chip("(" + t("filterFresh") + " " + fresh + ")", f.fresh, () => setFilter("fresh", true)));
+      }
+    }
     if (filtersActive()) {
       bar.appendChild(el("span", "p-flex"));
       bar.appendChild(
         chip("(" + t("filterReset") + ")", false, () => {
-          state.filters = { color: null, orient: null, format: null, period: null, dup: false, label: null, site: null };
+          state.filters = { kind: null, color: null, orient: null, format: null, period: null, dup: false, label: null, site: null, by: null, fresh: false };
           renderZones();
         })
       );
@@ -566,6 +782,15 @@
     const motif = (l) => (lang === "de" && LABEL_DE[l] ? LABEL_DE[l][0].toUpperCase() + LABEL_DE[l].slice(1) : l);
     if (labels.length || state.filters.label) wrap.appendChild(facetRow("facetMotif", labels, "label", motif));
     if (sites.length || state.filters.site) wrap.appendChild(facetRow("facetSource", sites, "site", (x) => x));
+    // Geteilte Bibliothek: „Von: JP“, wer abgelegt hat
+    if (state.shared) {
+      const people = new Map();
+      for (const item of state.items) if (item.addedBy && matches(item, words)) people.set(item.addedBy, (people.get(item.addedBy) || 0) + 1);
+      if (people.size > 1 || state.filters.by) {
+        const list = [...people].sort((a, b) => b[1] - a[1]);
+        wrap.appendChild(facetRow("facetBy", list, "by", (x) => (x === state.user ? t("byMe") : byInitials(x))));
+      }
+    }
     return wrap;
   }
 
@@ -592,6 +817,7 @@
     renderZones();
     renderToolbar();
     renderInfo();
+    renderLibTab();
   }
 
   // Prototyp: keine Toolbar mehr. Die Navigation schwebt unten in der Mitte,
@@ -601,18 +827,11 @@
     const main = $("navMain");
     const btns = [];
     const inZone = isZone(state.focus) && !state.query;
-    // Ganz links immer die Bibliothek als Home, in einer Zone folgt der Pfad.
-    const home = navButton(t("navZones"), state.focus == null && !state.query && !state.page, () => {
-      closePage();
-      setFocus(null);
-    });
-    home.classList.add("p-nav-home");
-    home.title = t("navZones");
-    btns.push(home);
+    // Zur Übersicht führt „Archiver“ links; in einer Zone folgt hier der Pfad.
     if (inZone) {
       const parts = state.focus.split("/");
       parts.forEach((part, i) => {
-        btns.push(el("span", "p-nav-sep", "›"));
+        if (i) btns.push(el("span", "p-nav-sep", "›"));
         const path = parts.slice(0, i + 1).join("/");
         const last = i === parts.length - 1;
         const exists = state.zones.some((z) => z.path === path);
@@ -632,10 +851,11 @@
     const searchOpen = !!state.query || document.activeElement === $("search");
     $("navSearch").classList.toggle("open", searchOpen);
     $("navMore").classList.toggle("active", !!document.querySelector(".p-more-menu"));
+    $("navBrand").classList.toggle("active", state.focus == null && !state.query.trim() && !state.page);
   }
 
   // Hover in der Navigation: eine Fläche gleitet unter den Button unter der Maus.
-  // „Archiver“ bekommt stattdessen den Regenbogen und keine Fläche.
+  // „Archiver“ hat keinen Hover, nur den Aktiv-Zustand auf der Startseite.
   function setupNavGlide() {
     const nav = $("nav");
     const glide = el("span", "p-nav-glide");
@@ -716,8 +936,114 @@
     return state.items.filter((i) => i.zone === path); // neueste zuerst (Reihenfolge aus Rust)
   }
 
+  // Für Übersichten (Karten-Cover, Index-Thumbs, Vorschau): in der eigenen Reihenfolge der Zone
+  function orderedItems(path) {
+    const list = zoneItems(path);
+    return feat("order") ? applyItemOrder(path, list) : list;
+  }
+
+  // Ordnerpfad eines Objekts innerhalb seiner Zone ("" = direkt in der Zone)
+  function subdirOf(item) {
+    const d = item.path.slice(0, Math.max(0, item.path.lastIndexOf("/")));
+    const z = item.zone || "";
+    if (!z) return d;
+    return d === z ? "" : d.startsWith(z + "/") ? d.slice(z.length + 1) : "";
+  }
+
+  // Liegt das Objekt im Ordner (samt Unterordnern)? "" = lose, direkt in der Zone
+  function inFolder(item, folder) {
+    if (folder == null) return true;
+    const d = subdirOf(item);
+    return folder === "" ? d === "" : d === folder || d.startsWith(folder + "/");
+  }
+
+  // Unterordner der Ebene `base`, in dem das Objekt liegt ("" = direkt auf dieser Ebene)
+  function childFolder(item, base) {
+    const d = subdirOf(item);
+    const pre = base ? base + "/" : "";
+    if (base && !d.startsWith(pre)) return "";
+    const rest = d.slice(pre.length);
+    return rest ? pre + rest.split("/")[0] : "";
+  }
+
+  function parentFolder(folder) {
+    const i = folder ? folder.lastIndexOf("/") : -1;
+    return i > 0 ? folder.slice(0, i) : null;
+  }
+
+  // Ordner einer Ebene mit Anzahl (samt Unterordnern). Oben in der Zone kommen
+  // lose Dateien ("") zuletzt; im Ordner zählen nur seine eigenen Unterordner.
+  function zoneFolders(items, base) {
+    const counts = new Map();
+    for (const i of items) {
+      if (base && !inFolder(i, base)) continue;
+      const f = childFolder(i, base);
+      counts.set(f, (counts.get(f) || 0) + 1);
+    }
+    const named = [...counts].filter(([f]) => f).sort((a, b) => a[0].localeCompare(b[0], undefined, { numeric: true }));
+    return counts.has("") && !base ? [...named, ["", counts.get("")]] : named;
+  }
+
+  // Darstellung einer Zone mit Ordnern: "mosaic" (ein Raster) oder "sections", je Zone gemerkt
+  function zoneLayout(path) {
+    return (pref("zoneLayouts", {}) || {})[path] === "sections" ? "sections" : "mosaic";
+  }
+
+  function setZoneLayout(path, layout) {
+    setPref("zoneLayouts", { ...(pref("zoneLayouts", {}) || {}), [path]: layout });
+    renderZones();
+  }
+
+  // Ordner-Chips unter dem Zonentitel: (All 282) (Typefaces 165) (Loose 3).
+  // Im Ordner: (Alle n) für diese Ebene, dahinter nur seine Unterordner.
+  function folderChips(zone, folders, total) {
+    const wrap = el("span", "p-folder-chips");
+    const base = state.folder || null;
+    wrap.appendChild(chip("(" + t("folderAll") + " " + total + ")", state.folder == null || state.folder === base, () => {
+      state.folder = base;
+      renderZones();
+    }));
+    for (const [f, n] of folders) wrap.appendChild(chip("(" + (f ? lastSegment(f) : t("folderLoose")) + " " + n + ")", state.folder === f, () => openFolder(f)));
+    return wrap;
+  }
+
+  // Ordner betreten bzw. eine Ebene zurück (Esc, ⌘↑, Klick im Pfad)
+  function openFolder(f) {
+    state.folder = f;
+    state.folderKbd = null;
+    renderZones();
+  }
+
+  function folderUp() {
+    if (state.folder == null) return false;
+    openFolder(parentFolder(state.folder));
+    return true;
+  }
+
+  // Ordner als Karten oben in der Zone: Vorschau, Name, Anzahl. Klick filtert wie die Chips.
+  function folderCards(zone, folders, items) {
+    const named = folders.filter(([f]) => f);
+    const wrap = el("div", "p-cards p-cards-grid p-folder-cards");
+    for (const [f, n] of named) {
+      const idx = wrap.children.length;
+      const card = el("article", "p-card p-folder-card" + (state.folder === f ? " active" : "") + (state.folderKbd === idx ? " kbd-focus" : ""));
+      card.appendChild(cardCover(applyItemOrder(zone.path, items.filter((i) => inFolder(i, f)))));
+      const body = el("div", "p-card-body");
+      const text = el("div");
+      text.appendChild(el("div", "zone-card-name", lastSegment(f)));
+      text.appendChild(el("div", "p-card-meta", n === 1 ? t("countImage") : t("countImages", { n })));
+      body.appendChild(text);
+      card.appendChild(body);
+      card.addEventListener("click", () => openFolder(f));
+      card.dataset.folder = f;
+      wrap.appendChild(card);
+    }
+    return wrap;
+  }
+
   // Vorschaubild für Startseite und Karten; fehlt das Thumbnail noch, das Original nehmen.
   function previewImg(item) {
+    if (quoteOf(item)) return textSheet(item, "text-sheet mini");
     const img = el("img");
     img.alt = "";
     img.decoding = "async";
@@ -762,6 +1088,20 @@
         found.push([score, itemTime(item) || 0, item]);
       }
     }
+    // Eigene Reihenfolge je Zone (per Ziehen gesetzt); Neues ohne Platz steht vorn
+    if (feat("order")) for (const [zone, list] of state.lists) applyItemOrder(zone, list);
+    // Ordner der offenen Zone: Chip filtert, „Sections“ ordnet nach Ordnern
+    if (isZone(state.focus) && !words.length && state.lists.has(state.focus)) {
+      let list = state.lists.get(state.focus);
+      if (state.folder != null) list = list.filter((i) => inFolder(i, state.folder));
+      if (zoneLayout(state.focus) === "sections") {
+        const base = state.folder || null;
+        const rank = new Map(zoneFolders(list, base).map(([f], i) => [f, i]));
+        const at = (item) => rank.get(childFolder(item, base)) ?? rank.size;
+        list = list.map((item, i) => [item, i]).sort((a, b) => at(a[0]) - at(b[0]) || a[1] - b[1]).map(([item]) => item);
+      }
+      state.lists.set(state.focus, list);
+    }
     // Finden: eine Liste nach Relevanz, bei gleicher Punktzahl das Neueste zuerst
     state.found = words.length || filtering ? found.sort((a, b) => b[0] - a[0] || b[1] - a[1]).map((x) => x[2]) : null;
 
@@ -778,6 +1118,35 @@
     layoutMasonry(true);
     grid.scrollTop = scroll;
     for (const path of [...cardCache.keys()]) if (!state.byPath.has(path)) cardCache.delete(path);
+  }
+
+  function applyItemOrder(zone, list) {
+    const order = state.order && state.order[zone];
+    if (!order || !order.length) return list;
+    const pos = new Map(order.map((h, i) => [h, i]));
+    const at = (item) => (pos.has(item.hash) ? pos.get(item.hash) : -1);
+    return list.sort((a, b) => at(a) - at(b));
+  }
+
+  // Objekte in einer Zone umstellen: `moved` (Pfade) vor bzw. hinter `ref` (Pfad)
+  async function reorderInZone(zone, moved, ref, after) {
+    const list = (state.lists.get(zone) || []).slice();
+    const movedSet = new Set(moved);
+    const picked = list.filter((i) => movedSet.has(i.path));
+    const rest = list.filter((i) => !movedSet.has(i.path));
+    let at = rest.findIndex((i) => i.path === ref);
+    if (at < 0) return;
+    if (after) at++;
+    rest.splice(at, 0, ...picked);
+    const hashes = [];
+    for (const i of rest) if (!hashes.includes(i.hash)) hashes.push(i.hash);
+    state.order = { ...state.order, [zone]: hashes };
+    renderZones();
+    try {
+      await invoke("set_item_order", { zone, hashes });
+    } catch (e) {
+      fail(e);
+    }
   }
 
   // ---- Startseite: Index (D), Index mit Vorschau (E) oder Karten (F) ----
@@ -824,13 +1193,29 @@
     wrap.style.setProperty("--cover", HOME_SIZES[homeStep()].cover + "px");
 
     if (state.home === "overview") wrap.appendChild(overviewLayout());
-    else if (state.home === "cards") wrap.appendChild(cardsLayout());
-    else if (state.home === "preview") {
+    else if (state.home === "cards") {
+      // Active Zones stehen in jeder Ansicht oben, je nach Darstellung als Karten oder Zeilen
+      const row = el("div", "p-hotrow");
+      for (let i = 0; i < HOT_ZONES; i++) row.appendChild(state.zones[i] ? hotCard(state.zones[i], i) : hotSlot(i));
+      wrap.appendChild(row);
+      wrap.appendChild(restBar(state.zones.length - HOT_ZONES));
+      wrap.appendChild(cardsLayout());
+    } else if (state.home === "preview") {
       const split = el("div", "p-split");
-      split.appendChild(indexList(true));
+      const lists = el("div", "p-split-lists");
+      lists.appendChild(hotLabel());
+      lists.appendChild(hotList(true));
+      lists.appendChild(restBar(state.zones.length - HOT_ZONES));
+      lists.appendChild(indexList(true, state.zones.slice(HOT_ZONES), HOT_ZONES));
+      split.appendChild(lists);
       split.appendChild(previewPanel());
       wrap.appendChild(split);
-    } else wrap.appendChild(indexList(false));
+    } else {
+      wrap.appendChild(hotLabel());
+      wrap.appendChild(hotList(false));
+      wrap.appendChild(restBar(state.zones.length - HOT_ZONES));
+      wrap.appendChild(indexList(false, state.zones.slice(HOT_ZONES), HOT_ZONES));
+    }
     return wrap;
   }
 
@@ -892,6 +1277,10 @@
       // Einblick: Lightbox mit den Bildern der gewählten Karte, ←→ blättert darin
       openLightbox((state.lists.get(state.homeCursor) || [])[0]);
       return true;
+    } else if (e.key === "Backspace" || e.key === "Delete") {
+      const hovered = document.querySelector(".p-home [data-zone]:hover");
+      const path = active ? state.homeCursor : hovered?.dataset.zone;
+      return path ? askTrashZone(path) : false;
     } else if (e.key === "Escape" && active) {
       state.homeKbd = false;
       applyHomeCursor(false);
@@ -908,7 +1297,7 @@
     return Number.isInteger(step) ? Math.max(0, Math.min(HOME_SIZES.length - 1, step)) : 1;
   }
 
-  function indexList(compact, zones = state.zones, offset = 0) {
+  function indexList(compact, zones = state.zones, offset = 0, swap = offset > 0) {
     const list = el("div", "p-index" + (compact ? " compact" : ""));
     const head = el("div", "p-row p-row-head");
     head.appendChild(mono(t("colNo")));
@@ -925,7 +1314,7 @@
       const index = offset + i;
       const row = el("div", "p-row p-zone");
       row.dataset.zone = zone.path;
-      if (offset) {
+      if (swap) {
         // Übersicht: Zeile per Ziehen mit einer Hot Zone tauschen
         row.dataset.swap = zone.path;
         row.addEventListener("pointerdown", (e) => dragSwap(e, row));
@@ -940,7 +1329,7 @@
       if (!compact) {
         row.appendChild(el("span", "p-num", recentDate(lastSaved(zone.path))));
         const thumbs = el("span", "p-thumbs");
-        for (const item of zoneItems(zone.path).slice(0, 6)) {
+        for (const item of orderedItems(zone.path).slice(0, 6)) {
           thumbs.appendChild(previewImg(item));
         }
         row.appendChild(thumbs);
@@ -975,12 +1364,39 @@
     const add = el("div", "p-row p-new");
     add.appendChild(mono("+", "dim"));
     add.appendChild(el("span", "zone-card-name", t("newZone")));
+    // leere Spalten wie in den Zonen-Zeilen, damit die Zeile gleich hoch ist
+    add.appendChild(el("span", "p-num"));
+    if (!compact) {
+      add.appendChild(el("span", "p-num"));
+      add.appendChild(el("span", "p-thumbs"));
+    }
+    add.appendChild(el("span"));
     add.addEventListener("click", startNewZone);
     list.appendChild(add);
     return list;
   }
 
   // ---- Übersicht: oben die vier Hot Zones als Karten, darunter der Index ----
+
+  function hotList(compact) {
+    const list = indexList(compact, state.zones.slice(0, HOT_ZONES), 0, true);
+    list.querySelector(".p-new")?.remove();
+    return list;
+  }
+
+  function hotLabel() {
+    const label = el("div", "p-bar p-overview-bar p-hot-label");
+    label.appendChild(mono(t("hotLabel") + " (" + Math.min(HOT_ZONES, state.zones.length) + ")", "strong"));
+    label.appendChild(el("span", "p-flex"));
+    label.appendChild(mono(t("hotHintRow"), "dim"));
+    return label;
+  }
+
+  function restBar(n) {
+    const label = el("div", "p-bar p-overview-bar");
+    label.appendChild(mono(t("indexLabel") + " (" + Math.max(0, n) + ")", "strong"));
+    return label;
+  }
 
   function overviewLayout() {
     const wrap = el("div", "p-overview");
@@ -1009,7 +1425,7 @@
     card.dataset.zone = zone.path;
     card.dataset.swap = zone.path;
     card.title = t("keyHint", { n: i + 1 });
-    const items = zoneItems(zone.path);
+    const items = orderedItems(zone.path);
     const cover = el("div", "p-card-cover" + (items.length >= 3 ? " trio" : "") + (items.length ? "" : " empty"));
     for (const item of items.slice(0, items.length >= 3 ? 3 : 1)) cover.appendChild(previewImg(item));
     card.appendChild(cover);
@@ -1058,10 +1474,24 @@
     const start = { x: e.clientX, y: e.clientY };
     let lifted = false;
     let target = null;
+    let targetRect = null;
+    let home = null;
+    // Vorschau des Tauschs: die Zielkarte rückt schon an den Platz, der frei wird
+    const preview = (n, on) => {
+      if (!n) return;
+      // Karte und Zeile haben verschiedene Formen: dann tritt das Ziel nur zurück
+      if (n.classList.contains("p-row") !== node.classList.contains("p-row")) return void n.classList.toggle("swap-out", on);
+      n.style.transition = "transform 0.22s cubic-bezier(.2,.7,.2,1)";
+      if (!on) return void (n.style.transform = "");
+      const r = n.getBoundingClientRect();
+      const cur = new DOMMatrixReadOnly(getComputedStyle(n).transform);
+      n.style.transform = `translate(${home.left - (r.left - cur.m41)}px, ${home.top - (r.top - cur.m42)}px)`;
+    };
     const onMove = (ev) => {
       if (!lifted) {
         if (Math.hypot(ev.clientX - start.x, ev.clientY - start.y) < DRAG_THRESHOLD) return;
         lifted = true;
+        home = node.getBoundingClientRect();
         node.classList.add("lifted");
         node.style.pointerEvents = "none";
         document.body.classList.add("sorting");
@@ -1069,11 +1499,22 @@
       }
       ev.preventDefault();
       node.style.transform = `translate(${ev.clientX - start.x}px, ${ev.clientY - start.y}px)`;
+      // Das Ziel bleibt gewählt, solange der Zeiger über seinem alten Platz ist,
+      // auch wenn es für die Vorschau schon weggerückt ist
+      const inside = (r) => r && ev.clientX >= r.left && ev.clientX <= r.right && ev.clientY >= r.top && ev.clientY <= r.bottom;
+      if (target && inside(targetRect)) return;
       const hit = document.elementFromPoint(ev.clientX, ev.clientY);
       const next = hit && hit.closest("[data-swap]");
-      target = next && next !== node ? next : null;
-      for (const n of document.querySelectorAll(".swap-target")) if (n !== target) n.classList.remove("swap-target");
-      if (target) target.classList.add("swap-target");
+      const found = next && next !== node && next !== target ? next : null;
+      if (found === target) return;
+      preview(target, false);
+      target?.classList.remove("swap-target");
+      target = found;
+      targetRect = target ? target.getBoundingClientRect() : null;
+      if (target) {
+        target.classList.add("swap-target");
+        preview(target, true);
+      }
     };
     const onUp = () => {
       window.removeEventListener("pointermove", onMove);
@@ -1083,24 +1524,40 @@
       cardDragged = true;
       setTimeout(() => (cardDragged = false), 0);
       document.body.classList.remove("sorting");
+      const from = new Map();
+      if (target) {
+        from.set(node.dataset.swap, node.getBoundingClientRect());
+        from.set(target.dataset.swap, target.getBoundingClientRect());
+      }
       node.classList.remove("lifted");
       node.style.transform = "";
       node.style.pointerEvents = "";
-      for (const n of document.querySelectorAll(".swap-target")) n.classList.remove("swap-target");
+      for (const n of document.querySelectorAll(".swap-target, .swap-out")) n.classList.remove("swap-target", "swap-out");
       if (!target) return;
       const order = state.zones.map((z) => z.path);
       const a = order.indexOf(node.dataset.swap);
       const b = order.indexOf(target.dataset.swap);
-      if (a < 0 || b < 0) return;
+      if (a < 0 || b < 0) return preview(target, false);
       [order[a], order[b]] = [order[b], order[a]];
       setZoneOrder(order);
       renderZones();
+      // Beide gleiten von dort, wo man sie zuletzt gesehen hat, an ihren neuen Platz
+      for (const [path, r] of from) {
+        const n = [...document.querySelectorAll("[data-swap]")].find((x) => x.dataset.swap === path);
+        if (!n) continue;
+        const to = n.getBoundingClientRect();
+        n.animate(
+          [{ transform: `translate(${r.left - to.left}px, ${r.top - to.top}px)` }, { transform: "none" }],
+          { duration: 320, easing: "cubic-bezier(.2,.7,.2,1)" }
+        );
+      }
       if (a < HOT_ZONES || b < HOT_ZONES) toast(t("hotSwapped", { zone: zoneLabel(order[Math.min(a, b)]) }));
     };
     window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", onUp);
     window.addEventListener("pointercancel", onUp);
   }
+
 
   function previewZone() {
     if (state.hover && state.zones.some((z) => z.path === state.hover)) return state.hover;
@@ -1114,7 +1571,7 @@
     const panel = el("section", "p-preview");
     if (path == null) return panel;
     panel.dataset.zone = path;
-    const items = zoneItems(path);
+    const items = orderedItems(path);
     const head = el("div", "p-preview-head");
     const title = el("div", "p-preview-title");
     title.appendChild(document.createTextNode(lastSegment(path)));
@@ -1141,7 +1598,7 @@
   // (z. B. Kunden / Studio B) gesammelt in einer Karte als Liste.
   function cardsLayout() {
     const groups = new Map();
-    for (const zone of state.zones) {
+    for (const zone of state.zones.slice(HOT_ZONES)) {
       const top = zone.path === "" ? "" : zone.path.split("/")[0];
       if (!groups.has(top)) groups.set(top, []);
       groups.get(top).push(zone);
@@ -1154,22 +1611,24 @@
       card.addEventListener("dragstart", (e) => e.preventDefault());
       cards.push(card);
     }
-    const add = el("article", "p-card p-new");
-    add.appendChild(el("div", "zone-card-name", "+ " + t("newZone")));
+    // „+ Neue Zone“ im selben Format wie die übrigen Karten
+    const add = el("article", "p-card p-new p-new-card");
+    add.appendChild(el("div", "p-card-cover empty"));
+    const addBody = el("div", "p-card-body");
+    const addText = el("div");
+    addText.appendChild(el("div", "zone-card-name", "+ " + t("newZone")));
+    addText.appendChild(el("div", "p-card-meta", "\u00a0"));
+    addBody.appendChild(addText);
+    add.appendChild(addBody);
     add.addEventListener("click", startNewZone);
     cards.push(add);
 
-    // Spalten wie ein Mauerwerk: jede Karte in die gerade kürzeste Spalte
+    // Raster mit gleich hohen Karten je Reihe
     const width = $("zones").clientWidth - 80;
     const count = Math.max(1, Math.min(4, Math.floor((width + 10) / 280)));
-    const wrap = el("div", "p-cards");
-    const cols = Array.from({ length: count }, () => wrap.appendChild(el("div", "p-cards-col")));
-    const heights = cols.map(() => 0);
-    for (const card of cards) {
-      const i = heights.indexOf(Math.min(...heights));
-      cols[i].appendChild(card);
-      heights[i] += (card.querySelector(".p-card-cover") ? 3 : 1) + card.querySelectorAll(".p-card-row").length;
-    }
+    const wrap = el("div", "p-cards p-cards-grid");
+    wrap.style.setProperty("--card-cols", String(count));
+    for (const card of cards) wrap.appendChild(card);
     return wrap;
   }
 
@@ -1199,12 +1658,12 @@
         const r = other.getBoundingClientRect();
         if (ev.clientX >= r.left && ev.clientX <= r.right && ev.clientY >= r.top && ev.clientY <= r.bottom) {
           target = other;
-          after = ev.clientY > r.top + r.height / 2;
+          // Die gezogene Karte nimmt den Platz des Ziels ein: nach vorn davor, nach hinten dahinter
+          after = order.indexOf(card.dataset.group) < order.indexOf(other.dataset.group);
         }
       }
       for (const other of document.querySelectorAll(".p-cards .p-card[data-group]")) {
-        other.classList.toggle("drop-before", other === target && !after);
-        other.classList.toggle("drop-after", other === target && after);
+        other.classList.toggle("drop-target", other === target);
       }
     };
     const onUp = () => {
@@ -1217,15 +1676,16 @@
       document.body.classList.remove("sorting");
       card.classList.remove("lifted");
       card.style.transform = "";
-      for (const n of document.querySelectorAll(".drop-before, .drop-after")) n.classList.remove("drop-before", "drop-after");
+      for (const n of document.querySelectorAll(".drop-target")) n.classList.remove("drop-target");
       if (!target) return;
       const tops = order.filter((top) => top !== card.dataset.group);
       tops.splice(tops.indexOf(target.dataset.group) + (after ? 1 : 0), 0, card.dataset.group);
       const rank = new Map(tops.map((top, i) => [top, i]));
       const topOf = (path) => (path === "" ? "" : path.split("/")[0]);
-      const paths = state.zones.map((z, i) => [z.path, i]);
+      // Die Active Zones oben bleiben stehen, sortiert wird der Rest
+      const paths = state.zones.slice(HOT_ZONES).map((z, i) => [z.path, i]);
       paths.sort((a, b) => rank.get(topOf(a[0])) - rank.get(topOf(b[0])) || a[1] - b[1]);
-      setZoneOrder(paths.map(([path]) => path));
+      setZoneOrder([...state.zones.slice(0, HOT_ZONES).map((z) => z.path), ...paths.map(([path]) => path)]);
       renderZones();
     };
     card.addEventListener("pointermove", onMove);
@@ -1235,20 +1695,15 @@
 
   function cardMeta(zone) {
     const latest = lastSaved(zone.path);
-    return zone.count ? countText(zone.count) + (latest ? " · " + recentDate(latest) : "") : t("emptyShort");
+    const folders = zoneFolders(zoneItems(zone.path)).filter(([f]) => f).length;
+    const inside = folders ? " · " + t(folders === 1 ? "folderCount1" : "folderCount", { n: folders }) : "";
+    return zone.count ? countText(zone.count) + inside + (latest ? " · " + recentDate(latest) : "") : t("emptyShort");
   }
 
   function zoneCardTile(zone) {
     const card = el("article", "p-card");
     card.dataset.zone = zone.path;
-    const items = zoneItems(zone.path);
-    if (items.length) {
-      const cover = el("div", "p-card-cover" + (items.length >= 3 ? " trio" : ""));
-      for (const item of items.slice(0, items.length >= 3 ? 3 : 1)) {
-        cover.appendChild(previewImg(item));
-      }
-      card.appendChild(cover);
-    }
+    card.appendChild(cardCover(orderedItems(zone.path)));
     const body = el("div", "p-card-body");
     const text = el("div");
     const name = zoneNameEl(zone);
@@ -1272,14 +1727,24 @@
     return card;
   }
 
+  // Titelbild einer Karte: ein Bild oder drei, leer als ruhige Fläche
+  function cardCover(items) {
+    const cover = el("div", "p-card-cover" + (items.length >= 3 ? " trio" : "") + (items.length ? "" : " empty"));
+    for (const item of items.slice(0, items.length >= 3 ? 3 : 1)) cover.appendChild(previewImg(item));
+    return cover;
+  }
+
   function groupCard(top, zones) {
     const card = el("article", "p-card p-card-group");
+    const paths = new Set(zones.map((z) => z.path));
+    card.appendChild(cardCover(state.items.filter((i) => paths.has(i.zone))));
     card.appendChild(el("div", "p-card-group-title", top));
     for (const zone of zones) {
       const row = el("div", "p-card-row");
       row.dataset.zone = zone.path;
-      const text = el("div");
+      const text = el("div", "p-card-row-text");
       const name = el("div", "zone-card-name", zone.path === top ? top : zone.path.slice(top.length + 1).split("/").join(" / "));
+      name.title = zoneLabel(zone.path);
       text.appendChild(name);
       text.appendChild(el("div", "p-card-meta", zone.count ? countText(zone.count) : t("emptyShort")));
       row.appendChild(text);
@@ -1312,10 +1777,12 @@
 
   function togglePage(name) {
     state.page = state.page === name ? null : name;
+    state.settingsSub = null;
     renderPage();
   }
 
   function closePage() {
+    previewDropbar(false);
     if (!state.page) return;
     state.page = null;
     renderPage();
@@ -1358,29 +1825,167 @@
     return wrap;
   }
 
+  // 3 × 2 Punkte wie eine Ausrichtungs-Wahl: oben und unten, je links, Mitte, rechts
+  function navPosPicker(rerender) {
+    const cur = pref("navPos", "tl");
+    const wrap = el("span", "p-navpos");
+    for (const id of NAV_POS) {
+      const b = button("p-navpos-dot" + (cur === id ? " on" : ""), "", () => {
+        setPref("navPos", id);
+        applyNavPos(id);
+        rerender();
+      });
+      b.title = t("navPos_" + id);
+      b.setAttribute("aria-label", t("navPos_" + id));
+      wrap.appendChild(b);
+    }
+    return wrap;
+  }
+
   function shortPath(path) {
     return String(path || "").replace(/^\/(Users|home)\/[^/]+/, "~");
   }
 
+  // Langer Pfad als eine Zeile: Anfang … die letzten Ordner, voller Pfad im Tooltip
+  function pathEl(path, extra) {
+    const full = shortPath(path);
+    const parts = full.split("/");
+    let text = full;
+    if (full.length > 44 && parts.length > 4) {
+      // Cloud-Ordner: „GoogleDrive-name@…/Meine Ablage“ wird zu „Google Drive“
+      const cloud = full.match(/Library\/CloudStorage\/([A-Za-z]+)/);
+      const head = cloud ? "~/" + cloud[1].replace(/([a-z])([A-Z])/g, "$1 $2") : parts[0];
+      text = head + "/…/" + parts.slice(-2).join("/");
+    }
+    const span = el(extra ? "div" : "span", "p-path" + (extra ? " " + extra : ""), text);
+    span.title = full;
+    return span;
+  }
+
   // Einklappbare Blöcke in den Einstellungen; der Zustand bleibt gemerkt.
   function collapsible(id, title) {
-    const b = el("section", "p-block p-collapsible");
-    const closed = new Set(pref("collapsed", ["viewer", "keys"]));
-    const head = button("p-block-title p-block-toggle", null, () => {
-      const set = new Set(pref("collapsed", ["viewer", "keys"]));
-      if (set.has(id)) set.delete(id);
-      else set.add(id);
-      setPref("collapsed", [...set]);
-      b.classList.toggle("collapsed", set.has(id));
+    return block(title);
+  }
+
+  // Ordnerstruktur: wie tief Unterordner eigene Zonen werden, welche Ordner Archiver überspringt
+  function renderStructure() {
+    const b = block(t("setStructure"));
+    const st = state.structure || { depth: 2, skip: [], subzones: false };
+    const save = async (next) => {
+      try {
+        await invoke("set_structure", { structure: { ...st, ...next } });
+        await refresh();
+      } catch (e) {
+        fail(e);
+      }
+      renderPage(true);
+    };
+    // Aus: eine Zone pro Ordner der obersten Ebene, Unterordner als Ordner darin
+    const levels = [["off", t("setSubzonesOff")], ["2", t("setLevel", { n: 2 })], ["3", t("setLevel", { n: 3 })]];
+    b.appendChild(
+      blockRow(t("setSubzones"), choice(levels, st.subzones ? String(st.depth) : "off", (id) => save(id === "off" ? { subzones: false } : { subzones: true, depth: Number(id) })))
+    );
+    const input = el("input", "p-skip-input");
+    input.value = st.skip.join(", ");
+    input.spellcheck = false;
+    input.placeholder = "Links, Backup …";
+    const commit = () => {
+      const skip = input.value.split(",").map((x) => x.trim()).filter(Boolean);
+      if (skip.join(",") !== st.skip.join(",")) save({ skip });
+    };
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") input.blur();
+      e.stopPropagation();
     });
-    head.appendChild(el("span", null, title));
-    head.appendChild(el("span", "p-block-sign"));
-    b.appendChild(head);
-    b.classList.toggle("collapsed", closed.has(id));
+    input.addEventListener("blur", commit);
+    b.appendChild(blockRow(t("setSkip"), input));
+    b.appendChild(el("p", "p-block-hint", t("setStructureHint")));
+    return b;
+  }
+
+  // Standard-Zone: wohin alles kommt, was ohne Ziel gesammelt wird (sonst Unsorted)
+  function renderDefaultZone() {
+    const b = block(t("setDefaultZone"));
+    const select = el("select", "p-select");
+    for (const z of state.zones.filter((z) => z.path !== "")) {
+      const opt = el("option", null, zoneLabel(z.path));
+      opt.value = z.path;
+      if (z.path === state.defaultZone) opt.selected = true;
+      select.appendChild(opt);
+    }
+    select.addEventListener("change", async () => {
+      try {
+        await invoke("set_default_zone", { zone: select.value });
+        await refresh();
+        renderPage(true);
+      } catch (e) {
+        fail(e);
+      }
+    });
+    b.appendChild(blockRow(t("setDefaultZoneLabel"), select));
+    b.appendChild(el("p", "p-block-hint", t("setDefaultZoneHint")));
     return b;
   }
 
   // Zonen: umbenennen, neu anlegen (die ersten vier sind die Hot Zones, Tasten 1–4)
+  // Einstellungen › Zonen: Zeile greifen und an neuen Platz schieben, die anderen rücken nach.
+  // Die ersten vier sind die Active Zones.
+  function dragZoneRow(e, row, list) {
+    if (e.button !== 0 || e.target.closest("button, input")) return;
+    const start = e.clientY;
+    let lifted = false;
+    const onMove = (ev) => {
+      if (!lifted) {
+        if (Math.abs(ev.clientY - start) < DRAG_THRESHOLD) return;
+        lifted = true;
+        row.classList.add("lifted");
+        document.body.classList.add("sorting");
+        window.getSelection().removeAllRanges();
+      }
+      ev.preventDefault();
+      const rows = [...list.children].filter((r) => r !== row);
+      const before = rows.find((r) => {
+        const b = r.getBoundingClientRect();
+        return ev.clientY < b.top + b.height / 2;
+      });
+      if (before !== row.nextSibling) {
+        const old = new Map([...list.children].map((r) => [r, r.getBoundingClientRect().top]));
+        list.insertBefore(row, before || null);
+        // Nachrückende Zeilen gleiten an ihren Platz
+        for (const r of list.children) {
+          if (r === row) continue;
+          const dy = old.get(r) - r.getBoundingClientRect().top;
+          if (!dy) continue;
+          r.animate([{ transform: `translateY(${dy}px)` }, { transform: "none" }], { duration: 160, easing: "ease-out" });
+        }
+        [...list.children].forEach((r, i) => {
+          const no = r.querySelector(".p-zone-main .p-mono");
+          if (no) {
+            no.textContent = String(i + 1).padStart(2, "0");
+            no.classList.toggle("p-zone-hot", i < HOT_ZONES);
+          }
+        });
+      }
+    };
+    const onUp = () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onUp);
+      if (!lifted) return;
+      document.body.classList.remove("sorting");
+      row.classList.remove("lifted");
+      // Der Klick nach dem Loslassen soll nicht umbenennen
+      const swallow = (ev) => ev.stopPropagation();
+      window.addEventListener("click", swallow, true);
+      setTimeout(() => window.removeEventListener("click", swallow, true), 0);
+            setZoneOrder([...list.children].map((r) => r.dataset.zone));
+      renderZones();
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onUp);
+  }
+
   function renderZoneSettings() {
     const b = collapsible("zones", t("setZones"));
     const list = el("div", "p-zone-list");
@@ -1397,6 +2002,7 @@
             async (value) => {
               try {
                 const newPath = await invoke("rename_zone", { zone: zone.path, name: value });
+                undoRename(zone.path, newPath);
                 renameInOrder(zone.path, newPath);
                 if (state.focus === zone.path) state.focus = newPath;
                 await refresh();
@@ -1439,6 +2045,7 @@
         del.classList.remove("armed");
       });
       row.lastChild.append(del);
+      row.addEventListener("pointerdown", (e) => dragZoneRow(e, row, list));
       list.appendChild(row);
     });
     b.appendChild(list);
@@ -1468,150 +2075,461 @@
   }
 
   // Zeile am Griff ziehen: wandert live mit, beim Loslassen wird gespeichert
+  // Einstellungen: oben eine ruhige Liste der Bereiche, jeder öffnet sein Untermenü.
+  // Ganz unten steht immer der Freischalt-Code.
+  const SETTINGS_SECTIONS = ["library", "view", "look", "start", "studio", "connect", "general"];
+
+  function sectionTitle(id) {
+    return t({ library: "setLibrary", view: "setSecView", look: "setLook", start: "setSecStart", studio: "setStudio", connect: "setConnect", general: "setGeneral" }[id]);
+  }
+
+  function sectionSummary(id) {
+    if (id === "library") {
+      const slots = state.libraries || [];
+      const i = slots.findIndex((l) => l.active);
+      return i >= 0 ? libraryName(slots[i], i) : shortPath(state.root);
+    }
+    if (id === "look") {
+      const th = window.ArchiverI18n.theme();
+      const scheme = window.ArchiverI18n.scheme() === "sage" ? t("schemeSage") : t("schemeStandard");
+      return t({ system: "themeSystem", light: "themeLight", dark: "themeDark" }[th]) + " · " + scheme;
+    }
+    if (id === "connect") return t("setConnectSummary");
+    if (id === "studio") {
+      const on = FEATURES.filter(feat).length;
+      return on + " / " + FEATURES.length + (state.shared ? " · " + t("featSharedOn") : "");
+    }
+    if (id === "view")
+      return t(state.view === "original" ? "viewOriginal" : "viewGrid") + " · " + t(pref("folderStyle", "cards") === "list" ? "setFolderList" : "setFolderCards");
+    if (id === "start")
+      return t(pref("revealForm", "wave") === "lid" ? "revealLid" : "revealWave") + " · " + t("setSound") + " " + (pref("startSound", true) ? t("setOn") : t("setOff")).toLowerCase();
+    return lang === "de" ? "Deutsch" : "English";
+  }
+
+  function openSettingsSection(id) {
+    previewDropbar(false);
+    state.settingsSub = id;
+    renderPage();
+  }
+
   function renderSettings() {
     const wrap = el("div", "p-sheet-inner");
-    wrap.appendChild(headline(t("settings"), t("settingsText")));
+    const sub = state.settingsSub;
+    if (!sub) {
+      wrap.appendChild(headline(t("settings"), t("settingsText")));
+      const list = el("section", "p-block p-settings-nav");
+      for (const id of SETTINGS_SECTIONS) {
+        const row = button("p-settings-link", null, () => openSettingsSection(id));
+        row.appendChild(el("span", "p-settings-link-title", sectionTitle(id)));
+        row.appendChild(el("span", "p-settings-link-sum", sectionSummary(id)));
+        row.appendChild(el("span", "p-settings-link-arrow", "›"));
+        list.appendChild(row);
+      }
+      wrap.appendChild(list);
+      wrap.appendChild(renderUnlock());
+      return wrap;
+    }
+    wrap.appendChild(button("p-settings-back", "‹ " + t("settings"), () => openSettingsSection(null)));
+    wrap.appendChild(headline(sectionTitle(sub)));
     const rerender = () => {
       renderZones();
       renderPage(true);
     };
 
-    const lib = collapsible("library", t("setLibrary"));
-    lib.appendChild(
-      blockRow(shortPath(state.root), [
-        button("p-link", t("reveal"), () => invoke("reveal_zone", { zone: "" }).catch(fail)),
-        button("p-link", t("libraryChange"), chooseLibrary),
-      ])
-    );
-    wrap.appendChild(lib);
-    wrap.appendChild(renderZoneSettings());
-    const later = [];
+    if (sub === "library") {
+      wrap.appendChild(renderLibrarySlots());
+      wrap.appendChild(renderDefaultZone());
+      wrap.appendChild(renderStructure());
+      wrap.appendChild(renderZoneSettings());
+    }
 
-    const extBlock = collapsible("extension", t("setExtension"));
-    const ext = el("div", null, "…");
-    invoke("bridge_browsers")
-      .then((list) => (ext.textContent = list.length ? t("setBridgeOn", { list: list.join(", ") }) : t("setBridgeOff")))
-      .catch(() => (ext.textContent = t("setBridgeOff")));
-    extBlock.appendChild(blockRow(ext, [button("p-link", t("import"), openImportDialog)]));
-    later.push(extBlock);
-
-    if (isMac) {
-      const viewerBlock = collapsible("viewer", t("setViewer"));
-      viewerBlock.appendChild(blockRow(el("div", "p-block-text", t("setViewerText"))));
-      const rows = el("div");
-      const showFormats = (list) =>
-        rows.replaceChildren(
-          ...list.map((f) =>
-            blockRow(
-              f.name,
-              choice([["on", t("setOn")], ["off", t("setOff")]], f.active ? "on" : "off", (id) => {
-                if (id === "off" && f.active) return toast(t("setViewerOff", { format: f.name }), true, 8000);
-                if (id === "on" && !f.active)
-                  invoke("viewer_make_default", { format: f.name })
-                    .then(() => invoke("viewer_defaults"))
-                    .then(showFormats)
-                    .catch(fail);
-              })
-            )
+    if (sub === "view") {
+      const view = block(null);
+      view.appendChild(
+        blockRow(
+          t("setImages"),
+          choice([["grid", t("viewGrid")], ["original", t("viewOriginal")]], state.view, (id) => {
+            state.view = id;
+            setPref("view", id);
+            rerender();
+          })
+        )
+      );
+      view.appendChild(
+        blockRow(
+          t("sizeLabel"),
+          sizeChips(Math.max(0, SIZES.indexOf(state.size)), SIZES.length, (step) => {
+            state.size = SIZES[step];
+            setPref("size", state.size);
+            rerender();
+          })
+        )
+      );
+      view.appendChild(
+        blockRow(
+          t("setFolderStyle"),
+          choice([["cards", t("setFolderCards")], ["list", t("setFolderList")]], pref("folderStyle", "cards"), (id) => {
+            setPref("folderStyle", id);
+            rerender();
+          })
+        )
+      );
+      for (const [key, label] of [["autoplayVideo", "setAutoplayVideo"], ["autoplayAudio", "setAutoplayAudio"]])
+        view.appendChild(
+          blockRow(
+            t(label),
+            choice([["on", t("setOn")], ["off", t("setOff")]], pref(key, false) ? "on" : "off", (id) => {
+              setPref(key, id === "on");
+              rerender();
+            })
           )
         );
-      invoke("viewer_defaults").then(showFormats).catch(fail);
-      viewerBlock.appendChild(rows);
-      later.unshift(viewerBlock);
+      view.appendChild(
+        blockRow(
+          t("setInfoPanel"),
+          choice([["on", t("setOn")], ["off", t("setOff")]], state.infoOpen ? "on" : "off", (id) => {
+            if ((id === "on") !== state.infoOpen) toggleInfo();
+            rerender();
+          })
+        )
+      );
+      wrap.appendChild(view);
     }
 
-    const view = collapsible("view", t("setView"));
-    view.appendChild(
-      blockRow(
-        t("setImages"),
-        choice([["grid", t("viewGrid")], ["original", t("viewOriginal")]], state.view, (id) => {
-          state.view = id;
-          setPref("view", id);
-          rerender();
-        })
-      )
-    );
-    view.appendChild(
-      blockRow(
-        t("sizeLabel"),
-        sizeChips(Math.max(0, SIZES.indexOf(state.size)), SIZES.length, (step) => {
-          state.size = SIZES[step];
-          setPref("size", state.size);
-          rerender();
-        })
-      )
-    );
-    view.appendChild(
-      blockRow(
-        t("setInfoPanel"),
-        choice([["on", t("setOn")], ["off", t("setOff")]], state.infoOpen ? "on" : "off", (id) => {
-          if ((id === "on") !== state.infoOpen) toggleInfo();
-          rerender();
-        })
-      )
-    );
-    view.appendChild(
-      blockRow(
-        t("setRadius"),
-        choice(
-          [["square", t("radiusSquare")], ["soft", t("radiusSoft")], ["round", t("radiusRound")], ["xl", t("radiusXl")]],
-          pref("radius", "round"),
-          (id) => {
-            setPref("radius", id);
-            applyRadius(id);
-            rerender();
-          }
+    if (sub === "look") {
+      const look = block(null);
+      look.appendChild(
+        blockRow(
+          t("setTheme"),
+          choice(
+            [["system", t("themeSystem")], ["light", t("themeLight")], ["dark", t("themeDark")]],
+            window.ArchiverI18n.theme(),
+            (id) => {
+              window.ArchiverI18n.setTheme(id);
+              rerender();
+            }
+          )
         )
-      )
-    );
-    view.appendChild(
-      blockRow(
-        t("setTheme"),
-        choice(
-          [["system", t("themeSystem")], ["light", t("themeLight")], ["dark", t("themeDark")]],
-          window.ArchiverI18n.theme(),
-          (id) => {
-            window.ArchiverI18n.setTheme(id);
+      );
+      look.appendChild(
+        blockRow(
+          t("setScheme"),
+          choice([["standard", t("schemeStandard")], ["sage", t("schemeSage")]], window.ArchiverI18n.scheme(), (id) => {
+            window.ArchiverI18n.setScheme(id);
             rerender();
-          }
+          })
         )
-      )
-    );
-    view.appendChild(
-      blockRow(
-        t("setLanguage"),
-        choice([["de", "Deutsch"], ["en", "English"]], lang, (id) => {
-          if (id === lang) return;
-          setPref("lang", id);
-          sessionStorage.setItem("archiver.reopen", "settings");
-          location.reload();
-        })
-      )
-    );
-    wrap.appendChild(view);
-    wrap.appendChild(renderSoundSettings());
-    for (const b of later) wrap.appendChild(b);
-
-    const feedback = collapsible("feedback", t("feedback"));
-    feedback.appendChild(blockRow(el("div", "p-block-text", t("feedbackText")), [button("p-link", t("feedback"), sendFeedback)]));
-    wrap.appendChild(feedback);
-
-    const keys = collapsible("keys", t("setKeys"));
-    for (const [k, v] of [
-      ["Space", t("keyPreview")],
-      ["1–4", t("keyMove")],
-      ["Del", t("trash")],
-      ["⌘F", t("navSearch")],
-      ["⌘D", t("infoPanel")],
-      ["⌘N", t("newZone")],
-      ["⌘P", t("pdfExport")],
-      ["⌘,", t("settings")],
-      ["Esc", t("keyBack")],
-    ]) {
-      keys.appendChild(blockRow(v, k));
+      );
+      look.appendChild(
+        blockRow(
+          t("setRadius"),
+          choice(
+            [["square", t("radiusSquare")], ["soft", t("radiusSoft")], ["round", t("radiusRound")], ["xl", t("radiusXl")]],
+            pref("radius", "round"),
+            (id) => {
+              setPref("radius", id);
+              applyRadius(id);
+              rerender();
+            }
+          )
+        )
+      );
+      look.appendChild(blockRow(t("setNavPos"), navPosPicker(rerender)));
+      look.appendChild(
+        blockRow(
+          t("setTopFade"),
+          choice([["fade", t("setTopFadeFade")], ["glass", t("setTopFadeGlass")]], pref("topFade", "fade"), (id) => {
+            setPref("topFade", id);
+            applyTopFade(id);
+            rerender();
+          })
+        )
+      );
+      look.appendChild(
+        blockRow(
+          t("setFocusAnim"),
+          choice([["off", t("setFocusStill")], ["on", t("setFocusRun")]], pref("focusAnim", false) ? "on" : "off", (id) => {
+            setPref("focusAnim", id === "on");
+            applyFocusAnim(id === "on");
+            rerender();
+          })
+        )
+      );
+      if (isMac) {
+        const value = mono("", "p-alpha-value");
+        const slider = el("input", "p-volume p-alpha");
+        slider.type = "range";
+        slider.min = "0";
+        slider.max = "100";
+        slider.step = "5";
+        const show = (pct) => (value.textContent = pct + " %");
+        const start = Math.round((typeof pref("winAlpha", null) === "number" ? pref("winAlpha", null) : 0.85) * 100);
+        slider.value = String(start);
+        show(start);
+        slider.addEventListener("input", () => {
+          show(slider.value);
+          applyWinAlpha(Number(slider.value) / 100);
+        });
+        slider.addEventListener("change", () => setPref("winAlpha", Number(slider.value) / 100));
+        look.appendChild(blockRow(t("setWinAlpha"), [slider, value]));
+      }
+      look.appendChild(
+        blockRow(
+          t("setReloadAnim"),
+          choice([["plain", t("setReloadPlain")], ["wave", t("setReloadWave")]], pref("reloadAnim", "plain"), (id) => {
+            setPref("reloadAnim", id);
+            if (id === "wave") reloadWave(document.getElementById("zones") || document.body);
+          })
+        )
+      );
+      wrap.appendChild(look);
+      wrap.appendChild(renderDragSettings());
     }
-    wrap.appendChild(keys);
+
+    // Start: Öffnung und Startton gehören zum selben Moment
+    if (sub === "start") {
+      const open = block(t("setReveal"));
+      // Licht-Öffnung nach Getting Started: Welle oder Lid, zum Vergleich abspielbar
+      const reveal = choice([["wave", t("revealWave")], ["lid", t("revealLid")]], pref("revealForm", "wave"), (id) => {
+        setPref("revealForm", id);
+        rerender();
+      });
+      reveal.appendChild(
+        button("p-link", t("revealPlay"), () => {
+          closePage();
+          setTimeout(() => playReveal(null), 350);
+        })
+      );
+      open.appendChild(blockRow(t("setReveal"), reveal));
+      wrap.appendChild(open);
+      wrap.appendChild(renderSoundSettings());
+    }
+
+    if (sub === "connect") {
+      const extBlock = block(t("setExtension"));
+      const ext = el("div", null, "…");
+      invoke("bridge_browsers")
+        .then((list) => (ext.textContent = list.length ? t("setBridgeOn", { list: list.join(", ") }) : t("setBridgeOff")))
+        .catch(() => (ext.textContent = t("setBridgeOff")));
+      extBlock.appendChild(blockRow(ext, [button("p-link", t("import"), openImportDialog)]));
+      wrap.appendChild(extBlock);
+      if (isMac) {
+        const viewerBlock = block(t("setViewer"));
+        viewerBlock.appendChild(blockRow(el("div", "p-block-text", t("setViewerText"))));
+        const rows = el("div");
+        const showFormats = (list) =>
+          rows.replaceChildren(
+            ...list.map((f) =>
+              blockRow(
+                f.name,
+                choice([["on", t("setOn")], ["off", t("setOff")]], f.active ? "on" : "off", (id) => {
+                  if (id === "off" && f.active) return toast(t("setViewerOff", { format: f.name }), true, 8000);
+                  if (id === "on" && !f.active)
+                    invoke("viewer_make_default", { format: f.name })
+                      .then(() => invoke("viewer_defaults"))
+                      .then(showFormats)
+                      .catch(fail);
+                })
+              )
+            )
+          );
+        invoke("viewer_defaults").then(showFormats).catch(fail);
+        viewerBlock.appendChild(rows);
+        wrap.appendChild(viewerBlock);
+      }
+    }
+
+    if (sub === "studio") renderStudioSettings(wrap, rerender);
+
+    if (sub === "general") {
+      const general = block(t("setLanguage"));
+      general.appendChild(
+        blockRow(
+          t("setLanguage"),
+          choice([["de", "Deutsch"], ["en", "English"]], lang, (id) => {
+            if (id === lang) return;
+            setPref("lang", id);
+            sessionStorage.setItem("archiver.reopen", "settings:general");
+            location.reload();
+          })
+        )
+      );
+      wrap.appendChild(general);
+
+      const feedback = block(t("feedback"));
+      feedback.appendChild(blockRow(el("div", "p-block-text", t("feedbackText")), [button("p-link", t("feedback"), sendFeedback)]));
+      wrap.appendChild(feedback);
+
+      const keys = block(t("setKeys"));
+      for (const [k, v] of [
+        ["Space", t("keyPreview")],
+        ["1–4", t("keyMove")],
+        ["⇧ ← →", t("keyExtend")],
+        ["Del", t("trash")],
+        ["⌘F", t("navSearch")],
+        ["⌘D", t("infoPanel")],
+        ["⌘N", t("newZone")],
+        ["⌘P", t("pdfExport")],
+        ["⌘,", t("settings")],
+        ["Esc", t("keyBack")],
+      ]) {
+        keys.appendChild(blockRow(v, k));
+      }
+      wrap.appendChild(keys);
+    }
     return wrap;
+  }
+
+  // Studio: Schalter je Funktion, dazu Name und geteilte Bibliothek
+  function renderStudioSettings(wrap, rerender) {
+    wrap.appendChild(el("p", "p-block-hint p-studio-lead", t("setStudioText")));
+    const tools = block(t("featTools"));
+    for (const [id, title, text] of [
+      ["notes", "featNotes", "featNotesText"],
+      ["rights", "featRights", "featRightsText"],
+      ["package", "featPackage", "featPackageText"],
+    ]) {
+      tools.appendChild(
+        blockRow(
+          [el("div", null, t(title)), el("div", "p-block-text dim", t(text))],
+          choice([["on", t("setOn")], ["off", t("setOff")]], feat(id) ? "on" : "off", (v) => {
+            setPref("feat." + id, v === "on");
+            for (const item of state.items) item._idx = null;
+            cardCache.clear();
+            rerender();
+            renderInfo();
+          })
+        )
+      );
+    }
+
+    const team = block(t("featShared"));
+    team.appendChild(blockRow(el("div", "p-block-text", t("featSharedText"))));
+    const name = el("input", "p-input note-field");
+    name.value = state.user || "";
+    name.placeholder = t("featUserPlaceholder");
+    name.spellcheck = false;
+    const saveName = () => {
+      const v = name.value.trim();
+      if (v === (state.user || "")) return;
+      state.user = v;
+      invoke("set_sharing", { shared: state.shared, user: v || null }).catch(fail);
+    };
+    name.addEventListener("blur", saveName);
+    name.addEventListener("keydown", (e) => {
+      e.stopPropagation();
+      if (e.key === "Enter" || e.key === "Escape") name.blur();
+    });
+    team.appendChild(blockRow([el("div", null, t("featUser")), el("div", "p-block-text dim", t("featUserText"))], name));
+    team.appendChild(
+      blockRow(
+        t("featShared"),
+        choice([["off", t("featSharedOff")], ["on", t("featSharedOn")]], state.shared ? "on" : "off", async (v) => {
+          const shared = v === "on";
+          if (shared === state.shared) return;
+          const user = name.value.trim();
+          if (shared && !user) {
+            name.focus();
+            return toast(t("featSharedNeedsName"), false);
+          }
+          try {
+            await invoke("set_sharing", { shared, user: user || null });
+            state.user = user;
+            await refresh();
+            toast(t(shared ? "featSharedDone" : "featSharedOffDone"));
+          } catch (e) {
+            fail(e);
+          }
+          rerender();
+        })
+      )
+    );
+    wrap.appendChild(team);
+    wrap.appendChild(tools);
+  }
+
+  // Zonen beim Ziehen: Deckkraft, gilt in der App und (über die Bibliothek) in der Extension
+  function dragAlpha() {
+    const v = pref("zoneAlpha", null);
+    return typeof v === "number" ? v : null;
+  }
+
+  function applyDragAlpha() {
+    const v = dragAlpha();
+    if (v == null) document.documentElement.style.removeProperty("--zone-alpha");
+    else document.documentElement.style.setProperty("--zone-alpha", String(v));
+  }
+
+  function renderDragSettings() {
+    const b = block(t("setDragZones"));
+    b.appendChild(blockRow(el("div", "p-block-text", t("setDragZonesText"))));
+    const value = mono("", "p-alpha-value");
+    const slider = el("input", "p-volume p-alpha");
+    slider.type = "range";
+    slider.min = "30";
+    slider.max = "100";
+    slider.step = "5";
+    const show = (pct) => (value.textContent = pct + " %");
+    const start = Math.round((dragAlpha() ?? 0.9) * 100);
+    slider.value = String(start);
+    show(start);
+    slider.addEventListener("input", () => {
+      show(slider.value);
+      document.documentElement.style.setProperty("--zone-alpha", String(Number(slider.value) / 100));
+      previewDropbar(true);
+    });
+    slider.addEventListener("change", () => {
+      const v = Number(slider.value) / 100;
+      setPref("zoneAlpha", v);
+      invoke("set_drag_alpha", { alpha: v }).catch(() => {});
+      setTimeout(() => previewDropbar(false), 900);
+    });
+    b.appendChild(blockRow(t("setDragAlpha"), [slider, value]));
+    return b;
+  }
+
+  // Ganz unten: Freischalt-Code eingeben, danach nur noch ein ruhiges „Freigeschaltet“
+  function renderUnlock() {
+    const b = block(t("unlockTitle"));
+    b.classList.add("p-unlock");
+    if (isUnlocked()) {
+      b.appendChild(blockRow(el("div", "p-block-text", t("unlockDone")), mono("●", "p-unlock-dot")));
+      return b;
+    }
+    b.appendChild(el("div", "p-block-text p-unlock-text", t("unlockText")));
+    b.appendChild(unlockForm());
+    return b;
+  }
+
+  // Eingabe für den Code: in den Einstellungen und direkt im Sperr-Hinweis
+  function unlockForm() {
+    const form = el("form", "p-unlock-form");
+    const input = el("input", "p-unlock-input");
+    input.placeholder = t("unlockPlaceholder");
+    input.spellcheck = false;
+    input.autocomplete = "off";
+    input.setAttribute("autocapitalize", "characters");
+    const go = el("button", "p-unlock-go", t("unlockButton"));
+    go.type = "submit";
+    form.append(input, go);
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const hash = await unlockHash(input.value);
+      if (!UNLOCK_HASHES.includes(hash)) {
+        form.classList.remove("wrong");
+        void form.offsetWidth;
+        form.classList.add("wrong");
+        input.select();
+        return;
+      }
+      setPref("unlock", hash);
+      applyLock();
+      if (state.page) renderPage(true);
+      toast(t("unlockOk"));
+    });
+    input.addEventListener("input", () => form.classList.remove("wrong"));
+    input.addEventListener("keydown", (e) => e.stopPropagation());
+    return form;
   }
 
   // Startton: Ein/Aus, Lautstärke mit Probehören, eigene Datei oder der Standard
@@ -1706,7 +2624,7 @@
     const version = el("span", null, "–");
     if (TAURI.app && TAURI.app.getVersion) TAURI.app.getVersion().then((v) => (version.textContent = v)).catch(() => {});
     meta.appendChild(blockRow(t("aboutVersion"), version));
-    meta.appendChild(blockRow(t("setLibrary"), shortPath(state.root)));
+    meta.appendChild(blockRow(t("setLibrary"), pathEl(state.root)));
     meta.appendChild(blockRow(t("aboutFont"), "SIL OFL"));
     wrap.appendChild(meta);
 
@@ -1721,12 +2639,18 @@
     const shown = single ? state.zones.filter((z) => z.path === state.focus) : state.zones;
     const wrap = el("div", "p-page p-gallery");
 
+    const all = single && shown[0] ? zoneItems(shown[0].path) : [];
+    const hasFolders = zoneFolders(all).some(([f]) => f);
+    // Ebenenweise: im Ordner nur seine eigenen Unterordner
+    const folders = zoneFolders(all, state.folder || null);
+    const here = state.folder ? all.filter((i) => inFolder(i, state.folder)) : all;
     if (single && shown[0]) {
       const zone = shown[0];
-      const items = state.lists.get(zone.path) || [];
+      const items = all;
       const latest = lastSaved(zone.path);
+      const named = zoneFolders(all).filter(([f]) => f).length;
       const sentence = items.length
-        ? [t("headZone", { count: countText(items.length), date: recentDate(latest) }), topDomains(items)].filter(Boolean).join(" ")
+        ? [t("headZone", { count: countText(items.length), date: recentDate(latest) }).replace(/\.\.$/, "."), hasFolders ? t(named === 1 ? "headFolder1" : "headFolders", { n: named }) : "", topDomains(items)].filter(Boolean).join(" ")
         : t("headZoneEmpty");
       const h = headline(lastSegment(zone.path), sentence);
       if (canEdit(zone.path)) {
@@ -1735,7 +2659,30 @@
         title.title = t("renameHint");
         title.addEventListener("dblclick", () => startRename(title, zone.path));
       }
-      wrap.appendChild(h);
+      if (hasFolders && state.folder != null) {
+        // Im Unterordner: Pfad „Zone / Ordner / Unterordner“, jeder Teil führt auf seine Ebene
+        const title = h.querySelector(".p-head-title");
+        const back = (node, target) => {
+          node.classList.add("p-head-back");
+          node.title = t("folderBack");
+          node.addEventListener("click", () => openFolder(target));
+        };
+        back(title, null);
+        const parts = state.folder ? state.folder.split("/") : [""];
+        let after = title;
+        parts.forEach((part, i) => {
+          const span = el("span", "p-head-title p-head-folder", " / " + (part || t("folderLoose")));
+          if (i < parts.length - 1) back(span, parts.slice(0, i + 1).join("/"));
+          after.after(span);
+          after = span;
+        });
+      }
+      if (hasFolders) {
+        // Kopfzeile am Bildraster: Titel links, Ordner rechts als Karten (3/6) oder Liste (2/6)
+        const row = el("div", "p-head-row " + (pref("folderStyle", "cards") === "list" ? "is-list" : "is-cards"));
+        row.append(h, folderCards(zone, folders, here));
+        wrap.appendChild(row);
+      } else wrap.appendChild(h);
     } else if (searching) {
       wrap.classList.add("p-find");
       const n = state.found ? state.found.length : 0;
@@ -1749,10 +2696,26 @@
     }
 
     const bar = el("div", "p-bar");
-    if (single && shown[0]) bar.appendChild(mono(t("allLabel") + " (" + shown[0].count + ")", "strong"));
+    if (single && shown[0] && hasFolders) bar.appendChild(folderChips(shown[0], folders, here.length));
+    else if (single && shown[0]) bar.appendChild(mono(t("allLabel") + " (" + shown[0].count + ")", "strong"));
     else if (state.found) bar.appendChild(mono(t("foundLabel") + " (" + state.found.length + ")", "strong"));
     else bar.appendChild(mono(t("allZonesLabel") + " (" + state.zones.length + ")", "strong"));
     bar.appendChild(el("span", "p-flex"));
+    if (single && shown[0]) {
+      const copies = cloudCopies(all);
+      if (copies.length) {
+        const c = chip("(" + t("cloudCopies", { n: copies.length }) + ")", false, () => mergeCloudCopies(copies));
+        c.classList.add("p-cloud-copies");
+        c.title = t("cloudCopiesHint");
+        bar.appendChild(c);
+        bar.appendChild(el("span", "p-filter-gap"));
+      }
+    }
+    if (single && shown[0] && hasFolders) {
+      for (const l of ["mosaic", "sections"])
+        bar.appendChild(chip("(" + t(l === "mosaic" ? "layoutMosaic" : "layoutSections") + ")", zoneLayout(shown[0].path) === l, () => setZoneLayout(shown[0].path, l)));
+      bar.appendChild(el("span", "p-filter-gap"));
+    }
     for (const v of ["grid", "original"]) {
       const c = chip("(" + t(v === "grid" ? "viewGrid" : "viewOriginal") + ")", state.view === v, () => {
         state.view = v;
@@ -1774,6 +2737,10 @@
     // Suche oder Filter: eine Liste nach Relevanz statt nach Zonen
     if (state.found) {
       wrap.appendChild(foundSection(state.found));
+      return wrap;
+    }
+    if (single && shown[0] && hasFolders && zoneLayout(shown[0].path) === "sections") {
+      wrap.appendChild(folderSections(shown[0]));
       return wrap;
     }
     shown.forEach((zone) => {
@@ -1842,6 +2809,33 @@
     return card;
   }
 
+  // „Sections“: je Ordner eine Kopfzeile, darunter sein Raster
+  function folderSections(zone) {
+    const list = state.lists.get(zone.path) || [];
+    const wrap = el("div", "p-folder-sections");
+    const base = state.folder || null;
+    for (const [folder, n] of zoneFolders(list, base).concat(base && list.some((i) => childFolder(i, base) === "") ? [["", 0]] : [])) {
+      const part = list.filter((i) => childFolder(i, base) === folder);
+      const card = el("section", "zone-card p-section p-folder-section");
+      card.dataset.zone = zone.path;
+      const head = el("h2", "p-head p-folder-head");
+      head.appendChild(el("span", "p-head-title", folder ? lastSegment(folder) : base ? lastSegment(base) : t("folderLoose")));
+      head.appendChild(el("span", "p-head-text", " " + countText(part.length)));
+      card.appendChild(head);
+      const body = el("div", "zone-card-grid");
+      body.tabIndex = -1;
+      const items = el("div", "zone-card-items");
+      if (state.view === "original") {
+        items.classList.add("p-masonry");
+        masonryLists.set(items, part);
+      } else for (const item of part) items.appendChild(itemCard(item));
+      body.appendChild(items);
+      card.appendChild(body);
+      wrap.appendChild(card);
+    }
+    return wrap;
+  }
+
   function foundSection(list) {
     const card = el("section", "zone-card p-section p-found");
     const body = el("div", "zone-card-grid");
@@ -1866,6 +2860,11 @@
     } else {
       name.textContent = lastSegment(zone.path);
     }
+    if (zoneHasFresh(zone.path)) {
+      const dot = el("span", "p-fresh-dot");
+      dot.title = t("freshHint");
+      name.appendChild(dot);
+    }
     return name;
   }
 
@@ -1878,13 +2877,16 @@
   }
 
   function canEdit(path) {
-    return path !== "" && path !== "Inbox";
+    return path !== "" && path !== (state.defaultZone || "Unsorted");
   }
 
   // ---- Zonen-Menü (⋯): Umbenennen, im Finder zeigen, löschen ----
 
   function closeMenus() {
     for (const m of document.querySelectorAll(".zone-menu")) m.remove();
+    for (const b of document.querySelectorAll(".zone-menu-btn.open")) b.classList.remove("open");
+    const lib = $("libTabBtn");
+    if (lib) lib.classList.remove("active");
     if (pendingRender) {
       pendingRender = false;
       render();
@@ -1896,9 +2898,20 @@
     btn.title = t("zoneOptions");
     btn.addEventListener("click", (e) => {
       e.stopPropagation();
-      const open = btn.parentElement.querySelector(".zone-menu");
+      const open = btn.classList.contains("open");
       closeMenus();
-      if (!open) btn.parentElement.appendChild(zoneMenu(zone));
+      if (open) return;
+      // Schwebt über allem: Karten schneiden ihren Inhalt ab
+      const menu = zoneMenu(zone);
+      menu.classList.add("floating");
+      document.body.appendChild(menu);
+      const r = btn.getBoundingClientRect();
+      const h = menu.offsetHeight;
+      const w = menu.offsetWidth;
+      const below = r.bottom + 4 + h <= window.innerHeight - 8;
+      menu.style.top = (below ? r.bottom + 4 : Math.max(8, r.top - 4 - h)) + "px";
+      menu.style.left = Math.max(8, Math.min(window.innerWidth - w - 8, r.right - w)) + "px";
+      btn.classList.add("open");
     });
     return btn;
   }
@@ -1922,6 +2935,25 @@
         invoke("reveal_zone", { zone: zone.path }).catch(fail);
       })
     );
+    if (feat("package") && zone.count) {
+      menu.appendChild(
+        button("zone-menu-item", t("packageExport"), () => {
+          closeMenus();
+          exportPackage(applyItemOrder(zone.path, state.items.filter((i) => i.zone === zone.path)), lastSegment(zone.path) || state.name);
+        })
+      );
+    }
+    if (feat("order") && state.order[zone.path]) {
+      menu.appendChild(
+        button("zone-menu-item", t("orderReset"), () => {
+          closeMenus();
+          const { [zone.path]: _, ...rest } = state.order;
+          state.order = rest;
+          renderZones();
+          invoke("set_item_order", { zone: zone.path, hashes: [] }).catch(fail);
+        })
+      );
+    }
     if (canEdit(zone.path)) {
       const del = button("zone-menu-item danger", t("trashZone"));
       let armed = false;
@@ -1933,18 +2965,79 @@
           return;
         }
         closeMenus();
-        try {
-          await invoke("trash_zone", { zone: zone.path });
-          if (state.focus === zone.path) state.focus = null;
-          await refresh();
-          toast(t("zoneTrashed", { zone: zoneLabel(zone.path) }));
-        } catch (e) {
-          fail(e);
-        }
+        trashZone(zone);
       });
       menu.appendChild(del);
     }
     return menu;
+  }
+
+  // Rechtsklick auf eine Zone der Übersicht (Karte oder Index-Zeile): Öffnen,
+  // Active Zone, PDF und dieselben Einträge wie im ⋯-Menü
+  function openZoneContext(path, x, y) {
+    const zone = state.zones.find((z) => z.path === path);
+    if (!zone) return;
+    closeMenus();
+    const menu = zoneMenu(zone);
+    menu.classList.add("floating", "p-zone-ctx");
+    const first = menu.firstChild;
+    const add = (label, fn) => menu.insertBefore(button("zone-menu-item", label, () => (closeMenus(), fn())), first);
+    add(t("openFile"), () => setFocus(zone.path));
+    const order = state.zones.map((z) => z.path);
+    const at = order.indexOf(zone.path);
+    if (at >= HOT_ZONES && order.length > HOT_ZONES) {
+      add(t("makeHot"), () => {
+        const slot = HOT_ZONES - 1;
+        [order[at], order[slot]] = [order[slot], order[at]];
+        setZoneOrder(order);
+        renderZones();
+        toast(t("hotSwapped", { zone: zoneLabel(zone.path) }));
+      });
+    }
+    if (zone.count) {
+      add(t("zonePdf"), () => openPdfMaker(applyItemOrder(zone.path, state.items.filter((i) => i.zone === zone.path)), zoneLabel(zone.path)));
+    }
+    document.body.appendChild(menu);
+    const w = menu.offsetWidth;
+    const h = menu.offsetHeight;
+    menu.style.left = Math.max(8, Math.min(window.innerWidth - w - 8, x)) + "px";
+    menu.style.top = Math.max(8, Math.min(window.innerHeight - h - 8, y)) + "px";
+  }
+
+  async function trashZone(zone) {
+    try {
+      await invoke("trash_zone", { zone: zone.path });
+      if (state.focus === zone.path) state.focus = null;
+      await refresh();
+      toast(t("zoneTrashed", { zone: zoneLabel(zone.path) }));
+    } catch (e) {
+      fail(e);
+    }
+  }
+
+  // ⌫ auf der Startseite: gewählte oder überfahrene Zone löschen, nach Rückfrage.
+  function askTrashZone(path) {
+    const zone = state.zones.find((z) => z.path === path);
+    if (!zone || !canEdit(zone.path)) return false;
+    const dialog = el("div", "dialog confirm");
+    dialog.appendChild(el("h3", null, t("trashZoneAsk", { zone: zoneLabel(zone.path) })));
+    const count = zone.count === 1 ? t("countImage") : t("countImages", { n: zone.count });
+    dialog.appendChild(el("p", null, zone.count ? t("trashZoneAskText", { count }) : t("trashZoneAskEmpty")));
+    const foot = el("div", "confirm-foot");
+    const go = () => {
+      closeModal();
+      trashZone(zone);
+    };
+    foot.appendChild(button("btn", t("cancel"), closeModal));
+    const ok = button("btn danger-fill", t("trashZoneDo"), go);
+    foot.appendChild(ok);
+    dialog.appendChild(foot);
+    const modal = $("modal");
+    modal.replaceChildren(dialog);
+    modal.hidden = false;
+    modal.onEnter = go;
+    ok.focus();
+    return true;
   }
 
   // Originalansicht wie ein Moodboard: Bild 1 in Spalte 1, Bild 2 in Spalte 2 …
@@ -1975,9 +3068,14 @@
       img.loading = "lazy";
       img.decoding = "async";
       img.alt = "";
+      // Noch nicht geladen: Glasfläche wie die Zonenleiste, beim Laden blendet sie weich aus
+      const done = () => card.classList.remove("loading");
+      img.addEventListener("load", done);
+      img.addEventListener("error", done);
       card.appendChild(img);
       card.appendChild(el("div", "card-badge"));
       card.appendChild(el("div", "card-media"));
+      card.appendChild(el("span", "card-fresh"));
       cardCache.set(item.path, card);
     }
     const label = mediaLabel(item);
@@ -1989,10 +3087,12 @@
     card.classList.toggle("card-text", !!quote);
     let sheet = card.querySelector(".text-sheet");
     if (quote) {
-      if (!sheet || sheet.dataset.quote !== quote) {
+      const tone = toneKey(item);
+      if (!sheet || sheet.dataset.quote !== quote || sheet.dataset.tone !== tone) {
         if (sheet) sheet.remove();
         sheet = textSheet(item, "text-sheet");
         sheet.dataset.quote = quote;
+        sheet.dataset.tone = tone;
         card.insertBefore(sheet, img);
       }
       img.hidden = true;
@@ -2000,17 +3100,32 @@
       if (sheet) sheet.remove();
       img.hidden = false;
       const src = thumbSrc(item);
-      if (img.getAttribute("src") !== src) img.src = src;
+      if (img.getAttribute("src") !== src) {
+        card.classList.add("loading");
+        img.src = src;
+        if (img.complete && img.naturalWidth) card.classList.remove("loading");
+      }
     }
-    card.querySelector(".card-badge").textContent = domainOf(item.pageUrl) || item.filename;
+    // Geteilte Bibliothek: Kürzel der Person, die abgelegt hat, nur bei Objekten anderer
+    const by = item.addedBy && item.addedBy !== state.user ? byInitials(item.addedBy) + " · " : "";
+    card.querySelector(".card-badge").textContent =
+      (feat("rights") && item.internal ? t("internalBadge") + " · " : "") + by + (domainOf(item.pageUrl) || item.filename);
+    card.classList.toggle("card-internal", feat("rights") && !!item.internal);
     // Seitenverhältnis fürs Bild, damit die Spalten vor dem Laden stehen
     if (state.view === "original" && item.width && item.height) card.style.setProperty("--ar", `${item.width} / ${item.height}`);
     else card.style.removeProperty("--ar");
     card.classList.toggle("selected", state.selection.has(item.path));
+    card.classList.toggle("fresh", isFresh(item));
     return card;
   }
 
   function setFocus(path) {
+    // Zone verlassen: was darin neu von anderen war, gilt als gesehen
+    if (path !== state.focus && isZone(state.focus) && state.shared) markSeen(zoneItems(state.focus));
+    if (path !== state.focus) {
+      state.folder = null;
+      state.folderKbd = null;
+    }
     state.focus = path;
     setPref("focus", path);
     if (state.query) {
@@ -2064,6 +3179,9 @@
     const panel = $("info");
     panel.hidden = !state.infoOpen;
     if (!state.infoOpen) return;
+    // Nicht unter den Fingern neu zeichnen, solange Notiz oder Rechte bearbeitet werden
+    const active = document.activeElement;
+    if (active && panel.contains(active) && active.matches("textarea, input")) return;
     panel.innerHTML = "";
     const items = selectedItems();
 
@@ -2076,6 +3194,7 @@
       panel.appendChild(el("div", "info-multi", t("selected", { n: items.length })));
       panel.appendChild(zoneSelect(null, (zone) => moveSelection(zone)));
       const actions = el("div", "info-actions");
+      if (feat("package")) actions.appendChild(button("btn", t("packageExport"), () => exportPackage(items, t("pdfSelection"))));
       actions.appendChild(button("btn danger", t("trash"), trashSelection));
       panel.appendChild(actions);
       return;
@@ -2096,27 +3215,33 @@
   function selectOnly(path) {
     state.selection = new Set(path ? [path] : []);
     state.anchor = path;
+    state.lead = path;
+    updateSelectionClasses();
+  }
+
+  // Shift: alles zwischen Anker und Ziel in sichtbarer Reihenfolge auswählen.
+  function extendTo(path, keep) {
+    const flat = allVisible().map((i) => i.path);
+    const a = flat.indexOf(state.anchor);
+    const b = flat.indexOf(path);
+    if (a < 0 || b < 0) return selectOnly(path);
+    const [from, to] = a < b ? [a, b] : [b, a];
+    if (!keep) state.selection.clear();
+    for (let i = from; i <= to; i++) state.selection.add(flat[i]);
+    state.lead = path;
     updateSelectionClasses();
   }
 
   function clickCard(path, e) {
-    const item = state.byPath.get(path);
-    if (e.shiftKey && state.anchor && state.byPath.get(state.anchor)?.zone === item.zone) {
-      const paths = (state.lists.get(item.zone) || []).map((i) => i.path);
-      const a = paths.indexOf(state.anchor);
-      const b = paths.indexOf(path);
-      if (a >= 0 && b >= 0) {
-        const [from, to] = a < b ? [a, b] : [b, a];
-        if (!(e.metaKey || e.ctrlKey)) state.selection.clear();
-        for (let i = from; i <= to; i++) state.selection.add(paths[i]);
-        updateSelectionClasses();
-        return;
-      }
+    if (e.shiftKey && state.anchor && state.byPath.has(state.anchor)) {
+      extendTo(path, e.metaKey || e.ctrlKey);
+      return;
     }
     if (e.metaKey || e.ctrlKey) {
       if (state.selection.has(path)) state.selection.delete(path);
       else state.selection.add(path);
       state.anchor = path;
+      state.lead = path;
       updateSelectionClasses();
       return;
     }
@@ -2135,28 +3260,74 @@
   }
 
   // Pfeiltasten: ←/→ durch alle sichtbaren Bilder, ↑/↓ innerhalb einer Kachel.
-  function moveCursor(dir) {
-    const anchor = state.anchor && state.byPath.get(state.anchor);
+  // Mit Shift wächst die Auswahl vom Anker aus mit.
+  function moveCursor(dir, extend) {
+    const cur = (extend && state.lead) || state.anchor;
+    const anchor = cur && state.byPath.get(cur);
+    const go = (p) => (extend && state.anchor ? (extendTo(p), scrollIntoView(p)) : selectAndShow(p));
     const flat = allVisible();
     if (!flat.length) return;
     if (!anchor) return selectAndShow(flat[0].path);
     if (dir === "left" || dir === "right") {
       const i = flat.findIndex((x) => x.path === anchor.path);
       const next = flat[Math.max(0, Math.min(flat.length - 1, i + (dir === "right" ? 1 : -1)))];
-      return selectAndShow(next.path);
+      return go(next.path);
     }
     const col = cardCache.get(anchor.path)?.parentElement;
     if (col && col.classList.contains("p-masonry-col")) {
       const card = cardCache.get(anchor.path);
       const next = dir === "down" ? card.nextElementSibling : card.previousElementSibling;
-      if (next) selectAndShow(next.dataset.path);
+      if (next) go(next.dataset.path);
       return;
     }
     const list = state.lists.get(anchor.zone) || [];
     const i = list.findIndex((x) => x.path === anchor.path);
     const step = columnsOf(anchor.zone) * (dir === "down" ? 1 : -1);
     const next = list[Math.max(0, Math.min(list.length - 1, i + step))];
-    if (next) selectAndShow(next.path);
+    if (next) go(next.path);
+  }
+
+  // Ordnerkarten per Tastatur: ↑ aus der obersten Bildreihe springt auf die Karten,
+  // ←→ wechselt, Enter/Leertaste filtert, ↓ und Esc führen zurück zu den Bildern.
+  function folderKey(e) {
+    const cards = [...document.querySelectorAll(".p-folder-card")];
+    if (!cards.length) return false;
+    const list = !!document.querySelector(".p-head-row.is-list");
+    const mark = (i) => {
+      state.folderKbd = i;
+      cards.forEach((c, n) => c.classList.toggle("kbd-focus", n === i));
+      if (i != null) cards[i].scrollIntoView({ block: "nearest", behavior: "smooth" });
+    };
+    if (state.folderKbd != null && cards[state.folderKbd]) {
+      const i = state.folderKbd;
+      // Liste: ↑↓ wandern durch die Einträge, ↓ vom letzten zurück zu den Bildern
+      if (list && (e.key === "ArrowUp" || (e.key === "ArrowDown" && i < cards.length - 1))) {
+        mark(Math.max(0, i + (e.key === "ArrowUp" ? -1 : 1)));
+        return true;
+      }
+      if (e.key === "ArrowRight" || e.key === "ArrowLeft") mark(Math.max(0, Math.min(cards.length - 1, i + (e.key === "ArrowRight" ? 1 : -1))));
+      else if (e.key === "Enter" || e.key === " ") cards[i].click();
+      else if (e.key === "ArrowDown" || e.key === "Escape") {
+        mark(null);
+        const first = allVisible()[0];
+        if (e.key === "ArrowDown" && first) selectAndShow(first.path);
+      } else return false;
+      return true;
+    }
+    if (e.key !== "ArrowUp" || e.shiftKey) return false;
+    const flat = allVisible();
+    const anchor = state.anchor && cardCache.get(state.anchor);
+    const top = flat[0] && cardCache.get(flat[0].path);
+    if (anchor && top && anchor.getBoundingClientRect().top > top.getBoundingClientRect().top + 4) return false;
+    const x = anchor ? anchor.getBoundingClientRect().left + anchor.offsetWidth / 2 : 0;
+    let best = 0;
+    cards.forEach((c, n) => {
+      const r = c.getBoundingClientRect();
+      if (Math.abs(r.left + r.width / 2 - x) < Math.abs(cards[best].getBoundingClientRect().left + cards[best].offsetWidth / 2 - x)) best = n;
+    });
+    selectOnly(null);
+    mark(list ? cards.length - 1 : best);
+    return true;
   }
 
   function selectAndShow(path) {
@@ -2180,14 +3351,45 @@
     selectAndShow(list[Math.min(pos.index, list.length - 1)].path);
   }
 
+  // ---- ⌘Z: Verschieben, Löschen und Umbenennen rückgängig ----
+  const undoStack = [];
+  const UNDO_MAX = 30;
+
+  function pushUndo(label, run) {
+    undoStack.push({ label, run });
+    if (undoStack.length > UNDO_MAX) undoStack.shift();
+  }
+
+  async function undo() {
+    const step = undoStack.pop();
+    if (!step) return toast(t("undoNothing"));
+    try {
+      await step.run();
+      await refresh();
+      toast(t("undone", { what: step.label }));
+    } catch (e) {
+      fail(e);
+    }
+  }
+
   async function moveSelection(zone) {
     const items = selectedItems().filter((i) => i.zone !== zone);
     if (!items.length) return;
     const pos = rememberPosition(items);
     try {
-      await invoke("move_items", { paths: items.map((i) => i.path), zone });
+      const moved = await invoke("move_items", { paths: items.map((i) => i.path), zone });
+      if (Array.isArray(moved) && moved.length === items.length) {
+        // zurück in den genauen Ordner (auch Unterordner einer Zone)
+        const back = items.map((i, k) => [moved[k], i.path.includes("/") ? i.path.slice(0, i.path.lastIndexOf("/")) : i.zone]);
+        pushUndo(t("undoMove"), async () => {
+          for (const z of new Set(back.map(([, z]) => z))) {
+            await invoke("move_items", { paths: back.filter(([, b]) => b === z).map(([p]) => p), zone: z });
+          }
+        });
+      }
       await refresh();
       selectNextAt(pos);
+      tourStats.drops++;
       toast(t("moved", { n: items.length, zone: zoneLabel(zone) }));
     } catch (e) {
       fail(e);
@@ -2226,7 +3428,8 @@
     if (!items.length) return;
     const pos = rememberPosition(items);
     try {
-      await invoke("trash_items", { paths: items.map((i) => i.path) });
+      const trashed = await invoke("trash_items", { paths: items.map((i) => i.path) });
+      if (Array.isArray(trashed) && trashed.length) pushUndo(t("undoTrash"), () => invoke("restore_items", { items: trashed }));
       await refresh();
       selectNextAt(pos);
       toast(t("trashed", { n: items.length }));
@@ -2235,7 +3438,41 @@
     }
   }
 
+  // ---- iCloud-Konfliktkopien („Bild 2.jpg“ neben „Bild.jpg“) ----
+  // Nur inhaltsgleiche Kopien zählen; abweichende bleiben unangetastet.
+  function cloudCopies(items) {
+    const out = [];
+    for (const item of items) {
+      const m = /^(.*) (\d{1,2})(\.[^./]+)?$/.exec(item.path);
+      if (!m) continue;
+      const orig = state.byPath.get(m[1] + (m[3] || ""));
+      if (orig && orig.hash === item.hash) out.push(item);
+    }
+    return out;
+  }
+
+  async function mergeCloudCopies(copies) {
+    if (!copies.length) return;
+    try {
+      const trashed = await invoke("trash_items", { paths: copies.map((i) => i.path) });
+      if (Array.isArray(trashed) && trashed.length) pushUndo(t("undoTrash"), () => invoke("restore_items", { items: trashed }));
+      await refresh();
+      toast(t("cloudMerged", { n: copies.length }));
+    } catch (e) {
+      fail(e);
+    }
+  }
+
   // ---- Zonen anlegen und umbenennen ----
+
+  function undoRename(oldPath, newPath) {
+    if (!newPath || newPath === oldPath) return;
+    pushUndo(t("undoRename"), async () => {
+      const back = await invoke("rename_zone", { zone: newPath, name: lastSegment(oldPath) });
+      renameInOrder(newPath, back);
+      if (state.focus === newPath) state.focus = back;
+    });
+  }
 
   function inlineInput(container, value, onCommit, onCancel) {
     const input = el("input");
@@ -2269,6 +3506,7 @@
       async (name) => {
         try {
           const newPath = await invoke("rename_zone", { zone: path, name });
+          undoRename(path, newPath);
           renameInOrder(path, newPath);
           if (state.focus === path) state.focus = newPath;
           await refresh();
@@ -2380,6 +3618,7 @@
   // Einpassen ↔ Originalgröße (bei kleinen Bildern doppelt)
   function lbToggleZoom(cx, cy) {
     if (lbMode === "pdf" && lbPdf) return lbPdf.setZoom(lbPdf.fitted() ? 2 : 1);
+    if (lbMode === "video" && lbVZoom) return lbVZoom.toggle(cx, cy);
     if (lbMode !== "image") return;
     if (!lbView.fitted) return lbFit(true);
     const [mx, my] = lbCenter();
@@ -2393,6 +3632,7 @@
   }
 
   function openLightbox(item) {
+    if (item && state.shared) markSeen([item]);
     if (!item) return;
     const zone = state.found && state.found.includes(item) ? FOUND : item.zone;
     const list = lbList({ zone });
@@ -2416,6 +3656,7 @@
     if (!item) return closeLightbox();
     lb.index = list.indexOf(item);
     $("lbName").textContent = item.filename;
+    $("lbName").title = item.filename;
     // Quelle nur, wenn es eine gibt; der blaue Knopf zeigt die Zone
     $("lbSourceBtn").hidden = !item.pageUrl;
     $("lbSourceBtn").title = item.pageUrl || "";
@@ -2465,12 +3706,21 @@
     $("lightbox").classList.toggle("has-player", !!lbPlayer);
   }
 
+  // Video: Zoom-Knopf zeigt „Einpassen“ bzw. die Stufe, wie bei Bildern
+  let lbVZoom = null;
+  function lbVideoZoomed(scale) {
+    $("lightboxZoom").textContent = "(" + (scale > 1 ? `${Math.round(scale * 100)} %` : t("viewerFit")) + ")";
+    $("lightbox").classList.toggle("zoomed", scale > 1);
+  }
+
   // Zeigt PDF oder Video statt des Bildes. false = normales Bild.
   function lbShowMedia(item) {
     const k = quoteOf(item) ? "text" : kindOf(item);
     const box = $("lbMedia");
     const img = $("lightboxImg");
     lbMode = k;
+    lbVZoom = null;
+    $("lightbox").classList.remove("zoomed");
     lbSetPlayer(null);
     $("lightbox").classList.toggle("media", k !== "image");
     $("lightbox").classList.toggle("is-video", k === "video");
@@ -2500,14 +3750,17 @@
       const wrap = Media.audioEl(fileSrc(item.abs), item.thumb ? fileSrc(item.thumb) : null, item.title || item.filename, sub);
       box.appendChild(wrap);
       lbSetPlayer(wrap.querySelector("audio"));
+      Media.autoplay(wrap.querySelector("audio"), "audio");
       $("lightboxZoom").textContent = "";
       return true;
     }
     if (k === "video") {
       const v = Media.videoEl(fileSrc(item.abs), item.thumb ? fileSrc(item.thumb) : null);
       box.appendChild(v);
+      lbVZoom = Media.zoomable(v, lbVideoZoomed);
       lbSetPlayer(v);
-      $("lightboxZoom").textContent = "";
+      lbVideoZoomed(1);
+      Media.autoplay(v, "video");
       return true;
     }
     lbPdf = new Media.PdfView(box, { padTop: LB_PAD.top, padBottom: LB_PAD.bottom, onChange: lbPdfChanged });
@@ -2560,14 +3813,15 @@
     const lead = [size, formatBytes(item.bytes)].filter(Boolean).join(", ");
     head.appendChild(el("span", "lead", lead + "."));
     inner.appendChild(head);
-    if (quoteOf(item)) inner.appendChild(lbBlock(t("quote"), [quoteBox(item, "lb-quote")]));
+    if (quoteOf(item)) inner.appendChild(lbBlock(t("quote"), [quoteBox(item, "lb-quote"), lbRow(t("toneLabel"), tonePicker(item))]));
+    if (feat("notes")) inner.appendChild(lbBlock(t("note"), [noteField(item, "note", t("notePlaceholder"), true)]));
 
     let source = null;
     if (item.pageUrl) {
       const link = el("button", "lb-link", item.pageTitle || domainOf(item.pageUrl));
       link.type = "button";
       link.title = item.pageUrl;
-      link.addEventListener("click", () => invoke("open_url", { url: item.pageUrl }).catch(fail));
+      link.addEventListener("click", () => invoke("open_url", { url: sourceUrl(item) }).catch(fail));
       source = lbRow(t("source"), link);
     }
     let imageUrl = null;
@@ -2581,11 +3835,27 @@
     inner.appendChild(
       lbBlock("Archiver", [
         lbRow(t("zone"), panel ? zoneSelect(item.zone, (zone) => moveSelection(zone)) : zoneLabel(item.zone)),
+        subfolderOf(item) ? lbRow(t("subfolder"), subfolderOf(item).split("/").join(" / ")) : null,
         source || lbRow(t("source"), t("noSource")),
         imageUrl,
         lbRow(t("savedAt"), formatDate(item.capturedAt || item.addedAt)),
+        item.addedBy ? lbRow(t("addedBy"), item.addedBy) : null,
       ])
     );
+    if (feat("rights")) {
+      const internal = chip("(" + t("internal") + ")", !!item.internal, () => {
+        item.internal = !item.internal;
+        internal.classList.toggle("active", item.internal);
+        saveNote(item, { internal: item.internal });
+      });
+      inner.appendChild(
+        lbBlock(t("rights"), [
+          lbRow(t("credit"), noteField(item, "credit", t("creditPlaceholder"))),
+          lbRow(t("license"), noteField(item, "license", t("licensePlaceholder"))),
+          lbRow("", internal),
+        ])
+      );
+    }
     inner.appendChild(
       lbBlock(t("viewerFile"), [
         item.pages ? lbRow(t("pages"), String(item.pages)) : null,
@@ -2613,6 +3883,79 @@
     }
     inner.appendChild(links);
     return inner;
+  }
+
+  // Notiz, Urheber, Lizenz: speichert beim Verlassen des Felds (⌘↩ ebenso)
+  function noteField(item, key, placeholder, multi) {
+    const f = el(multi ? "textarea" : "input", "note-field" + (multi ? " note-text" : ""));
+    f.value = item[key] || "";
+    f.placeholder = placeholder;
+    f.spellcheck = multi;
+    if (multi) {
+      f.rows = 1;
+      const grow = () => {
+        f.style.height = "auto";
+        f.style.height = f.scrollHeight + "px";
+      };
+      f.addEventListener("input", grow);
+      requestAnimationFrame(grow);
+    }
+    const commit = () => {
+      const value = f.value.trim();
+      if (value === (item[key] || "")) return;
+      item[key] = value || null;
+      item._idx = null;
+      saveNote(item, { [key]: value });
+    };
+    f.addEventListener("blur", commit);
+    f.addEventListener("keydown", (e) => {
+      e.stopPropagation(); // Leertaste, Pfeile, 1–4 gehören hier dem Text
+      if (e.key === "Escape" || (e.key === "Enter" && (e.metaKey || !multi))) {
+        e.preventDefault();
+        f.blur();
+      }
+    });
+    return f;
+  }
+
+  // Farbe einer Textkarte: fünf Töne und Weiß
+  function tonePicker(item) {
+    const row = el("div", "tone-picker");
+    const current = toneKey(item);
+    for (const key of [...RANDOM_TONES, "white"]) {
+      const b = el("button", "tone-dot" + (key === current ? " active" : ""));
+      b.type = "button";
+      b.title = t("tone_" + key);
+      b.style.setProperty("--dot", QUOTE_TONES[key][0]);
+      b.addEventListener("click", () => {
+        if (key === toneKey(item)) return;
+        item.tone = key;
+        saveNote(item, { tone: key });
+        for (const d of row.children) d.classList.toggle("active", d === b);
+        render();
+        if (state.lightbox && lightboxItem() === item) showLightboxItem();
+      });
+      row.appendChild(b);
+    }
+    return row;
+  }
+
+  function saveNote(item, patch) {
+    invoke("set_note", { hashes: [item.hash], patch }).catch(fail);
+  }
+
+  // ---- Zone oder Auswahl als Paket (Dateien, Quellen.csv/.md, Kontaktbogen) ----
+  async function exportPackage(items, title) {
+    if (!items.length) return toast(t("pdfNothing"));
+    const date = new Date().toLocaleDateString(lang === "de" ? "de-DE" : "en-GB", { day: "numeric", month: "long", year: "numeric" });
+    const meta = t(items.length === 1 ? "pdfCount1" : "pdfCount", { n: items.length }) + " · " + date;
+    try {
+      const r = await invoke("export_package", { paths: items.map((i) => i.path), title, meta, sheet: true });
+      if (!r) return;
+      toast(t("packageDone", { n: r.count }) + (r.internal ? " " + t("packageInternal", { n: r.internal }) : ""), true, r.internal ? 6000 : 2600);
+    } catch (e) {
+      fail(e);
+    }
   }
 
   // Maße: Bilder und Videos in Pixeln, PDF-Seiten in Millimetern
@@ -2645,6 +3988,7 @@
     const chips = state.zones.map((zone, i) => {
       const c = el("button", "lb-chip" + (zone.path === item.zone ? " current" : "") + (i < HOT_ZONES ? " hot" : ""));
       c.type = "button";
+      c.dataset.zone = zone.path; // Ziel auch beim Ziehen aus der Lightbox
       if (i < HOT_ZONES) c.appendChild(el("span", "lb-key", String(i + 1)));
       c.appendChild(zoneNameEl(zone));
       c.addEventListener("click", () => lbMoveTo(zone.path));
@@ -2655,6 +3999,21 @@
     $("lbZones").replaceChildren(el("span", "lb-mono", t("dropBar")), ...chips);
     $("lbZones").hidden = false;
     $("lbAction").classList.add("active");
+    lbBalanceZones();
+  }
+
+  // Passen nicht alle Zonen in eine Zeile, werden die Zeilen gleich lang
+  // statt eines einzelnen Rests in der letzten Zeile.
+  function lbBalanceZones() {
+    const bar = $("lbZones");
+    bar.style.width = "";
+    bar.classList.add("measure");
+    const natural = bar.scrollWidth;
+    bar.classList.remove("measure");
+    const room = bar.getBoundingClientRect().width;
+    if (natural <= room + 1) return;
+    const rows = Math.ceil(natural / room);
+    bar.style.width = Math.min(room, Math.ceil(natural / rows) + 48) + "px";
   }
 
   function lbCloseZones() {
@@ -2705,7 +4064,7 @@
     $("lbSourceBtn").textContent = t("source");
     $("lbSourceBtn").addEventListener("click", () => {
       const item = lightboxItem();
-      if (item && item.pageUrl) invoke("open_url", { url: item.pageUrl }).catch(fail);
+      if (item && item.pageUrl) invoke("open_url", { url: sourceUrl(item) }).catch(fail);
     });
     const action = $("lbAction");
     action.replaceChildren(el("span", "lb-dot"), el("span", "lb-action-zone", "Archiver"));
@@ -2756,6 +4115,32 @@
     });
     stage.addEventListener("gestureend", (e) => e.preventDefault());
 
+    // Ganzes Bild ziehen: Zonen klappen auf, das Bild lässt sich hineinlegen
+    // (oder in den Finder). Vergrößert verschiebt Ziehen den Ausschnitt.
+    let lift = null;
+    $("lightboxImg").draggable = false;
+    window.addEventListener("resize", () => {
+      if (!$("lbZones").hidden) lbBalanceZones();
+    });
+    stage.addEventListener("pointerdown", (e) => {
+      if (e.button !== 0 || !lbView.fitted || lbMode !== "image") return;
+      if (e.target !== $("lightboxImg")) return;
+      lift = { x: e.clientX, y: e.clientY };
+    });
+    stage.addEventListener("pointermove", (e) => {
+      if (!lift || !(e.buttons & 1)) return;
+      if (Math.hypot(e.clientX - lift.x, e.clientY - lift.y) < DRAG_THRESHOLD) return;
+      lift = null;
+      const item = lightboxItem();
+      if (!item) return;
+      const opened = $("lbZones").hidden;
+      if (opened) lbOpenZones();
+      startNativeDrag([item], () => {
+        if (opened && state.lightbox) setTimeout(lbCloseZones, 300);
+      });
+    });
+    stage.addEventListener("pointerup", () => (lift = null));
+
     // Ziehen verschiebt das vergrößerte Bild
     let drag = null;
     stage.addEventListener("pointerdown", (e) => {
@@ -2795,6 +4180,11 @@
       lbPdf.setZoom(e.key === "0" ? 1 : e.key === "-" ? lbPdf.zoom / 1.25 : lbPdf.zoom * 1.25);
       return true;
     }
+    if (mod && lbMode === "video" && lbVZoom && /^[=+\-0]$/.test(e.key)) {
+      if (e.key === "0") lbVZoom.reset();
+      else lbVZoom.zoomBy(e.key === "-" ? 1 / 1.25 : 1.25);
+      return true;
+    }
     if (mod) {
       if (e.key === "=" || e.key === "+") lbZoomAt(lbView.scale * 1.25, cx, cy, true);
       else if (e.key === "-") lbZoomAt(lbView.scale / 1.25, cx, cy, true);
@@ -2815,6 +4205,7 @@
     else if (e.key === "i" || e.key === "I") lbToggleInfo();
     else if (e.key === "Enter") $("lbZones").hidden ? lbOpenZones() : lbCloseZones();
     else if (e.key === "Escape" && !$("lbZones").hidden) lbCloseZones();
+    else if (e.key === "Escape" && lbMode === "video" && lbVZoom && lbVZoom.scale() > 1) lbVZoom.reset();
     else if (e.key === "Escape" && !lbView.fitted) lbFit(true);
     else if (e.key === " " && (lbMode === "video" || lbMode === "audio") && Media.togglePlay($("lbMedia"))) {}
     else if (e.key === "Escape" || e.key === " ") closeLightbox();
@@ -2895,6 +4286,7 @@
   }
 
   function closeModal() {
+    $("modal").onEnter = null;
     $("modal").hidden = true;
     $("modal").innerHTML = "";
   }
@@ -2927,25 +4319,65 @@
     document.body.classList.add("dragging");
   }
 
+  // Vorschau beim Einstellen der Deckkraft: die Leiste steht, solange der Regler bewegt wird
+  let previewTimer = 0;
+  function previewDropbar(on) {
+    clearTimeout(previewTimer);
+    const bar = $("dropbar");
+    if (on) {
+      if (bar.hidden) {
+        showDropbar();
+        document.body.classList.remove("dragging");
+        bar.classList.add("preview");
+      }
+      previewTimer = setTimeout(() => previewDropbar(false), 1600);
+    } else if (bar.classList.contains("preview")) {
+      bar.classList.remove("preview");
+      hideDropbar();
+    }
+  }
+
+  // Abgelegt: Liegt das Ziel in der Leiste, bleibt sie kurz stehen und
+  // blendet dann ruhig aus (kein Glühen, keine Bewegung).
+  let landingUntil = 0;
+  function landOn(target) {
+    const bar = $("dropbar");
+    if (!target) return hideDropbar();
+    if (bar.hidden || !bar.contains(target)) return hideDropbar();
+    bar.classList.add("leaving");
+    landingUntil = Date.now() + 500;
+    setTimeout(() => {
+      landingUntil = 0;
+      hideDropbar();
+    }, 500);
+  }
+
   function hideDropbar() {
+    if (Date.now() < landingUntil) return;
+    $("dropbar").classList.remove("leaving");
     dragHome = null;
     $("dropbar").hidden = true;
     document.body.classList.remove("dragging");
   }
 
-  async function startNativeDrag(items) {
+  async function startNativeDrag(items, onEnd) {
     const channel = new TAURI.core.Channel();
     // Das Ende des Ziehens kann vor dem Drop-Ereignis ankommen. Die Leiste
     // bleibt deshalb kurz stehen, sonst findet der Drop sein Ziel nicht mehr.
-    channel.onmessage = () => setTimeout(hideDropbar, 250);
+    channel.onmessage = () => {
+      setTimeout(hideDropbar, 250);
+      if (onEnd) onEnd();
+    };
     const zones = new Set(items.map((i) => i.zone));
     dragHome = zones.size === 1 ? [...zones][0] : null;
     if (!document.body.classList.contains("at-home")) showDropbar();
     const first = items[0];
     // kleines Drag-Bild, damit die Zonen beim Ziehen sichtbar bleiben
     const icon =
-      (await invoke("drag_icon", { hash: first.hash, path: first.thumb || first.abs }).catch(() => null)) ||
+      (await invoke("drag_icon", { hash: first.hash, path: first.thumb || first.abs, color: quoteOf(first) && !first.thumb ? quoteTone(first)[0] : null }).catch(() => null)) ||
       first.thumb ||
+      // nie das Original (große Bilder würden riesig gezogen): neutrale Fläche
+      (await invoke("drag_icon", { hash: first.hash, path: first.abs, color: "#8c8c8c" }).catch(() => null)) ||
       first.abs;
     invoke("plugin:drag|start_drag", {
       item: items.map((i) => i.abs),
@@ -2965,17 +4397,40 @@
 
   function clearDropUi() {
     for (const n of document.querySelectorAll(".drop-active")) n.classList.remove("drop-active");
+    for (const n of document.querySelectorAll(".drop-target")) n.classList.remove("drop-target");
+  }
+
+  // Umsortieren: alle gezogenen Objekte liegen in der gerade offenen Zone,
+  // die Maus steht über einer anderen Karte dieser Zone. Das Ziel trägt den
+  // Fokus-Ring; die Objekte nehmen seinen Platz ein (nach vorn gezogen davor,
+  // nach hinten gezogen dahinter).
+  function reorderTarget(x, y) {
+    if (!feat("order") || !isZone(state.focus) || state.query.trim() || filtersActive()) return null;
+    if (state.folder != null || zoneLayout(state.focus) === "sections") return null; // nur im vollen Raster
+    if (!dragPaths.length || dragHome !== state.focus) return null;
+    const rels = dragPaths.filter(insideLibrary).map((p) => p.slice(state.root.length + 1));
+    if (rels.length !== dragPaths.length || rels.some((r) => (state.byPath.get(r) || {}).zone !== state.focus)) return null;
+    const hit = document.elementFromPoint(x, y);
+    const card = hit && !hit.closest("#dropbar") ? hit.closest("#zones .card") : null;
+    if (!card || rels.includes(card.dataset.path)) return null;
+    const list = state.lists.get(state.focus) || [];
+    const at = (path) => list.findIndex((i) => i.path === path);
+    const after = at(rels[0]) < at(card.dataset.path);
+    return { card, ref: card.dataset.path, after, moved: rels };
   }
 
   let dragPaths = [];
   let lastTarget = null;
+  let lastReorder = null;
   let dropCount = 0; // für die Tour: wurde schon etwas abgelegt?
 
   function onDragDrop(event) {
+    if (!isUnlocked()) return;
     const p = event.payload;
     if (p.type === "leave") {
       dragPaths = [];
       lastTarget = null;
+      lastReorder = null;
       return clearDropUi();
     }
     if (p.type === "enter" && !document.body.classList.contains("at-home")) showDropbar();
@@ -2989,6 +4444,8 @@
     if (p.type === "enter" || p.type === "over") {
       clearDropUi();
       lastTarget = target;
+      lastReorder = target && target.dataset.zone !== dragHome ? null : reorderTarget(x, y);
+      if (lastReorder) lastReorder.card.classList.add("drop-target");
       if (target && target.dataset.zone !== dragHome) target.classList.add("drop-active");
       return;
     }
@@ -2996,15 +4453,28 @@
     // läge an derselben Stelle sonst die eigene Zone darunter.
     if (lastTarget) target = lastTarget;
     lastTarget = null;
+    const reorder = lastReorder;
+    lastReorder = null;
+
+    if (p.type === "drop" && reorder && (!target || target.dataset.zone === dragHome)) {
+      clearDropUi();
+      hideDropbar();
+      dragPaths = [];
+      return reorderInZone(state.focus, reorder.moved, reorder.ref, reorder.after);
+    }
 
     if (p.type === "drop") {
       clearDropUi();
-      hideDropbar();
+      landOn(target && dragPaths.length && target.dataset.zone !== dragHome ? target : null);
       const paths = dragPaths;
       dragPaths = [];
       if (!target || !paths.length) return;
       dropCount++;
+      tourStats.drops++;
       const zone = target.dataset.zone;
+      // Aus der Lightbox auf eine ihrer Zonen: wie ein Klick auf die Zone
+      const lbItem = state.lightbox && target.classList.contains("lb-chip") ? lightboxItem() : null;
+      if (lbItem && paths.length === 1 && paths[0] === lbItem.abs) return lbMoveTo(zone);
       const own = paths.filter(insideLibrary).map((path) => path.slice(state.root.length + 1));
       const foreign = paths.filter((path) => !insideLibrary(path));
       const toMove = own.filter((rel) => {
@@ -3044,6 +4514,7 @@
     ["4", [2, 2], [2, 2]],
     ["6", [3, 2], [2, 3]],
     ["12", [4, 3], [3, 4]],
+    ["16", [4, 4], [4, 4]],
   ];
   const PDF_PAGE = { long: 842, short: 595, margin: 40, gap: 20, caption: 28 };
 
@@ -3066,16 +4537,122 @@
       source: i.quote ? i.pageTitle || null : [i.artist, i.album].filter(Boolean).join(" · ") || domainOf(i.pageUrl) || null,
       quote: i.quote || null,
       label: String(i.format || "").toUpperCase(),
+      note: feat("notes") ? i.note || null : null,
     };
   }
 
-  function openPdfMaker(items, title) {
+  // ---- Moodboard: Objekte frei auf einer Seite (PDF-Ersteller, Stil „Moodboard“) ----
+  // Lage und Größe als Anteile (0–1) der Fläche zwischen Kopf und Fuß, wie
+  // pdf.rs board_area. Gemerkt je Auswahl (über die Hashes), damit ein
+  // Moodboard beim nächsten Öffnen so aussieht wie verlassen.
+
+  const BOARD_GAP = 8; // Punkte
+  function boardArea(portrait) {
+    const P = PDF_PAGE;
+    const [w, h] = portrait ? [P.short, P.long] : [P.long, P.short];
+    return { w: w - 2 * P.margin, h: h - P.margin - 30 - (P.margin + 18) };
+  }
+
+  function boardRatio(item) {
+    if (item.quote || quoteOf(item)) return 4 / 3;
+    return item.width && item.height ? item.width / item.height : 1;
+  }
+
+  // Erste Anordnung: Zeilen im Blocksatz, so viele, dass die Fläche am besten gefüllt ist
+  function boardAuto(items, portrait, notes) {
+    const A = boardArea(portrait);
+    const cap = notes ? 22 : 0;
+    const ratios = items.map(boardRatio);
+    let best = null;
+    for (let rows = 1; rows <= Math.max(1, items.length); rows++) {
+      // Zeilen mit möglichst gleicher Summe der Seitenverhältnisse
+      const total = ratios.reduce((a, b) => a + b, 0);
+      const lines = [];
+      let line = [];
+      let sum = 0;
+      ratios.forEach((r, i) => {
+        line.push(i);
+        sum += r;
+        if (sum >= (total / rows) * (lines.length + 1) - r / 2 && lines.length < rows - 1) {
+          lines.push(line);
+          line = [];
+        }
+      });
+      if (line.length) lines.push(line);
+      const heights = lines.map((l) => (A.w - BOARD_GAP * (l.length - 1)) / l.reduce((a, i) => a + ratios[i], 0));
+      const used = heights.reduce((a, b) => a + b + cap, 0) + BOARD_GAP * (lines.length - 1);
+      const scale = Math.min(1, A.h / used);
+      const fill = used * scale * (A.w * scale) / (A.w * A.h);
+      if (!best || fill > best.fill) best = { lines, heights, scale, used, fill };
+    }
+    const pos = new Map();
+    let y = (A.h - best.used * best.scale) / 2;
+    best.lines.forEach((l, li) => {
+      const h = best.heights[li] * best.scale;
+      const width = l.reduce((a, i) => a + ratios[i] * h, 0) + BOARD_GAP * best.scale * (l.length - 1);
+      let x = (A.w - width) / 2;
+      for (const i of l) {
+        const w = ratios[i] * h;
+        pos.set(items[i].path, { x: x / A.w, y: y / A.h, w: w / A.w, h: h / A.h });
+        x += w + BOARD_GAP * best.scale;
+      }
+      y += h + (cap + BOARD_GAP) * best.scale;
+    });
+    return pos;
+  }
+
+  function boardKey(items) {
+    let h = 0;
+    for (const s of items.map((i) => i.hash).sort().join("")) h = (h * 31 + s.charCodeAt(0)) >>> 0;
+    return "board." + h.toString(36);
+  }
+
+  // Helligkeit unten links im Vorschaubild (wo die Plakat-Beschriftung steht).
+  // Klappt nur, wenn das Bild lesbar ist; sonst bleibt die Schrift dunkel.
+  function captionTone(img) {
+    try {
+      const c = document.createElement("canvas");
+      c.width = 32;
+      c.height = 32;
+      const x = c.getContext("2d", { willReadFrequently: true });
+      const box = img.parentElement.getBoundingClientRect();
+      const nw = img.naturalWidth, nh = img.naturalHeight;
+      const scale = Math.max(box.width / nw, box.height / nh);
+      const vw = box.width / scale, vh = box.height / scale;
+      const sx = (nw - vw) / 2, sy = (nh - vh) / 2;
+      x.drawImage(img, sx, sy, vw, vh, 0, 0, 32, 32);
+      const d = x.getImageData(1, 26, 16, 5).data;
+      let sum = 0;
+      for (let i = 0; i < d.length; i += 4) sum += 0.2126 * d[i] + 0.7152 * d[i + 1] + 0.0722 * d[i + 2];
+      return sum / (d.length / 4) / 255 < 0.5 ? "dark" : "light";
+    } catch {
+      return null;
+    }
+  }
+
+  function openPdfMaker(items, title, preset) {
     const opts = {
       title,
       layout: pref("pdfLayout", items.length === 1 ? "1" : items.length === 2 ? "2" : "6"),
       portrait: pref("pdfPortrait", false),
       captions: pref("pdfCaptions", true),
+      poster: pref("pdfPoster", false),
+      board: feat("moodboard") && pref("pdfBoard", false),
+      notes: feat("notes") && pref("pdfNotes", false),
+      dark: pref("pdfBoardDark", false),
     };
+    if (preset && preset.poster) opts.board = false;
+    // Moodboard: Lage je Objekt (Pfad → x, y, w, h), Reihenfolge der Liste = Stapel
+    const saved = pref(boardKey(items), null);
+    let board = saved && saved.portrait === opts.portrait ? new Map(Object.entries(saved.pos)) : null;
+    const boardFit = () => {
+      board = boardAuto(items, opts.portrait, opts.notes);
+      saveBoard();
+    };
+    const saveBoard = () => setPref(boardKey(items), { portrait: opts.portrait, pos: Object.fromEntries(board) });
+    if (board && items.some((i) => !board.has(i.path))) board = null;
+    // Tour, Kapitel Plakat: gleich im Plakat-Stil, hoch, 16 pro Seite
+    if (preset && preset.poster && !opts.poster) Object.assign(opts, { poster: true, portrait: true, layout: "16" });
     if (items.length <= 2 && !["1", "2"].includes(opts.layout)) opts.layout = items.length === 1 ? "1" : "2";
     const date = new Date().toLocaleDateString(lang === "de" ? "de-DE" : "en-GB", { day: "numeric", month: "long", year: "numeric" });
     const meta = () => t(items.length === 1 ? "pdfCount1" : "pdfCount", { n: items.length }) + " · " + date;
@@ -3101,13 +4678,20 @@
     });
     side.appendChild(field(t("pdfTitleLabel"), titleInput));
 
+    const styleRow = el("div", "pdf-chips");
+    side.appendChild(field(t("pdfStyleLabel"), styleRow));
     const layoutRow = el("div", "pdf-layouts");
     side.appendChild(field(t("pdfLayoutLabel"), layoutRow));
     const formatRow = el("div", "pdf-chips");
     side.appendChild(field(t("pdfFormatLabel"), formatRow));
     const captionRow = el("div", "pdf-chips");
     side.appendChild(field(t("pdfCaptionsLabel"), captionRow));
-    side.appendChild(el("p", "pdf-hint", t("pdfHint")));
+    const bgRow = el("div", "pdf-chips");
+    const bgField = field(t("pdfBoardBg"), bgRow);
+    side.appendChild(bgField);
+    const layoutField = layoutRow.parentElement;
+    const hint = el("p", "pdf-hint", t("pdfHint"));
+    side.appendChild(hint);
     const count = el("div", "pdf-count");
     side.appendChild(count);
 
@@ -3148,16 +4732,65 @@
           return b;
         })
       );
+      const sheetStyle = () => {
+        opts.board = false;
+        setPref("pdfBoard", false);
+      };
+      styleRow.replaceChildren(
+        chip("(" + t("pdfStyleSheet") + ")", !opts.poster && !opts.board, () => {
+          sheetStyle();
+          setOpt("poster", false, "pdfPoster");
+        }),
+        chip("(" + t("pdfStylePoster") + ")", opts.poster && !opts.board, () => {
+          sheetStyle();
+          // Plakat lebt vom dichten Raster: beim ersten Wechsel hochkant mit 16 pro Seite
+          if (!opts.poster && pref("pdfPosterSet", false) === false) {
+            setPref("pdfPosterSet", true);
+            opts.portrait = true;
+            setPref("pdfPortrait", true);
+            opts.layout = "16";
+            setPref("pdfLayout", "16");
+          }
+          setOpt("poster", true, "pdfPoster");
+        })
+      );
+      if (feat("moodboard"))
+        styleRow.appendChild(
+          chip("(" + t("pdfStyleMoodboard") + ")", opts.board, () => {
+            opts.poster = false;
+            setPref("pdfPoster", false);
+            setOpt("board", true, "pdfBoard");
+          })
+        );
+      layoutField.hidden = opts.board;
+      bgField.hidden = !opts.board;
+      bgRow.replaceChildren(
+        chip("(" + t("pdfBoardLight") + ")", !opts.dark, () => setOpt("dark", false, "pdfBoardDark")),
+        chip("(" + t("pdfBoardDark") + ")", opts.dark, () => setOpt("dark", true, "pdfBoardDark")),
+        chip("(" + t("pdfBoardArrange") + ")", false, () => {
+          boardFit();
+          renderPages();
+        })
+      );
       formatRow.replaceChildren(
         chip("(" + t("pdfLandscape") + ")", !opts.portrait, () => setOpt("portrait", false, "pdfPortrait")),
         chip("(" + t("pdfPortraitLabel") + ")", opts.portrait, () => setOpt("portrait", true, "pdfPortrait"))
       );
-      captionRow.replaceChildren(
-        chip("(" + t("setOn") + ")", opts.captions, () => setOpt("captions", true, "pdfCaptions")),
-        chip("(" + t("setOff") + ")", !opts.captions, () => setOpt("captions", false, "pdfCaptions"))
-      );
+      // Bildunterschrift: aus, Name, Name mit Notiz (Moodboard: nur Notiz an/aus)
+      const capMode = opts.board ? (opts.notes ? "note" : "off") : !opts.captions ? "off" : opts.notes ? "note" : "on";
+      const setCaps = (captions, notes) => {
+        opts.notes = notes;
+        setPref("pdfNotes", notes);
+        if (opts.board) return renderAll();
+        setOpt("captions", captions, "pdfCaptions");
+      };
+      const capChips = [];
+      if (!opts.board) capChips.push(chip("(" + t("setOn") + ")", capMode === "on", () => setCaps(true, false)));
+      capChips.push(chip("(" + t("setOff") + ")", capMode === "off", () => setCaps(false, false)));
+      if (feat("notes") && !opts.poster) capChips.push(chip("(" + t("pdfCaptionsNotes") + ")", capMode === "note", () => setCaps(true, true)));
+      captionRow.replaceChildren(...capChips);
       const { cols, rows } = grid();
-      const pages = Math.max(1, Math.ceil(items.length / (cols * rows)));
+      const pages = opts.board ? 1 : Math.max(1, Math.ceil(items.length / (cols * rows)));
       count.textContent = meta() + " · " + t(pages === 1 ? "pdfPages1" : "pdfPagesN", { n: pages });
       save.disabled = !items.length;
     }
@@ -3165,11 +4798,16 @@
     function setOpt(key, value, prefKey) {
       opts[key] = value;
       setPref(prefKey, value);
+      // Neues Format: Moodboard neu anordnen
+      if (key === "portrait" && board) board = null;
       renderAll();
     }
 
     // ---- Vorschau: Seiten in A4-Proportion, Felder wie im PDF ----
     function renderPages() {
+      hint.textContent = t(opts.board ? "pdfBoardHint" : "pdfHint");
+      if (opts.board) return renderBoard();
+      stage.classList.remove("board");
       const { cols, rows } = grid();
       const per = cols * rows;
       const P = PDF_PAGE;
@@ -3181,7 +4819,9 @@
         page.style.setProperty("--pad-x", (P.margin / w) * 100 + "%");
         page.style.setProperty("--pad-y", (P.margin / h) * 100 + "%");
         const head = el("div", "pdf-head");
-        head.append(el("b", null, opts.title), el("span", null, meta()));
+        const pageCount = Math.max(1, Math.ceil(items.length / per));
+        head.append(el("b", null, opts.title), el("span", null, opts.poster ? `${meta()}  ${p + 1} / ${pageCount}` : meta()));
+        page.classList.toggle("poster", opts.poster);
         const body = el("div", "pdf-grid");
         body.style.setProperty("--cols", cols);
         body.style.setProperty("--rows", rows);
@@ -3191,6 +4831,7 @@
         foot.append(el("span", null, "Archiver"), el("span", null, `${p + 1} / ${Math.max(1, Math.ceil(items.length / per))}`));
         page.append(head, body, foot);
         page.classList.toggle("no-captions", !opts.captions);
+        page.classList.toggle("with-notes", opts.captions && opts.notes && !opts.poster);
         pages.push(page);
       }
       stage.replaceChildren(...pages);
@@ -3212,7 +4853,17 @@
       cell.appendChild(box);
       const s = sheetItem(item);
       const cap = el("div", "pdf-cap");
-      cap.append(el("span", null, s.name), el("span", "dim", s.source || ""));
+      const name = opts.poster ? s.name.replace(/\.[a-z0-9]{1,5}$/i, "") : s.name;
+      cap.append(el("span", null, name), el("span", "dim", s.source || ""));
+      if (opts.notes && !opts.poster && s.note) cap.appendChild(el("span", "pdf-note", s.note));
+      if (opts.poster && !item.quote) {
+        // Wie im PDF: Schrift hell auf dunklem Grund, sonst dunkel
+        const img = box.querySelector("img");
+        img.addEventListener("load", () => {
+          const tone = captionTone(img);
+          if (tone) cell.classList.toggle("on-dark", tone === "dark");
+        });
+      }
       cell.appendChild(cap);
       const remove = button("pdf-remove", "×", (e) => {
         e.stopPropagation();
@@ -3261,6 +4912,109 @@
       renderPages();
     }
 
+    // ---- Moodboard: eine Seite, Objekte frei verschieben und skalieren ----
+    function renderBoard() {
+      if (!board) boardFit();
+      const P = PDF_PAGE;
+      const [w, h] = opts.portrait ? [P.short, P.long] : [P.long, P.short];
+      const page = el("div", "pdf-page board" + (opts.dark ? " dark" : ""));
+      page.style.aspectRatio = `${w} / ${h}`;
+      const head = el("div", "pdf-head");
+      head.append(el("b", null, opts.title), el("span", null, meta()));
+      const area = el("div", "pdf-board");
+      items.forEach((item) => area.appendChild(boardCell(item, area)));
+      const foot = el("div", "pdf-foot");
+      foot.append(el("span", null, "Archiver"), el("span"));
+      page.append(head, area, foot);
+      stage.replaceChildren(page);
+      stage.classList.toggle("portrait", opts.portrait);
+      stage.classList.add("board");
+    }
+
+    function placeCell(cell, p) {
+      cell.style.left = p.x * 100 + "%";
+      cell.style.top = p.y * 100 + "%";
+      cell.style.width = p.w * 100 + "%";
+      cell.style.height = p.h * 100 + "%";
+    }
+
+    function boardCell(item, area) {
+      const cell = el("div", "pdf-bcell");
+      const p = board.get(item.path);
+      placeCell(cell, p);
+      if (quoteOf(item)) {
+        const q = textSheet(item, "text-sheet pdf-bquote");
+        cell.appendChild(q);
+      } else {
+        const img = el("img");
+        img.src = thumbSrc(item);
+        img.draggable = false;
+        cell.appendChild(img);
+      }
+      const s = sheetItem(item);
+      if (opts.notes && s.note) cell.appendChild(el("div", "pdf-bnote", s.note));
+      const grip = el("span", "pdf-grip");
+      cell.appendChild(grip);
+      const remove = button("pdf-remove", "×", (e) => {
+        e.stopPropagation();
+        items.splice(items.indexOf(item), 1);
+        board.delete(item.path);
+        saveBoard();
+        renderAll();
+      });
+      remove.title = t("pdfRemove");
+      cell.appendChild(remove);
+      // Doppelklick: nach vorn (zuletzt gezeichnet)
+      cell.addEventListener("dblclick", () => {
+        items.splice(items.indexOf(item), 1);
+        items.push(item);
+        renderPages();
+      });
+      cell.addEventListener("pointerdown", (e) => {
+        if (e.button !== 0 || e.target.closest(".pdf-remove")) return;
+        e.preventDefault();
+        const box = area.getBoundingClientRect();
+        const start = { ...board.get(item.path) };
+        const scaling = e.target === grip;
+        const ratio = (start.w * box.width) / (start.h * box.height);
+        root.classList.add("moving");
+        cell.classList.add("lifted");
+        let moved = false;
+        const move = (ev) => {
+          moved = true;
+          const dx = (ev.clientX - e.clientX) / box.width;
+          const dy = (ev.clientY - e.clientY) / box.height;
+          const next = { ...start };
+          if (scaling) {
+            // Ecke unten rechts: Seitenverhältnis bleibt
+            next.w = Math.max(0.04, Math.min(1.2, start.w + dx));
+            next.h = (next.w * box.width) / ratio / box.height;
+          } else {
+            next.x = Math.max(-next.w / 2, Math.min(1 - next.w / 2, start.x + dx));
+            next.y = Math.max(-next.h / 2, Math.min(1 - next.h / 2, start.y + dy));
+          }
+          board.set(item.path, next);
+          placeCell(cell, next);
+        };
+        const up = () => {
+          window.removeEventListener("pointermove", move);
+          root.classList.remove("moving");
+          cell.classList.remove("lifted");
+          saveBoard();
+          // Bewegtes liegt danach oben
+          const at = items.indexOf(item);
+          if (moved && at !== items.length - 1) {
+            items.splice(at, 1);
+            items.push(item);
+            renderPages();
+          }
+        };
+        window.addEventListener("pointermove", move);
+        window.addEventListener("pointerup", up, { once: true });
+      });
+      return cell;
+    }
+
     function onKey(e) {
       if (e.key === "Escape" && document.activeElement !== titleInput) close();
       else if (e.key === "Escape") titleInput.blur();
@@ -3283,14 +5037,27 @@
       save.disabled = true;
       save.textContent = t("pdfWorking");
       try {
-        const path = await invoke("export_pdf", {
-          title: opts.title,
-          meta: meta(),
-          fileName: name,
-          items: items.map(sheetItem),
-          layout: { cols, rows, portrait: opts.portrait, captions: opts.captions },
-        });
+        const path = opts.board
+          ? await invoke("export_moodboard", {
+              title: opts.title,
+              meta: meta(),
+              fileName: name,
+              board: {
+                portrait: opts.portrait,
+                notes: opts.notes,
+                dark: opts.dark,
+                items: items.map((i) => ({ ...sheetItem(i), ...board.get(i.path) })),
+              },
+            })
+          : await invoke("export_pdf", {
+              title: opts.title,
+              meta: meta(),
+              fileName: name,
+              items: items.map(sheetItem),
+              layout: { cols, rows, portrait: opts.portrait, captions: opts.captions, poster: opts.poster, notes: opts.captions && opts.notes && !opts.poster },
+            });
         if (path) {
+          tourStats.pdfs++;
           toast(t("pdfDone", { name: path.split("/").pop() }));
           close();
           return;
@@ -3333,7 +5100,7 @@
     if (one) {
       entry(menu, t("ctxPreview"), () => openLightbox(one), "␣");
       entry(menu, t("openFile"), () => invoke("open_file", { path: one.abs }).catch(fail));
-      if (one.pageUrl) entry(menu, t("ctxSource"), () => invoke("open_url", { url: one.pageUrl }).catch(fail));
+      if (one.pageUrl) entry(menu, t("ctxSource"), () => invoke("open_url", { url: sourceUrl(one) }).catch(fail));
       rule();
     }
     // Ablegen in: alle Zonen als Kästchen in zwei Spalten, Active Zones zuerst mit Taste
@@ -3407,6 +5174,10 @@
     item(t("infoPanel"), toggleInfo, state.infoOpen, "⌘D");
     item(t("pdfExport"), exportPdf, false, "⌘P");
     menu.appendChild(el("div", "p-more-rule"));
+    (state.libraries || []).forEach((slot, i) => {
+      if (slot.path) item(libraryName(slot, i), () => switchLibrary(i), slot.active, "⌘" + (i + 1));
+    });
+    if ((state.libraries || []).some((l) => l.path)) menu.appendChild(el("div", "p-more-rule"));
     item(t("settings"), () => togglePage("settings"), state.page === "settings", "⌘,");
     item(t("about"), () => togglePage("about"), state.page === "about");
     item(t("tour"), () => startTour());
@@ -3420,6 +5191,11 @@
   // ---- Ereignisse ----
 
   function bindEvents() {
+    $("lockText").textContent = t("lockText");
+    $("libTabBtn").addEventListener("click", (e) => {
+      e.stopPropagation();
+      openLibMenu();
+    });
     const zones = $("zones");
 
     zones.addEventListener("mousedown", (e) => {
@@ -3459,10 +5235,16 @@
     });
 
     zones.addEventListener("scroll", () => {
-      if (document.querySelector(".p-ctx-menu")) closeMenus();
+      if (document.querySelector(".p-ctx-menu, .zone-menu.floating")) closeMenus();
     }, { passive: true, capture: true });
 
     zones.addEventListener("contextmenu", (e) => {
+      const zoneEl = e.target.closest(".p-home [data-zone]");
+      if (zoneEl && !e.target.closest(".card")) {
+        e.preventDefault();
+        openZoneContext(zoneEl.dataset.zone, e.clientX, e.clientY);
+        return;
+      }
       const card = e.target.closest(".card");
       if (!card) return;
       e.preventDefault();
@@ -3547,6 +5329,10 @@
 
     if (!$("modal").hidden) {
       if (e.key === "Escape") closeModal();
+      else if (e.key === "Enter" && $("modal").onEnter) {
+        e.preventDefault();
+        $("modal").onEnter();
+      }
       return;
     }
 
@@ -3556,6 +5342,14 @@
     }
 
     const target = e.target;
+    if (!isUnlocked() && !(target && target.tagName === "INPUT")) {
+      if (mod && e.key === ",") togglePage("settings");
+      else if (e.key === "Escape") closePage();
+      else if (!mod) return;
+      if (mod && !["q", "w", "h", "m"].includes(e.key)) e.preventDefault();
+      return;
+    }
+
     if (target && (target.tagName === "INPUT" || target.tagName === "SELECT")) {
       if (target === $("search") && e.key === "Escape") {
         target.value = "";
@@ -3577,12 +5371,39 @@
       return;
     }
 
+    if (!mod && !e.altKey && !state.page && isZone(state.focus) && folderKey(e)) {
+      e.preventDefault();
+      return;
+    }
+
+    // ⌘↑ wie im Finder: eine Ordnerebene hoch, oben in der Zone zurück zur Übersicht
+    if (e.metaKey && !e.shiftKey && !e.altKey && e.key === "ArrowUp" && !state.page && state.focus != null) {
+      e.preventDefault();
+      if (!(isZone(state.focus) && folderUp())) {
+        const back = state.focus;
+        if (state.zones.some((z) => z.path === back)) {
+          state.homeCursor = back;
+          state.homeKbd = true;
+        }
+        setFocus(null);
+        applyHomeCursor(true);
+      }
+      return;
+    }
+
     if (mod && (e.key === "n" || e.key === "N") && !e.shiftKey) {
       startNewZone();
+    } else if (mod && !e.shiftKey && (e.key === "r" || e.key === "R")) {
+      e.preventDefault();
+      reloadObjects();
     } else if (mod && (e.key === "d" || e.key === "D")) {
       toggleInfo();
     } else if (mod && e.key === ",") {
       togglePage("settings");
+    } else if (mod && (e.key === "z" || e.key === "Z") && !e.shiftKey) {
+      undo();
+    } else if (mod && !e.shiftKey && !e.altKey && /^[1-3]$/.test(e.key)) {
+      switchLibrary(Number(e.key) - 1);
     } else if (mod && (e.key === "p" || e.key === "P")) {
       exportPdf();
     } else if (mod && e.key === "c") {
@@ -3598,9 +5419,12 @@
         closeMenus();
         closeMoreMenu();
       }
+      else if (state.page === "settings" && state.settingsSub) openSettingsSection(null);
       else if (state.page) closePage();
       else if (state.selection.size) selectOnly(null);
-      else if (state.focus != null) {
+      else if (isZone(state.focus) && folderUp()) {
+        // im Unterordner: eine Ebene zurück
+      } else if (state.focus != null) {
         // zurück zur Startseite, die eben offene Zone ist dort gewählt
         const back = state.focus;
         if (state.zones.some((z) => z.path === back)) {
@@ -3623,27 +5447,162 @@
       resize(1);
     } else if (e.key === "-" && !e.altKey) {
       resize(-1);
-    } else if (e.key === "ArrowRight") moveCursor("right");
-    else if (e.key === "ArrowLeft") moveCursor("left");
-    else if (e.key === "ArrowDown") moveCursor("down");
-    else if (e.key === "ArrowUp") moveCursor("up");
+    } else if (e.key === "ArrowRight") moveCursor("right", e.shiftKey);
+    else if (e.key === "ArrowLeft") moveCursor("left", e.shiftKey);
+    else if (e.key === "ArrowDown") moveCursor("down", e.shiftKey);
+    else if (e.key === "ArrowUp") moveCursor("up", e.shiftKey);
     else return;
     e.preventDefault();
   }
 
   // ---- Start ----
 
-  async function chooseLibrary() {
-    const path = await invoke("pick_folder");
-    if (!path) return;
-    try {
-      await invoke("open_library", { path });
-      state.focus = null;
-      cardCache.clear();
-      showApp();
-    } catch (e) {
-      fail(e);
+  // ---- Bibliotheken: drei feste Plätze (lib.rs: libraries, set_library_slot) ----
+  // Hot Zones und Zonenreihenfolge liegen in der Bibliothek selbst,
+  // die Extension sammelt immer in die gerade aktive.
+
+  async function loadLibraries() {
+    state.libraries = await invoke("libraries").catch(() => state.libraries || []);
+    renderLibTab();
+    return state.libraries;
+  }
+
+  // Reiter oben rechts: aktive Bibliothek, Klick zeigt die anderen
+  function renderLibTab() {
+    const tab = $("libTab");
+    if (!tab) return;
+    const slots = state.libraries || [];
+    const i = slots.findIndex((l) => l.active);
+    const name = i >= 0 ? libraryName(slots[i], i) : state.name;
+    tab.hidden = !name || !state.root;
+    $("libTabBtn").textContent = name || "";
+    $("libTabBtn").title = state.root.replace(/^\/(Users|home)\/[^/]+/, "~");
+  }
+
+  function openLibMenu() {
+    if (document.querySelector(".p-lib-menu")) return closeMenus();
+    closeMenus();
+    const menu = el("div", "zone-menu p-lib-menu");
+    (state.libraries || []).forEach((slot, i) => {
+      if (!slot.path) return;
+      const b = button("zone-menu-item" + (slot.active ? " on" : ""), libraryName(slot, i), () => {
+        closeMenus();
+        switchLibrary(i);
+      });
+      b.appendChild(el("span", "p-more-key", " (⌘" + (i + 1) + ")"));
+      b.title = slot.path.replace(/^\/(Users|home)\/[^/]+/, "~");
+      menu.appendChild(b);
+    });
+    if (menu.children.length) menu.appendChild(el("div", "p-more-rule"));
+    menu.appendChild(button("zone-menu-item", t("libManage"), () => {
+      closeMenus();
+      if (state.page !== "settings") togglePage("settings");
+      openSettingsSection("library");
+    }));
+    $("libTab").appendChild(menu);
+    $("libTabBtn").classList.add("active");
+  }
+
+  function libraryName(slot, i) {
+    return (slot && slot.name) || t("libSlot", { n: i + 1 });
+  }
+
+  // Fehler des Ordner-Schutzes (lib.rs: check_library) verständlich machen
+  function libraryFail(e) {
+    const msg = String(e && e.message ? e.message : e);
+    const key = { "library-system": "libSystem", "library-large": "libLarge", "library-slow": "libSlow", "library-active": "libActive", "library-missing": "libMissing" }[msg];
+    if (key) toast(t(key), false, 5200);
+    else fail(e);
+  }
+
+  function afterLibrarySwitch() {
+    state.focus = null;
+    state.selection = new Set();
+    cardCache.clear();
+    return showApp();
+  }
+
+  async function switchLibrary(i) {
+    const slots = await loadLibraries();
+    const slot = slots[i];
+    if (!slot || !slot.path) {
+      togglePage("settings");
+      openSettingsSection("library");
+      return;
     }
+    if (slot.active) return;
+    document.body.classList.add("lib-loading");
+    try {
+      await invoke("open_library", { path: slot.path });
+      if (state.page) closePage();
+      await afterLibrarySwitch();
+      toast(libraryName(slot, i));
+    } catch (e) {
+      libraryFail(e);
+    } finally {
+      document.body.classList.remove("lib-loading");
+    }
+  }
+
+  function renderLibrarySlots() {
+    const b = block(t("setLibraries"));
+    const slots = state.libraries && state.libraries.length ? state.libraries : [{}, {}, {}];
+    slots.forEach((slot, i) => {
+      const name = el("div", "p-lib-name" + (slot.path ? "" : " empty"), libraryName(slot, i));
+      name.title = t("libRename");
+      name.addEventListener("click", () => {
+        inlineInput(
+          name,
+          slot.name || "",
+          async (value) => {
+            await invoke("set_library_slot", { index: i, name: value }).catch(libraryFail);
+            await loadLibraries();
+            renderPage(true);
+          },
+          () => renderPage(true)
+        );
+      });
+      const main = [name, slot.path ? pathEl(slot.path, "p-lib-path") : el("div", "p-lib-path", t("libEmpty"))];
+      const side = [];
+      if (slot.active) {
+        side.push(el("span", "p-lib-active", t("libActiveLabel")));
+        side.push(button("p-link", t("reveal"), () => invoke("reveal_zone", { zone: "" }).catch(fail)));
+      }
+      else if (slot.path) side.push(button("p-link", t("libOpen") + " (⌘" + (i + 1) + ")", () => switchLibrary(i)));
+      side.push(
+        button("p-link", slot.path ? t("libChoose") : t("libAssign"), async () => {
+          const path = await invoke("pick_folder");
+          if (!path) return;
+          try {
+            await invoke("set_library_slot", { index: i, path });
+            // aktiver Platz bekommt einen neuen Ordner: gleich öffnen
+            if (slot.active) {
+              await invoke("open_library", { path });
+              await afterLibrarySwitch();
+            }
+          } catch (e) {
+            libraryFail(e);
+          }
+          await loadLibraries();
+          renderPage(true);
+        })
+      );
+      if (slot.path && !slot.active) {
+        side.push(
+          button("p-link p-lib-clear", "✕", async () => {
+            await invoke("set_library_slot", { index: i, clear: true }).catch(libraryFail);
+            await loadLibraries();
+            renderPage(true);
+          })
+        );
+      }
+      const row = blockRow(main, side);
+      row.classList.add("p-lib-row");
+      if (slot.active) row.classList.add("active");
+      b.appendChild(row);
+    });
+    b.appendChild(el("p", "p-block-hint", t("libHint")));
+    return b;
   }
 
   // ---- Erster Start: 1 Bibliothek, 2 Extension, 3 erstes Bild ----
@@ -3666,7 +5625,7 @@
         await invoke("open_library", { path: info.suggestedLibrary });
         showExtensionStep();
       } catch (e) {
-        fail(e);
+        libraryFail(e);
       }
     };
     $("welcomeChoose").textContent = t("welcomeChoose");
@@ -3677,7 +5636,7 @@
         await invoke("open_library", { path });
         showExtensionStep();
       } catch (e) {
-        fail(e);
+        libraryFail(e);
       }
     };
   }
@@ -3720,27 +5679,263 @@
     startTour(showDropHint);
   }
 
-  // ---- Einstiegstour: Hinweise direkt an der Oberfläche, drei zum Mitmachen ----
-  // Mitmach-Schritte (live) lassen die Oberfläche bedienbar und gehen von
-  // selbst weiter, sobald erledigt ist (done). Enter / → geht immer weiter.
+  // ---- Getting Started (0.19): neun Kapitel, fünf zum Mitmachen ----
+  // Läuft im Vollbild, auf Wunsch in einer Demo-Bibliothek (~/Archiver Demo/,
+  // lib.rs: open_demo / close_demo). Mitmach-Schritte (live) lassen die
+  // Oberfläche bedienbar und gehen erst nach der Aktion weiter. Am Ende
+  // verlässt die App das Vollbild, dann öffnet Licht die Oberfläche (reveal.js).
 
-  // Neue Tour (0.7.6) startet auch für alle, die die alte schon gesehen haben.
-  const TOUR_PREF = "tour2Done";
+  const TOUR_PREF = "tour3Done";
+  // Mitgelieferte Grafiken für das Schema, wenn die Tour in der eigenen Bibliothek läuft
+  const TOUR_WEB = ["welle-plakat", "dreieck", "zitrone-etikett", "buchstabe-g", "raster-gelb", "abend-verlauf"];
+  // Eintrag im Chrome Web Store, sobald es ihn gibt; bis dahin der Weg über chrome://extensions
+  const EXT_STORE_URL = null;
+  const tourStats = { drops: 0, pdfs: 0, collected: 0 };
+  const tourDemo = { on: false, prevOrder: null, zones: [], web: [] };
+  const demoHot = () => tourDemo.zones.filter((z) => z !== "Unsorted").slice(0, HOT_ZONES);
+
+  const zoneByName = (name) => state.zones.find((z) => z.path === name);
+  const kbdHtml = (s) => s; // Texte stammen aus i18n.js und enthalten <kbd>
+
+  async function enterDemo() {
+    tourDemo.prevOrder = pref("zoneOrder", []);
+    setPref("demoPrevOrder", tourDemo.prevOrder);
+    const info = await invoke("open_demo");
+    tourDemo.zones = info.zones;
+    tourDemo.web = info.web;
+    setPref("zoneOrder", info.zones);
+    tourDemo.on = true;
+    document.body.classList.add("demo-lib");
+    if (state.focus != null || state.query) setFocus(null);
+    state.home = "overview";
+    await refresh();
+  }
+
+  async function leaveDemo(keep) {
+    if (!tourDemo.on) return 0;
+    tourDemo.on = false;
+    document.body.classList.remove("demo-lib");
+    const moved = await invoke("close_demo", { keep }).catch((e) => (fail(e), 0));
+    setPref("zoneOrder", tourDemo.prevOrder || []);
+    localStorage.removeItem("archiver.demoPrevOrder");
+    if (state.focus != null || state.query) setFocus(null);
+    state.home = "cards";
+    await refresh();
+    return moved;
+  }
+
+  // Ein Absturz mitten in der Demo: beim nächsten Start die eigene Reihenfolge zurückholen
+  function restoreAfterDemo() {
+    const prev = pref("demoPrevOrder", null);
+    if (prev == null) return;
+    setPref("zoneOrder", prev);
+    localStorage.removeItem("archiver.demoPrevOrder");
+  }
+  restoreAfterDemo();
+
+
+  function finderList() {
+    const list = el("div", "tour-finder");
+    const zones = (tourDemo.on ? demoHot().map(zoneByName) : state.zones.slice(0, HOT_ZONES)).filter(Boolean).slice(0, 3);
+    for (const z of zones) {
+      const row = el("div", "tour-finder-row");
+      row.innerHTML =
+        '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M1.5 3.5h5l1.5 1.5h6.5v8h-13z" fill="none" stroke="currentColor"/></svg>';
+      row.append(el("span", null, shortPath(state.root + "/" + z.path) + "/"), el("span", "tour-mono", countText(z.count)));
+      list.appendChild(row);
+    }
+    return list;
+  }
+
+  // Vorschläge aus dem, was die Bildanalyse in den Objekten gefunden hat:
+  // zwei häufige Farben und zwei häufige Bildinhalte, auf Deutsch, wo es geht.
+  function tourSearchWords() {
+    const de = new Map();
+    if (lang === "de") for (const [word, en] of Object.entries(SEARCH_DE)) if (!de.has(en)) de.set(en, word);
+    const colors = new Map();
+    const labels = new Map();
+    for (const item of state.items) {
+      const idx = searchIndex(item);
+      for (const [c, share] of idx.colors) if (share >= COLOR_SHARE && c !== "white" && c !== "black" && c !== "gray") colors.set(c, (colors.get(c) || 0) + 1);
+      for (const l of idx.labels.slice(0, 3)) labels.set(l, (labels.get(l) || 0) + 1);
+    }
+    const top = (m, n) => [...m].sort((a, b) => b[1] - a[1]).slice(0, n).map(([k]) => de.get(k) || k);
+    const words = [...top(colors, 2), ...top(labels, 2)];
+    return words.length >= 2 ? words : t("tourSearchTry").split(", ");
+  }
+
+  function keyList() {
+    const list = el("div", "tour-keys");
+    for (const [k, label] of [["1–4", "tourKeyFile"], [t("tourSpace"), "tourKeyView"], ["⌘F", "tourKeySearch"], ["+ −", "tourKeySize"], ["⌫", "tourKeyTrash"]])
+      list.append(el("kbd", null, k), el("span", null, t(label)));
+    return list;
+  }
+
+  // Schema-Browser wie auf der Website: die Geste spielt dreimal von selbst,
+  // dann zieht man selbst. Ein Drop legt das Bild wirklich in die Demo-Zone.
+  function browserSchema(ctx) {
+    const s = el("div", "tour-schema");
+    const tag = el("span", "tour-schema-tag", "(" + t("tourSchemaAuto") + ")");
+    const bar = el("div", "tour-schema-bar");
+    bar.append(el("span", "tour-schema-dots"), el("span", "tour-schema-url", t("tourSchemaUrl")));
+    const grid = el("div", "tour-schema-grid");
+    const drop = el("div", "tour-schema-drop");
+    const zones = (tourDemo.on ? demoHot() : state.zones.slice(0, HOT_ZONES).map((z) => z.path)).slice(0, HOT_ZONES);
+    zones.forEach((z, i) => {
+      const d = el("div", "tour-schema-zone");
+      d.dataset.zone = z;
+      d.append(el("span", "tour-mono", String(i + 1).padStart(2, "0")), el("span", null, zoneLabel(z)));
+      drop.appendChild(d);
+    });
+    const cursor = el("div", "tour-schema-cursor");
+    cursor.innerHTML =
+      '<svg viewBox="0 0 22 22" width="22" height="22"><path d="M4 2l13 9.5-6.2.9 3.6 7-2.6 1.3-3.6-7L4 18z" fill="#fff" stroke="#111" stroke-width="1.2" stroke-linejoin="round"/></svg>';
+    s.append(tag, bar, grid, drop, cursor);
+    ctx.user = false;
+
+    const saved = (node, zone, zoneEl, byUser) => {
+      node.classList.add("taken");
+      zoneEl.classList.remove("flash");
+      void zoneEl.offsetWidth;
+      zoneEl.classList.add("flash");
+      if (tourDemo.on && node.dataset.file) invoke("demo_collect", { file: node.dataset.file, zone }).catch(() => {});
+      if (byUser) {
+        tourStats.collected++;
+        toast(t("tourSchemaSaved", { zone: zoneLabel(zone) }));
+      }
+    };
+
+    const web = tourDemo.on && tourDemo.web.length ? tourDemo.web : TOUR_WEB.map((n) => ({ file: "", show: "tour/" + n + ".jpg" }));
+    for (const w of web) {
+      const item = el("div", "tour-schema-item");
+      item.dataset.file = w.file;
+      const img = el("img");
+      img.src = w.show.startsWith("/") ? fileSrc(w.show) : w.show;
+      img.alt = "";
+      img.draggable = false;
+      item.appendChild(img);
+      item.addEventListener("pointerdown", (e) => {
+        if (e.button || item.classList.contains("taken")) return;
+        ctx.user = true;
+        tag.textContent = "(" + t("tourSchemaYou") + ")";
+        const sx = e.clientX;
+        const sy = e.clientY;
+        let ghost = null;
+        let over = null;
+        const move = (ev) => {
+          if (!ghost) {
+            if (Math.hypot(ev.clientX - sx, ev.clientY - sy) < 6) return;
+            ghost = el("div", "tour-schema-ghost");
+            ghost.appendChild(img.cloneNode());
+            document.body.appendChild(ghost);
+            item.classList.add("lifted");
+            s.classList.add("dragging");
+          }
+          ghost.style.left = ev.clientX + "px";
+          ghost.style.top = ev.clientY + "px";
+          const hit = document.elementFromPoint(ev.clientX, ev.clientY);
+          const z = hit && hit.closest(".tour-schema-zone");
+          const ok = z && drop.contains(z) ? z : null;
+          if (ok !== over) {
+            if (over) over.classList.remove("over");
+            if (ok) ok.classList.add("over");
+            over = ok;
+          }
+        };
+        const up = () => {
+          removeEventListener("pointermove", move);
+          removeEventListener("pointerup", up);
+          if (!ghost) return;
+          ghost.remove();
+          item.classList.remove("lifted");
+          s.classList.remove("dragging");
+          if (over) {
+            over.classList.remove("over");
+            saved(item, over.dataset.zone, over, true);
+          }
+        };
+        addEventListener("pointermove", move);
+        addEventListener("pointerup", up);
+      });
+      grid.appendChild(item);
+    }
+
+    // Selbstlauf
+    const still = matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+    const rel = (n) => {
+      const a = n.getBoundingClientRect();
+      const b = s.getBoundingClientRect();
+      return { x: a.left - b.left + a.width / 2, y: a.top - b.top + a.height / 2 };
+    };
+    const glide = (n, a, b, ms) =>
+      n.animate([{ left: a.x + "px", top: a.y + "px" }, { left: b.x + "px", top: b.y + "px" }], {
+        duration: ms,
+        easing: "cubic-bezier(.55,.05,.25,1)",
+        fill: "forwards",
+      }).finished;
+    (async () => {
+      await wait(800);
+      for (let k = 0; k < 3; k++) {
+        if (ctx.user || !s.isConnected || still) break;
+        const free = [...grid.children].filter((n) => !n.classList.contains("taken"));
+        if (!free.length) break;
+        const card = free[k % free.length];
+        const zoneEl = drop.children[[1, 0, 2][k] % drop.children.length];
+        if (!zoneEl) break;
+        const start = { x: s.clientWidth * 0.5, y: s.clientHeight * 0.55 };
+        const a = rel(card);
+        cursor.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 200, fill: "forwards" });
+        await glide(cursor, start, a, 650);
+        if (ctx.user) break;
+        await wait(140);
+        const ghost = el("div", "tour-schema-ghost local");
+        ghost.appendChild(card.firstChild.cloneNode());
+        s.appendChild(ghost);
+        ghost.style.left = a.x + "px";
+        ghost.style.top = a.y + "px";
+        card.classList.add("lifted");
+        s.classList.add("dragging");
+        await wait(260);
+        const z = rel(zoneEl);
+        setTimeout(() => zoneEl.classList.add("over"), 600);
+        await Promise.all([glide(cursor, a, z, 850), glide(ghost, a, z, 850)]);
+        await wait(220);
+        zoneEl.classList.remove("over");
+        ghost.remove();
+        card.classList.remove("lifted");
+        s.classList.remove("dragging");
+        saved(card, zoneEl.dataset.zone, zoneEl, false);
+        await cursor.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 260, delay: 200, fill: "forwards" }).finished;
+        await wait(700);
+      }
+      if (s.isConnected) tag.textContent = "(" + t("tourSchemaYou") + ")";
+    })();
+    return s;
+  }
+
   const TOUR = [
-    { key: "Zones", target: () => document.querySelector(".p-nav-home") },
     {
-      key: "NewZone",
-      live: true,
-      setup: (ctx) => {
-        if (state.focus != null || state.query) setFocus(null);
-        ctx.zones = state.zones.length;
-      },
-      target: () => document.querySelector(".p-new"),
-      action: () => startNewZone(),
-      done: (ctx) => state.zones.length > ctx.zones,
+      key: "Start",
+      center: true,
+      buttons: (api) => [
+        [t("tourOwn"), () => api.next()],
+        [
+          t("tourDemo"),
+          async () => {
+            try {
+              await enterDemo();
+            } catch (e) {
+              fail(e);
+            }
+            api.next();
+          },
+          true,
+        ],
+      ],
     },
     {
-      key: "Hot",
+      key: "Folders",
       setup: () => {
         if (state.focus != null || state.query) setFocus(null);
         if (state.home !== "overview") {
@@ -3749,10 +5944,36 @@
         }
       },
       target: () => document.querySelector(".p-hotrow"),
+      extra: finderList,
     },
     {
-      key: "Ext",
+      key: "Active",
       setup: (ctx) => {
+        if (state.focus != null || state.query) setFocus(null);
+        if (state.home !== "overview") {
+          state.home = "overview";
+          renderZones();
+        }
+        // Die Leiste fährt ein und bleibt stehen, solange der Schritt offen ist
+        ctx.peek = setTimeout(() => {
+          showDropbar();
+          document.body.classList.remove("dragging");
+          $("dropbar").classList.add("preview");
+        }, 500);
+      },
+      teardown: (ctx) => {
+        clearTimeout(ctx.peek);
+        $("dropbar").classList.remove("preview");
+        hideDropbar();
+      },
+      target: () => document.querySelector(".p-hotrow"),
+    },
+    {
+      key: "Browser",
+      center: true,
+      wide: true,
+      setup: (ctx) => {
+        ctx.n = tourStats.collected;
         const check = () =>
           invoke("bridge_browsers")
             .then((list) => (ctx.browsers = list))
@@ -3761,45 +5982,129 @@
         ctx.timer = setInterval(check, 2000);
       },
       teardown: (ctx) => clearInterval(ctx.timer),
+      extra: (ctx) => ctx.schema || (ctx.schema = browserSchema(ctx)),
+      done: (ctx) => tourStats.collected > ctx.n,
       status: (ctx) =>
         ctx.browsers && ctx.browsers.length
           ? { ok: true, text: t("onbExtOn", { list: ctx.browsers.join(", ") }) }
           : { ok: false, text: t("onbExtWaiting") },
-      action: (ctx) =>
+      third: (ctx) =>
         ctx.browsers && ctx.browsers.length
           ? null
-          : () =>
-              navigator.clipboard
-                .writeText("chrome://extensions")
-                .then(() => toast(t("onbExtCopied")))
-                .catch(fail),
-      actionLabel: "onbExtOpen",
-      target: () => null,
+          : EXT_STORE_URL
+            ? [t("tourStore"), () => invoke("open_url", { url: EXT_STORE_URL }).catch(fail)]
+            : [
+                t("onbExtOpen"),
+                () =>
+                  navigator.clipboard
+                    .writeText("chrome://extensions")
+                    .then(() => toast(t("onbExtCopied")))
+                    .catch(fail),
+              ],
     },
     {
-      key: "Drag",
+      key: "File",
       live: true,
       corner: true,
       setup: (ctx) => {
-        ctx.drops = dropCount;
-        if (state.items.length) setFocus(ALL);
+        ctx.n = tourStats.drops;
+        const inbox = zoneByName("Unsorted");
+        if (tourDemo.on && inbox) setFocus(inbox.path);
+        else if (state.items.length) setFocus(ALL);
       },
-      text: () => (state.items.length ? "tourDragText" : "tourDragEmpty"),
-      target: () => null,
-      done: (ctx) => dropCount > ctx.drops,
+      text: () => (tourDemo.on || state.items.length ? "tourFileText" : "tourFileEmpty"),
+      done: (ctx) => tourStats.drops > ctx.n || dropCount > (ctx.d ?? (ctx.d = dropCount)),
     },
-    { key: "Keys", target: () => null },
-    { key: "Search", target: () => $("navSearch") },
-    { key: "Menu", target: () => $("navMore") },
+    {
+      key: "View",
+      live: true,
+      corner: true,
+      setup: (ctx) => {
+        ctx.seen = false;
+        const zone = tourDemo.on && zoneByName(demoHot()[0]);
+        if (zone) setFocus(zone.path);
+        else if (state.items.length && state.focus == null) setFocus(ALL);
+      },
+      done: (ctx) => ctx.seen || (ctx.seen = !!state.lightbox),
+    },
+    {
+      key: "Search",
+      live: true,
+      corner: true,
+      setup: () => {
+        if (state.lightbox) closeLightbox();
+        setFocus(null);
+        openSearch();
+      },
+      extra: () => {
+        const chips = el("div", "tour-chips");
+        for (const w of tourSearchWords()) {
+          chips.appendChild(
+            chip("„" + w + "“", false, () => {
+              const input = $("search");
+              input.value = w;
+              input.dispatchEvent(new Event("input", { bubbles: true }));
+              input.focus();
+            })
+          );
+        }
+        return chips;
+      },
+      target: () => $("navSearch"),
+      done: () => !!state.query.trim() && !!state.found && state.found.length > 0,
+    },
+    {
+      key: "Poster",
+      live: true,
+      corner: true,
+      setup: (ctx) => {
+        ctx.n = tourStats.pdfs;
+        $("search").value = "";
+        $("search").blur();
+        const zone = tourDemo.on && zoneByName(demoHot()[1] || demoHot()[0]);
+        if (zone) setFocus(zone.path);
+        else if (state.focus == null && state.items.length) setFocus(ALL);
+      },
+      buttons: (api, ctx) =>
+        ctx.finished
+          ? null
+          : [
+              [
+                t("tourPosterDo"),
+                () => {
+                  const items = allVisible();
+                  if (!items.length) return toast(t("pdfNothing"));
+                  const title = isZone(state.focus) ? zoneLabel(state.focus) : t("pdfSelection");
+                  openPdfMaker(items.slice(), title, { poster: true });
+                },
+                true,
+              ],
+            ],
+      done: (ctx) => tourStats.pdfs > ctx.n,
+    },
+    {
+      key: "End",
+      center: true,
+      extra: keyList,
+      buttons: (api) =>
+        tourDemo.on
+          ? [
+              [t("tourKeepDemo"), () => api.end("keep")],
+              [t("tourToOwn"), () => api.end("own"), true],
+            ]
+          : [[t("tourDone"), () => api.end("own"), true]],
+    },
   ];
 
   function startTour(done) {
+    if (document.querySelector(".tour") || !isUnlocked()) return;
     closeMenus();
     closeMoreMenu();
     if (state.page) closePage();
     let step = 0;
     let ctx = {};
     let poll = 0;
+    let ending = false;
     const layer = el("div", "tour");
     const ring = el("div", "tour-ring");
     const card = el("div", "tour-card");
@@ -3811,27 +6116,34 @@
       const s = TOUR[step];
       if (s && s.teardown) s.teardown(ctx);
     };
-    const finish = () => {
+    const end = async (mode) => {
+      if (ending) return;
+      ending = true;
       leave();
       setPref(TOUR_PREF, true);
       document.removeEventListener("keydown", onKey, true);
       window.removeEventListener("resize", render);
+      await layer.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 260, fill: "forwards" }).finished;
       layer.remove();
+      await finale(mode !== "keep");
       if (done) done();
     };
     const go = (to) => {
       leave();
-      step = to;
-      if (step >= TOUR.length) return finish();
+      step = Math.max(0, to);
+      if (step >= TOUR.length) return end("own");
       enter();
     };
-    const next = () => go(step + 1);
+    const api = { next: () => go(step + 1), end };
     const onKey = (e) => {
-      // Tippen (z. B. Name der neuen Zone) gehört nicht der Tour
+      // Tippen und offene Ansichten (Vorschau, PDF-Ersteller) gehören nicht der Tour
       if (e.target.closest && e.target.closest("input, textarea, [contenteditable]")) return;
-      if (e.key === "Escape") finish();
-      else if (e.key === "Enter" || e.key === "ArrowRight") next();
-      else if (e.key === "ArrowLeft" && step > 0) go(step - 1);
+      if (state.lightbox || document.querySelector(".pdf-maker")) return;
+      const s = TOUR[step];
+      if (e.key === "Escape") end("own");
+      else if (e.key === "Enter" && !e.target.closest("button") && !s.buttons && !(s.done && !ctx.finished)) api.next();
+      else if (e.key === "ArrowRight" && !s.live && !s.buttons && !(s.done && !ctx.finished)) api.next();
+      else if (e.key === "ArrowLeft" && !s.live && step > 0) go(step - 1);
       else return;
       e.preventDefault();
       e.stopPropagation();
@@ -3840,59 +6152,139 @@
     function enter() {
       const s = TOUR[step];
       ctx = { finished: false };
+      card.replaceChildren();
       if (s.setup) s.setup(ctx);
       render();
       if (s.done || s.status)
         poll = setInterval(() => {
+          layer.classList.toggle("away", !!document.querySelector(".pdf-maker"));
           if (s.done && !ctx.finished && s.done(ctx)) {
             ctx.finished = true;
             render();
-            clearInterval(poll);
-            setTimeout(() => step === TOUR.indexOf(s) && next(), 1400);
-          } else if (s.status) render();
-        }, 500);
+          } else if (s.status) renderStatus();
+        }, 400);
+    }
+
+    function renderStatus() {
+      const s = TOUR[step];
+      const node = card.querySelector(".tour-status");
+      if (!s.status || !node) return;
+      const st = s.status(ctx);
+      node.className = "tour-status" + (st.ok ? " ok" : "");
+      node.textContent = st.text;
+      const acts = card.querySelector(".tour-actions");
+      if (acts) acts.replaceWith(actions());
+    }
+
+    function actions() {
+      const s = TOUR[step];
+      const row = el("div", "tour-actions");
+      const left = el("div", "tour-actions-group");
+      const right = el("div", "tour-actions-group");
+      if (step < TOUR.length - 1) left.appendChild(button("p-chip", "(" + t("tourSkip") + ")", () => end("own")));
+      if (step > 0) left.appendChild(button("p-chip", "(" + t("tourBack") + ")", () => go(step - 1)));
+      const third = s.third && !ctx.finished ? s.third(ctx) : null;
+      if (third) right.appendChild(button("p-chip", "(" + third[0] + ")", third[1]));
+      const custom = s.buttons ? s.buttons(api, ctx) : null;
+      if (custom) for (const [label, fn, primary] of custom) right.appendChild(button("p-chip" + (primary ? " active" : ""), "(" + label + ")", fn));
+      if (!custom || (s.key === "Poster" && ctx.finished)) {
+        const waiting = s.done && !ctx.finished;
+        right.appendChild(button("p-chip" + (waiting ? "" : " active"), "(" + t(waiting ? "tourLater" : "tourNext") + ")", api.next));
+      }
+      row.append(left, right);
+      return row;
     }
 
     function render() {
       const s = TOUR[step];
-      const target = s.target();
-      const r = target ? target.getBoundingClientRect() : null;
-      const textKey = s.text ? s.text() : "tour" + s.key + "Text";
-      card.replaceChildren(
-        el("div", "tour-count", `${step + 1} / ${TOUR.length}`),
-        el("div", "tour-title", t(ctx.finished ? "tour" + s.key + "Done" : "tour" + s.key + "Title")),
-        el("div", "tour-text", t(textKey))
-      );
-      if (s.status) {
-        const st = s.status(ctx);
-        card.appendChild(el("div", "tour-status" + (st.ok ? " ok" : ""), st.text));
+      const keepSchema = s.key === "Browser" && ctx.schema && card.contains(ctx.schema);
+      const title = t("tour" + s.key + (ctx.finished ? "Done" : "Title"));
+      const textKey = ctx.finished ? "tour" + s.key + "DoneText" : s.text ? s.text() : "tour" + s.key + "Text";
+      if (keepSchema) {
+        card.querySelector(".tour-title").textContent = title;
+        card.querySelector(".tour-text").innerHTML = kbdHtml(t(textKey));
+        renderStatus();
+        card.querySelector(".tour-actions").replaceWith(actions());
+      } else {
+        const count = el("div", "tour-progress");
+        TOUR.forEach((_, i) => count.appendChild(el("i", i <= step ? "on" : null)));
+        const text = el("div", "tour-text");
+        text.innerHTML = kbdHtml(t(textKey));
+        card.replaceChildren(count, el("div", "tour-title", title), text);
+        if (s.extra) {
+          const extra = el("div", "tour-extra");
+          extra.appendChild(s.extra(ctx));
+          card.appendChild(extra);
+        }
+        if (s.status) card.appendChild(el("div", "tour-status"));
+        card.appendChild(actions());
+        renderStatus();
       }
-      const actions = el("div", "tour-actions");
-      const action = typeof s.action === "function" && s.action.length ? s.action(ctx) : s.action;
-      const primary =
-        action && !ctx.finished
-          ? button("p-chip active", "(" + t(s.actionLabel || "tour" + s.key + "Do") + ")", action)
-          : button("p-chip active", "(" + t(step === TOUR.length - 1 ? "tourDone" : "tourNext") + ")", next);
-      actions.append(button("p-chip", "(" + t("tourSkip") + ")", finish), primary);
-      card.appendChild(actions);
       layer.classList.toggle("live", !!s.live);
-      ring.hidden = !r;
-      card.className = "tour-card";
+      card.className = "tour-card" + (s.wide ? " wide" : "") + (s.corner ? " corner" : "") + (s.center ? " center" : "");
       card.style.cssText = "";
-      if (s.corner) return card.classList.add("corner");
-      if (!r) return card.classList.add("center");
+      const target = s.target && s.target();
+      const r = target ? target.getBoundingClientRect() : null;
+      ring.hidden = !r || !r.width;
+      if (ring.hidden) return;
       const pad = 6;
-      ring.style.cssText = `left:${r.left - pad}px;top:${r.top - pad}px;width:${r.width + pad * 2}px;height:${r.height + pad * 2}px`;
-      // Karte unter Zielen oben (Leiste), über Zielen unten, sonst mittig
-      const left = Math.max(16, Math.min(innerWidth - 376, r.left + r.width / 2 - 180));
-      if (r.bottom < innerHeight * 0.3) card.style.cssText = `left:${left}px;top:${r.bottom + 18}px`;
-      else if (r.top > innerHeight * 0.6) card.style.cssText = `left:${left}px;bottom:${innerHeight - r.top + 18}px`;
-      else card.classList.add("center");
+      ring.style.cssText = `left:${r.left - pad}px;top:${r.top - pad}px;width:${r.width + pad * 2}px;height:${Math.min(r.height, innerHeight - r.top - 12) + pad * 2}px`;
+      if (s.corner || s.center) return;
+      const w = Math.min(380, innerWidth - 32);
+      const left = Math.max(16, Math.min(innerWidth - w - 16, r.left + r.width / 2 - w / 2));
+      if (r.bottom < innerHeight * 0.55) card.style.cssText = `left:${left}px;top:${Math.min(r.bottom + 18, innerHeight - card.offsetHeight - 16)}px`;
+      else card.style.cssText = `left:${left}px;bottom:${innerHeight - r.top + 18}px`;
     }
 
     document.addEventListener("keydown", onKey, true);
     window.addEventListener("resize", render);
     enter();
+  }
+
+  // Abschluss: zurück zur eigenen Bibliothek, Licht-Öffnung
+  async function finale(own) {
+    const cover = el("div", "reveal-cover");
+    document.body.appendChild(cover);
+    await cover.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 420, easing: "ease-in-out", fill: "forwards" }).finished;
+    const demo = tourDemo.on;
+    const moved = demo ? await leaveDemo(!own) : 0;
+    if (!demo) {
+      if (state.focus != null || state.query) setFocus(null);
+      state.home = "cards";
+      renderZones();
+    }
+    await playReveal(cover);
+    if (demo) toast(moved ? t("tourBackOwnMoved", { n: moved }) : t("tourBackOwn"));
+  }
+
+  function revealTargets() {
+    const out = [];
+    const nav = $("nav");
+    if (nav) out.push(nav);
+    const walk = (node, depth) => {
+      for (const c of node.children) {
+        if (out.length > 60) return;
+        const r = c.getBoundingClientRect();
+        if (!r.width || !r.height || r.bottom < 0 || r.top > innerHeight) continue;
+        if ((r.height > innerHeight * 0.45 || r.width > innerWidth * 0.6) && depth < 5 && c.children.length) walk(c, depth + 1);
+        else out.push(c);
+      }
+    };
+    const zones = $("zones");
+    if (zones) walk(zones, 0);
+    return out;
+  }
+
+  function playReveal(cover) {
+    const mode = pref("revealForm", "wave");
+    return window.ArchiverReveal.play({
+      mode,
+      targets: revealTargets(),
+      onStart: () => {
+        if (cover) cover.remove();
+      },
+      onOpen: () => playStartSound(),
+    });
   }
 
   function showDropHint() {
@@ -3916,12 +6308,23 @@
   function showApp() {
     $("welcome").hidden = true;
     $("app").hidden = false;
+    applyLock();
+    applyDragAlpha();
+    loadLibraries();
     return refresh().then(() => {
       // Nach dem Sprachwechsel wieder in den Einstellungen landen
-      if (sessionStorage.getItem("archiver.reopen") === "settings") {
+      const reopen = sessionStorage.getItem("archiver.reopen") || "";
+      if (reopen.startsWith("settings")) {
         sessionStorage.removeItem("archiver.reopen");
         togglePage("settings");
+        if (reopen.includes(":")) openSettingsSection(reopen.split(":")[1]);
       }
+      invoke("get_drag_alpha")
+        .then((a) => {
+          if (typeof a === "number") setPref("zoneAlpha", a);
+          applyDragAlpha();
+        })
+        .catch(() => {});
     });
   }
 
@@ -3940,12 +6343,14 @@
   // Animation beginnt erst, wenn es zu sehen ist, läuft einmal ganz durch,
   // und erst dann gibt die schwarze Fläche die Oberfläche frei.
   const SPLASH_MS = matchMedia("(prefers-reduced-motion: reduce)").matches ? 300 : 2500;
+  const SOUND_DELAY_MS = 350;
   const splashPlayed = new Promise((resolve) => {
     const win = TAURI.window && TAURI.window.getCurrentWindow && TAURI.window.getCurrentWindow();
     const started = Date.now();
     const play = () => {
       $("splash").classList.add("play");
-      playStartSound();
+      // Ton setzt ein, wenn die Wortmarke ins Bild gleitet
+      setTimeout(playStartSound, SOUND_DELAY_MS);
       setTimeout(resolve, SPLASH_MS);
     };
     const poll = () => {
@@ -3983,8 +6388,9 @@
 
   // ---- Updates (lib.rs: update_check / update_install) ----
   async function checkUpdate() {
+    if (document.querySelector(".p-update")) return;
     const info = await invoke("update_check").catch(() => null);
-    if (!info) return;
+    if (!info || document.querySelector(".p-update")) return;
     const bar = el("div", "p-update");
     bar.appendChild(el("span", null, t("updateAvailable", { version: info.version })));
     const go = button("p-update-btn", "(" + t("updateInstall") + ")", () => {
@@ -4008,6 +6414,16 @@
     TAURI.event.listen("analysis-ready", (e) => applyAnalysis(e.payload));
     TAURI.event.listen("reveal-in-app", (e) => revealFromViewer(e.payload));
     const info = await invoke("start_info");
+    // Die Bibliothek wird erst hier geöffnet (im Hintergrund, mit Ordner-Schutz),
+    // damit das Fenster nie hängt.
+    if (!info.library && info.pending) {
+      try {
+        await invoke("open_library", { path: info.pending });
+        info.library = info.pending;
+      } catch (e) {
+        setTimeout(() => libraryFail(e), 2600);
+      }
+    }
     if (info.library) {
       await showApp();
       // Einmal für alle, die vor der Tour schon eingerichtet waren
@@ -4015,6 +6431,14 @@
     } else showWelcome(info);
     hideSplash();
     setTimeout(checkUpdate, 3000);
+    // Auch im laufenden Betrieb: alle 30 Minuten und wenn das Fenster wieder nach vorne kommt
+    setInterval(checkUpdate, 30 * 60 * 1000);
+    let lastFocusCheck = Date.now();
+    window.addEventListener("focus", () => {
+      if (Date.now() - lastFocusCheck < 5 * 60 * 1000) return;
+      lastFocusCheck = Date.now();
+      checkUpdate();
+    });
   }
 
   boot().catch((e) => {

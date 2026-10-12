@@ -16,7 +16,7 @@ pub const LABEL: &str = "viewer";
 
 /// Öffnet ein Bild im Betrachter (neues Fenster oder das vorhandene).
 pub fn open(app: &AppHandle, path: PathBuf) {
-    if !path.is_file() || !library::is_media(&path) {
+    if !path.is_file() || !(library::is_media(&path) && !library::is_text(&path)) {
         return;
     }
     if let Some(dir) = path.parent() {
@@ -46,7 +46,7 @@ pub fn open(app: &AppHandle, path: PathBuf) {
 
 /// Bilder, die beim Start übergeben wurden (Linux/Windows: als Argumente).
 pub fn from_args() -> Option<PathBuf> {
-    std::env::args_os().skip(1).map(PathBuf::from).find(|p| p.is_file() && library::is_media(p))
+    std::env::args_os().skip(1).map(PathBuf::from).find(|p| p.is_file() && library::is_media(p) && !library::is_text(p))
 }
 
 fn file_name(path: &Path) -> String {
@@ -85,7 +85,7 @@ pub async fn viewer_siblings(path: String) -> Result<Siblings, String> {
         let files: Vec<PathBuf> = entries
             .filter_map(|e| e.ok())
             .map(|e| e.path())
-            .filter(|p| !file_name(p).starts_with('.') && library::is_media(p) && p.is_file())
+            .filter(|p| !file_name(p).starts_with('.') && library::is_media(p) && !library::is_text(p) && p.is_file())
             .collect();
         let current = files
             .iter()
@@ -276,7 +276,11 @@ pub fn viewer_make_default(app: AppHandle, format: String) -> Result<(), String>
 pub async fn viewer_drag_icon(path: String) -> Option<String> {
     use base64::Engine;
     tauri::async_runtime::spawn_blocking(move || {
-        let img = image::open(&path).ok()?.thumbnail(96, 96);
+        let tmp = std::env::temp_dir().join(format!("archiver-ql-{}", std::process::id()));
+        let img = image::open(&path)
+            .ok()
+            .or_else(|| crate::library::ql_image(std::path::Path::new(&path), 96, &tmp))?
+            .thumbnail(96, 96);
         let mut png = std::io::Cursor::new(Vec::new());
         img.to_rgba8().write_to(&mut png, image::ImageFormat::Png).ok()?;
         Some(format!("data:image/png;base64,{}", base64::engine::general_purpose::STANDARD.encode(png.into_inner())))

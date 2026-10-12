@@ -44,6 +44,28 @@
   let panelHostEl = null;
   let panels = null;
 
+  // Geist wie in der App. @font-face greift im Shadow DOM nicht, deshalb über
+  // document.fonts; die Seite sieht nur die zusätzliche Schrift, ändert nichts.
+  let fontsLoaded = false;
+  function loadFonts() {
+    if (fontsLoaded || !window.FontFace || !document.fonts) return;
+    fontsLoaded = true;
+    [
+      ["Geist", "fonts/Geist-Variable.woff2", { weight: "100 900" }],
+      ["Geist Mono", "fonts/GeistMono-Regular.woff2", { weight: "400" }],
+    ].forEach(([family, file, desc]) => {
+      const face = new FontFace(family, `url(${chrome.runtime.getURL(file)})`, desc);
+      face.load().then((f) => document.fonts.add(f)).catch(() => {});
+    });
+  }
+
+  // Ein-/Ausblenden der Zonenleiste als animierbare Zahl (siehe overlay.css)
+  try {
+    CSS.registerProperty({ name: "--archiver-zone-in", syntax: "<number>", inherits: true, initialValue: "1" });
+  } catch (e) {
+    // schon registriert (zweite Injektion) oder nicht unterstützt: Fallback 1 im CSS
+  }
+
   function ensureOverlay() {
     if (!overlayReady) {
       overlayReady = Promise.all(
@@ -62,6 +84,7 @@
         rootEl = UI.el("div", "root");
         shadow.appendChild(rootEl);
         document.documentElement.appendChild(host);
+        loadFonts();
       });
     }
     return overlayReady;
@@ -81,8 +104,17 @@
   }
 
   loadShortcut((s) => (shortcut = s));
+  // Deckkraft der Zonen beim Ziehen, eingestellt in der App
+  let zoneAlpha = null;
+  const loadAlpha = () =>
+    chrome.storage &&
+    chrome.storage.local &&
+    chrome.storage.local.get({ appZoneAlpha: null }, (d) => (zoneAlpha = typeof d.appZoneAlpha === "number" ? d.appZoneAlpha : null));
+  loadAlpha();
+  let zoneInfo = null;
   loadZones((list, info) => {
     zones = list;
+    zoneInfo = info || null;
     barZones = hotOf(list, info);
   });
 
@@ -91,12 +123,14 @@
       if (ArchiverShared.zonesChanged(changes, area)) {
         loadZones((list, info) => {
           zones = list;
+          zoneInfo = info || null;
           barZones = hotOf(list, info);
           if (zonesBarEl) removeZones(); // Zonenanzahl kann sich geändert haben
-          if (gallery) gallery.render(barZones);
+          if (gallery) gallery.render(barZones, zoneInfo);
         });
       }
       if (area === "sync" && changes.shortcut) loadShortcut((s) => (shortcut = s));
+      if (area === "local" && changes.appZoneAlpha) loadAlpha();
     });
   }
 
@@ -159,6 +193,7 @@
     } else if (message.type === "pinterest-collect" && window === window.top) {
       collectPinterestBoard().then((result) => chrome.runtime.sendMessage({ type: "pinterest-pins", ...result }));
     } else if (message.type === "context-save") {
+      dropLibrary = null;
       contextSave(message);
     } else if (message.type === "capture-start" && window === window.top) {
       startAreaCapture();
@@ -203,7 +238,41 @@
   }
 
   function saveCard(card, folder, source) {
-    chrome.runtime.sendMessage({ type: "download-image", url: card.dataUrl, suggestedName: card.name, folder, ...source });
+    // Textkarten (mit Farbe) landen bei laufender App als .txt in der Zone (background.js asTextFile)
+    sendSave({ type: "download-image", url: card.dataUrl, suggestedName: card.name, folder, tone: card.tone, textCard: !!card.tone, ...source });
+  }
+
+  // Farben der Textkarten, gleiche Werte wie in der App (app.js QUOTE_TONES):
+  // Hintergrund, Schrift Ton in Ton, Deckkraft für Kennung und Fuß
+  const CARD_TONES = {
+    red: ["#ff0000", "#5c0000", 0.7],
+    green: ["#00b050", "#003d1c", 0.7],
+    violet: ["#7030a0", "#e2c8f5", 0.75],
+    cyan: ["#00b0f0", "#003d54", 0.7],
+    yellow: ["#ffff00", "#5c5c00", 0.75],
+  };
+  // Die Farbe wird zu Beginn jeder Markierung zufällig bestimmt (nie zweimal
+  // dieselbe hintereinander) und gilt, bis neu markiert wird
+  let markTone = null;
+  function newTone() {
+    const keys = Object.keys(CARD_TONES).filter((k) => k !== markTone);
+    markTone = keys[Math.floor(Math.random() * keys.length)];
+    return markTone;
+  }
+  function toneFor() {
+    return markTone || newTone();
+  }
+
+  // Markierung in der Farbe der späteren Textkarte, schon während des Markierens
+  let toneStyle = null;
+  function showTone() {
+    if (!toneStyle) {
+      toneStyle = document.createElement("style");
+      toneStyle.setAttribute("data-archiver-tone", "");
+      (document.head || document.documentElement).appendChild(toneStyle);
+    }
+    const [bg, fg] = CARD_TONES[toneFor()];
+    toneStyle.textContent = `::selection{background:${bg}!important;color:${fg}!important}`;
   }
 
   // ---- PDF, Video und Audio ----
@@ -242,7 +311,7 @@
   }
 
   function saveMediaFile(url, folder, source) {
-    chrome.runtime.sendMessage({ type: "download-image", url: resolveUrl(url), folder, ...source });
+    sendSave({ type: "download-image", url: resolveUrl(url), folder, ...source });
   }
 
   async function saveVideoCard(url, folder, fallbackTitle) {
@@ -265,7 +334,7 @@
     const video = videoPageUrl(location.href);
     if (isPdfPage()) saveMediaFile(location.href, folder, { pageUrl: location.href, pageTitle: document.title || null });
     else if (video) saveVideoCard(video, folder, document.title.replace(/ - YouTube$/, ""));
-    else chrome.runtime.sendMessage({ type: "capture-visible", folder, ...source });
+    else sendSave({ type: "capture-visible", folder, ...source });
   }
 
   function contextSave(msg) {
@@ -279,7 +348,7 @@
       savePage(folder, source);
     } else if (msg.srcUrl) {
       const best = ctx && ctx.target && ctx.target.tagName === "IMG" ? findBestImageUrl(ctx.target) : null;
-      chrome.runtime.sendMessage({ type: "download-image", url: resolveUrl(best || msg.srcUrl), folder, ...source });
+      sendSave({ type: "download-image", url: resolveUrl(best || msg.srcUrl), folder, ...source });
     } else if (selection) {
       saveCard(textCard(selection, source), folder, { ...source, quote: selection });
     } else if (msg.linkUrl) {
@@ -290,8 +359,8 @@
       savePage(folder, source);
     } else {
       const url = ctx ? imageAt(ctx.x, ctx.y) : null;
-      if (url) chrome.runtime.sendMessage({ type: "download-image", url: resolveUrl(url), folder, ...source });
-      else chrome.runtime.sendMessage({ type: "capture-visible", folder, ...source });
+      if (url) sendSave({ type: "download-image", url: resolveUrl(url), folder, ...source });
+      else sendSave({ type: "capture-visible", folder, ...source });
     }
   }
 
@@ -331,12 +400,12 @@
     }
   }
 
-  function renderCard(draw, height) {
+  function renderCard(draw, height, bg) {
     const canvas = document.createElement("canvas");
     canvas.width = CARD_W;
     canvas.height = height;
     const ctx = canvas.getContext("2d");
-    ctx.fillStyle = "#f4f3ef";
+    ctx.fillStyle = bg || "#f4f3ef";
     ctx.fillRect(0, 0, CARD_W, height);
     ctx.fillStyle = "#141414";
     ctx.textBaseline = "top";
@@ -350,6 +419,8 @@
   }
 
   function textCard(text, source) {
+    const tone = toneFor();
+    const [bg, fg, dim] = CARD_TONES[tone];
     const measure = document.createElement("canvas").getContext("2d");
     const size = text.length < 140 ? 64 : text.length < 400 ? 46 : 36;
     measure.font = `500 ${size}px ${SANS}`;
@@ -358,17 +429,19 @@
     const height = CARD_PAD * 2 + 80 + lines.length * lh + 60;
     const date = new Date().toLocaleDateString(document.documentElement.lang || undefined);
     const dataUrl = renderCard((ctx) => {
+      ctx.fillStyle = fg;
       ctx.font = `400 22px ${MONO}`;
-      ctx.fillStyle = "#8a8a85";
+      ctx.globalAlpha = dim;
       ctx.fillText(t("cardText").toUpperCase(), CARD_PAD, CARD_PAD);
-      ctx.fillStyle = "#141414";
+      ctx.globalAlpha = 1;
       ctx.font = `500 ${size}px ${SANS}`;
       lines.forEach((l, i) => ctx.fillText(l, CARD_PAD, CARD_PAD + 80 + i * lh));
       ctx.font = `400 22px ${MONO}`;
-      ctx.fillStyle = "#8a8a85";
+      ctx.globalAlpha = dim;
       ctx.fillText([hostOf(source.pageUrl), date].filter(Boolean).join("  ·  "), CARD_PAD, height - CARD_PAD + 10);
-    }, height);
-    return { dataUrl, name: cardName(text, "Text") };
+      ctx.globalAlpha = 1;
+    }, height, bg);
+    return { dataUrl, name: cardName(text, "Text"), tone };
   }
 
   function linkCard(title, url) {
@@ -627,10 +700,11 @@
     toolbar.appendChild(UI.buildPanelButtons(panels));
 
     galleryPanelEl.appendChild(toolbar);
+    galleryPanelEl.appendChild(toolbar.libTab);
     galleryPanelEl.appendChild(gallery.el);
     rootEl.appendChild(galleryPanelEl);
     rootEl.appendChild(panelHostEl);
-    gallery.render(barZones);
+    gallery.render(barZones, zoneInfo);
   }
 
   function removeGalleryPanel() {
@@ -650,10 +724,12 @@
       if (zonesBarEl || manualOpen || dragCounter <= 0) return; // schon da, Overlay offen oder Drag vorbei
 
       zonesBarEl = UI.el("div", "zones-bar");
+      if (zoneAlpha != null) zonesBarEl.style.setProperty("--zone-alpha", String(zoneAlpha));
       zoneEls = barZones.map((name, i) => {
         const zone = UI.el("div", "zone" + (isRootZoneName(name) ? " root" : ""));
         zone.dataset.index = String(i);
         // Schwebende Karte wie in der App: Name oben links, Unterzone mit grauem Elternteil
+        zone.appendChild(UI.el("span", "zone-key", String(i + 1).padStart(2, "0")));
         const label = UI.el("div", "zone-label");
         const parts = String(name).split("/");
         if (parts.length > 1) label.appendChild(UI.el("span", "zone-parent", parts.slice(0, -1).join(" / ") + " / "));
@@ -672,6 +748,7 @@
   // eine Zone angelegt worden sein). Ändert sich etwas, wird die Leiste neu gebaut.
   let zonesRefreshedAt = 0;
   function refreshZones() {
+    if (dropLibrary) return; // per ⇧ andere Bibliothek gewählt: deren Zonen stehen lassen
     if (Date.now() - zonesRefreshedAt < 2000) return;
     zonesRefreshedAt = Date.now();
     loadZones((list, info) => {
@@ -694,7 +771,21 @@
       zonesBarEl = null;
       zoneEls = [];
     }
+    removeLibBar();
     dragCounter = 0;
+  }
+
+  // Abgelegt: Die Zielkarte bleibt kurz hervorgehoben, dann blendet die Leiste ruhig aus.
+  function landZones(idx) {
+    const bar = zonesBarEl;
+    const zone = zoneEls[idx];
+    if (!bar || !zone) return removeZones();
+    zonesBarEl = null;
+    zoneEls = [];
+    dragCounter = 0;
+    zone.classList.add("active");
+    bar.classList.add("leaving");
+    setTimeout(() => bar.remove(), 520);
   }
 
   // Liefert den Zonen-Index unter x/y, oder -1 wenn außerhalb aller Zonen
@@ -822,7 +913,6 @@
 
   const SPOT_PAD = 8;
   let spotEl = null;
-  let spotStyle = null;
   let spotFrame = 0;
   let spotRect = null; // sichtbarer Block, für das Ziehen
 
@@ -849,7 +939,6 @@
   function hideSpotlight() {
     spotRect = null;
     if (spotEl) spotEl.style.opacity = "0";
-    if (spotStyle) spotStyle.disabled = true;
   }
 
   function updateSpotlight() {
@@ -862,18 +951,10 @@
       spotEl.setAttribute("data-archiver-spotlight", "");
       spotEl.style.cssText =
         "position:fixed;left:0;top:0;z-index:2147483000;pointer-events:none;" +
-        "outline:1.5px dashed #fff;box-shadow:0 0 0 100vmax rgba(0,0,0,.42);" +
-        "opacity:0;transition:opacity .2s ease;";
+"opacity:0;";
       document.documentElement.appendChild(spotEl);
       spotEl.getBoundingClientRect();
     }
-    if (!spotStyle) {
-      // Markierungsfarbe ausblenden, solange die Outline steht
-      spotStyle = document.createElement("style");
-      spotStyle.textContent = "::selection{background:transparent!important}";
-      (document.head || document.documentElement).appendChild(spotStyle);
-    }
-    spotStyle.disabled = false;
     spotEl.style.transform = `translate(${Math.round(box.left)}px, ${Math.round(box.top)}px)`;
     spotEl.style.width = Math.round(box.right - box.left) + "px";
     spotEl.style.height = Math.round(box.bottom - box.top) + "px";
@@ -891,7 +972,13 @@
     if (e.button === 0 && spotRect && insideBlock(e.clientX, e.clientY)) return; // Ziehen des Blocks
     selecting = true;
     hideSpotlight();
+    // Neue Markierung beginnt: neue Farbe, sofort sichtbar
+    if (e.button === 0) {
+      newTone();
+      showTone();
+    }
   }, true);
+  showTone();
   document.addEventListener("mouseup", () => {
     selecting = false;
     setTimeout(scheduleSpotlight, 0);
@@ -918,44 +1005,6 @@
     );
   }
 
-  // Abbild des Blocks am Zeiger: dieselbe Größe, dieselbe Outline, darin der
-  // markierte Inhalt in der Schrift der Seite.
-  function blockGhost(rect) {
-    const ghost = document.createElement("div");
-    ghost.setAttribute("data-archiver-spotlight", "");
-    const w = Math.round(rect.right - rect.left);
-    const h = Math.round(rect.bottom - rect.top);
-    const sel = window.getSelection();
-    const range = sel.rangeCount ? sel.getRangeAt(0) : null;
-    let host = range && range.commonAncestorContainer;
-    if (host && host.nodeType !== 1) host = host.parentElement;
-    const cs = host ? getComputedStyle(host) : null;
-    let bg = "#fff";
-    for (let n = host; n; n = n.parentElement) {
-      const c = getComputedStyle(n).backgroundColor;
-      if (c && c !== "transparent" && !/rgba\(.*,\s*0\)$/.test(c)) {
-        bg = c;
-        break;
-      }
-    }
-    ghost.style.cssText =
-      `position:fixed;left:0;top:0;z-index:2147483647;pointer-events:none;width:${w}px;height:${h}px;` +
-      `box-sizing:border-box;padding:${SPOT_PAD}px;overflow:hidden;outline:1.5px dashed #fff;` +
-      `background:${bg};opacity:.92;box-shadow:0 18px 50px rgba(0,0,0,.45);` +
-      `transform-origin:0 0;transition:scale .18s ease;` +
-      (cs ? `font:${cs.font};color:${cs.color};line-height:${cs.lineHeight};text-align:${cs.textAlign};` : "");
-    if (range) {
-      const inner = document.createElement("div");
-      // erste Zeile beginnt dort, wo die Markierung beginnt
-      const first = range.getClientRects()[0];
-      const indent = first ? Math.max(0, Math.round(first.left - rect.left - SPOT_PAD)) : 0;
-      inner.style.cssText = `pointer-events:none;text-indent:${indent}px;`;
-      inner.appendChild(range.cloneContents());
-      ghost.appendChild(inner);
-    }
-    return ghost;
-  }
-
   function endTextDrag() {
     if (!textDrag) return;
     if (textDrag.ghost) textDrag.ghost.remove();
@@ -974,11 +1023,10 @@
       d.moving = true;
       dragCounter = 1;
       showZones();
-      const block = d.rect ? blockGhost(d.rect) : null; // jetzt, solange die Markierung steht
       ensureOverlay().then(() => {
         if (textDrag !== d) return;
-        // in der Überlagerung, damit der Block über den Zonen liegt
-        d.ghost = block || UI.el("div", "text-ghost", d.text.length > 80 ? d.text.slice(0, 80) + " …" : d.text);
+        // in der Überlagerung, damit die Karte über den Zonen liegt
+        d.ghost = cardGhost(d.text);
         rootEl.appendChild(d.ghost);
         moveGhost(d, d.lastX ?? e.clientX, d.lastY ?? e.clientY);
       });
@@ -991,19 +1039,22 @@
     zoneEls.forEach((el, i) => el.classList.toggle("active", i === active));
   }
 
+  // Am Zeiger hängt schon die spätere Textkarte: Farbe der Markierung,
+  // Text in Kartenschrift, unten die Quelle.
+  function cardGhost(text) {
+    const [bg, fg, dim] = CARD_TONES[toneFor()];
+    const g = UI.el("div", "text-ghost card");
+    g.style.background = bg;
+    g.style.color = fg;
+    g.appendChild(UI.el("div", "text-ghost-text", text.length > 220 ? text.slice(0, 220).trim() + " …" : text));
+    const foot = UI.el("div", "text-ghost-foot", hostOf(location.href));
+    foot.style.opacity = String(dim);
+    g.appendChild(foot);
+    return g;
+  }
+
   function moveGhost(d, x, y) {
     if (!d.ghost) return;
-    if (d.rect) {
-      // Block bleibt dort gegriffen, wo man ihn angefasst hat, und schrumpft
-      // bei großen Blöcken, damit die Zonen sichtbar bleiben
-      const w = d.rect.right - d.rect.left;
-      const h = d.rect.bottom - d.rect.top;
-      const k = Math.min(1, 420 / w, 260 / h);
-      const ox = (d.x - d.rect.left) * k;
-      const oy = (d.y - d.rect.top) * k;
-      d.ghost.style.transform = `translate(${x - ox}px, ${y - oy}px) scale(${k})`;
-      return;
-    }
     // am rechten und unteren Rand auf die andere Seite des Zeigers
     const w = d.ghost.offsetWidth;
     const h = d.ghost.offsetHeight;
@@ -1023,6 +1074,7 @@
       const idx = getZoneIndex(e.clientX, e.clientY);
       if (idx !== -1) {
         const name = barZones[idx];
+        landZones(idx);
         const source = currentPageSource();
         saveCard(textCard(d.text, source), isRootZoneName(name) ? null : name, { ...source, quote: d.text });
       }
@@ -1142,13 +1194,33 @@
       e.dataTransfer.setData("text/html", `<img src="${url.replace(/"/g, "&quot;")}">`);
       // Vorschau beim Ziehen: das Bild selbst statt der leeren Fläche
       const img = [...document.elementsFromPoint(e.clientX, e.clientY)].find((n) => n.tagName === "IMG");
-      if (img) {
-        const r = img.getBoundingClientRect();
-        e.dataTransfer.setDragImage(img, Math.min(e.clientX - r.left, r.width), Math.min(e.clientY - r.top, r.height));
-      }
+      if (img) cappedDragImage(e, img);
     },
     true
   );
+
+  // Chrome zeichnet ein <img> als Ziehbild in voller Pixelgröße (große WebP
+  // wurden riesig). Stattdessen eine verkleinerte Kopie, höchstens 220 px.
+  function cappedDragImage(e, img) {
+    const r = img.getBoundingClientRect();
+    const nw = img.naturalWidth || r.width;
+    const nh = img.naturalHeight || r.height;
+    const scale = Math.min(1, 220 / Math.max(nw, nh, 1));
+    const w = Math.max(1, Math.round(nw * scale));
+    const h = Math.max(1, Math.round(nh * scale));
+    const canvas = document.createElement("canvas");
+    canvas.width = w;
+    canvas.height = h;
+    canvas.style.cssText = `position:fixed;left:-10000px;top:0;width:${w}px;height:${h}px;pointer-events:none`;
+    try {
+      canvas.getContext("2d").drawImage(img, 0, 0, w, h);
+    } catch {}
+    document.documentElement.appendChild(canvas);
+    const fx = r.width ? Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)) : 0.5;
+    const fy = r.height ? Math.min(1, Math.max(0, (e.clientY - r.top) / r.height)) : 0.5;
+    e.dataTransfer.setDragImage(canvas, Math.round(w * fx), Math.round(h * fy));
+    setTimeout(() => canvas.remove(), 0);
+  }
 
   // Instagram: eigenes Ziehen mit Zeiger-Ereignissen statt des Browser-Ziehens,
   // das Instagram unterbindet. Erst ab ein paar Pixeln Bewegung, sonst bleibt
@@ -1213,6 +1285,7 @@
       { capture: true, once: true }
     );
     const idx = getZoneIndex(e.clientX, e.clientY);
+    if (idx !== -1) landZones(idx);
     endMediaDrag();
     if (idx === -1) return;
     const name = barZones[idx];
@@ -1315,20 +1388,30 @@
     return m && img(m) ? { url: img(m), ext: "jpg" } : null;
   }
 
+  // Quelle ist der Beitrag selbst, nicht der Feed, auf dem gezogen wurde.
+  function igSource(code, item) {
+    const reel = item ? item.product_type === "clips" : /\/reels?\//.test(location.pathname);
+    const user = item && item.user && item.user.username;
+    return {
+      pageUrl: `https://www.instagram.com/${reel ? "reel" : "p"}/${code}/`,
+      pageTitle: user ? `@${user} · Instagram` : "Instagram",
+    };
+  }
+
   async function dropInstagram(el, video, imageUrl, folder) {
     clearHiddenDrag();
     removeZones();
     fallbackImageUrl = null;
-    const source = currentPageSource();
     const code = el ? postCodeNear(el) : null;
     const item = code ? await igItem(code) : null;
+    const source = code ? igSource(code, item) : currentPageSource();
     const hit = item ? igPick(item, video, imageUrl) : null;
     if (hit) {
-      chrome.runtime.sendMessage({ type: "download-image", url: hit.url, suggestedName: `instagram-${code}-${fileNameOf(hit.url).slice(0, 40)}`.replace(/\.(jpe?g|mp4|webp|heic)$/i, "") + "." + hit.ext, folder, ...source });
+      sendSave({ type: "download-image", url: hit.url, suggestedName: `instagram-${code}-${fileNameOf(hit.url).slice(0, 40)}`.replace(/\.(jpe?g|mp4|webp|heic)$/i, "") + "." + hit.ext, folder, toDownloads: shiftDrop, ...source });
     } else if (video) {
       photographVideo(video, folder);
     } else if (imageUrl) {
-      chrome.runtime.sendMessage({ type: "download-image", url: resolveUrl(imageUrl), folder, ...source });
+      sendSave({ type: "download-image", url: resolveUrl(imageUrl), folder, toDownloads: shiftDrop, ...source });
     }
   }
 
@@ -1357,11 +1440,90 @@
     return typeof result === "string" ? resolveUrl(result) : result;
   }
 
+  // Shift beim Loslassen: Bild landet in ~/Downloads statt in der Zone.
+  // Gibt es in der App mehrere Bibliotheken, wechselt ⇧ stattdessen die Bibliothek.
+  let shiftDrop = false;
+
+  // ---- ⇧ beim Ziehen: Bibliothek wechseln ----
+  // Jeder Druck auf ⇧ (gelesen aus dragover, Tastenereignisse gibt es während
+  // eines Drags nicht) springt zur nächsten Bibliothek und zeigt ihre Active
+  // Zones. Die Bibliotheks-Leiste ist nur sichtbar, solange ⇧ gedrückt ist.
+  let dragLibs = []; // [{ name, path, active }]
+  let libIdx = -1;
+  let shiftHeld = false;
+  let dropLibrary = null; // Pfad der per ⇧ gewählten Bibliothek, null = aktive
+  let libBarEl = null;
+
+  function sendSave(message) {
+    return chrome.runtime.sendMessage(dropLibrary ? { ...message, library: dropLibrary } : message);
+  }
+
+  function loadDragLibs() {
+    dropLibrary = null;
+    libIdx = -1;
+    shiftHeld = false;
+    chrome.runtime.sendMessage({ type: "library-zones", library: null }, (r) => {
+      if (chrome.runtime.lastError || !r || !r.app) return;
+      dragLibs = Array.isArray(r.libraries) ? r.libraries : [];
+      libIdx = Math.max(0, dragLibs.findIndex((l) => l.active));
+    });
+  }
+
+  function cycleLibrary() {
+    if (dragLibs.length < 2) return;
+    libIdx = (libIdx + 1) % dragLibs.length;
+    const lib = dragLibs[libIdx];
+    dropLibrary = lib.active ? null : lib.path;
+    showLibBar();
+    chrome.runtime.sendMessage({ type: "library-zones", library: lib.path }, (r) => {
+      if (chrome.runtime.lastError || !r || !r.app || dragLibs[libIdx] !== lib) return;
+      barZones = r.hot && r.hot.length ? r.hot : r.zones.slice(0, 4);
+      relabelZones();
+    });
+  }
+
+  function showLibBar() {
+    if (!rootEl) return;
+    if (!libBarEl) {
+      libBarEl = UI.el("div", "lib-bar");
+      rootEl.appendChild(libBarEl);
+    }
+    libBarEl.replaceChildren(
+      ...dragLibs.map((l, i) => UI.el("span", "lib" + (i === libIdx ? " on" : ""), l.name)),
+      UI.el("span", "lib-key", "⇧")
+    );
+    libBarEl.hidden = false;
+  }
+
+  function hideLibBar() {
+    if (libBarEl) libBarEl.hidden = true;
+  }
+
+  function removeLibBar() {
+    if (libBarEl) libBarEl.remove();
+    libBarEl = null;
+  }
+
+  // Karten behalten, nur Namen tauschen (Leiste bleibt ruhig stehen)
+  function relabelZones() {
+    zoneEls.forEach((zone, i) => {
+      const name = barZones[i];
+      zone.hidden = name == null;
+      if (name == null) return;
+      const label = zone.querySelector(".zone-label");
+      label.replaceChildren();
+      const parts = String(name).split("/");
+      if (parts.length > 1) label.appendChild(UI.el("span", "zone-parent", parts.slice(0, -1).join(" / ") + " / "));
+      label.appendChild(document.createTextNode(parts[parts.length - 1]));
+    });
+  }
+
   document.addEventListener(
     "dragenter",
     (e) => {
       if (!e.dataTransfer || manualOpen) return; // im offenen Overlay übernehmen die Zonen-Karten
       dragCounter++;
+      if (dragCounter === 1 && !zonesBarEl) loadDragLibs();
       showZones();
     },
     true
@@ -1373,6 +1535,21 @@
       if (!e.dataTransfer || manualOpen) return;
       e.preventDefault(); // notwendig, damit "drop" überhaupt feuert
       e.dataTransfer.dropEffect = "copy";
+      // Mehrere Bibliotheken: ⇧ wechselt die Bibliothek, die Leiste zeigt sich nur bei gedrückter Taste
+      if (dragLibs.length > 1) {
+        if (e.shiftKey && !shiftHeld) {
+          shiftHeld = true;
+          cycleLibrary();
+        } else if (!e.shiftKey && shiftHeld) {
+          shiftHeld = false;
+          hideLibBar();
+        }
+      } else if (zonesBarEl && zonesBarEl.classList.contains("to-downloads") !== e.shiftKey) {
+        // Nur eine Bibliothek: mit Shift geht das Bild am Archiv vorbei in den Download-Ordner
+        zonesBarEl.classList.toggle("to-downloads", e.shiftKey);
+        const hint = t(e.shiftKey ? "dropDownloads" : "dropRelease");
+        zoneEls.forEach((el) => (el.querySelector(".zone-hint").textContent = hint));
+      }
       if (zoneEls.length) {
         const activeIdx = getZoneIndex(e.clientX, e.clientY);
         zoneEls.forEach((el, i) => el.classList.toggle("active", i === activeIdx));
@@ -1396,6 +1573,8 @@
     (e) => {
       if (manualOpen) return;
       const zoneIdx = getZoneIndex(e.clientX, e.clientY);
+      shiftDrop = dragLibs.length > 1 ? false : e.shiftKey;
+      removeLibBar();
       debugLog("drop, zoneIdx:", zoneIdx, "types:", e.dataTransfer.types);
 
       if (zoneIdx === -1) {
@@ -1407,6 +1586,7 @@
 
       const zoneName = barZones[zoneIdx];
       const folder = isRootZoneName(zoneName) ? null : zoneName;
+      landZones(zoneIdx);
 
       if (IG && (hiddenDrag || dragSource)) {
         const el = hiddenDrag ? hiddenDrag.el : dragSource;
@@ -1459,11 +1639,11 @@
         if (result.file) {
           const reader = new FileReader();
           reader.onload = () => {
-            chrome.runtime.sendMessage({ type: "download-image", url: reader.result, suggestedName: result.file.name, folder });
+            sendSave({ type: "download-image", url: reader.result, suggestedName: result.file.name, folder, toDownloads: shiftDrop });
           };
           reader.readAsDataURL(result.file);
         } else {
-          chrome.runtime.sendMessage({ type: "download-image", url: result, folder, ...currentPageSource() });
+          sendSave({ type: "download-image", url: result, folder, toDownloads: shiftDrop, ...currentPageSource() });
         }
       }
       removeZones();

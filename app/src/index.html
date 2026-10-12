@@ -33,6 +33,13 @@
       <aside id="info" class="info-panel" hidden></aside>
       <aside id="sheet" class="p-sheet"></aside>
       <div id="dropbar" class="p-dropbar" hidden></div>
+      <div id="lock" class="p-lock" hidden>
+        <div class="p-lock-inner">
+          <div class="p-lock-mark">Archiver</div>
+          <p id="lockText"></p>
+          <div id="lockForm" class="p-lock-form"></div>
+        </div>
+      </div>
       <header id="top" class="p-top" data-tauri-drag-region>
       <nav id="nav" class="p-nav">
         <button type="button" id="navBrand" class="p-nav-btn p-nav-brand">Archiver</button>
@@ -47,6 +54,9 @@
         </div>
       </nav>
       </header>
+      <div id="libTab" class="p-lib-tab" hidden>
+        <button type="button" id="libTabBtn" class="p-nav-btn"></button>
+      </div>
     </div>
 
     <div id="lightbox" class="lightbox" hidden>
@@ -74,6 +84,7 @@
 
     <script src="i18n.js"></script>
     <script src="media.js"></script>
+    <script src="reveal.js"></script>
     <script src="app.js"></script>
   </body>
 </html>

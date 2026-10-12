@@ -53,6 +53,18 @@
     return span;
   }
 
+  // „heute“, „gestern“, sonst „10. Okt.“ wie in der App
+  function dayText(ts) {
+    const d = new Date(ts);
+    const today = new Date();
+    const start = (x) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+    const days = Math.round((start(today) - start(d)) / 864e5);
+    if (days === 0) return t("dayToday");
+    if (days === 1) return t("dayYesterday");
+    const lang = (chrome.i18n && chrome.i18n.getUILanguage && chrome.i18n.getUILanguage()) || "de";
+    return d.toLocaleDateString(lang.startsWith("de") ? "de-DE" : "en-GB", { day: "numeric", month: "short" }).replace(/\.\.$/, ".");
+  }
+
   function setBodyUserSelect(value) {
     if (document.body) document.body.style.userSelect = value;
   }
@@ -85,9 +97,11 @@
     let query = "";
     let lightbox = null; // { el, img, caption, items, index }
     let focusKey = null; // folderKey der geöffneten Zone, null = alle Zonen
+    let libName = null; // Name der Bibliothek in der App (null = ohne App)
 
-    function render(list) {
+    function render(list, meta) {
       if (list) zones = list.slice();
+      if (meta !== undefined) libName = meta && meta.app ? meta.library || null : null;
       if (focusKey !== null && !zones.some((name) => folderKeyForName(name) === focusKey)) focusKey = null;
       clearSelection();
       gridEl.innerHTML = "";
@@ -95,6 +109,16 @@
       gridEl.classList.toggle("focused", focusKey !== null);
       gridEl.classList.toggle("cards", focusKey === null);
       cardRefs = {};
+      if (focusKey === null) {
+        // Kopf wie in der App: „Active Zones in Referenzen. …“, darunter das Etikett
+        const head = el("h1", "x-head");
+        head.appendChild(el("span", "x-head-title", t("activeTitle")));
+        head.appendChild(el("span", "x-head-text", " " + (libName ? t("activeLead", [libName]) : t("activeLeadNoLib"))));
+        gridEl.appendChild(head);
+        const bar = el("div", "x-bar");
+        bar.appendChild(el("span", "x-mono", t("activeLabel") + " (" + zones.length + ")"));
+        gridEl.appendChild(bar);
+      }
       zones.forEach((name, i) => {
         if (focusKey === null || folderKeyForName(name) === focusKey) gridEl.appendChild(buildCard(name, i));
       });
@@ -184,6 +208,11 @@
       const cover = focused ? null : el("div", "zone-card-cover");
       const cardGrid = el("div", "zone-card-grid");
       if (cover) {
+        // Nummer (Taste 1–4) und Etikett über dem Cover, wie die Active Zones der App
+        const key = el("div", "x-key");
+        key.appendChild(el("span", "x-mono", String(index + 1).padStart(2, "0")));
+        key.appendChild(el("span", "x-mono", t("activeTag")));
+        card.appendChild(key);
         card.appendChild(cover);
         card.title = t("openZone");
         card.addEventListener("click", (e) => {
@@ -387,11 +416,11 @@
     function loadFolder(folderKey, cardGrid, countEl, cover) {
       chrome.runtime.sendMessage({ type: "list-folder-downloads", folder: folderKey }, (response) => {
         const items = (response && response.items) || [];
-        countEl.textContent = !items.length
-          ? t("noImagesYet")
-          : items.length === 1
-            ? t("imageCountOne")
-            : t("imageCount", [String(items.length)]);
+        const count = items.length === 1 ? t("objCountOne") : t("objCount", [String(items.length)]);
+        const latest = Math.max(0, ...items.map((i) => i.ts || 0));
+        if (!items.length) countEl.textContent = t("noImagesYet");
+        else if (cover) countEl.textContent = latest ? count + " · " + dayText(latest) : count;
+        else countEl.textContent = latest ? t("zoneLead", [count, dayText(latest)]) : count + ".";
         if (cover) {
           cover.innerHTML = "";
           cover.classList.toggle("trio", items.length >= 3);
@@ -542,11 +571,18 @@
     });
 
     // Mit App: Hinweis, dass alles Weitere in der App liegt, ein Klick öffnet sie
+    // Oben rechts wie der Bibliotheks-Reiter der App: Name der Bibliothek, Klick öffnet die App
     const appBadge = button("nav-btn nav-app", t("openApp") + " ↗", () => chrome.runtime.sendMessage({ type: "open-app" }));
     appBadge.title = t("openAppTitle");
     appBadge.hidden = true;
-    toolbar.appendChild(appBadge);
-    loadZones((list, info) => (appBadge.hidden = !(info && info.app)));
+    // Eigenes Element neben der Navigation (die Leiste hat backdrop-filter, darin wäre fixed relativ zu ihr)
+    const libTab = el("div", "x-lib-tab");
+    libTab.appendChild(appBadge);
+    toolbar.libTab = libTab;
+    loadZones((list, info) => {
+      appBadge.hidden = !(info && info.app);
+      if (info && info.app && info.library) appBadge.textContent = info.library + " ↗";
+    });
     return toolbar;
   }
 
