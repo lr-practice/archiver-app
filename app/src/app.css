@@ -5722,3 +5722,66 @@ html.mac[data-winalpha] {
   background: var(--p-text);
   vertical-align: 0.2em;
 }
+
+/* ---- 0.25.0: Neues Hell ----
+   Neutrales Hellgrau ohne Farbstich (R = G = B), damit weiße Bilder eine Kante
+   haben. Übersetzt aus Dunkel: gleiche Kontraste, Karten eine Stufe vom Grund
+   abgesetzt, Navigation als weißes Glas, Zonenkarten beim Ziehen als helles
+   Glas ohne Sättigung (Deckkraft über den Regler). Salbei bleibt unverändert. */
+html.light:not([data-scheme="sage"]) {
+  --bg-solid: #f4f4f4;
+  --bg: #f4f4f4;
+  --panel: #f4f4f4;
+  --sheet-bg: #f4f4f4;
+  --splash-bg: #f4f4f4;
+  --lightbox-bg: rgba(244, 244, 244, 0.98);
+  --ink: #111111;
+  --ink-rgb: 17, 17, 17;
+  --ink-inverse: #f4f4f4;
+  --p-text: #111111;
+  --p-dim: #5c5c5c;
+  --muted: #5c5c5c;
+  --p-faint: #8f8f8f;
+  --p-rule: rgba(0, 0, 0, 0.1);
+  --p-rule-strong: rgba(0, 0, 0, 0.55);
+  --p-pill: rgba(255, 255, 255, 0.78);
+  --thumb-bg: #e8e8e8;
+  --card-bg: rgba(0, 0, 0, 0.045);
+  --menu-bg: rgba(250, 250, 250, 0.97);
+  --menu-shadow: 0 14px 44px rgba(0, 0, 0, 0.14), inset 0 0 0 1px rgba(0, 0, 0, 0.06);
+}
+html.mac[data-winalpha].light:not([data-scheme="sage"]) {
+  --bg: color-mix(in srgb, var(--bg-solid) calc(var(--win-alpha, 0.6) * 100%), transparent);
+}
+html.light:not([data-scheme="sage"]) .p-nav {
+  background: var(--p-pill);
+  -webkit-backdrop-filter: blur(24px) saturate(0);
+  backdrop-filter: blur(24px) saturate(0);
+  box-shadow: 0 10px 34px rgba(0, 0, 0, 0.08), inset 0 0 0 1px rgba(0, 0, 0, 0.05);
+}
+html.light:not([data-scheme="sage"]) .p-nav-btn.active {
+  background: rgba(0, 0, 0, 0.08);
+}
+html.light:not([data-scheme="sage"]) .p-nav > .p-nav-glide {
+  background: rgba(0, 0, 0, 0.06);
+}
+html.light:not([data-scheme="sage"]) .p-lib-tab {
+  background: transparent;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.08);
+}
+html.light:not([data-scheme="sage"]) .p-card {
+  background: rgba(0, 0, 0, 0.045);
+}
+html.light:not([data-scheme="sage"]) .p-card:hover {
+  background: rgba(0, 0, 0, 0.07);
+}
+html.light:not([data-scheme="sage"]) .p-dropbar .p-hot {
+  --menu-bg: #fafafa;
+  --hot-shadow: 0.16;
+  -webkit-backdrop-filter: blur(calc(28px * var(--hot-in))) saturate(0);
+  backdrop-filter: blur(calc(28px * var(--hot-in))) saturate(0);
+  box-shadow:
+    0 14px 44px rgba(0, 0, 0, calc(0.16 * var(--hot-in))),
+    inset 0 0 0 1px rgba(255, 255, 255, calc(0.7 * var(--hot-in))),
+    inset 0 0 0 0.5px rgba(0, 0, 0, calc(0.08 * var(--hot-in)));
+}

@@ -1,5 +1,13 @@
 # Changelog
 
+## App 0.25.0 (12.10.2026)
+
+- Neues Hell: neutrales Hellgrau (#F4F4F4) ohne Farbstich, alle Grautöne ohne Sättigung. Weiße Bilder behalten ihre Kante.
+- Übersetzt aus Dunkel: Schrift mit denselben Kontrasten, Karten eine Stufe vom Grund abgesetzt, Bibliotheks-Reiter zurückgenommen.
+- Navigation als weißes Glas mit leichtem Schatten.
+- Zonenkarten beim Ziehen als helles Glas ohne Sättigung; wie stark sie decken, regelt weiter Einstellungen › Aussehen.
+- Salbei bleibt unverändert.
+
 ## App 0.24.9 · Extension 3.20.0 (12.10.2026)
 
 Extension auf dem Stand der App:
