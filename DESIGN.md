@@ -1,6 +1,6 @@
 # Archiver – Design-System
 
-Stand: App 0.26.1 · Extension 3.20.0
+Stand: App 0.27.0 · Extension 3.20.0
 
 Diese Datei hält fest, wie Archiver aussieht und warum. Sie gilt für die Mac-App
 (`app/src`) und die Chrome-Extension (`extension/`). Wer an der Oberfläche
@@ -209,13 +209,22 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
 
 ### 4.5 Ordnerkarte (`.p-folder-card`)
 - **Zweck:** Unterordner neben dem Zonen-Titel, als Karten (3/6) oder als
-  Liste (2/6).
+  Liste (2/6). Klick betritt den Ordner (Titel wird zum Pfad), die Chips
+  links filtern nur und lassen Titel und Karten stehen.
 - **Form:** Wie die Zonenkarte, ein Sechstel breit. Aktiv zeigt sie den Ring.
+  Auch leere Ordner haben eine Karte (0 Objekte).
+- **Ablageziel (0.27):** Objekte und Ordner lassen sich auf die Karte ziehen,
+  sie zeigt dabei den Ring (4.1).
+- **Titel:** Steht oben im Kopf (`align-self: start`) und springt nicht, wenn
+  sich die Zahl der Karten beim Wechsel der Ebene ändert.
 
 ### 4.6 Objekt (`.card`)
 - **Zweck:** Ein gesichertes Bild, Video, PDF oder eine Text- bzw. Seitenkarte
   im Raster.
 - **Form:** Eckig, ohne Fläche. Solange es lädt, steht ein Glasplatzhalter da.
+- **Video beim Hover (0.27):** Nach 250 ms Verweilen zeigt `.card-scrub` acht
+  Standbilder aus dem ganzen Clip nacheinander (alle 320 ms), ohne Ton. Mit
+  `prefers-reduced-motion` bleibt das Standbild.
 - **Nicht:** Keine Rundung, kein Schatten und keine Bildunterschrift im Raster.
   Die Info gibt es per `I` oder im Seitenblatt.
 
@@ -258,6 +267,12 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
   Rahmen oder Platzieren-Cursor), sonst „Kopieren“. Beim Herausziehen eines Objekts wird die Palette auf 6 %
   Deckkraft gesetzt und lässt Klicks durch. Klick in ein anderes Programm
   blendet sie aus.
+- **Textkarten (0.27):** wie in der App in ihrer Grundfarbe (`.pal-text`).
+- **Leertaste (0.27):** zeigt das gewählte Objekt groß, innerhalb der Palette
+  (`.pal-preview` ersetzt den Inhalt, Suchfeld und Fußzeile bleiben). ←→
+  blättern, Leertaste oder esc schließen. Im Suchfeld mit Text tippt die
+  Leertaste weiter.
+- **⌘1–3:** wechselt die Bibliothek wie in der App.
 - **Nicht:** Sie aktiviert Archiver nicht und holt das Hauptfenster nicht nach vorne.
 
 ### 4.13 Zonenleiste am ganzen Mac (`dropbar.css`)
@@ -267,6 +282,16 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
   eigene Unschärfe (das Fenster ist durchsichtig), deshalb gilt `--zone-alpha`.
 - **Nicht:** Erscheint nicht, wenn Archiver selbst vorne ist, und nicht bei
   Text oder Links ohne Datei.
+
+### 4.14 Zuletzt gelöscht (`.p-deleted`, `.p-del`)
+- **Zweck:** Gelöschte Objekte und Zonen liegen 7 Tage unter
+  `.archiver/deleted/<Zeit>/<alter Pfad>` in der Bibliothek, dann gehen sie in
+  den Papierkorb des Macs. Erreichbar über die letzte Zeile im Index und ≡.
+- **Form:** Raster wie Objekte (4.6), Bilder auf 72 % zurückgenommen, darunter
+  eine Mono-Zeile mit Zone und Resttagen. Auswahl zeigt den Ring (4.1).
+  Wiederherstellen und Sofort löschen stehen als Chips rechts.
+- **Nicht:** Kein eigener Zonenplatz unter den Active Zones, keine Zeile, wenn
+  nichts gelöscht ist.
 
 ---
 

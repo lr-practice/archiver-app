@@ -114,6 +114,7 @@
   });
 
   TAURI.event.listen("library-changed", () => (state.dirty = true));
+  TAURI.event.listen("library-switched", () => (state.dirty = true));
   TAURI.event.listen("dropbar-show", async () => {
     await load();
     render();

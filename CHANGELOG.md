@@ -1,5 +1,25 @@
 # Changelog
 
+## App 0.27.0 (12.10.2026)
+
+Entfernt:
+- Getting Started (Tour) und das Farbschema Salbei. Wer Salbei hatte, sieht wieder das Standard-Schema.
+
+Zonen und Ordner:
+- Zuletzt gelöscht: Gelöschte Objekte und Zonen liegen 7 Tage in der Bibliothek und lassen sich zurückholen (Doppelklick, Rechtsklick oder „Wiederherstellen“). Danach gehen sie in den Papierkorb des Macs. Zu finden als letzte Zeile im Index und im ≡-Menü.
+- Der Titel einer Zone steht oben fest und springt nicht mehr, wenn man in einen Unterordner geht.
+- Die Ordner-Chips links oben filtern nur noch, Titel und Ordnerkarten bleiben stehen. Die Karten rechts führen weiter in den Ordner.
+- Rechtsklick in eine Zone: „Neuer Unterordner“, auf Objekte: „Neuer Unterordner mit Auswahl“. Der Ordner heißt erst „Neuer Ordner“ und lässt sich gleich umbenennen. Leere Ordner haben jetzt auch eine Karte.
+- Objekte lassen sich auf die kleinen Ordnerkarten ziehen und landen im Unterordner. ⌘Z holt sie genau zurück.
+- Ganze Ordner aus dem Finder in die App ziehen: in der Übersicht wird daraus eine Zone, in einer Zone oder auf einer Karte ein Unterordner, jeweils mit allen Unterordnern.
+- Videos zeigen beim Hover eine kurze Vorschau aus acht Bildern.
+- Fehler behoben: In der Übersicht „Karten“ lässt sich eine Zone aus dem Index wieder auf eine Active Zone ziehen (und umgekehrt).
+
+Palette:
+- Textkarten erscheinen in ihrer Farbe statt als leere Fläche.
+- ⌘1–3 wechselt die Bibliothek, wie in der App.
+- Leertaste zeigt das gewählte Objekt groß, innerhalb der Palette. ←→ blättern, Leertaste oder esc schließen.
+
 ## App 0.26.1 (12.10.2026)
 
 - Palette aus InDesign: Rahmen markieren, ⌥ Space, Doppelklick oder ↵ auf ein Bild – es landet verknüpft im Rahmen, proportional gefüllt und zentriert. Ohne markierten Rahmen liegt es im Platzieren-Cursor. Beim ersten Mal fragt macOS, ob Archiver InDesign steuern darf.
