@@ -2598,10 +2598,17 @@
     if (sub === "extension") {
       const extBlock = block(t("setExtension"));
       const ext = el("div", null, "…");
-      invoke("bridge_browsers")
-        .then((list) => (ext.textContent = list.length ? t("setBridgeOn", { list: list.join(", ") }) : t("setBridgeOff")))
-        .catch(() => (ext.textContent = t("setBridgeOff")));
-      extBlock.appendChild(blockRow(ext, [button("p-link", t("import"), openImportDialog)]));
+      const get = button("p-link", t("extGet"), openExtensionDownload);
+      get.hidden = true;
+      Promise.all([invoke("bridge_browsers").catch(() => []), extensionState()]).then(([list, s]) => {
+        if (!list.length) return (ext.textContent = t("setBridgeOff"));
+        const kind = s ? s.kind : "missing";
+        get.hidden = kind === "ok";
+        if (kind === "ok") ext.textContent = t("extStatusOk", { version: s.version, list: list.join(", ") });
+        else if (kind === "old") ext.textContent = t("extStatusOld", { version: s.version || "", min: s.min }).replace("  ", " ");
+        else ext.textContent = t("extStatusMissing");
+      });
+      extBlock.appendChild(blockRow(ext, [get, button("p-link", t("import"), openImportDialog)]));
       wrap.appendChild(extBlock);
     }
 
@@ -6805,9 +6812,10 @@
     status.hidden = false;
     let timer = 0;
     const check = () =>
-      invoke("bridge_browsers")
-        .then((list) => {
-          const on = list.length > 0;
+      Promise.all([invoke("bridge_browsers"), extensionState()])
+        .then(([list, s]) => {
+          // Verbunden heißt: Die Extension hat sich gemeldet (nicht nur die Brücke eingerichtet)
+          const on = list.length > 0 && !!s && s.kind !== "missing";
           status.textContent = on ? t("onbExtOn", { list: list.join(", ") }) : t("onbExtWaiting");
           status.classList.toggle("ok", on);
           $("welcomeCreate").textContent = t(on ? "onbNext" : "onbExtOpen");
@@ -6968,9 +6976,11 @@
 
   // ---- Updates (lib.rs: update_check / update_install) ----
   async function checkUpdate() {
-    if (document.querySelector(".p-update")) return;
+    if (document.querySelector(".p-update:not(.p-ext)")) return;
     const info = await invoke("update_check").catch(() => null);
-    if (!info || document.querySelector(".p-update")) return;
+    if (!info || document.querySelector(".p-update:not(.p-ext)")) return;
+    // Das App-Update geht vor; die neue App bringt meist auch die Extension mit
+    document.querySelectorAll(".p-ext").forEach((n) => n.remove());
     const bar = el("div", "p-update");
     bar.appendChild(el("span", null, t("updateAvailable", { version: info.version })));
     const go = button("p-update-btn", "(" + t("updateInstall") + ")", () => {
@@ -6984,6 +6994,65 @@
     });
     bar.appendChild(go);
     bar.appendChild(button("p-update-close", "×", () => bar.remove()));
+    document.body.appendChild(bar);
+  }
+
+  // ---- Extension fehlt oder ist veraltet (bridge.rs: extension_status) ----
+  // Der Host notiert bei jedem Kontakt die Version der Extension. Gleiche Leiste
+  // wie der Update-Hinweis; × blendet ihn aus, bis sich der Zustand ändert.
+
+  const EXTENSION_DOWNLOAD = "https://archiver-app.com/download/";
+  const EXT_MISSING_GRACE = 2 * 24 * 60 * 60 * 1000;
+
+  function openExtensionDownload() {
+    invoke("open_url", { url: EXTENSION_DOWNLOAD }).catch(fail);
+  }
+
+  function versionLess(a, b) {
+    const pa = String(a).split(".").map(Number);
+    const pb = String(b).split(".").map(Number);
+    for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+      const x = pa[i] || 0;
+      const y = pb[i] || 0;
+      if (x !== y) return x < y;
+    }
+    return false;
+  }
+
+  // { kind: "ok" | "old" | "missing", version, min } oder null
+  async function extensionState() {
+    const s = await invoke("extension_status").catch(() => null);
+    if (!s) return null;
+    const kind = !s.seen ? "missing" : !s.version || versionLess(s.version, s.min) ? "old" : "ok";
+    return { kind, version: s.version, min: s.min };
+  }
+
+  async function checkExtension() {
+    if (document.querySelector(".p-update") || $("app").hidden || !$("lock").hidden) return;
+    const s = await extensionState();
+    if (!s) return;
+    if (s.kind === "ok") {
+      setPref("extMissingSince", null);
+      return;
+    }
+    // Fehlt sie, erst nach zwei Tagen melden: Nach einem App-Update meldet sich
+    // eine vorhandene Extension erst, wenn sie das nächste Mal etwas tut.
+    if (s.kind === "missing") {
+      const since = pref("extMissingSince", null);
+      if (!since) return setPref("extMissingSince", Date.now());
+      if (Date.now() - since < EXT_MISSING_GRACE) return;
+    }
+    const key = s.kind + ":" + s.min;
+    if (pref("extHintClosed", null) === key || document.querySelector(".p-update")) return;
+    const bar = el("div", "p-update p-ext");
+    bar.appendChild(el("span", null, s.kind === "old" ? t("extOld", { min: s.min }) : t("extMissing")));
+    bar.appendChild(button("p-update-btn", "(" + t("extGet") + ")", openExtensionDownload));
+    bar.appendChild(
+      button("p-update-close", "×", () => {
+        setPref("extHintClosed", key);
+        bar.remove();
+      })
+    );
     document.body.appendChild(bar);
   }
 
@@ -7014,6 +7083,7 @@
     } else showWelcome(info);
     hideSplash();
     setTimeout(checkUpdate, 3000);
+    setTimeout(checkExtension, 6000);
     // Auch im laufenden Betrieb: alle 30 Minuten und wenn das Fenster wieder nach vorne kommt
     setInterval(checkUpdate, 30 * 60 * 1000);
     let lastFocusCheck = Date.now();
@@ -7021,6 +7091,7 @@
       if (Date.now() - lastFocusCheck < 5 * 60 * 1000) return;
       lastFocusCheck = Date.now();
       checkUpdate();
+      checkExtension();
     });
   }
 

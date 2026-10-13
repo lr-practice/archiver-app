@@ -50,6 +50,7 @@ const MANUAL = {
           { t: "Bild mit Text", d: "Bild und Text zusammen markieren und sichern: Das Bild wird gesichert, der Text wird sein Bildtext." },
           { t: "Links und Medien", d: "Links und Seiten werden Karten, PDF-, Video- und Audio-Links Dateien. YouTube und Vimeo als Video-Karte, Instagram-Karussells und Reels im Original." },
           { t: "Overlay", d: "Die Active Zones auf jeder Seite. „Archiver öffnen ↗“ führt in die App.", k: ["⌥⇧A"] },
+          { t: "Version", d: "Fehlt die Extension oder ist sie älter, als die App sie braucht, steht oben rechts ein Hinweis mit „(Laden)“. Den Stand zeigt Einstellungen › Extension." },
         ],
       },
       {
@@ -168,6 +169,7 @@ const MANUAL = {
           { t: "Image with text", d: "Select an image together with text and save it: the image is saved, the text becomes its caption." },
           { t: "Links and media", d: "Links and pages become cards, PDF, video and audio links become files. YouTube and Vimeo as video cards, Instagram carousels and reels in their original." },
           { t: "Overlay", d: "The Active Zones on any page. “Open Archiver ↗” takes you to the app.", k: ["⌥⇧A"] },
+          { t: "Version", d: "If the extension is missing or older than the app needs, a note with “(Download)” appears at the top right. Settings › Extension shows which version is connected." },
         ],
       },
       {

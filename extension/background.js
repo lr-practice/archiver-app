@@ -226,7 +226,8 @@ async function appBridge() {
   if (Date.now() - bridgeCache.at < BRIDGE_CACHE_MS) return bridgeCache.info;
   let info = null;
   try {
-    const r = await hostCall("hello");
+    // ext: eigene Version, damit die App einen Hinweis zeigen kann, wenn sie veraltet ist
+    const r = await hostCall("hello", { ext: chrome.runtime.getManifest().version });
     if (r.library) info = { library: r.library, name: r.name || "Archiver", version: r.version, libraries: Array.isArray(r.libraries) ? r.libraries : [] };
   } catch {}
   bridgeCache = { at: Date.now(), info };
@@ -499,6 +500,9 @@ function buildMenus() {
 
 chrome.runtime.onInstalled.addListener(buildMenus);
 chrome.runtime.onStartup.addListener(buildMenus);
+// Gleich beim Laden bei der App melden (Hinweis „Extension fehlt“ verschwindet)
+chrome.runtime.onInstalled.addListener(() => appBridge());
+chrome.runtime.onStartup.addListener(() => appBridge());
 chrome.storage.onChanged.addListener((changes, area) => {
   if ((area === "sync" && changes.zones) || (area === "local" && (changes.appZones || changes.appZoneOrder))) buildMenus();
 });

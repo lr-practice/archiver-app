@@ -28,6 +28,10 @@ const LIST_LIMIT: usize = 500;
 /// in Phase 4 dazu.
 const EXTENSION_IDS: &[&str] = &["gddcmkfpdfkpnieegdplpilmoodghgdd"];
 
+/// Version der Extension, die diese App mindestens braucht. Meldet sich eine
+/// ältere (oder eine ohne Versionsangabe, vor 3.22.0), zeigt die App einen Hinweis.
+pub const EXTENSION_MIN: &str = "3.22.0";
+
 /// Wurde das Programm von Chrome als Native-Messaging-Host gestartet?
 pub fn is_host_invocation() -> bool {
     std::env::args().skip(1).any(|a| a.starts_with("chrome-extension://"))
@@ -108,6 +112,36 @@ pub fn install_manifests() -> Vec<PathBuf> {
         }
     }
     written
+}
+
+// ---- Welche Extension hat sich zuletzt gemeldet? ----
+// Der Host schreibt bei jedem "hello" Version und Zeit in extension.json neben
+// die Einstellungen der App. Die App liest das für den Hinweis „fehlt/veraltet“.
+
+fn extension_file() -> Option<PathBuf> {
+    Some(dirs::config_dir()?.join(APP_IDENTIFIER).join("extension.json"))
+}
+
+fn note_extension(msg: &Value) {
+    let Some(file) = extension_file() else { return };
+    let entry = json!({ "version": str_arg(msg, "ext"), "seen": now_ms() });
+    if let Some(dir) = file.parent() {
+        let _ = std::fs::create_dir_all(dir);
+    }
+    let _ = std::fs::write(file, serde_json::to_vec(&entry).unwrap());
+}
+
+/// Zuletzt gemeldete Extension (Version, Zeit) und die Mindestversion.
+pub fn extension_status() -> Value {
+    let seen: Value = extension_file()
+        .and_then(|f| std::fs::read_to_string(f).ok())
+        .and_then(|t| serde_json::from_str(&t).ok())
+        .unwrap_or(Value::Null);
+    json!({
+        "version": seen.get("version").cloned().unwrap_or(Value::Null),
+        "seen": seen.get("seen").cloned().unwrap_or(Value::Null),
+        "min": EXTENSION_MIN,
+    })
 }
 
 // ---- Host ----
@@ -281,6 +315,7 @@ fn handle(msg: &Value, slot: &mut Vec<(PathBuf, Library)>) -> Result<Value, Stri
     let cmd = str_arg(msg, "cmd").unwrap_or("");
     match cmd {
         "hello" => {
+            note_extension(msg);
             let root = library_root();
             Ok(json!({
                 "app": "Archiver",

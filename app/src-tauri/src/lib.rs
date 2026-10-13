@@ -357,6 +357,11 @@ fn bridge_browsers() -> Vec<String> {
 }
 
 #[tauri::command]
+fn extension_status() -> serde_json::Value {
+    bridge::extension_status()
+}
+
+#[tauri::command]
 async fn pick_folder(app: AppHandle) -> Option<String> {
     app.dialog().file().blocking_pick_folder().and_then(|p| p.into_path().ok()).map(|p| p.to_string_lossy().into_owned())
 }
@@ -1242,6 +1247,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             start_info,
             bridge_browsers,
+            extension_status,
             pick_folder,
             pick_export_file,
             open_library,

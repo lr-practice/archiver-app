@@ -1,6 +1,6 @@
 # Archiver – Design-System
 
-Stand: App 0.29.1 · Extension 3.21.1
+Stand: App 0.29.1 · Extension 3.22.0
 
 Diese Datei hält fest, wie Archiver aussieht und warum. Sie gilt für die Mac-App
 (`app/src`) und die Chrome-Extension (`extension/`). Wer an der Oberfläche
@@ -362,6 +362,19 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
 - **Taste (`kbd` im Seitenblatt):** Geist Mono 11 px, `--p-text`, Rand als
   `inset 0 0 0 1px` ink × 0.25, Ecke `--r-sm`.
 - **Nicht:** Keine Bilder, keine Akzentfarbe, kein eigenes Inhaltsverzeichnis.
+
+### 4.16 Hinweisleiste (`.p-update`, `.p-ext`)
+- **Zweck:** Ein Hinweis, der bleibt, bis man handelt: „Archiver X ist da“
+  und seit 0.30 „Extension X ist da“ bzw. „Keine Extension verbunden“.
+- **Form:** Glas-Pille oben rechts (12 px vom Rand), `--p-pill`, Text 13 px,
+  danach Handlung in Mono 12 px in Klammern („(Laden)“) und ×. Immer nur
+  eine Leiste; das App-Update verdrängt den Extension-Hinweis.
+- **Extension:** Der Host notiert bei jedem Kontakt die Version
+  (`extension.json` neben den Einstellungen). Älter als `EXTENSION_MIN`
+  (`bridge.rs`) oder ohne Version = veraltet. Hat sich nie eine gemeldet,
+  kommt der Hinweis erst nach zwei Tagen. × blendet ihn aus, bis sich Zustand
+  oder Mindestversion ändern. Einstellungen › Extension zeigt den Stand.
+- **Nicht:** Kein Toast, keine Akzentfarbe, kein Dialog beim Start.
 
 ---
 
