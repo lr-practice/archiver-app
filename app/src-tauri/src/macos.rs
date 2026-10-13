@@ -397,6 +397,12 @@ pub unsafe fn make_panel(window: *mut AnyObject, level: isize) {
     let _: () = msg_send![window, setCollectionBehavior: (1usize) | (1 << 8) | (1 << 6)];
     let _: () = msg_send![window, setFloatingPanel: true];
     let _: () = msg_send![window, setHidesOnDeactivate: false];
+    // Die Maske nachträglich gesetzt aktiviert das Programm sonst trotzdem (0.28)
+    let sel = sel!(_setPreventsActivation:);
+    let responds: bool = msg_send![window, respondsToSelector: sel];
+    if responds {
+        let _: () = msg_send![window, _setPreventsActivation: true];
+    }
 }
 
 pub unsafe fn panel_visible(window: *mut AnyObject) -> bool {
@@ -443,6 +449,14 @@ unsafe fn find_webview(view: *mut AnyObject) -> *mut AnyObject {
         }
     }
     std::ptr::null_mut()
+}
+
+/// Hinter alle Fenster legen, ohne Archiver zu aktivieren
+pub unsafe fn order_back(window: *mut AnyObject) {
+    if !window.is_null() {
+        let none: *mut AnyObject = std::ptr::null_mut();
+        let _: () = msg_send![window, orderBack: none];
+    }
 }
 
 pub unsafe fn panel_hide(window: *mut AnyObject) {

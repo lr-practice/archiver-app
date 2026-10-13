@@ -866,6 +866,13 @@ async fn rename_zone(app: AppHandle, state: State<'_, AppState>, zone: String, n
     Ok(z)
 }
 
+#[tauri::command]
+async fn move_folder(app: AppHandle, state: State<'_, AppState>, from: String, into: String) -> Result<String, String> {
+    let p = current(&state)?.move_folder(&from, &into)?;
+    let _ = app.emit("library-changed", ());
+    Ok(p)
+}
+
 /// Deckkraft der Zonen beim Ziehen (App und Extension)
 #[tauri::command]
 async fn set_drag_alpha(state: State<'_, AppState>, alpha: f64) -> Result<(), String> {
@@ -1022,13 +1029,19 @@ fn set_system_prefs(app: AppHandle, prefs: system::SystemPrefs) -> Result<(), St
 
 /// Hell / Dunkel aus den Einstellungen: Fensterrahmen und Glas passend setzen.
 /// Dunkel bleibt das HUD-Glas, Hell nimmt das helle Seitenleisten-Glas.
+/// Ecke des Trays in Punkt, aus Einstellungen › Aussehen (0.28)
+static TRAY_RADIUS: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(12);
+
 #[tauri::command]
-fn set_appearance(window: tauri::WebviewWindow, light: bool) {
+fn set_appearance(window: tauri::WebviewWindow, light: bool, radius: Option<f64>) {
     let _ = window.set_theme(Some(if light { tauri::Theme::Light } else { tauri::Theme::Dark }));
+    if let Some(r) = radius.filter(|_| window.label() == system::PALETTE) {
+        TRAY_RADIUS.store(r.clamp(0.0, 24.0) as u32, std::sync::atomic::Ordering::Relaxed);
+    }
     if window.label() == "main" || window.label() == system::PALETTE {
         use tauri::window::{Effect, EffectState, EffectsBuilder};
         let effect = if light { Effect::Sidebar } else { Effect::HudWindow };
-        let radius = if window.label() == system::PALETTE { 12.0 } else { 0.0 };
+        let radius = if window.label() == system::PALETTE { TRAY_RADIUS.load(std::sync::atomic::Ordering::Relaxed) as f64 } else { 0.0 };
         let mut fx = EffectsBuilder::new().effect(effect).state(EffectState::Active);
         if radius > 0.0 {
             fx = fx.radius(radius);
@@ -1220,6 +1233,7 @@ pub fn run() {
             restore_deleted,
             remove_deleted,
             rename_zone,
+            move_folder,
             set_zone_order,
             set_default_zone,
             set_structure,

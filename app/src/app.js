@@ -69,15 +69,12 @@
 
   // Auswahl: ruhige gestrichelte Outline oder eine, die langsam um das Objekt läuft
   // Fensterhintergrund (Mac): wie stark die Farbe die macOS-Unschärfe deckt, getrennt von den Zonen
+  // 0.28: Standard ist das Glas des Trays (Dunkel 72 %, Hell 78 %), immer aktiv
   function applyWinAlpha(v) {
     const root = document.documentElement;
-    if (typeof v !== "number") {
-      delete root.dataset.winalpha;
-      root.style.removeProperty("--win-alpha");
-    } else {
-      root.dataset.winalpha = "on";
-      root.style.setProperty("--win-alpha", String(v));
-    }
+    root.dataset.winalpha = "on";
+    if (typeof v !== "number") root.style.removeProperty("--win-alpha");
+    else root.style.setProperty("--win-alpha", String(v));
   }
 
   function applyFocusAnim(on) {
@@ -159,7 +156,7 @@
   applyRadius(pref("radius", "round"));
   applyTopFade(pref("topFade", "fade"));
   applyFocusAnim(pref("focusAnim", false));
-  applyWinAlpha(pref("winAlpha", null));
+  applyWinAlpha(pref("winGlass", null));
   applyNavPos(pref("navPos", "tl"));
 
   const state = {
@@ -1115,12 +1112,112 @@
       text.appendChild(el("div", "p-card-meta", n === 1 ? t("countImage") : t("countImages", { n })));
       body.appendChild(text);
       card.appendChild(body);
-      card.addEventListener("click", () => openFolder(f));
+      const rel = zone.path + "/" + f;
+      // 0.28: ⋯ wie bei Zonen (Umbenennen, im Finder zeigen, löschen)
+      const menuWrap = el("span", "zone-menu-wrap");
+      menuWrap.appendChild(zoneMenuButton({ path: rel, count: n }, () => folderMenu(rel, n)));
+      body.appendChild(menuWrap);
+      card.addEventListener("click", (e) => {
+        if (cardDragged || e.target.closest(".zone-menu-btn, .zone-menu, input")) return;
+        openFolder(f);
+      });
+      card.addEventListener("contextmenu", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        closeMenus();
+        const menu = folderMenu(rel, n);
+        menu.classList.add("p-ctx-menu");
+        document.body.appendChild(menu);
+        const r = menu.getBoundingClientRect();
+        menu.style.left = Math.max(8, Math.min(e.clientX, window.innerWidth - r.width - 8)) + "px";
+        menu.style.top = Math.max(8, Math.min(e.clientY, window.innerHeight - r.height - 8)) + "px";
+      });
+      // 0.28: Ordner auf einen anderen Ordner ziehen legt ihn hinein
+      card.addEventListener("pointerdown", (e) => dragFolder(e, card));
+      card.addEventListener("dragstart", (e) => e.preventDefault());
       card.dataset.folder = f;
-      card.dataset.zone = zone.path + "/" + f; // Ablageziel beim Ziehen (0.27)
+      card.dataset.zone = rel; // Ablageziel beim Ziehen (0.27)
       wrap.appendChild(card);
     }
     return wrap;
+  }
+
+  // ⋯-Menü eines Unterordners: dieselben Einträge wie bei einer Zone
+  function folderMenu(rel, count) {
+    const menu = el("div", "zone-menu");
+    menu.addEventListener("click", (e) => e.stopPropagation());
+    menu.addEventListener("contextmenu", (e) => e.preventDefault());
+    menu.appendChild(button("zone-menu-item", t("rename"), () => {
+      closeMenus();
+      renameFolder(rel);
+    }));
+    menu.appendChild(button("zone-menu-item", t("reveal"), () => {
+      closeMenus();
+      invoke("reveal_zone", { zone: rel }).catch(fail);
+    }));
+    const del = button("zone-menu-item danger", t("trashZone"));
+    let armed = false;
+    del.addEventListener("click", async () => {
+      if (!armed) {
+        armed = true;
+        del.textContent = t("trashZoneConfirm", { count: count === 1 ? t("countImage") : t("countImages", { n: count }) });
+        del.classList.add("armed");
+        return;
+      }
+      closeMenus();
+      const inZone = rel.slice(state.focus.length + 1);
+      for (const key of ["level", "folder"]) if (state[key] === inZone || (state[key] || "").startsWith(inZone + "/")) state[key] = parentFolder(inZone);
+      trashZone({ path: rel, count });
+    });
+    menu.appendChild(del);
+    return menu;
+  }
+
+  function dragFolder(e, card) {
+    if (e.button !== 0 || e.target.closest(".zone-menu-btn, .zone-menu, input")) return;
+    card.setPointerCapture(e.pointerId);
+    const start = { x: e.clientX, y: e.clientY };
+    let lifted = false;
+    let target = null;
+    const onMove = (ev) => {
+      if (!lifted) {
+        if (Math.hypot(ev.clientX - start.x, ev.clientY - start.y) < DRAG_THRESHOLD) return;
+        lifted = true;
+        card.classList.add("lifted");
+        document.body.classList.add("sorting");
+      }
+      card.style.transform = `translate(${ev.clientX - start.x}px, ${ev.clientY - start.y}px)`;
+      target = null;
+      for (const other of document.querySelectorAll(".p-folder-card")) {
+        if (other === card) continue;
+        const r = other.getBoundingClientRect();
+        if (ev.clientX >= r.left && ev.clientX <= r.right && ev.clientY >= r.top && ev.clientY <= r.bottom) target = other;
+      }
+      for (const other of document.querySelectorAll(".p-folder-card")) other.classList.toggle("drop-target", other === target);
+    };
+    const onUp = async () => {
+      card.removeEventListener("pointermove", onMove);
+      card.removeEventListener("pointerup", onUp);
+      card.removeEventListener("pointercancel", onUp);
+      if (!lifted) return;
+      cardDragged = true;
+      setTimeout(() => (cardDragged = false), 0);
+      document.body.classList.remove("sorting");
+      card.classList.remove("lifted");
+      card.style.transform = "";
+      for (const n of document.querySelectorAll(".drop-target")) n.classList.remove("drop-target");
+      if (!target) return;
+      try {
+        await invoke("move_folder", { from: card.dataset.zone, into: target.dataset.zone });
+        await refresh();
+        toast(t("folderMoved", { folder: lastSegment(card.dataset.zone), into: lastSegment(target.dataset.zone) }));
+      } catch (err) {
+        fail(err);
+      }
+    };
+    card.addEventListener("pointermove", onMove);
+    card.addEventListener("pointerup", onUp);
+    card.addEventListener("pointercancel", onUp);
   }
 
   // Vorschaubild für Startseite und Karten; fehlt das Thumbnail noch, das Original nehmen.
@@ -1277,9 +1374,7 @@
     if (state.home === "overview") wrap.appendChild(overviewLayout());
     else if (state.home === "cards") {
       // Active Zones stehen in jeder Ansicht oben, je nach Darstellung als Karten oder Zeilen
-      const row = el("div", "p-hotrow");
-      for (let i = 0; i < HOT_ZONES; i++) row.appendChild(state.zones[i] ? hotCard(state.zones[i], i) : hotSlot(i));
-      wrap.appendChild(row);
+      wrap.appendChild(hotRow());
       wrap.appendChild(restBar(state.zones.length - HOT_ZONES));
       wrap.appendChild(cardsLayout());
     } else if (state.home === "preview") {
@@ -1492,11 +1587,18 @@
     return label;
   }
 
+  // 0.28: Active Zones brechen wie der Index um; passen keine vier Karten, dann 2 × 2
+  function hotRow() {
+    const row = el("div", "p-hotrow");
+    const width = $("zones").clientWidth - 80;
+    row.style.setProperty("--hot-cols", Math.floor((width + 10) / 280) >= 4 ? "4" : "2");
+    for (let i = 0; i < HOT_ZONES; i++) row.appendChild(state.zones[i] ? hotCard(state.zones[i], i) : hotSlot(i));
+    return row;
+  }
+
   function overviewLayout() {
     const wrap = el("div", "p-overview");
-    const row = el("div", "p-hotrow");
-    for (let i = 0; i < HOT_ZONES; i++) row.appendChild(state.zones[i] ? hotCard(state.zones[i], i) : hotSlot(i));
-    wrap.appendChild(row);
+    wrap.appendChild(hotRow());
     const rest = state.zones.slice(HOT_ZONES);
     const label = el("div", "p-bar p-overview-bar");
     label.appendChild(mono(t("indexLabel") + " (" + rest.length + ")", "strong"));
@@ -2194,10 +2296,13 @@
   // Zeile am Griff ziehen: wandert live mit, beim Loslassen wird gespeichert
   // Einstellungen: oben eine ruhige Liste der Bereiche, jeder öffnet sein Untermenü.
   // Ganz unten steht immer der Freischalt-Code.
-  const SETTINGS_SECTIONS = ["library", "view", "look", "start", "studio", "connect", "general"];
+  // 0.28: Tray, Observer und Extension je ein eigener Bereich (Tray und Observer nur am Mac)
+  const SETTINGS_SECTIONS = ["library", "view", "look", "start", "tray", "observer", "extension", "studio", "general"].filter(
+    (id) => isMac || (id !== "tray" && id !== "observer")
+  );
 
   function sectionTitle(id) {
-    return t({ library: "setLibrary", view: "setSecView", look: "setLook", start: "setSecStart", studio: "setStudio", connect: "setConnect", general: "setGeneral" }[id]);
+    return t({ library: "setLibrary", view: "setSecView", look: "setLook", start: "setSecStart", tray: "setTray", observer: "setViewer", extension: "setExtension", studio: "setStudio", general: "setGeneral" }[id]);
   }
 
   function sectionSummary(id) {
@@ -2210,7 +2315,14 @@
       const th = window.ArchiverI18n.theme();
       return t({ system: "themeSystem", light: "themeLight", dark: "themeDark" }[th]);
     }
-    if (id === "connect") return t("setConnectSummary");
+    if (id === "tray") {
+      const p = state.sysPrefs;
+      if (!p) return "";
+      const key = PALETTE_KEYS.find(([k]) => k === p.shortcut);
+      return (p.shortcut ? (key && key[1]) || p.shortcut : t("setOff")) + " · " + t("setTrayBar") + " " + (p.dropbar ? t("setOn") : t("setOff")).toLowerCase();
+    }
+    if (id === "observer") return t("setObserverSummary");
+    if (id === "extension") return t("setExtensionSummary");
     if (id === "studio") {
       const on = FEATURES.filter(feat).length;
       return on + " / " + FEATURES.length + (state.shared ? " · " + t("featSharedOn") : "");
@@ -2237,7 +2349,10 @@
     const show = (prefs) => {
       const save = (next) =>
         invoke("set_system_prefs", { prefs: next })
-          .then(() => show(next))
+          .then(() => {
+            state.sysPrefs = next;
+            show(next);
+          })
           .catch((e) => {
             const key = PALETTE_KEYS.find(([id]) => id === next.shortcut);
             if (String(e) === "shortcut-taken") toast(t("setKeyTaken", { key: key ? key[1] : next.shortcut }), false, 6000);
@@ -2258,7 +2373,12 @@
         )
       );
     };
-    invoke("system_prefs").then(show).catch(fail);
+    invoke("system_prefs")
+      .then((p) => {
+        state.sysPrefs = p;
+        show(p);
+      })
+      .catch(fail);
     sys.appendChild(rows);
     return sys;
   }
@@ -2273,6 +2393,13 @@
     const wrap = el("div", "p-sheet-inner");
     const sub = state.settingsSub;
     if (!sub) {
+      if (isMac && !state.sysPrefs)
+        invoke("system_prefs")
+          .then((p) => {
+            state.sysPrefs = p;
+            if (state.page === "settings" && !state.settingsSub) renderPage(true);
+          })
+          .catch(() => {});
       wrap.appendChild(headline(t("settings"), t("settingsText")));
       const list = el("section", "p-block p-settings-nav");
       for (const id of SETTINGS_SECTIONS) {
@@ -2409,16 +2536,17 @@
         slider.type = "range";
         slider.min = "0";
         slider.max = "100";
-        slider.step = "5";
+        slider.step = "1";
         const show = (pct) => (value.textContent = pct + " %");
-        const start = Math.round((typeof pref("winAlpha", null) === "number" ? pref("winAlpha", null) : 0.85) * 100);
+        const glass = pref("winGlass", null);
+        const start = Math.round((typeof glass === "number" ? glass : document.documentElement.classList.contains("light") ? 0.78 : 0.72) * 100);
         slider.value = String(start);
         show(start);
         slider.addEventListener("input", () => {
           show(slider.value);
           applyWinAlpha(Number(slider.value) / 100);
         });
-        slider.addEventListener("change", () => setPref("winAlpha", Number(slider.value) / 100));
+        slider.addEventListener("change", () => setPref("winGlass", Number(slider.value) / 100));
         look.appendChild(blockRow(t("setWinAlpha"), [slider, value]));
       }
       look.appendChild(
@@ -2453,7 +2581,7 @@
       wrap.appendChild(renderSoundSettings());
     }
 
-    if (sub === "connect") {
+    if (sub === "extension") {
       const extBlock = block(t("setExtension"));
       const ext = el("div", null, "…");
       invoke("bridge_browsers")
@@ -2461,7 +2589,12 @@
         .catch(() => (ext.textContent = t("setBridgeOff")));
       extBlock.appendChild(blockRow(ext, [button("p-link", t("import"), openImportDialog)]));
       wrap.appendChild(extBlock);
-      if (isMac) {
+    }
+
+    if (sub === "tray" && isMac) wrap.appendChild(renderSystemSettings());
+
+    if (sub === "observer" && isMac) {
+      {
         const viewerBlock = block(t("setViewer"));
         viewerBlock.appendChild(blockRow(el("div", "p-block-text", t("setViewerText"))));
         const rows = el("div");
@@ -2485,7 +2618,6 @@
         viewerBlock.appendChild(rows);
         wrap.appendChild(viewerBlock);
       }
-      if (isMac) wrap.appendChild(renderSystemSettings());
     }
 
     if (sub === "studio") renderStudioSettings(wrap, rerender);
@@ -3043,7 +3175,7 @@
     }
   }
 
-  function zoneMenuButton(zone) {
+  function zoneMenuButton(zone, makeMenu) {
     const btn = button("zone-menu-btn", "⋯");
     btn.title = t("zoneOptions");
     btn.addEventListener("click", (e) => {
@@ -3052,7 +3184,7 @@
       closeMenus();
       if (open) return;
       // Schwebt über allem: Karten schneiden ihren Inhalt ab
-      const menu = zoneMenu(zone);
+      const menu = makeMenu ? makeMenu() : zoneMenu(zone);
       menu.classList.add("floating");
       document.body.appendChild(menu);
       const r = btn.getBoundingClientRect();
@@ -4270,8 +4402,14 @@
     action.replaceChildren(el("span", "lb-dot"), el("span", "lb-action-zone", "Archiver"));
     action.title = t("dropBar");
     action.addEventListener("click", () => ($("lbZones").hidden ? lbOpenZones() : lbCloseZones()));
-    stage.addEventListener("click", lbCloseZones);
-    $("lbMedia").addEventListener("click", lbCloseZones);
+    // 0.28: Klick neben das Objekt schließt (offene Zonen erst zuklappen, gezoomt nicht)
+    const backdropClick = (e) => {
+      if (!$("lbZones").hidden) return lbCloseZones();
+      const bg = e.target === stage || e.target === $("lbMedia") || e.target.classList.contains("pdf-scroll");
+      if (bg && lbView.fitted && state.lightbox) closeLightbox();
+    };
+    stage.addEventListener("click", backdropClick);
+    $("lbMedia").addEventListener("click", backdropClick);
     // PDF: Zwei-Finger-Zoom bzw. ⌘ + Scrollen zoomt, Scrollen blättert
     $("lbMedia").addEventListener(
       "wheel",
@@ -5379,27 +5517,42 @@
       rm.classList.add("danger");
       bar.appendChild(rm);
     }
+    bar.appendChild(el("span", "p-filter-gap"));
+    bar.appendChild(sizeChips(Math.max(0, SIZES.indexOf(state.size)), SIZES.length, (step) => {
+      state.size = SIZES[step];
+      setPref("size", state.size);
+      renderToolbar();
+      renderZones();
+    }));
     wrap.appendChild(bar);
+    // 0.28: dieselbe Karte und dasselbe Raster wie in jeder Zone; Badge zeigt Zone und Resttage
     const section = el("section", "zone-card p-section");
     const body = el("div", "zone-card-grid");
+    body.tabIndex = -1;
     const items = el("div", "zone-card-items");
     for (const item of list) {
-      const tile = el("div", "p-del" + (sel.has(item.abs) ? " sel" : ""));
-      tile.appendChild(previewImg(item));
-      const meta = el("div", "p-del-meta");
-      meta.append(el("span", null, zoneLabel(item.zone)), el("span", null, t("deletedDays", { n: daysLeft(item) })));
-      tile.title = item.path;
-      const box = el("div", "p-del-box");
-      box.append(tile, meta);
-      tile.addEventListener("click", (e) => {
+      const card = el("div", "card del" + (sel.has(item.abs) ? " selected" : ""));
+      card.dataset.del = item.abs;
+      card.title = item.path;
+      const img = quoteOf(item) ? textSheet(item, "text-sheet") : previewImg(item);
+      if (img.tagName === "IMG") img.loading = "lazy";
+      card.classList.toggle("card-text", !!quoteOf(item));
+      card.appendChild(img);
+      card.appendChild(el("div", "card-badge", zoneLabel(item.zone) + " · " + t("deletedDays", { n: daysLeft(item) })));
+      const label = item.format ? mediaLabel({ ...item, duration: null, pages: null }) : "";
+      const media = el("div", "card-media", label);
+      media.hidden = !label;
+      card.appendChild(media);
+      card.addEventListener("click", (e) => {
         if (!(e.metaKey || e.shiftKey)) sel.clear();
         if (sel.has(item.abs) && (e.metaKey || e.shiftKey)) sel.delete(item.abs);
         else sel.add(item.abs);
         renderZones();
       });
-      tile.addEventListener("dblclick", () => restoreDeleted([item.abs]));
-      tile.addEventListener("contextmenu", (e) => {
+      card.addEventListener("dblclick", () => restoreDeleted([item.abs]));
+      card.addEventListener("contextmenu", (e) => {
         e.preventDefault();
+        e.stopPropagation();
         if (!sel.has(item.abs)) {
           sel.clear();
           sel.add(item.abs);
@@ -5407,7 +5560,7 @@
         }
         openDeletedMenu(e.clientX, e.clientY);
       });
-      items.appendChild(box);
+      items.appendChild(card);
     }
     body.appendChild(items);
     section.appendChild(body);
@@ -5524,7 +5677,7 @@
 
     zones.addEventListener("mousedown", (e) => {
       if (e.button !== 0) return;
-      const card = e.target.closest(".card");
+      const card = e.target.closest(".card:not(.del)");
       suppressClick = false;
       if (!card) {
         const control = e.target.closest("button, input, select, a, .p-bar, .p-section-head, .p-head-title, .zone-menu, .zone-card-name, .p-card, .p-row");
@@ -5554,7 +5707,7 @@
         suppressClick = false;
         return;
       }
-      const card = e.target.closest(".card");
+      const card = e.target.closest(".card:not(.del)");
       if (card) clickCard(card.dataset.path, e);
     });
 
@@ -5564,12 +5717,12 @@
 
     zones.addEventListener("contextmenu", (e) => {
       const zoneEl = e.target.closest(".p-home [data-zone]");
-      if (zoneEl && !e.target.closest(".card")) {
+      if (zoneEl && !e.target.closest(".card:not(.del)")) {
         e.preventDefault();
         openZoneContext(zoneEl.dataset.zone, e.clientX, e.clientY);
         return;
       }
-      const card = e.target.closest(".card");
+      const card = e.target.closest(".card:not(.del)");
       if (!card) {
         if (state.focus === DELETED) return;
         // In einer Zone: Rechtsklick in den Hintergrund legt einen Unterordner an
@@ -5584,13 +5737,13 @@
     });
 
     zones.addEventListener("dblclick", (e) => {
-      const card = e.target.closest(".card");
+      const card = e.target.closest(".card:not(.del)");
       if (card) openLightbox(state.byPath.get(card.dataset.path));
     });
 
     // 0.27: Video beim Hover als kurze Vorschau aus wenigen Bildern
     zones.addEventListener("pointerover", (e) => {
-      const card = e.target.closest(".card");
+      const card = e.target.closest(".card:not(.del)");
       if (card && !card.contains(e.relatedTarget)) videoScrub(card);
     });
 
@@ -5652,7 +5805,7 @@
     window.addEventListener(
       "resize",
       debounce(() => {
-        if (document.body.classList.contains("at-home") && state.home === "cards") renderZones();
+        if (document.body.classList.contains("at-home") && (state.home === "cards" || state.home === "overview")) renderZones();
         else layoutMasonry(false);
       }, 120)
     );

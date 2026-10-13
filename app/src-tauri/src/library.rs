@@ -1566,6 +1566,38 @@ impl Library {
         Ok(new_zone)
     }
 
+    /// Verschiebt einen Unterordner samt Inhalt in einen anderen Ordner (0.28).
+    /// Gibt den neuen Pfad zurück; gleichnamige Ziele bekommen eine Nummer.
+    pub fn move_folder(&self, from: &str, into: &str) -> Result<String> {
+        if from.is_empty() || !from.contains('/') {
+            return Err("Nur Unterordner lassen sich verschieben".into());
+        }
+        if into == from || into.starts_with(&format!("{from}/")) {
+            return Err("Ein Ordner kann nicht in sich selbst liegen".into());
+        }
+        let src = safe_join(&self.root, from)?;
+        let parent = safe_join(&self.root, into)?;
+        if !src.is_dir() || !parent.is_dir() {
+            return Err(format!("Ordner nicht gefunden: {from}"));
+        }
+        if src.parent() == Some(parent.as_path()) {
+            return Ok(from.to_string());
+        }
+        let name = src.file_name().and_then(|n| n.to_str()).unwrap_or("Ordner").to_string();
+        let dst = unique_path(&parent, &name);
+        move_file(&src, &dst)?;
+        let new_path = rel_path(&self.root, &dst);
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "UPDATE item SET path = ?2 || substr(path, length(?1) + 1) WHERE path LIKE ?1 || '/%'",
+            params![from, new_path],
+        )
+        .map_err(err)?;
+        drop(conn);
+        self.rename_item_order(from, &new_path)?;
+        Ok(new_path)
+    }
+
     /// Legt eine Zone samt Inhalt in den Papierkorb. Inbox und Bibliotheksordner bleiben.
     pub fn trash_zone(&self, zone: &str) -> Result<()> {
         if zone.is_empty() || zone == self.default_zone() {
@@ -2105,6 +2137,11 @@ mod tests {
         write_png(&ext.join("e.png"), 4, 4, 50);
         lib.import_files(&[ext], "Unsorted").unwrap();
         assert!(root.join("Unsorted/Projekt X/e.png").is_file());
+        // Unterordner in einen anderen Ordner ziehen (0.28)
+        assert_eq!(lib.move_folder("Projekt X/Sub", "Unsorted/Projekt X").unwrap(), "Unsorted/Projekt X/Sub");
+        assert!(root.join("Unsorted/Projekt X/Sub/d.png").is_file());
+        assert!(lib.items().unwrap().iter().any(|i| i.path == "Unsorted/Projekt X/Sub/d.png"));
+        assert!(lib.move_folder("Unsorted/Projekt X", "Unsorted/Projekt X/Sub").is_err(), "nicht in sich selbst");
     }
 
     #[test]

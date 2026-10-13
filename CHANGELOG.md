@@ -1,5 +1,26 @@
 # Changelog
 
+## App 0.28.0 (13.10.2026)
+
+Tray (bisher „Palette“):
+- Heißt jetzt Tray. Unten links steht „Tray“, die Tasten stehen rechts.
+- Hell/Dunkel und die Ecken aus Einstellungen › Aussehen gelten auch im Tray, samt Fensterecke.
+- Öffnen holt das Archiver-Fenster nicht mehr nach vorne, auch wenn es nur hinten lag. Nach dem Schließen liegt es wieder hinten.
+
+Aussehen:
+- Glas und Grundfarbe des Trays sind jetzt der Standard fürs ganze Fenster (Dunkel 72 %, Hell 78 %). Der Regler in Aussehen startet auf diesem Wert.
+- Die Leiste in der Lightbox hat die Maße der Navigation oben.
+- Im schmalen Fenster stehen die Active Zones 2 × 2, wie der Index.
+
+Zonen und Ordner:
+- Zuletzt gelöscht zeigt dasselbe Raster wie jede Zone, mit Größenstufen. Zone und Resttage stehen im Badge.
+- Unterordner haben ⋯ und Rechtsklick: Umbenennen, Im Finder zeigen, Löschen.
+- Ordnerkarten lassen sich auf andere Ordnerkarten ziehen und liegen dann darin.
+- Lightbox: Klick neben das Objekt schließt sie.
+
+Einstellungen:
+- Tray, Observer und Extension haben je einen eigenen Bereich.
+
 ## App 0.27.0 (12.10.2026)
 
 Entfernt:

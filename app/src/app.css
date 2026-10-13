@@ -5730,63 +5730,6 @@ html.light .p-dropbar .p-hot {
 }
 
 /* ---- 0.27: Zuletzt gelöscht ---- */
-.p-del-box {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  min-width: 0;
-}
-.p-del {
-  position: relative;
-  aspect-ratio: 1;
-  overflow: hidden;
-  background: var(--thumb-bg);
-  cursor: default;
-}
-.p-del > img,
-.p-del > .text-sheet {
-  display: block;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  opacity: 0.72;
-  transition: opacity 0.12s ease;
-}
-.p-del:hover > img,
-.p-del.sel > img {
-  opacity: 1;
-}
-.p-del.sel {
-  --ring: var(--ring-0);
-  --ring-gap: 2px;
-  overflow: visible;
-}
-.p-del.sel::after {
-  content: "";
-  position: absolute;
-  inset: calc(-1 * var(--ring-gap));
-  z-index: 4;
-  pointer-events: none;
-  background: var(--p-text, var(--ink));
-  -webkit-mask: var(--ring) 0 0 / 100% 100% no-repeat;
-  mask: var(--ring) 0 0 / 100% 100% no-repeat;
-}
-.p-del-meta {
-  display: flex;
-  justify-content: space-between;
-  gap: 6px;
-  font-family: "Geist Mono", ui-monospace, monospace;
-  font-size: 11px;
-  letter-spacing: 0.02em;
-  text-transform: uppercase;
-  color: var(--p-faint);
-  white-space: nowrap;
-  overflow: hidden;
-}
-.p-del-meta > span:first-child {
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
 .p-chip.danger:hover {
   color: var(--danger);
 }
@@ -5799,9 +5742,6 @@ html.light .p-dropbar .p-hot {
 }
 .p-deleted-row:hover .zone-card-name {
   color: var(--p-text);
-}
-@media (prefers-reduced-motion: reduce) {
-  .p-del > img { transition: none; }
 }
 
 /* ---- 0.27: Video-Vorschau beim Hover (Daumenkino aus acht Bildern) ---- */
@@ -5822,4 +5762,55 @@ html.light .p-dropbar .p-hot {
 .card > .card-badge,
 .card > .card-media {
   z-index: 2;
+}
+
+/* ---- 0.28: Fensterglas wie im Tray ----
+   Grundfarbe und Deckkraft des Trays gelten jetzt für das ganze Fenster:
+   Dunkel rgb(28,28,28) zu 72 %, Hell rgb(244,244,244) zu 78 %. Der Regler in
+   Einstellungen › Aussehen startet auf diesem Wert und setzt --win-alpha. */
+:root {
+  --bg-solid: #1c1c1c;
+  --win-alpha: 0.72;
+}
+html.light {
+  --bg-solid: #f4f4f4;
+  --win-alpha: 0.78;
+}
+
+/* ---- 0.28: Active Zones brechen um wie der Index (vier oder 2 × 2) ---- */
+.p-hotrow {
+  grid-template-columns: repeat(var(--hot-cols, 4), minmax(0, 1fr));
+}
+
+/* ---- 0.28: Leiste der Lightbox in den Maßen der Hauptnavigation ----
+   Rand --nav-rim, Knopfhöhe --nav-h, 13,5 px, Abstand 3 px, Ecke --r-md. */
+.lb-bar,
+.lb-group {
+  gap: 3px;
+}
+.lb-bar {
+  padding: var(--nav-rim, 5px);
+  border-radius: var(--r-md);
+}
+.lb-btn {
+  height: var(--nav-h, 36px);
+  font-size: 13.5px;
+  letter-spacing: -0.005em;
+}
+.lb-name {
+  font-size: 13.5px;
+}
+/* die Leiste ist 6 px höher: Zonen und Player rücken mit */
+.lb-zones {
+  bottom: 76px;
+}
+.lightbox.has-player .lb-zones {
+  bottom: 120px;
+}
+.lightbox.has-player .lb-media .media-video {
+  bottom: 134px;
+  height: calc(100% - 48px - 134px);
+}
+.lightbox.has-player .lb-media .media-audio {
+  bottom: 134px;
 }

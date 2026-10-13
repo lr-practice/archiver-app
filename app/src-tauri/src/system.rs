@@ -33,6 +33,9 @@ pub const DEFAULT_SHORTCUT: &str = "Alt+Space";
 static DROPBAR_ON: AtomicBool = AtomicBool::new(true);
 /// Gerade wird aus der Palette gezogen: keine Leiste, Palette nicht schließen
 static PALETTE_DRAG: AtomicBool = AtomicBool::new(false);
+/// Hauptfenster beim Öffnen des Trays weggelegt (0.28): kommt beim Schließen
+/// hinter alle Fenster zurück, statt mit Archiver nach vorne zu springen.
+pub static MAIN_TUCKED: AtomicBool = AtomicBool::new(false);
 /// Programm, das vor der Palette vorne war (NSRunningApplication, 0 = keins)
 #[cfg(target_os = "macos")]
 static BEFORE_PALETTE: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
@@ -145,8 +148,19 @@ pub fn toggle_palette(app: &AppHandle) {
             let ns = ns.cast();
             unsafe {
                 if crate::macos::panel_visible(ns) {
-                    close_palette(ns);
+                    close_palette(&app2, ns);
                 } else {
+                    // Archiver liegt hinten: das Hauptfenster bleibt dort, auch wenn
+                    // der Tray Archiver kurz aktiviert (0.28)
+                    if !crate::macos::app_active() {
+                        if let Some(Ok(main)) = app2.get_webview_window("main").map(|w| w.ns_window()) {
+                            let main = main.cast();
+                            if crate::macos::panel_visible(main) {
+                                crate::macos::panel_hide(main);
+                                MAIN_TUCKED.store(true, Ordering::Relaxed);
+                            }
+                        }
+                    }
                     let prev = crate::macos::frontmost_other_app();
                     crate::macos::release_app(BEFORE_PALETTE.swap(prev, Ordering::Relaxed));
                     crate::macos::panel_center_on_mouse_screen(ns);
@@ -163,7 +177,7 @@ pub fn toggle_palette(app: &AppHandle) {
 /// Palette ausblenden. War Archiver dadurch vorne (esc, Klick in die Palette),
 /// kommt das Programm von vorher zurück, nicht das Archiver-Fenster.
 #[cfg(target_os = "macos")]
-unsafe fn close_palette(ns: *mut objc2::runtime::AnyObject) {
+unsafe fn close_palette(app: &AppHandle, ns: *mut objc2::runtime::AnyObject) {
     crate::macos::panel_hide(ns);
     let prev = BEFORE_PALETTE.swap(0, Ordering::Relaxed);
     if crate::macos::app_active() {
@@ -172,14 +186,20 @@ unsafe fn close_palette(ns: *mut objc2::runtime::AnyObject) {
         // nur freigeben
         crate::macos::release_app(prev);
     }
+    if MAIN_TUCKED.swap(false, Ordering::Relaxed) {
+        if let Some(Ok(main)) = app.get_webview_window("main").map(|w| w.ns_window()) {
+            crate::macos::order_back(main.cast());
+        }
+    }
 }
 
 pub fn hide_palette(app: &AppHandle) {
     #[cfg(target_os = "macos")]
     if let Some(win) = app.get_webview_window(PALETTE) {
+        let app2 = app.clone();
         let _ = app.run_on_main_thread(move || {
             if let Ok(ns) = win.ns_window() {
-                unsafe { close_palette(ns.cast()) };
+                unsafe { close_palette(&app2, ns.cast()) };
             }
         });
     }

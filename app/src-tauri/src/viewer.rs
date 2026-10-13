@@ -205,6 +205,7 @@ pub async fn show_in_app(app: AppHandle, path: Option<String>) -> Result<(), Str
 }
 
 pub fn show_main(app: &AppHandle) {
+    crate::system::MAIN_TUCKED.store(false, std::sync::atomic::Ordering::Relaxed);
     if let Some(win) = app.get_webview_window("main") {
         let _ = win.unminimize();
         let _ = win.show();

@@ -1,6 +1,6 @@
 # Archiver – Design-System
 
-Stand: App 0.27.0 · Extension 3.20.0
+Stand: App 0.28.0 · Extension 3.20.0
 
 Diese Datei hält fest, wie Archiver aussieht und warum. Sie gilt für die Mac-App
 (`app/src`) und die Chrome-Extension (`extension/`). Wer an der Oberfläche
@@ -57,8 +57,9 @@ Bei neuen Regeln gilt:
 
 | Token | Dunkel | Hell (0.25.0) | Zweck |
 |---|---|---|---|
-| `--bg-solid` | `#101010` | `#f4f4f4` | Grundfarbe des Fensters |
-| `--bg` | aus `--bg-solid` × `--win-alpha` | dito | Fenster über dem Mac-Glas (Regler in Einstellungen › Aussehen) |
+| `--bg-solid` | `#1c1c1c` | `#f4f4f4` | Grundfarbe des Fensters, gleich dem Tray (0.28) |
+| `--win-alpha` | 0.72 | 0.78 | Deckkraft über dem Mac-Glas, Standard wie im Tray; Regler in Einstellungen › Aussehen |
+| `--bg` | aus `--bg-solid` × `--win-alpha` | dito | Fenster über dem Mac-Glas |
 | `--ink` / `--ink-rgb` | `#ffffff` / `255,255,255` | `#111111` / `17,17,17` | Text und Basis aller Alpha-Flächen |
 | `--ink-inverse` | `#0f0f0f` | `#f4f4f4` | Text auf `--ink`-Flächen (Primärknopf) |
 | `--p-text` | `#ededed` | `#111111` | Haupttext |
@@ -153,7 +154,8 @@ Für die Bewegung gilt:
 
 **App** (`app/src`): Fenster mit macOS-Glas, Navigation oben in der Titelzeile
 auf Höhe der Fensterknöpfe, Bibliotheks-Reiter oben rechts. Startseite mit den
-Zonen als Karten, Active Zones oben in jeder Übersicht.
+Zonen als Karten, Active Zones oben in jeder Übersicht. Passen keine vier
+Karten nebeneinander, stehen sie 2 × 2 wie der Index (0.28).
 
 **Extension** (`extension/`): Overlay im Shadow DOM auf fremden Seiten
 (`overlay.css`, `:host`), Galerie im App-Layout (`gallery.css`), Panel
@@ -215,6 +217,9 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
   Auch leere Ordner haben eine Karte (0 Objekte).
 - **Ablageziel (0.27):** Objekte und Ordner lassen sich auf die Karte ziehen,
   sie zeigt dabei den Ring (4.1).
+- **⋯ und Ziehen (0.28):** ⋯ und Rechtsklick öffnen Umbenennen, Im Finder
+  zeigen und Löschen wie bei Zonen. Eine Ordnerkarte auf eine andere gezogen
+  legt den Ordner hinein (gleiches Anheben wie 4.4, Ziel mit Ring).
 - **Titel:** Steht oben im Kopf (`align-self: start`) und springt nicht, wenn
   sich die Zahl der Karten beim Wechsel der Ebene ändert.
 
@@ -252,17 +257,25 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
 
 ### 4.11 Lightbox und Seitenblatt
 - **Lightbox:** Das Bild steht groß auf `--lightbox-bg`. Leertaste öffnet sie,
-  Pfeile blättern, `I` zeigt die Info.
+  Pfeile blättern, `I` zeigt die Info. Klick neben das Objekt schließt sie
+  (offene Zonen klappen erst zu, vergrößert schließt nichts).
+- **Leiste der Lightbox (0.28):** dieselben Maße wie die Navigation (4.2):
+  Innenrand `--nav-rim`, Knöpfe `--nav-h`, 13,5 px, Abstand 3 px, Ecke `--r-md`.
 - **Seitenblatt:** Details von rechts, `--sheet-w` = min(560 px, 46 vw).
 
-### 4.12 Palette (`palette.css`)
-- **Zweck:** Per Kürzel (Standard ⌥ Space, Einstellungen › Extension & Observer) über
+### 4.12 Tray (`palette.css`)
+- **Name (0.28):** In der Oberfläche heißt sie „Tray“, im Code weiter `palette`.
+- **Zweck:** Per Kürzel (Standard ⌥ Space, Einstellungen › Tray) über
   jedem Programm Zonen und Objekte holen, etwa in einen InDesign-Rahmen.
-- **Form:** 860 × 620 px, macOS-Glas mit 12 px Rundung, Suchfeld 17 px oben.
+- **Form:** 860 × 620 px, macOS-Glas, Suchfeld 17 px oben. Grund `--pal-bg`
+  (Dunkel rgb 28 × 0.72, Hell rgb 244 × 0.78) ist seit 0.28 auch der Standard
+  des App-Fensters (2.1). Hell/Dunkel und Ecken folgen Einstellungen › Aussehen;
+  die Fensterecke ist eckig 0, klein 6, mittel 12 (Standard), groß 18 px.
   Start: Active Zones als Zonenkarten (4.4) mit 01–04 und „Active Zone“,
   darunter der Index als flachere Karten (8:3). Zone: Active Zones als Reiter,
   Objekte eckig in sechs Spalten (4.6). Suche: passende Zonen als Karten,
-  darunter Objekte. Tasten stehen als Mono-Etiketten in der Fußzeile.
+  darunter Objekte. Fußzeile: links „Tray“, rechts die Tasten als
+  Mono-Etiketten, esc am Ende.
 - **Verhalten:** Aus InDesign geöffnet heißt ↵ „Platzieren“ (markierter
   Rahmen oder Platzieren-Cursor), sonst „Kopieren“. Beim Herausziehen eines Objekts wird die Palette auf 6 %
   Deckkraft gesetzt und lässt Klicks durch. Klick in ein anderes Programm
@@ -274,6 +287,8 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
   Leertaste weiter.
 - **⌘1–3:** wechselt die Bibliothek wie in der App.
 - **Nicht:** Sie aktiviert Archiver nicht und holt das Hauptfenster nicht nach vorne.
+  Liegt Archiver hinten, wird das Hauptfenster beim Öffnen weggelegt und beim
+  Schließen hinter alle Fenster zurückgelegt (0.28).
 
 ### 4.13 Zonenleiste am ganzen Mac (`dropbar.css`)
 - **Zweck:** Wie 4.3, aber beim Ziehen von Dateien in jedem Programm.
@@ -283,13 +298,13 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
 - **Nicht:** Erscheint nicht, wenn Archiver selbst vorne ist, und nicht bei
   Text oder Links ohne Datei.
 
-### 4.14 Zuletzt gelöscht (`.p-deleted`, `.p-del`)
+### 4.14 Zuletzt gelöscht (`.p-deleted`, `.card.del`)
 - **Zweck:** Gelöschte Objekte und Zonen liegen 7 Tage unter
   `.archiver/deleted/<Zeit>/<alter Pfad>` in der Bibliothek, dann gehen sie in
   den Papierkorb des Macs. Erreichbar über die letzte Zeile im Index und ≡.
-- **Form:** Raster wie Objekte (4.6), Bilder auf 72 % zurückgenommen, darunter
-  eine Mono-Zeile mit Zone und Resttagen. Auswahl zeigt den Ring (4.1).
-  Wiederherstellen und Sofort löschen stehen als Chips rechts.
+- **Form (0.28):** Dasselbe Raster und dieselbe Karte wie in jeder Zone (4.6),
+  mit Größenstufen. Das Badge zeigt Zone und Resttage. Auswahl zeigt den Ring
+  (4.1). Wiederherstellen und Sofort löschen stehen als Chips rechts.
 - **Nicht:** Kein eigener Zonenplatz unter den Active Zones, keine Zeile, wenn
   nichts gelöscht ist.
 

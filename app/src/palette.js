@@ -204,17 +204,19 @@
   }
 
   function keys(list) {
+    // 0.28: links der Name „Tray“, die Tasten rechts in einer Reihe
     const foot = $("keys");
-    foot.replaceChildren();
+    const cmds = el("span", "pal-keys-list");
     for (const [k, text] of list) {
       const s = el("span", "pal-mono");
       s.appendChild(el("span", "pal-kbd", k));
       s.appendChild(document.createTextNode(text));
-      foot.appendChild(s);
+      cmds.appendChild(s);
     }
-    const esc = el("span", "pal-mono pal-flex");
+    const esc = el("span", "pal-mono");
     esc.appendChild(el("span", "pal-kbd", "esc"));
-    foot.appendChild(esc);
+    cmds.appendChild(esc);
+    foot.replaceChildren(el("span", "pal-mono pal-name", "Tray"), cmds);
   }
 
   function render() {
@@ -625,12 +627,29 @@
   TAURI.event.listen("palette-open", async (e) => {
     state.indesign = e && e.payload === true;
     state.preview = null;
+    applyLook();
     await load();
     goStart();
   });
   window.addEventListener("storage", (e) => {
     if (e.key === "archiver.zoneOrder") state.dirty = true;
+    if (e.key === "archiver.radius" || e.key === "archiver.theme") applyLook();
   });
+
+  // 0.28: Aussehen aus der App (Hell/Dunkel, Ecken) gilt auch im Tray, samt Fensterecke
+  const TRAY_RADIUS = { square: 0, soft: 6, round: 12, xl: 18 };
+  function applyLook() {
+    const id = pref("radius", "round");
+    const root = document.documentElement;
+    if (id && id !== "round") root.dataset.radius = id;
+    else delete root.dataset.radius;
+    const r = TRAY_RADIUS[id] ?? 12;
+    root.style.setProperty("--pal-radius", r + "px");
+    window.ArchiverI18n.applyTheme();
+    const light = root.classList.contains("light");
+    invoke("set_appearance", { light, radius: r }).catch(() => {});
+  }
+  applyLook();
 
   load().then(goStart);
 })();

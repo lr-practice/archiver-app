@@ -30,7 +30,7 @@
       dropSaved: "Saved in {zone}",
       setSystem: "Across your Mac",
       setSystemText: "Works in every app, even with the Archiver window closed.",
-      setPaletteKey: "Palette shortcut",
+      setPaletteKey: "Tray shortcut",
       setDropbarSys: "Active zones when dragging files",
       setKeyTaken: "{key} is already used by another app. Pick a different shortcut.",
       settings: "Settings",
@@ -294,6 +294,10 @@
       cancel: "Cancel",
       setConnect: "Extension & Observer",
       setConnectSummary: "Chrome, Finder",
+      setTray: "Tray",
+      setTrayBar: "Zones bar",
+      setObserverSummary: "Finder › Open With",
+      setExtensionSummary: "Chrome",
       setGeneral: "General",
       setStudio: "Studio",
       setStudioText: "For projects and teams: a shared library and tools per object.",
@@ -494,6 +498,7 @@
       newFolder: "New folder",
       newFolderWith: "New folder with selection",
       newFolderName: "New folder",
+      folderMoved: "{folder} moved into {into}",
       deletedTitle: "Recently deleted",
       deletedText: "{count}. After {days} days they move to the Mac’s Trash.",
       deletedEmpty: "Nothing here. Deleted objects stay here for 7 days.",
@@ -537,7 +542,7 @@
       dropSaved: "Gesichert in {zone}",
       setSystem: "Am ganzen Mac",
       setSystemText: "Funktioniert in jedem Programm, auch wenn das Archiver-Fenster zu ist.",
-      setPaletteKey: "Kürzel für die Palette",
+      setPaletteKey: "Kürzel für den Tray",
       setDropbarSys: "Active Zones beim Ziehen von Dateien",
       setKeyTaken: "{key} ist schon von einem anderen Programm belegt. Wähle ein anderes Kürzel.",
       settings: "Einstellungen",
@@ -801,6 +806,10 @@
       cancel: "Abbrechen",
       setConnect: "Extension & Observer",
       setConnectSummary: "Chrome, Finder",
+      setTray: "Tray",
+      setTrayBar: "Zonenleiste",
+      setObserverSummary: "Finder › Öffnen mit",
+      setExtensionSummary: "Chrome",
       setGeneral: "Allgemein",
       setStudio: "Studio",
       setStudioText: "Für Projekte und Teams: eine geteilte Bibliothek und Werkzeuge pro Objekt.",
@@ -1001,6 +1010,7 @@
       newFolder: "Neuer Unterordner",
       newFolderWith: "Neuer Unterordner mit Auswahl",
       newFolderName: "Neuer Ordner",
+      folderMoved: "{folder} liegt jetzt in {into}",
       deletedTitle: "Zuletzt gelöscht",
       deletedText: "{count}. Nach {days} Tagen gehen sie in den Papierkorb des Macs.",
       deletedEmpty: "Hier liegt nichts. Gelöschtes bleibt 7 Tage hier.",
@@ -1078,5 +1088,5 @@
     if (e.key === "archiver.scheme") applyScheme();
   });
 
-  global.ArchiverI18n = { t, lang, theme, setTheme, scheme, setScheme };
+  global.ArchiverI18n = { t, lang, theme, setTheme, applyTheme, scheme, setScheme };
 })(window);
