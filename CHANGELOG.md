@@ -1,5 +1,47 @@
 # Changelog
 
+## App 0.31.0 · Extension 3.24.0 (13.10.2026)
+
+Stabilitäts-Release nach dem Prüfbericht zu 0.30.1. Keine neuen Funktionen, dafür weniger Datenverlust, weniger stille Fehler und mehr Tempo bei großen Bibliotheken.
+
+Sicherheit:
+- Die Extension reagiert nur noch auf echte Eingaben. Eine Webseite kann kein Overlay öffnen, keine Zonenleiste einblenden und nichts in deine Bibliothek sichern. Das Overlay ist für die Seite unsichtbar (geschlossenes Shadow DOM).
+- Die Brücke übernimmt nur Dateien aus Downloads/Archiver-Transfer, nie einen beliebigen Pfad auf dem Mac. Zonennamen mit „..“ werden abgelehnt.
+- Rechte wie Zonen anlegen oder Galerie lesen hat nur noch die Seite selbst, nicht eingebettete Frames.
+
+Externe Zonen:
+- Ein abgezogenes Laufwerk oder ein umbenannter Projektordner zeigt die Zone als „offline“, statt ihre Objekte samt Bildtexten aus der Bibliothek zu löschen. Dasselbe gilt für Ordner, die gerade nicht lesbar sind.
+- Bilder aus externen Zonen erscheinen wieder in App und Observer.
+- Systemordner, ganze Laufwerke und ineinanderliegende Zonen werden abgelehnt, mit Hinweis.
+
+Dateien:
+- Verschieben auf ein anderes Laufwerk kopiert erst vollständig und löscht dann das Original. Bricht es ab, bleibt das Original unangetastet.
+- metadata.json, zones.json und die Einstellungen werden atomar geschrieben, ein Absturz hinterlässt keine halbe Datei.
+- Zitat-Text, Löschen mehrerer Objekte und Umbenennen einer Zone nur in Groß/Kleinschreibung funktionieren zuverlässig. Eigene Reihenfolge, Standard-Zone und Hot Zones ziehen beim Umbenennen mit.
+- „Zuletzt gelöscht“ greift nur noch auf Dateien im eigenen Papierkorb zu.
+- Jede Bibliothek merkt sich ihre eigene Zonen-Reihenfolge. Bisher übernahm eine Bibliothek beim Wechsel die Reihenfolge der vorigen.
+
+Fehler sichtbar:
+- Protokoll unter ~/Library/Logs/Archiver/archiver.log.
+- Fehler beim Einlesen erscheinen als Hinweis, statt still zu verschwinden.
+- Die Zonenleiste am Mac sagt „Gesichert“ erst, wenn es gesichert ist, sonst „Nicht gesichert“ mit Grund.
+- Notizen zeigen „Nicht gesichert“ und versuchen es erneut.
+- Eine beschädigte Datenbank wird beiseitegelegt und neu aufgebaut. Kaputte Einstellungen werden als settings.json.broken aufgehoben.
+- Ein Bild, an dem die Vorschau abstürzt, legt den Vorschau-Dienst nicht mehr lahm.
+
+Tempo:
+- Die Extension fragt Zonen und Galerie seltener ab, die App liest dafür nicht mehr jedes Mal den ganzen Ordner ein. Galerie-Vorschauen laden erst, wenn sie sichtbar werden.
+- Die Startseite rechnet „zuletzt gesichert“ einmal statt pro Zeile. Lange PDFs geben Speicher frei. Verschieben und Löschen blockieren die Oberfläche nicht mehr.
+
+Extension 3.24.0:
+- Antwortet die App nicht, obwohl sie schon verbunden war, sagt die Extension, dass das Bild in Downloads liegt, statt es still dort abzulegen.
+- Nicht übernommene Übergaben werden aus Archiver-Transfer geräumt.
+- Nach einem Extension-Update sagt die Seite „Bitte neu laden“, statt nichts zu tun.
+- Das Rechtsklickmenü zeigt auch leere Ordner.
+
+Veröffentlichen:
+- Das Auto-Update an alle Tester geht nur noch raus, wenn beim Start des Workflows „publish“ angehakt ist. Alle Actions sind auf feste Commits gepinnt.
+
 ## App 0.30.1 · Extension 3.23.0 (13.10.2026)
 
 Bildtext in der Lightbox:

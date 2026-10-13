@@ -365,9 +365,12 @@
   }
 
   // Eigene Reihenfolge der Zonen (Einstellungen › Zonen). Neue Zonen hinten.
-  // Der Betrachter liest denselben Eintrag.
+  // Sie gehört zur Bibliothek (.archiver/zones.json) und kommt mit dem Snapshot;
+  // vorher galt eine Reihenfolge für alle Bibliotheken und überschrieb beim
+  // Wechsel die der anderen (0.31.0). Palette und Zonenleiste lesen die Kopie
+  // in localStorage „zoneOrder“, die hier mit der aktiven Bibliothek mitzieht.
   function orderZones(zones) {
-    const order = pref("zoneOrder", []);
+    const order = state.zoneOrder || [];
     if (!order.length) return zones;
     // Zone, die früher in Unterzonen geteilt war: Platz ihrer ersten Unterzone
     const rank = (z) => {
@@ -379,6 +382,7 @@
   }
 
   function setZoneOrder(paths) {
+    state.zoneOrder = paths;
     setPref("zoneOrder", paths);
     state.zones = orderZones(state.zones);
     syncZoneOrder();
@@ -398,12 +402,10 @@
   }
 
   function renameInOrder(oldPath, newPath) {
-    const order = pref("zoneOrder", []);
+    const order = state.zoneOrder || [];
     if (!order.length) return;
-    setPref(
-      "zoneOrder",
-      order.map((p) => (p === oldPath ? newPath : p.startsWith(oldPath + "/") ? newPath + p.slice(oldPath.length) : p))
-    );
+    state.zoneOrder = order.map((p) => (p === oldPath ? newPath : p.startsWith(oldPath + "/") ? newPath + p.slice(oldPath.length) : p));
+    setPref("zoneOrder", state.zoneOrder);
   }
 
   async function refresh() {
@@ -412,6 +414,12 @@
       snap = await invoke("snapshot");
     } catch (e) {
       return fail(e);
+    }
+    if (snap.root !== state.root || !state.zoneOrder) {
+      // Bibliothek (neu) geladen: ihre eigene Reihenfolge übernehmen
+      state.zoneOrder = snap.zoneOrder || [];
+      syncedOrder = JSON.stringify(state.zoneOrder);
+      if (JSON.stringify(pref("zoneOrder", [])) !== syncedOrder) setPref("zoneOrder", state.zoneOrder);
     }
     state.root = snap.root;
     state.name = snap.name;

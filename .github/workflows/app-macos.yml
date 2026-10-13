@@ -11,8 +11,15 @@
 name: App macOS
 
 # Nur von Hand: Mac-Minuten zählen bei GitHub zehnfach, daher kein Build bei jedem Push.
+# Das Auto-Update an alle Tester geht nur raus, wenn „publish“ angehakt ist
+# (0.31.0). Vorher veröffentlichte jeder Lauf, von jedem Zweig, als „latest“.
 on:
   workflow_dispatch:
+    inputs:
+      publish:
+        description: "Als Auto-Update an alle Tester veröffentlichen"
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -25,19 +32,19 @@ jobs:
   build:
     runs-on: macos-14
     env:
-      PUBLISH_UPDATE: ${{ secrets.RELEASES_TOKEN != '' && secrets.TAURI_SIGNING_PRIVATE_KEY != '' }}
+      PUBLISH_UPDATE: ${{ inputs.publish && secrets.RELEASES_TOKEN != '' && secrets.TAURI_SIGNING_PRIVATE_KEY != '' }}
       APPLE_SIGN: ${{ secrets.APPLE_CERTIFICATE != '' }}
       APPLE_NOTARIZE: ${{ secrets.APPLE_CERTIFICATE != '' && secrets.APPLE_ID != '' && secrets.APPLE_PASSWORD != '' && secrets.APPLE_TEAM_ID != '' }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@686976e191b89faba57d3206551f0f330d8cb249 # stable
 
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
         with:
           workspaces: app/src-tauri
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 22
 
@@ -125,7 +132,7 @@ jobs:
           ls -la dist
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: archiver-mac
           path: dist/*

@@ -767,6 +767,8 @@ struct Snapshot {
     folders: Vec<String>,
     /// Anzahl unter „Zuletzt gelöscht“
     deleted: usize,
+    /// Reihenfolge der Zonen dieser Bibliothek (.archiver/zones.json), 0.31.0
+    zone_order: Vec<String>,
 }
 
 #[tauri::command]
@@ -803,6 +805,7 @@ async fn snapshot(state: State<'_, AppState>) -> Result<Snapshot, String> {
             structure: lib.structure(),
             folders: lib.folders(),
             deleted: lib.deleted_count(),
+            zone_order: lib.zone_order().0,
         })
     })
     .await
