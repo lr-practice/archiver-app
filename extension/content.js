@@ -77,7 +77,7 @@
           const [prop, value] = rule.split(":");
           host.style.setProperty(prop, value, "important");
         });
-        shadow = host.attachShadow({ mode: "open" });
+        shadow = host.attachShadow({ mode: "closed" }); // geschlossen: die Seite kommt nicht an Vorschauen und Dateinamen
         UI.watchTheme(host);
         const sheet = new CSSStyleSheet();
         sheet.replaceSync(texts.join("\n"));
@@ -161,6 +161,7 @@
   }
 
   document.addEventListener("keydown", (e) => {
+    if (!e.isTrusted) return; // nur echte Eingaben, keine von der Seite erzeugten Events
     if (recordingShortcut) return; // nimmt das Einstellungen-Panel selbst entgegen
 
     if (manualOpen) {
@@ -179,7 +180,9 @@
 
     if (matchesShortcut(e, shortcut)) {
       e.preventDefault();
-      toggleManualOverlay();
+      // Das Overlay lebt nur im Top-Frame; aus einem iframe heraus dorthin weiterreichen
+      if (window === window.top) toggleManualOverlay();
+      else chrome.runtime.sendMessage({ type: "toggle-overlay-top" }).catch(() => {});
     }
   });
 
@@ -189,7 +192,7 @@
     if (!message) return;
     if (message.type === "feedback") {
       ensureOverlay().then(() => UI.showToast(rootEl, message.text, message.ok));
-    } else if (message.type === "toggle-overlay") {
+    } else if (message.type === "toggle-overlay" && window === window.top) {
       toggleManualOverlay(); // Chrome-Befehl, kommt nur im Top-Frame an
     } else if (message.type === "pinterest-collect" && window === window.top) {
       collectPinterestBoard().then((result) => chrome.runtime.sendMessage({ type: "pinterest-pins", ...result }));
@@ -210,6 +213,7 @@
   document.addEventListener(
     "contextmenu",
     (e) => {
+      if (!e.isTrusted) return; // nur echte Eingaben, keine von der Seite erzeugten Events
       lastContext = { target: e.target, x: e.clientX, y: e.clientY };
     },
     true
@@ -598,6 +602,7 @@
   }
 
   function areaKey(e) {
+    if (!e.isTrusted) return; // nur echte Eingaben, keine von der Seite erzeugten Events
     if (e.key === "Escape") {
       e.preventDefault();
       e.stopPropagation();
@@ -1020,6 +1025,7 @@
   // Erst nach dem Loslassen der Maus einblenden, nicht während des Markierens
   let selecting = false;
   document.addEventListener("mousedown", (e) => {
+    if (!e.isTrusted) return; // nur echte Eingaben, keine von der Seite erzeugten Events
     if (e.button === 0 && spotRect && insideBlock(e.clientX, e.clientY)) return; // Ziehen des Blocks
     selecting = true;
     hideSpotlight();
@@ -1068,6 +1074,7 @@
   }
 
   function onTextDragMove(e) {
+    if (!e.isTrusted) return; // nur echte Eingaben, keine von der Seite erzeugten Events
     const d = textDrag;
     if (!d.moving) {
       if (Math.hypot(e.clientX - d.x, e.clientY - d.y) < TEXT_DRAG_THRESHOLD) return;
@@ -1126,6 +1133,7 @@
   }
 
   function onTextDragUp(e) {
+    if (!e.isTrusted) return; // nur echte Eingaben, keine von der Seite erzeugten Events
     const d = textDrag;
     if (!d.moving) {
       // nur geklickt: wie gewohnt Markierung aufheben
@@ -1149,6 +1157,7 @@
   }
 
   function onTextDragKey(e) {
+    if (!e.isTrusted) return; // nur echte Eingaben, keine von der Seite erzeugten Events
     if (e.key !== "Escape") return;
     e.preventDefault();
     endTextDrag();
@@ -1157,6 +1166,7 @@
   document.addEventListener(
     "mousedown",
     (e) => {
+      if (!e.isTrusted) return; // nur echte Eingaben, keine von der Seite erzeugten Events
       if (e.button !== 0 || manualOpen || textDrag) return;
       const text = selectedText();
       if (!text || !insideSelection(e.clientX, e.clientY)) return;
@@ -1173,6 +1183,7 @@
   document.addEventListener(
     "dragstart",
     (e) => {
+      if (!e.isTrusted) return; // nur echte Eingaben, keine von der Seite erzeugten Events
       fallbackImageUrl = findBestImageUrl(e.target);
       dragCaption = captionNear();
       debugLog("dragstart, target:", e.target, "erkannte Quelle:", fallbackImageUrl);
@@ -1206,6 +1217,7 @@
   }
 
   function armHiddenDrag(e) {
+    if (!e.isTrusted) return; // nur echte Eingaben, keine von der Seite erzeugten Events
     clearHiddenDrag();
     if (e.button !== 0 || manualOpen || textDrag) return;
     const t = e.target;
@@ -1227,6 +1239,7 @@
   window.addEventListener(
     "mousedown",
     (e) => {
+      if (!e.isTrusted) return; // nur echte Eingaben, keine von der Seite erzeugten Events
       if (hiddenDrag && hiddenDrag.el === e.target) e.stopImmediatePropagation();
     },
     true
@@ -1245,6 +1258,7 @@
   document.addEventListener(
     "dragstart",
     (e) => {
+      if (!e.isTrusted) return; // nur echte Eingaben, keine von der Seite erzeugten Events
       dragSource = e.target instanceof Element ? e.target : null;
       if (!hiddenDrag || !e.dataTransfer || !(e.target === hiddenDrag.el || hiddenDrag.el.contains(e.target))) return;
       e.dataTransfer.effectAllowed = "copy";
@@ -1312,6 +1326,7 @@
   }
 
   function onMediaDragMove(e) {
+    if (!e.isTrusted) return; // nur echte Eingaben, keine von der Seite erzeugten Events
     const d = mediaDrag;
     if (!d.moving) {
       if (Math.hypot(e.clientX - d.x, e.clientY - d.y) < 6) return;
@@ -1338,6 +1353,7 @@
   }
 
   function onMediaDragUp(e) {
+    if (!e.isTrusted) return; // nur echte Eingaben, keine von der Seite erzeugten Events
     const d = mediaDrag;
     if (!d.moving) return endMediaDrag();
     e.preventDefault();
@@ -1360,6 +1376,7 @@
   }
 
   function onMediaDragKey(e) {
+    if (!e.isTrusted) return; // nur echte Eingaben, keine von der Seite erzeugten Events
     if (e.key !== "Escape") return;
     e.preventDefault();
     endMediaDrag();
@@ -1588,6 +1605,7 @@
   document.addEventListener(
     "dragenter",
     (e) => {
+      if (!e.isTrusted) return; // nur echte Eingaben, keine von der Seite erzeugten Events
       if (!e.dataTransfer || manualOpen) return; // im offenen Overlay übernehmen die Zonen-Karten
       dragCounter++;
       if (dragCounter === 1 && !zonesBarEl) loadDragLibs();
@@ -1599,6 +1617,7 @@
   document.addEventListener(
     "dragover",
     (e) => {
+      if (!e.isTrusted) return; // nur echte Eingaben, keine von der Seite erzeugten Events
       if (!e.dataTransfer || manualOpen) return;
       e.preventDefault(); // notwendig, damit "drop" überhaupt feuert
       e.dataTransfer.dropEffect = "copy";
@@ -1638,6 +1657,7 @@
   document.addEventListener(
     "drop",
     (e) => {
+      if (!e.isTrusted) return; // nur echte Eingaben, keine von der Seite erzeugten Events
       if (manualOpen) return;
       const zoneIdx = getZoneIndex(e.clientX, e.clientY);
       shiftDrop = dragLibs.length > 1 ? false : e.shiftKey;

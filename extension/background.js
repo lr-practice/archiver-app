@@ -661,8 +661,39 @@ async function captureVisible(message, sender) {
 
 // ---- Nachrichten ----
 
+// Was die Bibliothek liest oder verändert, nehmen wir nur aus Seiten der Extension
+// selbst (Popup, Dashboard) oder aus dem Top-Frame eines Tabs an, in dem das
+// Overlay lebt. Content-Scripts in iframes (Werbung, Einbettungen) dürfen nur
+// sichern, Zonen und Bibliotheken für die Leiste abfragen und ein Bildschirmfoto
+// anstoßen.
+const PRIVILEGED = new Set([
+  "create-app-zone",
+  "list-folder-downloads",
+  "show-download",
+  "move-download",
+  "open-chrome-page",
+  "export-for-app",
+  "open-app",
+  "open-dashboard",
+  "pinterest-import",
+]);
+
+function trustedSender(sender) {
+  if (!sender || sender.id !== chrome.runtime.id) return false;
+  if (!sender.tab) return true; // Popup oder Service Worker
+  if (sender.url && sender.url.startsWith(chrome.runtime.getURL(""))) return true; // Dashboard im Tab
+  return sender.frameId === 0;
+}
+
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (!message) return;
+  if (PRIVILEGED.has(message.type) && !trustedSender(sender)) return;
+
+  // Tastenkürzel in einem iframe: Overlay im Top-Frame desselben Tabs öffnen
+  if (message.type === "toggle-overlay-top" && sender.tab) {
+    chrome.tabs.sendMessage(sender.tab.id, { type: "toggle-overlay" }, { frameId: 0 }).catch(() => {});
+    return;
+  }
 
   if (message.type === "download-image" && message.url) {
     handleDownload(message, sender).then(sendResponse);

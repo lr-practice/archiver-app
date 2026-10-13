@@ -746,6 +746,7 @@
       if (onRecordingChange) onRecordingChange(true);
 
       const onKeydown = (e) => {
+        if (!e.isTrusted) return; // nur echte Tasten, keine von der Seite erzeugten Events
         e.preventDefault();
         e.stopPropagation();
         if (e.key === "Escape") {

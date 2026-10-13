@@ -480,6 +480,14 @@ fn file_name(rel: &str) -> String {
 
 /// Prüft einen relativen Pfad aus der Oberfläche: keine "..", keine absoluten
 /// Pfade, nichts Verstecktes. Gibt den absoluten Pfad in der Bibliothek zurück.
+/// Relativer Pfad in der Bibliothek ohne `..`, versteckte oder absolute Teile.
+pub fn check_rel(rel: &str) -> Result<()> {
+    if rel.starts_with('/') {
+        return Err(format!("Ungültiger Pfad: {rel}"));
+    }
+    safe_join(Path::new(""), rel).map(|_| ())
+}
+
 fn safe_join(root: &Path, rel: &str) -> Result<PathBuf> {
     let mut out = root.to_path_buf();
     for seg in rel.split('/').filter(|s| !s.is_empty()) {

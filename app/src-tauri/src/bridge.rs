@@ -352,9 +352,10 @@ fn handle(msg: &Value, slot: &mut Vec<(PathBuf, Library)>) -> Result<Value, Stri
         }
         "save" => {
             let lib = library(slot, msg)?;
-            let file = PathBuf::from(str_arg(msg, "file").ok_or("Datei fehlt")?);
+            let file = transfer_file(str_arg(msg, "file").ok_or("Datei fehlt")?, None)?;
             let fallback = lib.default_zone();
             let zone = str_arg(msg, "zone").unwrap_or(&fallback);
+            crate::library::check_rel(zone)?;
             let source = Source {
                 image_url: str_arg(msg, "imageUrl").filter(|u| u.starts_with("http")).map(String::from),
                 page_url: str_arg(msg, "pageUrl").map(String::from),
@@ -362,7 +363,8 @@ fn handle(msg: &Value, slot: &mut Vec<(PathBuf, Library)>) -> Result<Value, Stri
                 captured_at: msg.get("capturedAt").and_then(|v| v.as_i64()).or_else(|| Some(now_ms())),
                 quote: str_arg(msg, "quote").map(|q| q.chars().take(20_000).collect()),
             };
-            let (mut path, mut duplicate) = lib.adopt_file(&file, str_arg(msg, "name"), zone, &source)?;
+            let (mut path, duplicate) = lib.adopt_file(&file, str_arg(msg, "name"), zone, &source)?;
+            let mut moved_here = false;
             remove_if_empty(file.parent());
             // Schon in der Bibliothek, aber auf eine andere Zone gezogen (0.30.1):
             // das vorhandene Bild wandert dorthin, statt still liegen zu bleiben.
@@ -370,11 +372,11 @@ fn handle(msg: &Value, slot: &mut Vec<(PathBuf, Library)>) -> Result<Value, Stri
                 let _ = std::fs::create_dir_all(lib.root.join(zone));
                 if let Some(moved) = lib.move_items(&[path.clone()], zone)?.pop() {
                     path = moved;
-                    duplicate = false;
+                    moved_here = true;
                 }
             }
             // Textkarte: Farbe, die schon beim Markieren gezeigt wurde; Bildtext der Seite (0.29).
-            // Mitgebrachter Bildtext gilt auch für ein schon vorhandenes Bild.
+            // Mitgebrachter Bildtext gilt auch für ein schon vorhandenes Bild, die Farbe nicht.
             let tone = crate::studio::clean_tone(str_arg(msg, "tone")).filter(|_| !duplicate);
             let caption = str_arg(msg, "caption").map(|c| c.trim().to_string()).filter(|c| !c.is_empty());
             if tone.is_some() || caption.is_some() {
@@ -385,13 +387,14 @@ fn handle(msg: &Value, slot: &mut Vec<(PathBuf, Library)>) -> Result<Value, Stri
             }
             // Linkkarte der offenen Seite: die ganze Seite als MHTML dahinter (0.30.1)
             if let Some(archive) = str_arg(msg, "archive") {
-                let archive = PathBuf::from(archive);
+                let archive = transfer_file(archive, Some("mhtml"))?;
                 if let Ok((_, hash)) = lib.locate(&path) {
                     let _ = lib.attach_web_archive(&hash, &archive);
                 }
                 remove_if_empty(archive.parent());
             }
-            Ok(json!({ "path": path, "duplicate": duplicate }))
+            // „duplicate“ heißt für die Extension: lag schon in dieser Zone, nichts verschoben
+            Ok(json!({ "path": path, "duplicate": duplicate && !moved_here }))
         }
         "list" => {
             let lib = library(slot, msg)?;
@@ -450,6 +453,31 @@ fn handle(msg: &Value, slot: &mut Vec<(PathBuf, Library)>) -> Result<Value, Stri
     }
 }
 
+/// Datei aus dem Zwischenordner der Extension (Downloads/Archiver-Transfer).
+/// Die Brücke übernimmt (und löscht) nur, was Chrome dort für uns abgelegt hat,
+/// nie einen beliebigen Pfad auf dem Mac.
+fn transfer_file(path: &str, ext: Option<&str>) -> Result<PathBuf, String> {
+    let given = PathBuf::from(path);
+    let meta = std::fs::symlink_metadata(&given).map_err(|e| format!("{}: {e}", given.display()))?;
+    if !meta.file_type().is_file() {
+        return Err(format!("Keine Datei: {}", given.display()));
+    }
+    let real = given.canonicalize().map_err(|e| e.to_string())?;
+    let in_transfer = real
+        .parent()
+        .map(|p| p.ancestors().any(|a| a.file_name().and_then(|n| n.to_str()) == Some(crate::library::TRANSFER_DIR)))
+        .unwrap_or(false);
+    if !in_transfer {
+        return Err(format!("Datei liegt nicht in {}: {}", crate::library::TRANSFER_DIR, given.display()));
+    }
+    if let Some(ext) = ext {
+        if !real.extension().and_then(|e| e.to_str()).is_some_and(|e| e.eq_ignore_ascii_case(ext)) {
+            return Err(format!("Erwartet .{ext}: {}", given.display()));
+        }
+    }
+    Ok(real)
+}
+
 /// Den Zwischenordner der Extension in den Downloads wieder entfernen, wenn er leer ist.
 fn remove_if_empty(dir: Option<&Path>) {
     if let Some(dir) = dir {
@@ -484,6 +512,34 @@ mod tests {
         write_message(&mut buf, &json!({ "cmd": "hello", "id": 1 })).unwrap();
         let back = read_message(&mut buf.as_slice()).unwrap();
         assert_eq!(back["cmd"], "hello");
+    }
+
+    #[test]
+    fn takes_only_files_from_transfer_dir() {
+        let tmp = tempfile::tempdir().unwrap();
+        let transfer = tmp.path().join("Downloads").join(crate::library::TRANSFER_DIR);
+        std::fs::create_dir_all(transfer.join("Zone")).unwrap();
+        let ok = transfer.join("Zone/bild.jpg");
+        std::fs::write(&ok, b"x").unwrap();
+        let page = transfer.join("page-1.mhtml");
+        std::fs::write(&page, b"x").unwrap();
+        let outside = tmp.path().join("Vertrag.pdf");
+        std::fs::write(&outside, b"x").unwrap();
+
+        assert!(transfer_file(ok.to_str().unwrap(), None).is_ok());
+        assert!(transfer_file(page.to_str().unwrap(), Some("mhtml")).is_ok());
+        assert!(transfer_file(ok.to_str().unwrap(), Some("mhtml")).is_err());
+        assert!(transfer_file(outside.to_str().unwrap(), None).is_err());
+        // Umweg über .. oder einen Symlink im Transfer-Ordner zählt nicht
+        let sneaky = format!("{}/../../Vertrag.pdf", transfer.display());
+        assert!(transfer_file(&sneaky, None).is_err());
+        #[cfg(unix)]
+        {
+            let link = transfer.join("link.pdf");
+            std::os::unix::fs::symlink(&outside, &link).unwrap();
+            assert!(transfer_file(link.to_str().unwrap(), None).is_err());
+        }
+        assert!(transfer_file(transfer.to_str().unwrap(), None).is_err());
     }
 
     #[test]
