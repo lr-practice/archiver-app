@@ -6171,3 +6171,9 @@ html.light {
   color: var(--p-dim);
   font-size: 13px;
 }
+
+/* ---- 0.29.1: Lightbox in „Zuletzt gelöscht“ ----
+   Statt Zone und Info: „Wiederherstellen“ und „Sofort löschen“ (rot beim Überfahren, wie der Chip). */
+.lb-remove:hover {
+  color: var(--danger);
+}

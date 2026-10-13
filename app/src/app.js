@@ -4428,9 +4428,25 @@
     $("lbBrowse").hidden = list.length < 2;
     $("lbCount").textContent = `${lb.index + 1} / ${list.length}`;
     lbCloseZones();
+    // Zuletzt gelöscht: nur ansehen, zurückholen oder endgültig löschen
+    const gone = !!lb.deleted;
+    $("lightbox").classList.toggle("is-deleted", gone);
+    $("lbAction").hidden = gone;
+    $("lbInfoBtn").hidden = gone;
+    $("lbRestoreBtn").hidden = !gone;
+    $("lbRemoveBtn").hidden = !gone;
+    if (gone && lbInfoOpen) lbToggleInfo();
     if (lbInfoOpen) lbRenderInfo(item);
     lbRenderText();
-    selectAndShow(item.path);
+    if (gone) {
+      state.delSel = new Set([item.abs]);
+      const card = document.querySelector(`.card.del[data-del="${CSS.escape(item.abs)}"]`);
+      document.querySelectorAll(".card.del.selected").forEach((c) => c !== card && c.classList.remove("selected"));
+      if (card) {
+        card.classList.add("selected");
+        card.scrollIntoView({ block: "nearest" });
+      }
+    } else selectAndShow(item.path);
     if (lbShowMedia(item)) return;
     const img = $("lightboxImg");
     const src = fileSrc(item.abs);
@@ -4479,7 +4495,8 @@
 
   // Zeigt PDF oder Video statt des Bildes. false = normales Bild.
   function lbShowMedia(item) {
-    const k = isNote(item) ? "note" : quoteOf(item) ? "text" : kindOf(item);
+    const gone = state.lightbox && state.lightbox.deleted;
+    const k = isNote(item) && !gone ? "note" : quoteOf(item) ? "text" : kindOf(item);
     const box = $("lbMedia");
     const img = $("lightboxImg");
     lbMode = k;
@@ -4746,6 +4763,7 @@
   }
 
   function lbToggleInfo() {
+    if (!lbInfoOpen && state.lightbox && state.lightbox.deleted) return;
     lbInfoOpen = !lbInfoOpen;
     $("lightbox").classList.toggle("info-open", lbInfoOpen);
     $("lbInfoBtn").classList.toggle("active", lbInfoOpen);
@@ -4817,6 +4835,11 @@
 
   function closeLightbox() {
     noteLeave();
+    $("lightbox").classList.remove("is-deleted");
+    $("lbAction").hidden = false;
+    $("lbInfoBtn").hidden = false;
+    $("lbRestoreBtn").hidden = true;
+    $("lbRemoveBtn").hidden = true;
     $("lbTones").hidden = true;
     state.lightbox = null;
     lbCloseZones();
@@ -4844,6 +4867,16 @@
     $("lbTextBtn").textContent = t("captionChip");
     $("lbTextBtn").title = t("captionLbTitle");
     $("lbTextBtn").addEventListener("click", lbToggleText);
+    $("lbRestoreBtn").textContent = t("deletedRestore");
+    $("lbRestoreBtn").addEventListener("click", () => {
+      const item = lightboxItem();
+      if (item) restoreDeleted([item.abs]);
+    });
+    $("lbRemoveBtn").textContent = t("deletedRemove");
+    $("lbRemoveBtn").addEventListener("click", () => {
+      const item = lightboxItem();
+      if (item) askRemoveDeleted([item.abs]);
+    });
     $("lbSourceBtn").textContent = t("source");
     $("lbSourceBtn").addEventListener("click", () => {
       const item = lightboxItem();
@@ -4913,7 +4946,7 @@
     });
     stage.addEventListener("pointerdown", (e) => {
       if (e.button !== 0 || !lbView.fitted || lbMode !== "image") return;
-      if (e.target !== $("lightboxImg")) return;
+      if (e.target !== $("lightboxImg") || state.lightbox.deleted) return;
       lift = { x: e.clientX, y: e.clientY };
     });
     stage.addEventListener("pointermove", (e) => {
@@ -4985,6 +5018,14 @@
       }
       else return false;
       return true;
+    }
+    if (state.lightbox.deleted) {
+      if (e.key === "Backspace" || e.key === "Delete") {
+        const item = lightboxItem();
+        if (item) askRemoveDeleted([item.abs]);
+        return true;
+      }
+      if (/^[1-4]$/.test(e.key) || e.key === "Enter" || e.key === "i" || e.key === "I") return true;
     }
     if (lbMode === "pdf" && lbPdf && (e.key === "ArrowDown" || e.key === "ArrowUp")) lbPdf.step(e.key === "ArrowDown" ? 1 : -1);
     else if (lbMode === "pdf" && lbPdf && e.key === "Escape" && !lbPdf.fitted() && $("lbZones").hidden) lbPdf.setZoom(1);
@@ -5965,7 +6006,7 @@
     if (list.length) {
       bar.appendChild(chip("(" + t(sel.size ? "deletedRestore" : "deletedRestoreAll") + ")", false, () => restoreDeleted(targets())));
       bar.appendChild(el("span", "p-filter-gap"));
-      const rm = chip("(" + t(sel.size ? "deletedRemove" : "deletedRemoveAll") + ")", false, () => removeDeleted(targets()));
+      const rm = chip("(" + t(sel.size ? "deletedRemove" : "deletedRemoveAll") + ")", false, () => askRemoveDeleted(targets()));
       rm.classList.add("danger");
       bar.appendChild(rm);
     }
@@ -6001,7 +6042,7 @@
         else sel.add(item.abs);
         renderZones();
       });
-      card.addEventListener("dblclick", () => restoreDeleted([item.abs]));
+      card.addEventListener("dblclick", () => openDeletedLightbox(item));
       card.addEventListener("contextmenu", (e) => {
         e.preventDefault();
         e.stopPropagation();
@@ -6034,7 +6075,7 @@
       }));
     entry(t("deletedRestore"), () => restoreDeleted(files));
     menu.appendChild(el("div", "p-more-rule"));
-    entry(t("deletedRemove"), () => removeDeleted(files), " danger");
+    entry(t("deletedRemove"), () => askRemoveDeleted(files), " danger");
     document.body.appendChild(menu);
     const r = menu.getBoundingClientRect();
     menu.style.left = Math.max(8, Math.min(x, window.innerWidth - r.width - 8)) + "px";
@@ -6047,10 +6088,55 @@
       const n = await invoke("restore_deleted", { files });
       state.delSel = new Set();
       await refresh();
+      lbSyncDeleted();
       toast(t("deletedRestored", { n }));
     } catch (e) {
       fail(e);
     }
+  }
+
+  // Lightbox in „Zuletzt gelöscht“ (0.29.1): Doppelklick, Leertaste oder Enter
+  function openDeletedLightbox(item) {
+    const list = state.deletedItems || [];
+    if (!item || !list.length) return;
+    state.lightbox = { zone: null, list, index: Math.max(0, list.indexOf(item)), deleted: true };
+    $("lightbox").hidden = false;
+    document.body.classList.add("lightbox-open");
+    lbView.fitted = true;
+    showLightboxItem();
+  }
+
+  // Nach Zurückholen oder Löschen: die Lightbox blättert in der neuen Liste weiter
+  function lbSyncDeleted() {
+    const lb = state.lightbox;
+    if (!lb || !lb.deleted) return;
+    lb.list = state.deletedItems || [];
+    if (!lb.list.length) return closeLightbox();
+    lb.index = Math.min(lb.index, lb.list.length - 1);
+    showLightboxItem();
+  }
+
+  // ⌫ und „Sofort löschen“ fragen nach: danach liegt es im Papierkorb des Macs
+  function askRemoveDeleted(files) {
+    if (!files.length) return;
+    const n = files.length;
+    const dialog = el("div", "dialog confirm");
+    dialog.appendChild(el("h3", null, n === 1 ? t("deletedAskOne") : t("deletedAskMany", { n })));
+    dialog.appendChild(el("p", null, t("deletedAskText")));
+    const foot = el("div", "confirm-foot");
+    const go = () => {
+      closeModal();
+      removeDeleted(files);
+    };
+    foot.appendChild(button("btn", t("cancel"), closeModal));
+    const ok = button("btn danger-fill", t("deletedRemove"), go);
+    foot.appendChild(ok);
+    dialog.appendChild(foot);
+    const modal = $("modal");
+    modal.replaceChildren(dialog);
+    modal.hidden = false;
+    modal.onEnter = go;
+    ok.focus();
   }
 
   async function removeDeleted(files) {
@@ -6059,6 +6145,7 @@
       const n = await invoke("remove_deleted", { files });
       state.delSel = new Set();
       await refresh();
+      lbSyncDeleted();
       toast(t("deletedRemoved", { n }));
     } catch (e) {
       fail(e);
@@ -6323,6 +6410,22 @@
         e.preventDefault();
       }
       return;
+    }
+
+    // Zuletzt gelöscht: Leertaste/Enter groß ansehen, ⌫ fragt vor dem endgültigen Löschen
+    if (!mod && !e.altKey && !state.page && state.focus === DELETED && !state.query.trim()) {
+      const list = state.deletedItems || [];
+      const sel = [...(state.delSel || [])];
+      if (e.key === " " || e.key === "Enter") {
+        e.preventDefault();
+        openDeletedLightbox(list.find((i) => i.abs === sel[0]) || list[0]);
+        return;
+      }
+      if (e.key === "Backspace" || e.key === "Delete") {
+        e.preventDefault();
+        if (sel.length) askRemoveDeleted(sel);
+        return;
+      }
     }
 
     if (!mod && !e.altKey && document.body.classList.contains("at-home") && !state.page && homeKey(e)) {

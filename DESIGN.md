@@ -341,6 +341,11 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
 - **Form (0.28):** Dasselbe Raster und dieselbe Karte wie in jeder Zone (4.6),
   mit Größenstufen. Das Badge zeigt Zone und Resttage. Auswahl zeigt den Ring
   (4.1). Wiederherstellen und Sofort löschen stehen als Chips rechts.
+- **Lightbox (0.29.1):** Doppelklick, Leertaste oder Enter öffnen sie wie in
+  jeder Zone. In der Leiste stehen statt Zone und Info „Wiederherstellen“ und
+  „Sofort löschen“ (rot beim Überfahren). Notizen sind hier nur lesbar.
+- **Endgültig löschen fragt immer nach** (⌫, Chip, Menü, Lightbox): Dialog mit
+  „Abbrechen“ und rotem „Sofort löschen“, Enter bestätigt.
 - **Nicht:** Kein eigener Zonenplatz unter den Active Zones, keine Zeile, wenn
   nichts gelöscht ist.
 
