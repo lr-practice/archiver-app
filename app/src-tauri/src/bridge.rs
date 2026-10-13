@@ -362,12 +362,22 @@ fn handle(msg: &Value, slot: &mut Vec<(PathBuf, Library)>) -> Result<Value, Stri
                 captured_at: msg.get("capturedAt").and_then(|v| v.as_i64()).or_else(|| Some(now_ms())),
                 quote: str_arg(msg, "quote").map(|q| q.chars().take(20_000).collect()),
             };
-            let (path, duplicate) = lib.adopt_file(&file, str_arg(msg, "name"), zone, &source)?;
+            let (mut path, mut duplicate) = lib.adopt_file(&file, str_arg(msg, "name"), zone, &source)?;
             remove_if_empty(file.parent());
-            // Textkarte: Farbe, die schon beim Markieren gezeigt wurde; Bildtext der Seite (0.29)
-            let tone = crate::studio::clean_tone(str_arg(msg, "tone"));
+            // Schon in der Bibliothek, aber auf eine andere Zone gezogen (0.30.1):
+            // das vorhandene Bild wandert dorthin, statt still liegen zu bleiben.
+            if duplicate && str_arg(msg, "zone").is_some() && !path.starts_with(&format!("{zone}/")) {
+                let _ = std::fs::create_dir_all(lib.root.join(zone));
+                if let Some(moved) = lib.move_items(&[path.clone()], zone)?.pop() {
+                    path = moved;
+                    duplicate = false;
+                }
+            }
+            // Textkarte: Farbe, die schon beim Markieren gezeigt wurde; Bildtext der Seite (0.29).
+            // Mitgebrachter Bildtext gilt auch für ein schon vorhandenes Bild.
+            let tone = crate::studio::clean_tone(str_arg(msg, "tone")).filter(|_| !duplicate);
             let caption = str_arg(msg, "caption").map(|c| c.trim().to_string()).filter(|c| !c.is_empty());
-            if !duplicate && (tone.is_some() || caption.is_some()) {
+            if tone.is_some() || caption.is_some() {
                 if let Ok((_, hash)) = lib.locate(&path) {
                     let patch = crate::studio::NotePatch { tone, caption, ..Default::default() };
                     let _ = lib.set_note(&[hash], &patch);
