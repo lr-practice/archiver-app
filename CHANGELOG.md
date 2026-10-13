@@ -1,6 +1,6 @@
 # Changelog
 
-## App 0.29.1 · Extension 3.21.0 (in Arbeit, noch nicht veröffentlicht)
+## App 0.29.1 · Extension 3.21.0 (13.10.2026)
 
 Zuletzt gelöscht:
 - Doppelklick, Leertaste oder Enter öffnen die Lightbox. Dort gibt es „Wiederherstellen“ und „Sofort löschen“.
