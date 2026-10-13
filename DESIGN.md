@@ -141,7 +141,7 @@ Ebenen vor: Navigation, Active-Zones-Leiste, Menüs und Ladeplatzhalter.
 | Ein- und Ausblenden, Toast, Wenden in der Lightbox (je Hälfte) | 0.18 s | `ease` / `ease-out` |
 | Seitenblatt, Gleiten | 0.28 s | `cubic-bezier(0.2, 0.7, 0.2, 1)` (`--sheet-ease`) |
 | Zonenleiste rein | 0.14 s | `ease-out` |
-| Zonenleiste raus | 0.2 s, 0.3 s verzögert | `ease` (Glühen auf dem Ziel bleibt kurz sichtbar) |
+| Zonenleiste raus | 0.2 s, 0.3 s verzögert | `ease` (Glühen auf dem Ziel bleibt kurz sichtbar). Am ganzen Mac erst, wenn gesichert ist; bei einem Fehler 2.5 s später (4.13) |
 | Ring „Umlaufend“ | 1.6 s je Runde | `linear` |
 
 Für die Bewegung gilt:
@@ -361,8 +361,13 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
 - **Form:** Volle Breite unten auf dem Bildschirm mit dem Zeiger, 280 px hoch,
   dieselben vier Glaskarten, Ring und Glühen wie 4.3. Die Karten haben keine
   eigene Unschärfe (das Fenster ist durchsichtig), deshalb gilt `--zone-alpha`.
+- **Ablauf (0.31.0):** Nach dem Loslassen zeigt das Ziel „Wird gesichert …“
+  (`.busy`, kein Glühen). Erst wenn Import oder Verschieben fertig ist, kommt
+  „Gesichert in …“ mit Glühen (`.landed`). Scheitert es, steht „Nicht
+  gesichert: …“ in `--danger` (`.failed`, kein Glühen) 2.5 s lang, dann
+  blendet die Leiste aus. Die Leiste bleibt so lange stehen (`dropbar_hold`).
 - **Nicht:** Erscheint nicht, wenn Archiver selbst vorne ist, und nicht bei
-  Text oder Links ohne Datei.
+  Text oder Links ohne Datei. Zeigt nie „Gesichert“, bevor es gesichert ist.
 
 ### 4.14 Zuletzt gelöscht (`.p-deleted`, `.card.del`)
 - **Zweck:** Gelöschte Objekte und Zonen liegen 7 Tage unter

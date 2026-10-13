@@ -8,6 +8,7 @@
 
 pub mod bridge;
 pub mod library;
+pub mod log;
 pub mod pdf;
 pub mod studio;
 mod system;
@@ -150,11 +151,22 @@ fn settings_path(app: &AppHandle) -> Option<PathBuf> {
     app.path().app_config_dir().ok().map(|d| d.join("settings.json"))
 }
 
+/// Einstellungen lesen und schreiben geht über diese Sperre: open_library
+/// (Hintergrund) und set_system_prefs (Hauptthread) überschrieben sich sonst.
+static SETTINGS_LOCK: Mutex<()> = Mutex::new(());
+
 fn load_settings(app: &AppHandle) -> Settings {
-    settings_path(app)
-        .and_then(|p| std::fs::read_to_string(p).ok())
-        .and_then(|t| serde_json::from_str(&t).ok())
-        .unwrap_or_default()
+    let Some(p) = settings_path(app) else { return Settings::default() };
+    let Ok(text) = std::fs::read_to_string(&p) else { return Settings::default() };
+    match serde_json::from_str(&text) {
+        Ok(s) => s,
+        Err(e) => {
+            // Kaputte Datei nicht still überschreiben: beiseitelegen, dann Standard
+            log::error("settings", format!("{}: {e}", p.display()));
+            let _ = std::fs::copy(&p, p.with_extension("json.broken"));
+            Settings::default()
+        }
+    }
 }
 
 fn save_settings(app: &AppHandle, s: &Settings) -> Result<(), String> {
@@ -162,7 +174,16 @@ fn save_settings(app: &AppHandle, s: &Settings) -> Result<(), String> {
     if let Some(dir) = p.parent() {
         std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
     }
-    std::fs::write(p, serde_json::to_vec_pretty(s).unwrap()).map_err(|e| e.to_string())
+    library::write_atomic(&p, &serde_json::to_vec_pretty(s).map_err(|e| e.to_string())?)
+}
+
+/// Einstellungen lesen, ändern, schreiben, ohne dass ein anderer Thread dazwischenkommt
+fn update_settings<T>(app: &AppHandle, f: impl FnOnce(&mut Settings) -> T) -> Result<T, String> {
+    let _guard = SETTINGS_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let mut s = load_settings(app);
+    let out = f(&mut s);
+    save_settings(app, &s)?;
+    Ok(out)
 }
 
 fn current(state: &State<AppState>) -> Result<Arc<Library>, String> {
@@ -171,10 +192,28 @@ fn current(state: &State<AppState>) -> Result<Arc<Library>, String> {
 
 /// Bestand neu einlesen und bei Änderungen die Oberfläche und den Vorschau-Worker anstoßen.
 fn rescan(app: &AppHandle, lib: &Library) {
-    if lib.scan().unwrap_or(false) {
-        let _ = app.emit("library-changed", ());
+    match lib.scan() {
+        Ok(true) => {
+            let _ = app.emit("library-changed", ());
+        }
+        Ok(false) => {}
+        Err(e) => report(app, "scan", &e),
     }
     kick_thumbs(app);
+}
+
+/// Fehler ins Protokoll und als Hinweis an die Oberfläche (0.31.0)
+/// Dieselbe Meldung höchstens einmal pro Minute, sonst meldet ein abgezogenes
+/// Laufwerk bei jedem Einlesen erneut.
+fn report(app: &AppHandle, area: &str, msg: &str) {
+    static LAST: Mutex<Option<(String, std::time::Instant)>> = Mutex::new(None);
+    log::error(area, msg);
+    let mut last = LAST.lock().unwrap_or_else(|e| e.into_inner());
+    if last.as_ref().is_some_and(|(m, at)| m == msg && at.elapsed() < Duration::from_secs(60)) {
+        return;
+    }
+    *last = Some((msg.to_string(), std::time::Instant::now()));
+    let _ = app.emit("library-error", msg.to_string());
 }
 
 fn kick_thumbs(app: &AppHandle) {
@@ -208,8 +247,16 @@ fn start_thumb_worker(app: AppHandle, lib: Arc<Library>) -> mpsc::Sender<()> {
                         let (lib, ready) = (&lib, &ready);
                         s.spawn(move || {
                             for (hash, path) in part {
-                                if let Some(thumb) = lib.make_thumb(hash, path) {
-                                    ready.lock().unwrap().push(ThumbReady { hash: hash.clone(), thumb });
+                                // Ein Decoder, der bei einer kaputten Datei abstürzt, darf
+                                // nicht den ganzen Worker mitnehmen (0.31.0)
+                                let made = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| lib.make_thumb(hash, path)));
+                                match made {
+                                    Ok(Some(thumb)) => ready.lock().unwrap_or_else(|e| e.into_inner()).push(ThumbReady { hash: hash.clone(), thumb }),
+                                    Ok(None) => {}
+                                    Err(_) => {
+                                        log::error("thumbs", format!("Vorschau abgestürzt: {}", path.display()));
+                                        lib.mark_thumb_failed(hash);
+                                    }
                                 }
                             }
                         });
@@ -292,12 +339,20 @@ fn activate(app: &AppHandle, root: &Path) -> Result<(), String> {
         Duration::from_millis(400),
         None,
         move |res: notify_debouncer_full::DebounceEventResult| {
-            let Ok(events) = res else { return };
+            let events = match res {
+                Ok(events) => events,
+                Err(errors) => {
+                    for e in errors {
+                        log::error("watcher", e);
+                    }
+                    return;
+                }
+            };
             let relevant = events.iter().any(|ev| {
                 ev.paths.iter().any(|p| !p.components().any(|c| c.as_os_str() == library::META_DIR))
             });
             if relevant {
-                let changed = watch_lib.scan().unwrap_or(false);
+                let changed = log::check("scan", watch_lib.scan()).unwrap_or(false);
                 let sig = watch_lib.signature();
                 let mut last = last_sig.lock().unwrap();
                 if changed || sig != *last {
@@ -395,20 +450,20 @@ async fn open_library(app: AppHandle, path: String) -> Result<(), String> {
     tauri::async_runtime::spawn_blocking(move || {
         check_library(Path::new(&path))?;
         activate(&worker, Path::new(&path))?;
-        let mut settings = load_settings(&worker);
-        let mut slots = library_slots(&settings);
-        // Neue Bibliothek bekommt einen Platz: den ersten freien, sonst den bisher aktiven
-        if !slots.iter().any(|l| l.path.as_deref() == Some(path.as_str())) {
-            let i = slots
-                .iter()
-                .position(|l| l.path.is_none())
-                .or_else(|| slots.iter().position(|l| l.path.is_some() && l.path == settings.library))
-                .unwrap_or(0);
-            slots[i] = LibrarySlot { name: folder_name(&path), path: Some(path.clone()) };
-        }
-        settings.libraries = slots;
-        settings.library = Some(path.clone());
-        save_settings(&worker, &settings)?;
+        update_settings(&worker, |settings| {
+            let mut slots = library_slots(settings);
+            // Neue Bibliothek bekommt einen Platz: den ersten freien, sonst den bisher aktiven
+            if !slots.iter().any(|l| l.path.as_deref() == Some(path.as_str())) {
+                let i = slots
+                    .iter()
+                    .position(|l| l.path.is_none())
+                    .or_else(|| slots.iter().position(|l| l.path.is_some() && l.path == settings.library))
+                    .unwrap_or(0);
+                slots[i] = LibrarySlot { name: folder_name(&path), path: Some(path.clone()) };
+            }
+            settings.libraries = slots;
+            settings.library = Some(path.clone());
+        })?;
         // Hauptfenster, Palette und Leiste ziehen nach (auch beim Wechsel aus der Palette)
         let _ = worker.emit("library-switched", path);
         Ok(())
@@ -443,26 +498,27 @@ async fn set_library_slot(app: AppHandle, index: usize, name: Option<String>, pa
     if let Some(p) = path.clone() {
         tauri::async_runtime::spawn_blocking(move || check_library(Path::new(&p))).await.map_err(|e| e.to_string())??;
     }
-    let mut settings = load_settings(&app);
-    let mut slots = library_slots(&settings);
-    let slot = &mut slots[index];
-    if clear.unwrap_or(false) {
-        if slot.path.is_some() && slot.path == settings.library {
-            return Err("library-active".into());
+    update_settings(&app, |settings| {
+        let mut slots = library_slots(settings);
+        let slot = &mut slots[index];
+        if clear.unwrap_or(false) {
+            if slot.path.is_some() && slot.path == settings.library {
+                return Err("library-active".to_string());
+            }
+            *slot = LibrarySlot::default();
         }
-        *slot = LibrarySlot::default();
-    }
-    if let Some(p) = path {
-        if slot.name.trim().is_empty() || slot.path.as_deref().map(folder_name).as_deref() == Some(slot.name.as_str()) {
-            slot.name = folder_name(&p);
+        if let Some(p) = path {
+            if slot.name.trim().is_empty() || slot.path.as_deref().map(folder_name).as_deref() == Some(slot.name.as_str()) {
+                slot.name = folder_name(&p);
+            }
+            slot.path = Some(p);
         }
-        slot.path = Some(p);
-    }
-    if let Some(n) = name {
-        slot.name = n.trim().to_string();
-    }
-    settings.libraries = slots;
-    save_settings(&app, &settings)
+        if let Some(n) = name {
+            slot.name = n.trim().to_string();
+        }
+        settings.libraries = slots;
+        Ok(())
+    })?
 }
 
 // ---- Demo-Bibliothek für die Einstiegstour ----
@@ -770,8 +826,7 @@ async fn set_item_order(state: State<'_, AppState>, zone: String, hashes: Vec<St
 #[tauri::command]
 async fn set_sharing(app: AppHandle, state: State<'_, AppState>, shared: bool, user: Option<String>) -> Result<(), String> {
     let user = user.map(|u| u.trim().to_string()).filter(|u| !u.is_empty());
-    let settings = load_settings(&app);
-    save_settings(&app, &Settings { user: user.clone(), ..settings })?;
+    update_settings(&app, |s| s.user = user.clone())?;
     let lib = current(&state)?;
     lib.set_user(user);
     if lib.shared == shared {
@@ -1132,6 +1187,13 @@ struct UpdateInfo {
 
 // ---- Am ganzen Mac: Palette und Zonenleiste (system.rs) ----
 
+/// Fehler aus der Oberfläche ins Protokoll (~/Library/Logs/Archiver), 0.31.0
+#[tauri::command]
+fn log_error(area: String, msg: String) {
+    let area: String = area.chars().filter(|c| c.is_ascii_alphanumeric() || *c == '-').take(24).collect();
+    log::error(&format!("ui-{area}"), msg.chars().take(2000).collect::<String>());
+}
+
 #[tauri::command]
 fn system_prefs(app: AppHandle) -> system::SystemPrefs {
     load_settings(&app).system
@@ -1139,9 +1201,7 @@ fn system_prefs(app: AppHandle) -> system::SystemPrefs {
 
 #[tauri::command]
 fn set_system_prefs(app: AppHandle, prefs: system::SystemPrefs) -> Result<(), String> {
-    let mut s = load_settings(&app);
-    s.system = prefs.clone();
-    save_settings(&app, &s)?;
+    update_settings(&app, |s| s.system = prefs.clone())?;
     system::apply(&app, &prefs)
 }
 
@@ -1400,6 +1460,8 @@ pub fn run() {
             viewer::viewer_defaults,
             viewer::viewer_make_default,
             system::palette_hide,
+            system::dropbar_hold,
+            log_error,
             system::palette_ghost,
             system::palette_place,
             system_prefs,

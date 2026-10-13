@@ -774,6 +774,24 @@ CREATE TABLE IF NOT EXISTS note (
 );
 ";
 
+/// Verbindung öffnen, einstellen, Schema anlegen und kurz auf Schäden prüfen
+fn open_db(db: &Path) -> rusqlite::Result<Connection> {
+    let conn = Connection::open(db)?;
+    // Die Brücke zur Extension öffnet dieselbe Datenbank parallel zur App.
+    conn.busy_timeout(std::time::Duration::from_secs(5))?;
+    conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL;")?;
+    conn.execute_batch(SCHEMA)?;
+    let check: String = conn.query_row("PRAGMA quick_check(1)", [], |r| r.get(0))?;
+    if check != "ok" {
+        return Err(rusqlite::Error::SqliteFailure(rusqlite::ffi::Error::new(rusqlite::ffi::SQLITE_CORRUPT), Some(check)));
+    }
+    Ok(conn)
+}
+
+fn is_corrupt(e: &rusqlite::Error) -> bool {
+    matches!(e.sqlite_error_code(), Some(rusqlite::ErrorCode::DatabaseCorrupt) | Some(rusqlite::ErrorCode::NotADatabase))
+}
+
 impl Library {
     /// Öffnet (und legt bei Bedarf an) eine Bibliothek in `root`.
     pub fn open(root: &Path) -> Result<Library> {
@@ -781,11 +799,21 @@ impl Library {
         let shared = crate::studio::is_shared(root);
         // Geteilt: SQLite gehört nicht auf ein Netzlaufwerk, jede Person hat ihren eigenen Cache.
         let db = if shared { crate::studio::local_db(root)? } else { root.join(META_DIR).join("library.db") };
-        let conn = Connection::open(db).map_err(err)?;
-        // Die Brücke zur Extension öffnet dieselbe Datenbank parallel zur App.
-        conn.busy_timeout(std::time::Duration::from_secs(5)).map_err(err)?;
-        conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL;").map_err(err)?;
-        conn.execute_batch(SCHEMA).map_err(err)?;
+        // Die Datenbank ist nur ein Zwischenspeicher: Ordner und .archiver/metadata.json
+        // sind die Wahrheit. Ist sie beschädigt, wird sie beiseitegelegt und neu
+        // aufgebaut, statt die Bibliothek gar nicht mehr zu öffnen (0.31.0).
+        let conn = match open_db(&db) {
+            Err(e) if is_corrupt(&e) => {
+                let aside = db.with_extension(format!("db.broken-{}", now_ms()));
+                crate::log::error("db", format!("{} beschädigt ({e}), neu aufgebaut, alte Datei: {}", db.display(), aside.display()));
+                fs::rename(&db, &aside).map_err(err)?;
+                for ext in ["db-wal", "db-shm"] {
+                    let _ = fs::remove_file(db.with_extension(ext));
+                }
+                open_db(&db).map_err(err)?
+            }
+            r => r.map_err(err)?,
+        };
         // ab 0.9: Text der Zitat-Karten (ältere Datenbanken bekommen die Spalte nachgereicht)
         let _ = conn.execute("ALTER TABLE source ADD COLUMN quote TEXT", []);
         // ab 0.20.1: Farbe der Textkarten
@@ -1412,10 +1440,15 @@ impl Library {
         match result {
             Ok(p) => Some(p),
             Err(_) => {
-                self.failed_thumbs.lock().unwrap().insert(hash.to_string());
+                self.mark_thumb_failed(hash);
                 None
             }
         }
+    }
+
+    /// Diese Datei nicht noch einmal versuchen (bis zum nächsten Start)
+    pub fn mark_thumb_failed(&self, hash: &str) {
+        self.failed_thumbs.lock().unwrap_or_else(|e| e.into_inner()).insert(hash.to_string());
     }
 
     /// Audio: eingebettetes Cover, sonst der Standard-Platzhalter. Eckdaten aus AVFoundation.
@@ -2720,6 +2753,31 @@ mod tests {
         lib.scan().unwrap();
         let (path, duplicate) = lib.adopt_file(&transfer.join("b.png"), None, "Typo", &Source::default()).unwrap();
         assert!(root.join(&path).is_file(), "einzige Kopie bleibt erhalten: {path} {duplicate}");
+    }
+
+    #[test]
+    fn broken_database_is_rebuilt() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path().join("Bib");
+        write_png(&root.join("Typo/a.png"), 4, 4, 10);
+        let hash = {
+            let lib = Library::open(&root).unwrap();
+            lib.scan().unwrap();
+            let hash = lib.items().unwrap()[0].hash.clone();
+            lib.set_quote(&hash, "bleibt").unwrap();
+            hash
+        };
+        let db = root.join(META_DIR).join("library.db");
+        let _ = fs::remove_file(db.with_extension("db-wal"));
+        let _ = fs::remove_file(db.with_extension("db-shm"));
+        fs::write(&db, b"kein SQLite, sondern Datenmuell".repeat(200)).unwrap();
+        let lib = Library::open(&root).expect("öffnet trotz kaputter Datenbank");
+        lib.scan().unwrap();
+        let items = lib.items().unwrap();
+        assert_eq!(items.len(), 1, "Bestand neu eingelesen");
+        assert_eq!(items[0].hash, hash);
+        let aside = fs::read_dir(root.join(META_DIR)).unwrap().filter_map(|e| e.ok()).any(|e| e.file_name().to_string_lossy().starts_with("library.db.broken-"));
+        assert!(aside, "alte Datei liegt daneben");
     }
 
     #[test]

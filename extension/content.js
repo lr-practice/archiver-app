@@ -1538,8 +1538,20 @@
   let dropLibrary = null; // Pfad der per ⇧ gewählten Bibliothek, null = aktive
   let libBarEl = null;
 
+  // Nach einem Update der Extension ist dieses Skript von ihr abgeschnitten:
+  // Speichern geht dann ins Leere. Statt still nichts zu tun, sagen wir es (3.24.0).
   function sendSave(message) {
-    return chrome.runtime.sendMessage(dropLibrary ? { ...message, library: dropLibrary } : message);
+    const lost = () => {
+      const own = t("extensionReloaded");
+      const text = own !== "extensionReloaded" ? own : /^de/i.test(navigator.language) ? "Archiver wurde aktualisiert. Bitte lade die Seite neu." : "Archiver was updated. Please reload the page.";
+      if (rootEl) UI.showToast(rootEl, text, false);
+    };
+    try {
+      return chrome.runtime.sendMessage(dropLibrary ? { ...message, library: dropLibrary } : message).catch(lost);
+    } catch {
+      lost();
+      return Promise.resolve();
+    }
   }
 
   function loadDragLibs() {

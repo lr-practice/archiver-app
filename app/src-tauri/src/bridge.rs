@@ -218,13 +218,23 @@ fn app_settings() -> Option<AppSettings> {
     serde_json::from_str(&std::fs::read_to_string(file).ok()?).ok()
 }
 
-fn read_message(input: &mut impl Read) -> Option<Value> {
+/// Chrome schickt höchstens 64 MiB an den Host; mehr ist ein Fehler im Strom.
+const MAX_IN: usize = 64 * 1024 * 1024;
+
+/// Nächste Nachricht. `None`: Chrome hat die Verbindung geschlossen.
+/// `Some(Err)`: diese eine Nachricht ist unbrauchbar, die Brücke läuft weiter (0.31.0).
+fn read_message(input: &mut impl Read) -> Option<Result<Value, String>> {
     let mut len = [0u8; 4];
     input.read_exact(&mut len).ok()?;
     let len = u32::from_ne_bytes(len) as usize;
+    if len > MAX_IN {
+        // Länge passt nicht zu dem, was Chrome schicken darf: der Strom ist nicht mehr lesbar
+        crate::log::error("bridge", format!("Nachricht mit {len} Bytes, Verbindung beendet"));
+        return None;
+    }
     let mut buf = vec![0u8; len];
     input.read_exact(&mut buf).ok()?;
-    serde_json::from_slice(&buf).ok()
+    Some(serde_json::from_slice(&buf).map_err(|e| format!("bad-message: {e}")))
 }
 
 fn write_message(out: &mut impl Write, value: &Value) -> std::io::Result<()> {
@@ -242,13 +252,21 @@ pub fn run_host() {
     let mut output = stdout.lock();
     let mut lib: Vec<(PathBuf, Library)> = Vec::new();
     while let Some(msg) = read_message(&mut input) {
+        let msg = msg.unwrap_or_else(|e| json!({ "type": "", "error": e }));
         let id = msg.get("id").cloned().unwrap_or(Value::Null);
-        let reply = match handle(&msg, &mut lib) {
+        let result = match msg.get("error").and_then(|e| e.as_str()) {
+            Some(e) => Err(e.to_string()),
+            None => handle(&msg, &mut lib),
+        };
+        let reply = match result {
             Ok(mut v) => {
                 v["ok"] = json!(true);
                 v
             }
-            Err(e) => json!({ "ok": false, "error": e }),
+            Err(e) => {
+                crate::log::error("bridge", format!("{}: {e}", msg.get("type").and_then(|t| t.as_str()).unwrap_or("?")));
+                json!({ "ok": false, "error": e })
+            }
         };
         let mut reply = reply;
         reply["id"] = id;
@@ -351,53 +369,21 @@ fn handle(msg: &Value, slot: &mut Vec<(PathBuf, Library)>) -> Result<Value, Stri
             Ok(json!({ "zone": lib.create_zone(name)? }))
         }
         "save" => {
-            let lib = library(slot, msg)?;
-            let file = transfer_file(str_arg(msg, "file").ok_or("Datei fehlt")?, None)?;
-            let fallback = lib.default_zone();
-            let zone = str_arg(msg, "zone").unwrap_or(&fallback);
-            crate::library::check_rel(zone)?;
-            let source = Source {
-                image_url: str_arg(msg, "imageUrl").filter(|u| u.starts_with("http")).map(String::from),
-                page_url: str_arg(msg, "pageUrl").map(String::from),
-                page_title: str_arg(msg, "pageTitle").map(String::from),
-                captured_at: msg.get("capturedAt").and_then(|v| v.as_i64()).or_else(|| Some(now_ms())),
-                quote: str_arg(msg, "quote").map(|q| q.chars().take(20_000).collect()),
-            };
-            let (mut path, duplicate) = lib.adopt_file(&file, str_arg(msg, "name"), zone, &source)?;
-            let mut moved_here = false;
-            remove_if_empty(file.parent());
-            // Schon in der Bibliothek, aber auf eine andere Zone gezogen (0.30.1):
-            // das vorhandene Bild wandert dorthin, statt still liegen zu bleiben.
-            // Liegt es in einer externen Zone (Projektordner draußen), bleibt es dort:
-            // Herausziehen würde Verknüpfungen in InDesign & Co. brechen (0.31.0).
-            let external = lib.external_zones().iter().any(|(z, _, _)| path.starts_with(&format!("{z}/")));
-            if duplicate && !external && str_arg(msg, "zone").is_some() && !path.starts_with(&format!("{zone}/")) {
-                let _ = std::fs::create_dir_all(lib.root.join(zone));
-                if let Some(moved) = lib.move_items(&[path.clone()], zone)?.pop() {
-                    path = moved;
-                    moved_here = true;
+            // Das Seitenarchiv gehört zur Bildanfrage: scheitert die, darf es nicht
+            // als Waise im Zwischenordner liegen bleiben (0.31.0)
+            let archive = str_arg(msg, "archive").map(|a| transfer_file(a, Some("mhtml")));
+            let saved = save(msg, slot, archive.as_ref().and_then(|a| a.as_ref().ok()));
+            if let Some(Ok(a)) = &archive {
+                if a.exists() {
+                    let _ = std::fs::remove_file(a);
                 }
+                remove_if_empty(a.parent());
             }
-            // Textkarte: Farbe, die schon beim Markieren gezeigt wurde; Bildtext der Seite (0.29).
-            // Mitgebrachter Bildtext gilt auch für ein schon vorhandenes Bild, die Farbe nicht.
-            let tone = crate::studio::clean_tone(str_arg(msg, "tone")).filter(|_| !duplicate);
-            let caption = str_arg(msg, "caption").map(|c| c.trim().to_string()).filter(|c| !c.is_empty());
-            if tone.is_some() || caption.is_some() {
-                if let Ok((_, hash)) = lib.locate(&path) {
-                    let patch = crate::studio::NotePatch { tone, caption, ..Default::default() };
-                    let _ = lib.set_note(&[hash], &patch);
-                }
+            let mut saved = saved?;
+            if let Some(Err(e)) = archive {
+                warn(&mut saved, "archive", &e);
             }
-            // Linkkarte der offenen Seite: die ganze Seite als MHTML dahinter (0.30.1)
-            if let Some(archive) = str_arg(msg, "archive") {
-                let archive = transfer_file(archive, Some("mhtml"))?;
-                if let Ok((_, hash)) = lib.locate(&path) {
-                    let _ = lib.attach_web_archive(&hash, &archive);
-                }
-                remove_if_empty(archive.parent());
-            }
-            // „duplicate“ heißt für die Extension: lag schon in dieser Zone, nichts verschoben
-            Ok(json!({ "path": path, "duplicate": duplicate && !moved_here }))
+            Ok(saved)
         }
         "list" => {
             let lib = library(slot, msg)?;
@@ -454,6 +440,70 @@ fn handle(msg: &Value, slot: &mut Vec<(PathBuf, Library)>) -> Result<Value, Stri
         }
         other => Err(format!("Unbekannter Befehl: {other}")),
     }
+}
+
+/// Bild (oder Text-/Linkkarte) aus dem Zwischenordner übernehmen
+fn save(msg: &Value, slot: &mut Vec<(PathBuf, Library)>, archive: Option<&PathBuf>) -> Result<Value, String> {
+    let lib = library(slot, msg)?;
+    let file = transfer_file(str_arg(msg, "file").ok_or("Datei fehlt")?, None)?;
+    let fallback = lib.default_zone();
+    let zone = str_arg(msg, "zone").unwrap_or(&fallback);
+    crate::library::check_rel(zone)?;
+    let source = Source {
+        image_url: str_arg(msg, "imageUrl").filter(|u| u.starts_with("http")).map(String::from),
+        page_url: str_arg(msg, "pageUrl").map(String::from),
+        page_title: str_arg(msg, "pageTitle").map(String::from),
+        captured_at: msg.get("capturedAt").and_then(|v| v.as_i64()).or_else(|| Some(now_ms())),
+        quote: str_arg(msg, "quote").map(|q| q.chars().take(20_000).collect()),
+    };
+    let mut warnings: Vec<Value> = Vec::new();
+    let (mut path, duplicate) = lib.adopt_file(&file, str_arg(msg, "name"), zone, &source)?;
+    let mut moved_here = false;
+    remove_if_empty(file.parent());
+    // Schon in der Bibliothek, aber auf eine andere Zone gezogen (0.30.1):
+    // das vorhandene Bild wandert dorthin, statt still liegen zu bleiben.
+    // Liegt es in einer externen Zone (Projektordner draußen), bleibt es dort:
+    // Herausziehen würde Verknüpfungen in InDesign & Co. brechen (0.31.0).
+    let external = lib.external_zones().iter().any(|(z, _, _)| path.starts_with(&format!("{z}/")));
+    if duplicate && !external && str_arg(msg, "zone").is_some() && !path.starts_with(&format!("{zone}/")) {
+        let _ = std::fs::create_dir_all(lib.root.join(zone));
+        if let Some(moved) = lib.move_items(&[path.clone()], zone)?.pop() {
+            path = moved;
+            moved_here = true;
+        }
+    }
+    // Textkarte: Farbe, die schon beim Markieren gezeigt wurde; Bildtext der Seite (0.29).
+    // Mitgebrachter Bildtext gilt auch für ein schon vorhandenes Bild, die Farbe nicht.
+    let tone = crate::studio::clean_tone(str_arg(msg, "tone")).filter(|_| !duplicate);
+    let caption = str_arg(msg, "caption").map(|c| c.trim().to_string()).filter(|c| !c.is_empty());
+    if tone.is_some() || caption.is_some() {
+        if let Ok((_, hash)) = lib.locate(&path) {
+            let patch = crate::studio::NotePatch { tone, caption, ..Default::default() };
+            if let Err(e) = lib.set_note(&[hash], &patch) {
+                warnings.push(json!({ "what": "caption", "error": e }));
+            }
+        }
+    }
+    // Linkkarte der offenen Seite: die ganze Seite als MHTML dahinter (0.30.1)
+    if let Some(archive) = archive {
+        if let Err(e) = lib.locate(&path).and_then(|(_, hash)| lib.attach_web_archive(&hash, archive)) {
+            warnings.push(json!({ "what": "archive", "error": e }));
+        }
+    }
+    // „duplicate“ heißt für die Extension: lag schon in dieser Zone, nichts verschoben.
+    // „warnings“: Bild ist da, aber Bildtext oder Seitenarchiv fehlen (0.31.0)
+    let mut out = json!({ "path": path, "duplicate": duplicate && !moved_here });
+    if !warnings.is_empty() {
+        out["warnings"] = json!(warnings);
+    }
+    Ok(out)
+}
+
+fn warn(out: &mut Value, what: &str, error: &str) {
+    if !out["warnings"].is_array() {
+        out["warnings"] = json!([]);
+    }
+    out["warnings"].as_array_mut().unwrap().push(json!({ "what": what, "error": error }));
 }
 
 /// Datei aus dem Zwischenordner der Extension (Downloads/Archiver-Transfer).
@@ -513,8 +563,23 @@ mod tests {
     fn message_roundtrip() {
         let mut buf = Vec::new();
         write_message(&mut buf, &json!({ "cmd": "hello", "id": 1 })).unwrap();
-        let back = read_message(&mut buf.as_slice()).unwrap();
+        let back = read_message(&mut buf.as_slice()).unwrap().unwrap();
         assert_eq!(back["cmd"], "hello");
+    }
+
+    #[test]
+    fn bad_message_does_not_end_the_bridge() {
+        // kaputtes JSON: Fehler für diese Nachricht, die nächste kommt trotzdem an
+        let mut buf = Vec::new();
+        buf.extend_from_slice(&3u32.to_ne_bytes());
+        buf.extend_from_slice(b"{x}");
+        write_message(&mut buf, &json!({ "cmd": "weiter" })).unwrap();
+        let mut input = buf.as_slice();
+        assert!(read_message(&mut input).unwrap().is_err());
+        assert_eq!(read_message(&mut input).unwrap().unwrap()["cmd"], "weiter");
+        // unmögliche Länge: Ende statt 4 GB Speicher anzufordern
+        let huge = u32::MAX.to_ne_bytes();
+        assert!(read_message(&mut huge.as_slice()).is_none());
     }
 
     #[test]

@@ -343,7 +343,9 @@
   }
 
   function fail(e) {
-    toast(t("error", { msg: String(e && e.message ? e.message : e) }), false);
+    const msg = String(e && e.message ? e.message : e);
+    toast(t("error", { msg }), false);
+    invoke("log_error", { area: "app", msg }).catch(() => {});
   }
 
   function debounce(fn, ms) {
@@ -4137,7 +4139,17 @@
     ed.status.textContent = t("noteSaving");
     const item = ed.item;
     await noteChain(async () => {
-      const r = await invoke("write_note", { path: item.path, text, rename: !!rename });
+      let r;
+      try {
+        r = await invoke("write_note", { path: item.path, text, rename: !!rename });
+      } catch (e) {
+        // Nicht gesichert: Text bleibt „ungespeichert“, der nächste Anlauf
+        // (Tippen, ⌘S, Schließen) versucht es erneut (0.31.0)
+        ed.dirty = true;
+        if (rename) ed.renameDue = true;
+        if (noteEd === ed) ed.status.textContent = t("noteSaveFailed");
+        throw e;
+      }
       const old = item.path;
       Object.assign(item, { hash: r.hash, quote: text.trim() || null, path: r.path, mtime: Date.now() });
       if (r.path !== old) {
@@ -7178,6 +7190,13 @@
   async function boot() {
     bindEvents();
     TAURI.event.listen("library-changed", debounce(refresh, 120));
+    // Fehler im Hintergrund (Einlesen, Ordner nicht lesbar) und vergessene
+    // Promise-Fehler nicht mehr still schlucken (0.31.0)
+    TAURI.event.listen("library-error", (e) => toast(t("error", { msg: String(e.payload) }), false, 5000));
+    window.addEventListener("unhandledrejection", (e) => {
+      e.preventDefault();
+      fail(e.reason);
+    });
     TAURI.event.listen("thumbs-ready", (e) => applyThumbs(e.payload));
     TAURI.event.listen("analysis-ready", (e) => applyAnalysis(e.payload));
     TAURI.event.listen("reveal-in-app", (e) => revealFromViewer(e.payload));

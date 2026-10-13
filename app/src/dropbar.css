@@ -5,6 +5,7 @@
 :root {
   --menu-bg: rgba(40, 40, 40, 0.97);
   --glow-rgb: 91, 124, 255;
+  --danger: #e5484d;
 }
 
 html.light {
@@ -70,7 +71,9 @@ html.light .db-hot {
 }
 
 .db-hot.drop-active .db-hint,
-.db-hot.landed .db-hint {
+.db-hot.busy .db-hint,
+.db-hot.landed .db-hint,
+.db-hot.failed .db-hint {
   opacity: 1;
   color: var(--p-text);
 }
@@ -89,6 +92,11 @@ html.light .db-hot {
 /* Abgelegt: kurzes Glühen, dann blendet die Leiste aus */
 .db-hot.landed {
   box-shadow: 0 0 0 1px rgba(var(--glow-rgb), 0.9), 0 0 28px rgba(var(--glow-rgb), 0.45);
+}
+
+/* Nicht gesichert: Hinweis in --danger, kein Glühen (0.31.0) */
+.db-hot.failed .db-hint {
+  color: var(--danger);
 }
 
 .db-bar.leaving {

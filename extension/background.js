@@ -187,7 +187,7 @@ function hostCall(cmd, args = {}) {
         hostPending.delete(msg.id);
         clearTimeout(pending.timer);
         if (msg.ok) pending.resolve(msg);
-        else pending.reject(new Error(msg.error || "App-Fehler"));
+        else pending.reject(Object.assign(new Error(msg.error || "App-Fehler"), { fromApp: true }));
       });
       port.onDisconnect.addListener(() => {
         const err = new Error((chrome.runtime.lastError && chrome.runtime.lastError.message) || "App getrennt");
@@ -231,7 +231,38 @@ async function appBridge() {
     if (r.library) info = { library: r.library, name: r.name || "Archiver", version: r.version, libraries: Array.isArray(r.libraries) ? r.libraries : [] };
   } catch {}
   bridgeCache = { at: Date.now(), info };
+  if (info) {
+    // Ab jetzt weiß die Extension: hier gibt es die App. Fällt sie später aus,
+    // wird nicht mehr still in Downloads gesichert (3.24.0)
+    storageGet({ appSeen: false }).then((s) => !s.appSeen && storageSet({ appSeen: true }));
+    sweepStrayTransfers();
+  }
   return info;
+}
+
+// Übergaben, auf die die App nicht geantwortet hat, liegen noch in
+// Downloads/Archiver-Transfer. Sobald die App wieder da ist und die Datei nach
+// zwei Minuten immer noch dort liegt, hat sie sie nicht übernommen: weg damit.
+const STRAY_AFTER_MS = 2 * 60 * 1000;
+async function noteStrayTransfer(...ids) {
+  const { strayTransfers } = await storageGet({ strayTransfers: [] });
+  const list = (Array.isArray(strayTransfers) ? strayTransfers : []).concat(ids.filter((id) => id != null).map((id) => ({ id, at: Date.now() })));
+  await storageSet({ strayTransfers: list.slice(-200) });
+}
+async function sweepStrayTransfers() {
+  const { strayTransfers } = await storageGet({ strayTransfers: [] });
+  if (!Array.isArray(strayTransfers) || !strayTransfers.length) return;
+  const keep = [];
+  for (const entry of strayTransfers) {
+    if (Date.now() - entry.at < STRAY_AFTER_MS) {
+      keep.push(entry);
+      continue;
+    }
+    const [item] = await searchDownloads({ id: entry.id });
+    if (item && item.exists !== false && String(item.filename).includes(TRANSFER_DIR)) await removeFile(entry.id);
+    await eraseDownload(entry.id);
+  }
+  await storageSet({ strayTransfers: keep });
 }
 
 // Zonen der Bibliothek in der Reihenfolge der App. Die ersten vier („hot“)
@@ -364,7 +395,19 @@ async function saveToApp(message, sender) {
   } catch (err) {
     console.warn("[Archiver] Übergabe an die App fehlgeschlagen:", err.message);
     bridgeCache.at = 0;
-    sendFeedback(tabId, frameId, t("appSaveFailed"), false);
+    // Hat die App abgelehnt, liegt die Datei ungenutzt im Zwischenordner: sofort
+    // aufräumen. Ohne Antwort könnte sie noch übernehmen, also später (3.24.0)
+    if (err.fromApp) {
+      await removeFile(id);
+      await eraseDownload(id);
+      if (archive) {
+        await removeFile(archive.id);
+        await eraseDownload(archive.id);
+      }
+    } else {
+      await noteStrayTransfer(id, archive && archive.id);
+    }
+    sendFeedback(tabId, frameId, t("appSaveFailed") + (err.fromApp && err.message ? ": " + err.message : ""), false);
     return { ok: false };
   }
 }
@@ -476,7 +519,8 @@ function lastName(path) {
 }
 
 function buildMenus() {
-  menuBuild = menuBuild.then(async () => {
+  // Ein Fehler (App weg, Menü-ID doppelt) darf die Kette nicht für immer blockieren
+  menuBuild = menuBuild.catch(() => {}).then(async () => {
     menuZones = await menuZoneList();
     await new Promise((r) => chrome.contextMenus.removeAll(r));
     chrome.contextMenus.create({ id: "archiver", title: t("menuDropIn"), contexts: MENU_CONTEXTS });
@@ -526,6 +570,7 @@ function buildMenus() {
     chrome.contextMenus.create({ id: "sep", parentId: "archiver", type: "separator", contexts: MENU_CONTEXTS });
     chrome.contextMenus.create({ id: "area", parentId: "archiver", title: t("menuArea"), contexts: MENU_CONTEXTS });
   });
+  menuBuild.catch((err) => console.warn("[Archiver] Menü nicht aufgebaut:", err && err.message));
   return menuBuild;
 }
 
@@ -874,6 +919,9 @@ function asTextFile(message) {
 async function handleDownload(message, sender) {
   if (message.toDownloads) return saveToDownloads(message, sender);
   if (await appBridge()) return saveToApp(asTextFile(message), sender);
+  // Die App war schon einmal verbunden, antwortet jetzt aber nicht: trotzdem
+  // sichern (nichts geht verloren), aber deutlich sagen, wo es gelandet ist (3.24.0)
+  const { appSeen } = await storageGet({ appSeen: false });
   const folderKey = message.folder ? sanitizePath(message.folder) : "";
   const filename = buildFilename(message.url, message.suggestedName, folderKey);
   const tabId = sender.tab && sender.tab.id;
@@ -892,7 +940,8 @@ async function handleDownload(message, sender) {
   // Sofort eintragen, damit die Galerie das Bild direkt zeigt …
   const source = { pageUrl: message.pageUrl, pageTitle: message.pageTitle };
   await withIndex((index) => addEntry(index, folderKey, makeEntry(id, message.url, filename, Date.now(), source)));
-  if (!message.quiet) sendFeedback(tabId, frameId, t("savedIn", [label]), true);
+  if (appSeen) sendFeedback(tabId, frameId, t("appOfflineSaved", [folderKey ? "Downloads/" + folderKey : "Downloads"]), false);
+  else if (!message.quiet) sendFeedback(tabId, frameId, t("savedIn", [label]), true);
 
   // … und wieder austragen, falls der Download doch scheitert (z. B. 403).
   const { state, item } = await waitForDownload(id);

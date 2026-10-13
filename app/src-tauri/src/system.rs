@@ -19,7 +19,7 @@
 //   "dropbar-release" an die Leiste: Maustaste losgelassen
 
 use serde::{Deserialize, Serialize};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use tauri::AppHandle;
 #[cfg(target_os = "macos")]
 use tauri::{Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
@@ -33,6 +33,10 @@ pub const DEFAULT_SHORTCUT: &str = "Alt+Space";
 static DROPBAR_ON: AtomicBool = AtomicBool::new(true);
 /// Gerade wird aus der Palette gezogen: keine Leiste, Palette nicht schließen
 static PALETTE_DRAG: AtomicBool = AtomicBool::new(false);
+/// Zonenleiste nach dem Loslassen stehen lassen bis zu diesem Zeitpunkt (ms):
+/// solange der Import läuft und kurz danach, damit Erfolg oder Fehler zu sehen
+/// sind (0.31.0). Vorher verschwand sie nach 0.9 s, auch mitten im Import.
+static DROPBAR_HOLD: AtomicU64 = AtomicU64::new(0);
 /// Hauptfenster beim Öffnen des Trays weggelegt (0.28): kommt beim Schließen
 /// hinter alle Fenster zurück, statt mit Archiver nach vorne zu springen.
 pub static MAIN_TUCKED: AtomicBool = AtomicBool::new(false);
@@ -215,6 +219,12 @@ pub fn palette_blurred(app: &AppHandle) {
     }
 }
 
+/// Die Zonenleiste bittet, noch `ms` stehen zu bleiben (höchstens eine Minute)
+#[tauri::command]
+pub fn dropbar_hold(ms: u64) {
+    DROPBAR_HOLD.store(crate::library::now_ms() as u64 + ms.min(60_000), Ordering::Relaxed);
+}
+
 #[tauri::command]
 pub fn palette_hide(app: AppHandle) {
     hide_palette(&app);
@@ -326,7 +336,8 @@ fn watch_drags(app: AppHandle) {
                         Instant::now()
                     });
                     // kurz stehen lassen: der Drop und seine Bestätigung brauchen einen Moment
-                    if at.elapsed() > Duration::from_millis(900) {
+                    let held = (crate::library::now_ms() as u64) < DROPBAR_HOLD.load(Ordering::Relaxed);
+                    if at.elapsed() > Duration::from_millis(900) && !held {
                         showing = false;
                         released = None;
                         set_dropbar(&app, false);

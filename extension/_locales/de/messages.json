@@ -165,6 +165,17 @@
   "appSaveFailed": {
     "message": "Bild konnte nicht an die App übergeben werden"
   },
+  "appOfflineSaved": {
+    "message": "Archiver antwortet nicht. Gesichert in $FOLDER$ statt in der Bibliothek",
+    "placeholders": {
+      "folder": {
+        "content": "$1"
+      }
+    }
+  },
+  "extensionReloaded": {
+    "message": "Archiver wurde aktualisiert. Bitte lade die Seite neu."
+  },
   "appZoneFailed": {
     "message": "Zone konnte nicht angelegt werden"
   },
