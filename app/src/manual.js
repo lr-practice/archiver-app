@@ -83,7 +83,7 @@ const MANUAL = {
         rows: [
           { t: "Textkarten", d: "Zitate aus dem Web als farbige Karte. Farbe in den Details änderbar: Rot, Grün, Violett, Cyan, Gelb, Weiß oder Schwarz, dieselbe Reihe wie bei Notizen. Liegen als .txt im Zonenordner." },
           { t: "Notizen", d: "Rechtsklick in eine Zone. In der Lightbox schreibst du direkt auf das Blatt, gesichert wird von selbst. Liegen als .md im Zonenordner. Links neben dem Blatt stehen verknüpfte Objekte.", k: ["⌘⇧N"] },
-          { t: "Bildtext", d: "Beim Sichern markierter Text wird zum Bildtext. Er ist durchsuchbar und wahlweise im PDF. In den Details editierbar, `⌘V` mit Text auf ein Bild setzt ihn. In der Lightbox blendet `T` ihn aus.", k: ["⌘V", "T"] },
+          { t: "Bildtext", d: "Beim Sichern markierter Text wird zum Bildtext. Er ist durchsuchbar und wahlweise im PDF. In der Lightbox steht er auf einer farbigen Karte: als Rückseite, die `T` oder das Eselsohr unten rechts aufdeckt, oder als Doppelseite neben dem Bild (Einstellungen › Aussehen). Auf der Karte direkt editierbar, ebenso Textkarten. `⌘V` mit Text auf ein Bild setzt ihn.", k: ["⌘V", "T"] },
         ],
       },
       {
@@ -201,7 +201,7 @@ const MANUAL = {
         rows: [
           { t: "Text cards", d: "Quotes from the web as coloured cards. Change the colour in the details: red, green, violet, cyan, yellow, white or black, the same row as for notes. Stored as .txt in the zone folder." },
           { t: "Notes", d: "Right-click in a zone. In the lightbox you write straight on the sheet, it saves by itself. Stored as .md in the zone folder. Linked objects sit to the left of the sheet.", k: ["⌘⇧N"] },
-          { t: "Caption", d: "Text selected while saving becomes the caption. It is searchable and optional in the PDF. Edit it in the details, `⌘V` with text on an image sets it. `T` hides it in the lightbox.", k: ["⌘V", "T"] },
+          { t: "Caption", d: "Text selected while saving becomes the caption. It is searchable and optional in the PDF. In the lightbox it sits on a coloured card: as the back, turned over with `T` or the corner at the bottom right, or as a spread next to the image (Settings › Appearance). Edit it right on the card, text cards too. `⌘V` with text on an image sets it.", k: ["⌘V", "T"] },
         ],
       },
       {

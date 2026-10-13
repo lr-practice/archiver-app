@@ -2464,6 +2464,16 @@
       );
       look.appendChild(
         blockRow(
+          t("setLbText"),
+          choice([["back", t("setLbTextBack")], ["spread", t("setLbTextSpread")]], lbTextStyle(), (id) => {
+            setPref("lbTextStyle", id);
+            rerender();
+          })
+        )
+      );
+      look.appendChild(blockRow(el("div", "p-block-text", t("setLbTextText"))));
+      look.appendChild(
+        blockRow(
           t("setTopFade"),
           choice([["fade", t("setTopFadeFade")], ["glass", t("setTopFadeGlass")]], pref("topFade", "fade"), (id) => {
             setPref("topFade", id);
@@ -3886,57 +3896,173 @@
   const LB_PAD = { top: 48, bottom: 84, side: 32 };
   const lbView = { w: 0, h: 0, scale: 1, x: 0, y: 0, fitted: true };
   let lbInfoOpen = false;
-  // 0.29: Bildtext links neben dem Bild, unten bündig; das Bild bleibt, wo es ist
+  // 0.30.1: Bildtext als farbige Karte im Ton des Bildes, wie die Textkarten.
+  // „Rückseite“: das Bild wird gewendet, ein Eselsohr unten rechts zeigt, dass
+  // es eine hat. „Doppelseite“: die Karte steht links neben dem Bild, gleich
+  // hoch, im Hochformat 3:4. Einstellungen › Aussehen. Der Text ist editierbar.
+  // Video, PDF und Audio: Karte unten links.
   const LB_TEXT_W = 300;
+  const LB_GAP = 24;
+  const LB_CARD_MIN = 260;
+  let lbFlipped = false;
+  function lbTextStyle() {
+    return pref("lbTextStyle", "back") === "spread" ? "spread" : "back";
+  }
+  function lbCaptionItem() {
+    const item = lightboxItem();
+    return item && hasCaption(item) && !quoteOf(item) ? item : null;
+  }
+  function lbBackMode() {
+    return lbTextStyle() === "back" && lbMode === "image";
+  }
   function lbTextShown() {
-    return !lbInfoOpen && pref("lbText", true) !== false && hasCaption(lightboxItem());
+    if (lbInfoOpen || !lbCaptionItem()) return false;
+    return lbBackMode() ? lbFlipped : pref("lbText", true) !== false;
+  }
+  function lbSpread() {
+    return lbMode === "image" && lbTextStyle() === "spread" && lbView.w > 0 && lbTextShown();
+  }
+  function lbCardW(h) {
+    return Math.max(LB_CARD_MIN, h * 0.75);
+  }
+
+  function captionCard(item) {
+    const lb = state.lightbox;
+    const len = item.caption.length;
+    const card = el("div", "text-sheet lb-cap-card " + (len < 140 ? "short" : len < 400 ? "medium" : "long"));
+    const [bg, fg, dim] = quoteTone(item);
+    card.style.setProperty("--ts-bg", bg);
+    card.style.setProperty("--ts-fg", fg);
+    card.style.setProperty("--ts-dim", dim);
+    card.appendChild(el("div", "ts-label", t("captionTitle").toUpperCase() + "  ·  " + captionId(item, lb.index, lbList(lb).length)));
+    const body = el("div", "ts-body", item.caption);
+    editableText(body, () => item.caption, (v) => {
+      item.caption = v;
+      saveNote(item, { caption: v });
+      lbRenderText();
+    });
+    card.appendChild(body);
+    const date = new Date(item.capturedAt || item.addedAt || 0).toLocaleDateString(lang === "de" ? "de-DE" : "en-GB");
+    card.appendChild(el("div", "ts-foot", [domainOf(item.pageUrl), item.capturedAt || item.addedAt ? date : ""].filter(Boolean).join("  ·  ")));
+    return card;
+  }
+
+  // 0.30.1: Text auf Karten in der Lightbox direkt ändern (Bildtext, Textkarte).
+  // Esc oder ⌘↩ beendet, gesichert wird beim Verlassen.
+  function editableText(body, current, save) {
+    body.contentEditable = "plaintext-only";
+    body.spellcheck = false;
+    body.addEventListener("keydown", (e) => {
+      e.stopPropagation();
+      if (e.key === "Escape" || (e.key === "Enter" && (e.metaKey || e.ctrlKey))) {
+        e.preventDefault();
+        body.blur();
+      }
+    });
+    body.addEventListener("blur", () => {
+      const v = body.innerText.trim();
+      if (v !== current()) save(v);
+    });
   }
 
   function lbRenderText() {
     const item = lightboxItem();
     const box = $("lbText");
     const btn = $("lbTextBtn");
-    btn.hidden = !hasCaption(item) || quoteOf(item);
+    const cap = lbCaptionItem();
+    if (!cap) lbFlipped = false;
+    btn.hidden = !cap;
+    btn.title = t(lbBackMode() ? "captionFlipTitle" : "captionLbTitle");
     btn.classList.toggle("active", lbTextShown());
-    const on = lbTextShown() && !quoteOf(item);
+    const on = lbTextShown();
     $("lightbox").classList.toggle("text-open", on);
+    $("lightbox").classList.toggle("flipped", on && lbBackMode());
     box.hidden = !on;
-    if (!on) return;
-    const lb = state.lightbox;
-    const list = lbList(lb);
-    box.replaceChildren(captionBlock(item, lb.index, list.length, "lb-caption-inner"));
+    // Während geschrieben wird, nicht neu aufbauen (library-changed nach dem Sichern)
+    if (on && !box.contains(document.activeElement)) box.replaceChildren(captionCard(item));
     lbPlaceText();
   }
 
-  // Unterkante des Textes auf der Unterkante des Bildes, rechte Kante 40 px vor dem Bild.
-  // Der Text wird schmaler, wenn links wenig Platz ist; reicht es nicht einmal
-  // für 180 px, liegt er unten links auf einer Fläche über dem Bild.
+  // Bild-Modus: Rückseite deckt das Bild genau, Doppelseite steht links daneben.
   function lbPlaceText() {
     const box = $("lbText");
+    lbPlaceEar();
     if (box.hidden) return;
-    let room = LB_TEXT_W;
-    let bottom = window.innerHeight - LB_PAD.bottom;
+    let r;
     if (lbMode === "image" && lbView.w) {
-      room = lbView.x - 40 - LB_PAD.side;
-      bottom = Math.min(window.innerHeight - LB_PAD.bottom, lbView.y + lbView.h * lbView.scale);
+      const w = lbView.w * lbView.scale;
+      const h = lbView.h * lbView.scale;
+      if (lbBackMode()) r = { left: lbView.x, top: lbView.y, width: w, height: h };
+      else {
+        const cw = lbCardW(h);
+        r = { left: lbView.x - LB_GAP - cw, top: lbView.y, width: cw, height: h };
+      }
+    } else {
+      const h = Math.min(LB_TEXT_W * (4 / 3), window.innerHeight - LB_PAD.top - LB_PAD.bottom);
+      r = { left: LB_PAD.side, top: window.innerHeight - LB_PAD.bottom - h, width: LB_TEXT_W, height: h };
     }
-    const over = room < 180;
-    box.classList.toggle("over", over);
-    const width = over ? LB_TEXT_W : Math.min(LB_TEXT_W, room);
-    box.style.width = width + "px";
-    box.style.left = (over ? LB_PAD.side : LB_PAD.side + room - width) + "px";
-    box.style.top = Math.max(LB_PAD.top, bottom - box.offsetHeight - (over ? 16 : 0)) + "px";
+    box.style.visibility = lbMode === "image" && !lbBackMode() && !lbView.fitted ? "hidden" : "";
+    for (const k in r) box.style[k] = Math.round(r[k]) + "px";
+  }
+
+  // Eselsohr in der Farbe der Karte: dieses Bild hat eine Rückseite
+  function lbPlaceEar() {
+    let ear = $("lbEar");
+    if (!ear) {
+      ear = el("button", "lb-ear");
+      ear.id = "lbEar";
+      ear.type = "button";
+      ear.title = t("captionFlipTitle");
+      ear.addEventListener("click", (e) => {
+        e.stopPropagation();
+        lbToggleText();
+      });
+      $("lightbox").appendChild(ear);
+    }
+    const item = lbCaptionItem();
+    const show = !!item && lbBackMode() && !lbFlipped && !lbInfoOpen && lbView.w > 0;
+    ear.hidden = !show;
+    if (!show) return;
+    ear.style.setProperty("--ts-bg", quoteTone(item)[0]);
+    ear.style.left = Math.round(lbView.x + lbView.w * lbView.scale) + "px";
+    ear.style.top = Math.round(lbView.y + lbView.h * lbView.scale) + "px";
   }
 
   function lbToggleText() {
-    setPref("lbText", !(pref("lbText", true) !== false));
+    if (!lbCaptionItem()) return;
     if (lbInfoOpen) lbToggleInfo();
+    if (lbBackMode()) return lbFlip();
+    setPref("lbText", !(pref("lbText", true) !== false));
     lbRenderText();
     if (lbView.fitted) lbFit(true);
     else {
       lbClamp();
       lbApply(true);
     }
+  }
+
+  // Wenden um die senkrechte Mitte: erst das Bild (bzw. die Karte) auf die
+  // Kante, dann die andere Seite von der Kante zurück. 2 × 0.18 s.
+  function lbFlip() {
+    if (!lbView.fitted) lbFit(false);
+    const toBack = !lbFlipped;
+    const done = () => {
+      lbFlipped = toBack;
+      lbRenderText();
+    };
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return done();
+    const stage = $("lightboxStage");
+    const cx = lbView.x + (lbView.w * lbView.scale) / 2;
+    const cy = lbView.y + (lbView.h * lbView.scale) / 2;
+    stage.style.transformOrigin = `${cx}px ${cy}px`;
+    const edge = (deg) => [{ transform: "perspective(2400px) rotateY(0deg)" }, { transform: `perspective(2400px) rotateY(${deg}deg)` }];
+    const out = toBack ? stage : $("lbText");
+    $("lbEar").hidden = true;
+    out.animate(edge(90), { duration: 180, easing: "ease-in" }).finished.then(() => {
+      done();
+      const inn = toBack ? $("lbText") : stage;
+      inn.animate(edge(-90).reverse(), { duration: 180, easing: "ease-out" });
+    });
   }
 
   // ---- Notiz-Objekte (0.29): ein Blatt im Raster, geschrieben wird in der Lightbox ----
@@ -4329,12 +4455,22 @@
 
   function lbBox() {
     const a = lbArea();
-    return {
+    const box = {
       left: LB_PAD.side,
       top: LB_PAD.top,
       width: Math.max(1, a.width - LB_PAD.side * 2),
       height: Math.max(1, a.height - LB_PAD.top - LB_PAD.bottom),
     };
+    // Doppelseite: Karte und Bild gleich hoch, zusammen mittig
+    if (lbSpread()) {
+      const ar = lbView.w / lbView.h;
+      const hd = Math.min(box.height, lbView.h, (box.width - LB_GAP) / (ar + 0.75));
+      const cw = lbCardW(hd);
+      const iw = Math.max(1, Math.min(hd * ar, box.width - cw - LB_GAP));
+      box.left += (box.width - (cw + LB_GAP + iw)) / 2 + cw + LB_GAP;
+      box.width = iw;
+    }
+    return box;
   }
 
   function lbFitScale() {
@@ -4425,6 +4561,8 @@
     if (!item) return closeLightbox();
     noteLeave();
     lbRenderTones(item);
+    if (lb.shown !== item) lbFlipped = false;
+    lb.shown = item;
     lb.index = list.indexOf(item);
     $("lbName").textContent = item.filename;
     $("lbName").title = item.filename;
@@ -4533,7 +4671,15 @@
     }
     if (k === "text") {
       const wrap = el("div", "lb-text");
-      wrap.appendChild(textSheet(item, "text-sheet large"));
+      const sheet = textSheet(item, "text-sheet large");
+      // Das PNG bleibt, wie es gesichert wurde; die App zeigt den geänderten Text
+      const body = sheet.querySelector(".ts-body");
+      if (item.quote) editableText(body, () => item.quote, (v) => {
+        if (!v) return (body.textContent = item.quote);
+        item.quote = v;
+        invoke("set_quote", { hash: item.hash, quote: v }).catch(fail);
+      });
+      wrap.appendChild(sheet);
       box.appendChild(wrap);
       $("lightboxZoom").textContent = "";
       return true;

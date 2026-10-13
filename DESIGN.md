@@ -138,7 +138,7 @@ Ebenen vor: Navigation, Active-Zones-Leiste, Menüs und Ladeplatzhalter.
 | Zweck | Dauer | Kurve |
 |---|---|---|
 | Hover (Farbe, Hintergrund) | 0.12 s | `ease` |
-| Ein- und Ausblenden, Toast | 0.18 s | `ease` / `ease-out` |
+| Ein- und Ausblenden, Toast, Wenden in der Lightbox (je Hälfte) | 0.18 s | `ease` / `ease-out` |
 | Seitenblatt, Gleiten | 0.28 s | `cubic-bezier(0.2, 0.7, 0.2, 1)` (`--sheet-ease`) |
 | Zonenleiste rein | 0.14 s | `ease-out` |
 | Zonenleiste raus | 0.2 s, 0.3 s verzögert | `ease` (Glühen auf dem Ziel bleibt kurz sichtbar) |
@@ -261,7 +261,8 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
   Fehler erscheinen in `--danger`.
 
 ### 4.11 Lightbox und Seitenblatt
-- **Lightbox:** Das Bild steht groß auf `--lightbox-bg`. Leertaste öffnet sie,
+- **Lightbox:** Das Bild steht groß auf `--lightbox-bg`, das Raster dahinter
+  verschwimmt (`blur(24px)`, 0.30.1), damit kein Text durchscheint. Leertaste öffnet sie,
   Pfeile blättern, `I` zeigt die Info. Klick neben das Objekt schließt sie
   (offene Zonen klappen erst zu, vergrößert schließt nichts).
 - **Leiste der Lightbox (0.28):** dieselben Maße wie die Navigation (4.2):
@@ -279,10 +280,20 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
   zwei Zeilen) bzw. 17 px (Lightbox).
 - **Raster:** Nur in „Original“ mit dem Chip „(+ Text)“, unter dem Bild in
   derselben Spalte. Bilder ohne Text bleiben stumm.
-- **Lightbox:** Links neben dem Bild, Unterkante bündig, rechte Kante 40 px vor
-  dem Bild. Das Bild verrückt dafür nicht. Wenig Platz: der Text wird schmaler
-  (bis 180 px), sonst liegt er unten links auf einer Menüfläche über dem Bild.
-  Knopf „Text“ und Taste T blenden ihn aus.
+- **Lightbox (0.30.1):** Karte im Ton des Bildes wie eine Textkarte
+  (`quoteTone`, `.text-sheet.lb-cap-card`): Kennung BILDTEXT · Zone—Nummer,
+  Text in Geist 500 nach Länge 7 / 5 / 3,6 `cqmin` (mind. 15 px), Fuß Quelle ·
+  Datum. Zwei Formen, Einstellungen › Aussehen „Bildtext in der Lightbox“:
+  - **Rückseite** (Standard): Die Karte hat genau das Maß des Bildes. Ein
+    Eselsohr 22 px in der Kartenfarbe unten rechts zeigt sie an (Hover 30 px).
+    `T`, Knopf „Text“ oder das Eselsohr wenden um die senkrechte Mitte,
+    2 × 0.18 s (`ease-in` auf die Kante, `ease-out` zurück). Blättern zeigt
+    wieder die Vorderseite.
+  - **Doppelseite:** Karte 3:4 (mind. 260 px) 24 px links neben dem Bild,
+    gleich hoch, beide zusammen mittig. Vergrößert ist die Karte aus.
+  Video, PDF und Audio: Karte 300 × 400 px unten links. Der Text ist auf der
+  Karte editierbar (Esc oder ⌘↩ beendet, Sichern beim Verlassen), ebenso der
+  Text einer Textkarte; deren PNG bleibt unverändert.
 
 ### 4.11b Notiz-Objekt (`.note-sheet`, `.note-paper`, `.note-links`, 0.29)
 - **Datei:** Eine Notiz ist eine `.md`-Datei in der Zone. Erste Zeile = Titel

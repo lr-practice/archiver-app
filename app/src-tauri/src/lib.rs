@@ -741,6 +741,14 @@ async fn set_note(app: AppHandle, state: State<'_, AppState>, hashes: Vec<String
 }
 
 #[tauri::command]
+async fn set_quote(app: AppHandle, state: State<'_, AppState>, hash: String, quote: String) -> Result<(), String> {
+    let lib = current(&state)?;
+    tauri::async_runtime::spawn_blocking(move || lib.set_quote(&hash, &quote)).await.map_err(|e| e.to_string())??;
+    let _ = app.emit("library-changed", ());
+    Ok(())
+}
+
+#[tauri::command]
 async fn set_item_order(state: State<'_, AppState>, zone: String, hashes: Vec<String>) -> Result<(), String> {
     current(&state)?.set_item_order(&zone, &hashes)
 }
@@ -1283,6 +1291,7 @@ pub fn run() {
             export_moodboard,
             export_package,
             set_note,
+            set_quote,
             set_item_order,
             set_sharing,
             copy_images,

@@ -464,6 +464,9 @@ button {
   inset: 0;
   z-index: 20;
   background: var(--lightbox-bg);
+  /* 0.30.1: Raster dahinter verschwimmt, kein Text scheint durch */
+  -webkit-backdrop-filter: blur(24px);
+  backdrop-filter: blur(24px);
   display: flex;
   flex-direction: column;
 }
@@ -5877,37 +5880,82 @@ html.light {
   color: var(--p-dim);
   font-weight: 500;
 }
+/* 0.30.1: Bildtext in der Lightbox als Karte im Ton des Bildes (wie die
+   Textkarten). Lage setzt app.js lbPlaceText: Rückseite deckt das Bild,
+   Doppelseite steht 24 px links daneben, gleich hoch. */
 .lb-caption {
   position: absolute;
   z-index: 2;
-  width: 300px;
-  max-height: calc(100% - 140px);
+  display: flex;
+}
+.lb-cap-card {
+  --ts-pad: 7cqmin;
+  container-type: size;
+  flex: 1;
+  min-width: 0;
+  padding: var(--ts-pad);
+  font-family: "Geist", -apple-system, sans-serif;
+}
+.lb-cap-card .ts-label,
+.lb-cap-card .ts-foot {
+  font-family: "Geist Mono", ui-monospace, monospace;
+  font-size: 11px;
+  text-transform: uppercase;
+}
+.lb-cap-card .ts-body {
+  flex: 1;
+  min-height: 0;
   overflow-y: auto;
-  color: var(--p-text);
+  margin: 1.6em 0 1.2em;
+  font-weight: 500;
+  line-height: 1.28;
+  letter-spacing: -0.015em;
+  white-space: pre-wrap;
+  word-break: break-word;
+  outline: none;
+  cursor: text;
   user-select: text;
   -webkit-user-select: text;
 }
-.lb-caption .cap-id {
-  font-size: 11px;
+.lb-cap-card.short .ts-body {
+  font-size: 7cqmin;
 }
-.lb-caption.over {
-  margin-left: 16px;
-  padding: 14px 16px 16px;
-  background: var(--menu-bg);
-  box-shadow: var(--menu-shadow);
-  border-radius: var(--r-md);
+.lb-cap-card.medium .ts-body {
+  font-size: 5cqmin;
 }
-.lb-caption .cap-text {
-  margin-top: 8px;
-  font-size: 17px;
-  line-height: 1.38;
-  letter-spacing: -0.01em;
+.lb-cap-card.long .ts-body {
+  font-size: max(15px, 3.6cqmin);
 }
-.lb-caption .cap-note {
-  margin-top: 14px;
-  font-size: 13px;
-  font-weight: 600;
-  line-height: 1.4;
+.lb-cap-card ::selection {
+  background: rgba(var(--accent-rgb), 0.25);
+}
+/* Editierbar (auch Textkarten): beim Schreiben ein feiner Rand im Ton */
+.lb-cap-card .ts-body:focus,
+.text-sheet.large .ts-body:focus {
+  outline: none;
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--ts-fg) 50%, transparent);
+}
+/* Rückseite: das Bild ist gewendet */
+.lightbox.flipped .lightbox-stage {
+  visibility: hidden;
+}
+/* Eselsohr unten rechts am Bild, in der Farbe der Karte */
+.lb-ear {
+  position: absolute;
+  z-index: 2;
+  width: 22px;
+  height: 22px;
+  margin: -22px 0 0 -22px;
+  padding: 0;
+  border: 0;
+  background: linear-gradient(135deg, transparent 50%, var(--ts-bg) 50%);
+  cursor: pointer;
+  transition: width 0.12s ease, height 0.12s ease, margin 0.12s ease;
+}
+.lb-ear:hover {
+  width: 30px;
+  height: 30px;
+  margin: -30px 0 0 -30px;
 }
 
 /* ---- 0.29: Notiz-Objekte ----

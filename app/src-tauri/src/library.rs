@@ -1873,6 +1873,20 @@ impl Library {
         Ok(true)
     }
 
+    /// Text einer Textkarte ändern (0.30.1, in der Lightbox editierbar).
+    /// Das PNG bleibt, wie es gesichert wurde; die App zeigt den Text.
+    pub fn set_quote(&self, hash: &str, quote: &str) -> Result<()> {
+        let quote: String = quote.trim().chars().take(20_000).collect();
+        if quote.is_empty() {
+            return Ok(());
+        }
+        {
+            let conn = self.conn.lock().unwrap();
+            conn.execute("UPDATE source SET quote = ?2 WHERE hash = ?1", params![hash, quote]).map_err(err)?;
+        }
+        self.write_metadata()
+    }
+
     /// Kopiert eine Datei in eine Zone. Bereits vorhandene Bilder (gleicher Hash)
     /// werden nicht doppelt angelegt; ihre Quelle wird trotzdem ergänzt.
     fn import_one(&self, src: &Path, zone: &str, source: Option<&Source>, report: &mut ImportReport) -> Result<()> {
