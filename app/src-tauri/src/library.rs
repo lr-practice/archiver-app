@@ -2657,9 +2657,11 @@ mod tests {
         lib.set_structure(&Structure { depth: 2, skip: vec![], subzones: false }).unwrap();
 
         // Laufwerk weg: die Zone bleibt (offline), ihre Objekte bleiben in der Datenbank
+        // Gespeichert wird das echte Ziel (auf dem Mac liegt /var unter /private/var)
+        let target = outside.canonicalize().unwrap().to_string_lossy().into_owned();
         let parked = tmp.path().join("Projekt-weg");
         fs::rename(&outside, &parked).unwrap();
-        assert_eq!(lib.external_zones(), vec![("Projekt".to_string(), outside.to_string_lossy().into_owned(), false)]);
+        assert_eq!(lib.external_zones(), vec![("Projekt".to_string(), target, false)]);
         lib.scan().unwrap();
         assert_eq!(paths(&lib).len(), 3, "offline heißt nicht gelöscht");
         let zones: Vec<String> = lib.zones().unwrap().into_iter().map(|z| z.path).collect();
