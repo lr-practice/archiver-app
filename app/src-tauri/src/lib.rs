@@ -257,6 +257,15 @@ fn start_analysis_worker(app: AppHandle, lib: Arc<Library>) -> mpsc::Sender<()> 
     tx
 }
 
+/// Externe Zonen (0.30.1) sind Verknüpfungen. Das Asset-Protokoll prüft den
+/// aufgelösten Pfad, deshalb muss jedes Ziel draußen eigens freigegeben werden,
+/// sonst laden Originale, Videos und PDFs daraus nicht (0.31.0).
+fn allow_external(app: &AppHandle, lib: &Library) {
+    for target in lib.external_targets() {
+        let _ = app.asset_protocol_scope().allow_directory(&target, true);
+    }
+}
+
 /// Öffnet eine Bibliothek, startet Watcher und Vorschau-Worker und liest den Bestand ein.
 fn activate(app: &AppHandle, root: &Path) -> Result<(), String> {
     let lib = Arc::new(Library::open(root)?);
@@ -268,6 +277,7 @@ fn activate(app: &AppHandle, root: &Path) -> Result<(), String> {
     *state.watcher.lock().unwrap() = None;
 
     app.asset_protocol_scope().allow_directory(root, true).map_err(|e| e.to_string())?;
+    allow_external(app, &lib);
 
     let tx = start_thumb_worker(app.clone(), lib.clone());
     *state.thumbs.lock().unwrap() = Some(tx);
@@ -300,6 +310,10 @@ fn activate(app: &AppHandle, root: &Path) -> Result<(), String> {
     )
     .map_err(|e| e.to_string())?;
     debouncer.watch(root, notify::RecursiveMode::Recursive).map_err(|e| e.to_string())?;
+    // FSEvents folgt keinen Verknüpfungen: externe Zonen eigens beobachten
+    for target in lib.external_targets() {
+        let _ = debouncer.watch(&target, notify::RecursiveMode::Recursive);
+    }
     *state.watcher.lock().unwrap() = Some(debouncer);
 
     // Geteilt: Änderungen der anderen kommen übers Netz oft ohne Ereignis an,
@@ -1037,17 +1051,33 @@ async fn export_pdf(
 struct ExternalZone {
     zone: String,
     path: String,
+    online: bool,
 }
 
 #[tauri::command]
 async fn external_zones(state: State<'_, AppState>) -> Result<Vec<ExternalZone>, String> {
-    Ok(current(&state)?.external_zones().into_iter().map(|(zone, path)| ExternalZone { zone, path }).collect())
+    Ok(current(&state)?.external_zones().into_iter().map(|(zone, path, online)| ExternalZone { zone, path, online }).collect())
 }
 
 #[tauri::command]
 async fn link_folder(app: AppHandle, state: State<'_, AppState>, path: String) -> Result<String, String> {
     let lib = current(&state)?;
-    let zone = tauri::async_runtime::spawn_blocking(move || lib.link_folder(std::path::Path::new(&path))).await.map_err(|e| e.to_string())??;
+    let worker = lib.clone();
+    let zone = tauri::async_runtime::spawn_blocking(move || {
+        // Dieselben Schranken wie für eine Bibliothek: kein Benutzer-, System-
+        // oder Laufwerksordner, nicht mehr als 20.000 Dateien (0.31.0)
+        let folder = std::path::Path::new(&path);
+        check_library(folder).map_err(|e| e.replacen("library-", "zone-", 1))?;
+        worker.link_folder(folder)
+    })
+    .await
+    .map_err(|e| e.to_string())??;
+    allow_external(&app, &lib);
+    if let Some(debouncer) = state.watcher.lock().unwrap().as_mut() {
+        for target in lib.external_targets() {
+            let _ = debouncer.watch(&target, notify::RecursiveMode::Recursive);
+        }
+    }
     let _ = app.emit("library-changed", ());
     Ok(zone)
 }

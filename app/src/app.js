@@ -6844,9 +6844,9 @@
     b.appendChild(list);
     const fill = (rows) => {
       list.replaceChildren(
-        ...rows.map(({ zone, path }) =>
+        ...rows.map(({ zone, path, online }) =>
           blockRow(
-            [el("div", "p-lib-name", zone), pathEl(path, "p-lib-path")],
+            [el("div", "p-lib-name", online === false ? `${zone} · ${t("extZoneOffline")}` : zone), pathEl(path, "p-lib-path")],
             [
               button("p-link", t("reveal"), () => invoke("reveal_zone", { zone }).catch(fail)),
               button("p-link p-lib-clear", "✕", async () => {
@@ -6871,7 +6871,10 @@
             await refresh();
             toast(t("extZonesAdded", { zone }));
           } catch (e) {
-            fail(e);
+            const msg = String(e && e.message ? e.message : e);
+            const key = { "zone-system": "zoneSystem", "zone-large": "zoneLarge", "zone-slow": "zoneSlow", "zone-overlap": "zoneOverlap", "zone-missing": "zoneMissing" }[msg];
+            if (key) toast(t(key), false, 5200);
+            else fail(e);
           }
           renderPage(true);
         })

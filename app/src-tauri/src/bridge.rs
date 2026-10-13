@@ -368,7 +368,10 @@ fn handle(msg: &Value, slot: &mut Vec<(PathBuf, Library)>) -> Result<Value, Stri
             remove_if_empty(file.parent());
             // Schon in der Bibliothek, aber auf eine andere Zone gezogen (0.30.1):
             // das vorhandene Bild wandert dorthin, statt still liegen zu bleiben.
-            if duplicate && str_arg(msg, "zone").is_some() && !path.starts_with(&format!("{zone}/")) {
+            // Liegt es in einer externen Zone (Projektordner draußen), bleibt es dort:
+            // Herausziehen würde Verknüpfungen in InDesign & Co. brechen (0.31.0).
+            let external = lib.external_zones().iter().any(|(z, _, _)| path.starts_with(&format!("{z}/")));
+            if duplicate && !external && str_arg(msg, "zone").is_some() && !path.starts_with(&format!("{zone}/")) {
                 let _ = std::fs::create_dir_all(lib.root.join(zone));
                 if let Some(moved) = lib.move_items(&[path.clone()], zone)?.pop() {
                     path = moved;

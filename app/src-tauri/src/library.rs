@@ -998,42 +998,65 @@ impl Library {
             rows.collect::<std::result::Result<_, _>>().map_err(err)?
         };
 
+        // Fehlt der Bibliotheksordner selbst (Netz weg, Laufwerk ab), wäre alles
+        // „verschwunden“. Dann lieber gar nichts ändern.
+        if !self.root.is_dir() {
+            return Err("library-missing".into());
+        }
         let mut seen = HashSet::new();
         let mut changed = false;
         let st = self.structure();
         let root = self.root.clone();
         // Bibliothek, dazu jede externe Zone (Verknüpfung auf einen Ordner
-        // außerhalb, 0.30.1); deren Pfade bleiben „Zone/…“ unter der Bibliothek
-        let starts: Vec<PathBuf> = std::iter::once(self.root.clone())
-            .chain(self.external_zones().into_iter().map(|(zone, _)| self.root.join(zone)))
-            .collect();
-        let walker = starts.into_iter().flat_map(|start| {
-            let root = root.clone();
-            let st = st.clone();
-            WalkDir::new(start)
+        // außerhalb, 0.30.1); deren Pfade bleiben „Zone/…“ unter der Bibliothek.
+        // Was sich nicht lesen ließ (offline, keine Rechte), gilt nicht als gelöscht.
+        let mut blind: Vec<String> = Vec::new();
+        let mut starts: Vec<PathBuf> = vec![self.root.clone()];
+        for (zone, _, online) in self.external_zones() {
+            if online {
+                starts.push(self.root.join(zone));
+            } else {
+                blind.push(zone);
+            }
+        }
+        for start in starts {
+            let filter_root = root.clone();
+            let filter_st = st.clone();
+            let walker = WalkDir::new(&start)
                 .min_depth(1)
                 .into_iter()
-                .filter_entry(move |e| !is_hidden(e.file_name()) && !(e.file_type().is_dir() && st.skips(&rel_path(&root, e.path()))))
-        });
-        for entry in walker.filter_map(|e| e.ok()) {
-            if !entry.file_type().is_file() || !is_media(entry.path()) {
-                continue;
+                .filter_entry(move |e| !is_hidden(e.file_name()) && !(e.file_type().is_dir() && filter_st.skips(&rel_path(&filter_root, e.path()))));
+            for entry in walker {
+                let entry = match entry {
+                    Ok(entry) => entry,
+                    Err(e) => {
+                        blind.push(rel_path(&self.root, e.path().unwrap_or(&start)));
+                        continue;
+                    }
+                };
+                if !entry.file_type().is_file() || !is_media(entry.path()) {
+                    continue;
+                }
+                let rel = rel_path(&self.root, entry.path());
+                let Ok(meta) = entry.metadata() else {
+                    blind.push(rel);
+                    continue;
+                };
+                let bytes = meta.len() as i64;
+                let mtime = time_ms(meta.modified()).unwrap_or(0);
+                seen.insert(rel.clone());
+                if known.get(&rel) == Some(&(bytes, mtime)) {
+                    continue;
+                }
+                let Ok(hash) = hash_file(entry.path()) else { continue };
+                let added = time_ms(meta.created()).unwrap_or(mtime);
+                self.upsert_item(&rel, &hash, bytes, mtime, added, entry.path())?;
+                changed = true;
             }
-            let Ok(meta) = entry.metadata() else { continue };
-            let rel = rel_path(&self.root, entry.path());
-            let bytes = meta.len() as i64;
-            let mtime = time_ms(meta.modified()).unwrap_or(0);
-            seen.insert(rel.clone());
-            if known.get(&rel) == Some(&(bytes, mtime)) {
-                continue;
-            }
-            let Ok(hash) = hash_file(entry.path()) else { continue };
-            let added = time_ms(meta.created()).unwrap_or(mtime);
-            self.upsert_item(&rel, &hash, bytes, mtime, added, entry.path())?;
-            changed = true;
         }
 
-        let gone: Vec<&String> = known.keys().filter(|p| !seen.contains(*p)).collect();
+        let unseen = |p: &String| blind.iter().any(|b| b.is_empty() || p == b || p.starts_with(&format!("{b}/")));
+        let gone: Vec<&String> = known.keys().filter(|p| !seen.contains(*p) && !unseen(p)).collect();
         if !gone.is_empty() {
             let conn = self.conn.lock().unwrap();
             for p in gone {
@@ -1094,19 +1117,42 @@ impl Library {
             }
         }
         let root = self.root.clone();
-        let mut zones: Vec<Zone> = WalkDir::new(&self.root)
+        let links = self.external_zones();
+        let offline: HashSet<String> = links.iter().filter(|(_, _, on)| !on).map(|(z, _, _)| z.clone()).collect();
+        let mut dirs: Vec<PathBuf> = WalkDir::new(&self.root)
             .min_depth(1)
             .max_depth(st.zone_depth())
             .into_iter()
             .filter_entry(|e| !is_hidden(e.file_name()) && !(e.file_type().is_dir() && st.skips(&rel_path(&root, e.path()))))
             .filter_map(|e| e.ok())
-            .filter(|e| e.file_type().is_dir() || (e.depth() == 1 && e.path_is_symlink() && e.path().is_dir()))
-            .filter_map(|e| {
-                let path = rel_path(&self.root, e.path());
+            .filter(|e| e.file_type().is_dir() || (e.depth() == 1 && links.iter().any(|(z, _, _)| e.file_name().to_str() == Some(z))))
+            .map(|e| e.into_path())
+            .collect();
+        // Unterzonen in externen Zonen: WalkDir folgt der Verknüpfung nicht,
+        // darum jede erreichbare externe Zone eigens durchgehen (wie im Scan)
+        if st.zone_depth() > 1 {
+            for (zone, _, _) in links.iter().filter(|(_, _, on)| *on) {
+                dirs.extend(
+                    WalkDir::new(self.root.join(zone))
+                        .min_depth(1)
+                        .max_depth(st.zone_depth() - 1)
+                        .into_iter()
+                        .filter_entry(|e| !is_hidden(e.file_name()) && !(e.file_type().is_dir() && st.skips(&rel_path(&root, e.path()))))
+                        .filter_map(|e| e.ok())
+                        .filter(|e| e.file_type().is_dir())
+                        .map(|e| e.into_path()),
+                );
+            }
+        }
+        let mut zones: Vec<Zone> = dirs
+            .into_iter()
+            .filter_map(|dir| {
+                let path = rel_path(&self.root, &dir);
                 let count = counts.get(&path).copied().unwrap_or(0);
                 // Ordner ohne Bilder & Co., in denen aber anderes liegt (Projekt-
                 // ordner, Technik): keine Zone. Ganz leere Ordner (neue Zonen) bleiben.
-                if count == 0 && path != default && !dir_is_empty(e.path()) {
+                // Externe Zonen offline bleiben stehen, ihre Vorschauen liegen hier.
+                if count == 0 && path != default && !offline.contains(&path) && !dir_is_empty(&dir) {
                     return None;
                 }
                 Some(Zone { count, name: path.clone(), path })
@@ -1668,19 +1714,37 @@ impl Library {
     // (Symlink) im Bibliotheksordner. Dateien bleiben, wo sie sind; Archiver
     // liest und sichert direkt dort. Lösen entfernt nur die Verknüpfung.
 
-    /// Externe Zonen: (Zone, Ordner draußen)
-    pub fn external_zones(&self) -> Vec<(String, String)> {
+    /// Externe Zonen: (Zone, Ordner draußen, erreichbar). Eine Verknüpfung, deren
+    /// Ziel gerade fehlt (Laufwerk ausgeworfen, Netz weg), bleibt Zone und gilt als
+    /// offline; ihre Objekte bleiben in der Datenbank, bis das Ziel zurück ist (0.31.0).
+    pub fn external_zones(&self) -> Vec<(String, String, bool)> {
         let Ok(rd) = fs::read_dir(&self.root) else { return Vec::new() };
-        let mut out: Vec<(String, String)> = rd
+        let mut out: Vec<(String, String, bool)> = rd
             .filter_map(|e| e.ok())
-            .filter(|e| is_link(&e.path()) && e.path().is_dir() && !is_hidden(&e.file_name()))
+            .filter(|e| is_link(&e.path()) && !is_hidden(&e.file_name()))
             .filter_map(|e| {
-                let target = fs::read_link(e.path()).ok()?;
-                Some((e.file_name().to_string_lossy().into_owned(), target.to_string_lossy().into_owned()))
+                let path = e.path();
+                // Verknüpfung auf eine Datei ist keine Zone; fehlendes Ziel schon
+                let online = match fs::metadata(&path) {
+                    Ok(m) if m.is_dir() => fs::read_dir(&path).is_ok(),
+                    Ok(_) => return None,
+                    Err(_) => false,
+                };
+                let target = fs::read_link(&path).ok()?;
+                Some((e.file_name().to_string_lossy().into_owned(), target.to_string_lossy().into_owned(), online))
             })
             .collect();
         out.sort_by(|a, b| a.0.to_lowercase().cmp(&b.0.to_lowercase()));
         out
+    }
+
+    /// Ziele der erreichbaren externen Zonen, aufgelöst (für Asset-Freigabe und Watcher)
+    pub fn external_targets(&self) -> Vec<PathBuf> {
+        self.external_zones()
+            .into_iter()
+            .filter(|(_, _, online)| *online)
+            .filter_map(|(zone, _, _)| self.root.join(zone).canonicalize().ok())
+            .collect()
     }
 
     /// Ordner außerhalb als Zone verknüpfen. Gibt den Zonennamen zurück.
@@ -1696,8 +1760,17 @@ impl Library {
         if root.starts_with(&folder) {
             return Err("Die Bibliothek liegt in diesem Ordner".into());
         }
-        if let Some((zone, _)) = self.external_zones().into_iter().find(|(_, t)| Path::new(t) == folder) {
+        let existing = self.external_targets();
+        if let Some((zone, _, _)) = self
+            .external_zones()
+            .into_iter()
+            .find(|(z, _, _)| self.root.join(z).canonicalize().ok().as_deref() == Some(folder.as_path()))
+        {
             return Ok(zone);
+        }
+        // Ineinander verschachtelte Ziele führten jedes Objekt doppelt
+        if existing.iter().any(|t| folder.starts_with(t) || t.starts_with(&folder)) {
+            return Err("zone-overlap".into());
         }
         let name = clean_segment(folder.file_name().and_then(|n| n.to_str()).unwrap_or("Ordner"));
         let name = if name.is_empty() { "Ordner".to_string() } else { name };
@@ -2264,15 +2337,24 @@ impl Library {
     pub fn folders(&self) -> Vec<String> {
         let st = self.structure();
         let root = self.root.clone();
-        WalkDir::new(&self.root)
-            .min_depth(st.zone_depth() + 1)
-            .max_depth(st.zone_depth() + 4)
-            .into_iter()
-            .filter_entry(|e| !is_hidden(e.file_name()) && !(e.file_type().is_dir() && st.skips(&rel_path(&root, e.path()))))
-            .filter_map(|e| e.ok())
-            .filter(|e| e.file_type().is_dir())
-            .map(|e| rel_path(&self.root, e.path()))
-            .collect()
+        // Bibliothek ab Tiefe zone_depth + 1; externe Zonen beginnen eine Ebene tiefer
+        let starts = std::iter::once((self.root.clone(), 0)).chain(
+            self.external_zones().into_iter().filter(|(_, _, on)| *on).map(|(zone, _, _)| (self.root.join(zone), 1)),
+        );
+        let mut out = Vec::new();
+        for (start, offset) in starts {
+            out.extend(
+                WalkDir::new(&start)
+                    .min_depth(st.zone_depth() + 1 - offset)
+                    .max_depth(st.zone_depth() + 4 - offset)
+                    .into_iter()
+                    .filter_entry(|e| !is_hidden(e.file_name()) && !(e.file_type().is_dir() && st.skips(&rel_path(&root, e.path()))))
+                    .filter_map(|e| e.ok())
+                    .filter(|e| e.file_type().is_dir())
+                    .map(|e| rel_path(&self.root, e.path())),
+            );
+        }
+        out
     }
 
     /// Einen ganzen Ordner übernehmen: Unterordner werden zu Zonen, lose Bilder landen in der Inbox.
@@ -2382,6 +2464,85 @@ mod tests {
     fn write_png(path: &Path, w: u32, h: u32, shade: u8) {
         fs::create_dir_all(path.parent().unwrap()).unwrap();
         image::RgbImage::from_pixel(w, h, image::Rgb([shade, 0, 0])).save(path).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn external_zones_offline_subzones_and_overlap() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path().join("Bib");
+        let outside = tmp.path().join("Projekt");
+        write_png(&root.join("Typo/a.png"), 4, 4, 10);
+        write_png(&outside.join("x.png"), 4, 4, 30);
+        write_png(&outside.join("Entwurf/y.png"), 4, 4, 40);
+        let lib = Library::open(&root).unwrap();
+        lib.scan().unwrap();
+        let zone = lib.link_folder(&outside).unwrap();
+        assert_eq!(zone, "Projekt");
+        let paths = |lib: &Library| {
+            let mut p: Vec<String> = lib.items().unwrap().into_iter().map(|i| i.path).collect();
+            p.sort();
+            p
+        };
+        assert_eq!(paths(&lib), ["Projekt/Entwurf/y.png", "Projekt/x.png", "Typo/a.png"]);
+        assert!(lib.folders().contains(&"Projekt/Entwurf".to_string()), "Unterordner der externen Zone");
+        assert_eq!(lib.external_targets(), vec![outside.canonicalize().unwrap()]);
+
+        // Verschachtelte Ziele führten Objekte doppelt
+        assert_eq!(lib.link_folder(&outside.join("Entwurf")).unwrap_err(), "zone-overlap");
+        // Derselbe Ordner noch einmal: dieselbe Zone, keine zweite
+        assert_eq!(lib.link_folder(&outside).unwrap(), "Projekt");
+
+        // Unterzonen: „Projekt/Entwurf“ ist eine Zone, „Projekt“ bleibt sichtbar
+        lib.set_structure(&Structure { depth: 2, skip: vec![], subzones: true }).unwrap();
+        let zones: Vec<String> = lib.zones().unwrap().into_iter().map(|z| z.path).collect();
+        assert!(zones.contains(&"Projekt/Entwurf".to_string()), "{zones:?}");
+        lib.set_structure(&Structure { depth: 2, skip: vec![], subzones: false }).unwrap();
+
+        // Laufwerk weg: die Zone bleibt (offline), ihre Objekte bleiben in der Datenbank
+        let parked = tmp.path().join("Projekt-weg");
+        fs::rename(&outside, &parked).unwrap();
+        assert_eq!(lib.external_zones(), vec![("Projekt".to_string(), outside.to_string_lossy().into_owned(), false)]);
+        lib.scan().unwrap();
+        assert_eq!(paths(&lib).len(), 3, "offline heißt nicht gelöscht");
+        let zones: Vec<String> = lib.zones().unwrap().into_iter().map(|z| z.path).collect();
+        assert!(zones.contains(&"Projekt".to_string()), "{zones:?}");
+        // zurück: alles wieder da, ohne neu zu hashen
+        fs::rename(&parked, &outside).unwrap();
+        assert!(!lib.scan().unwrap(), "nichts geändert");
+        assert_eq!(paths(&lib).len(), 3);
+
+        // Lösen entfernt nur die Verknüpfung
+        lib.unlink_folder("Projekt").unwrap();
+        assert!(outside.join("x.png").exists());
+        assert_eq!(paths(&lib), ["Typo/a.png"]);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn unreadable_folder_is_not_deleted() {
+        use std::os::unix::fs::PermissionsExt;
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path().join("Bib");
+        write_png(&root.join("Typo/a.png"), 4, 4, 10);
+        write_png(&root.join("Geheim/b.png"), 4, 4, 20);
+        let lib = Library::open(&root).unwrap();
+        lib.scan().unwrap();
+        assert_eq!(lib.items().unwrap().len(), 2);
+        let secret = root.join("Geheim");
+        fs::set_permissions(&secret, fs::Permissions::from_mode(0o000)).unwrap();
+        let readable = fs::read_dir(&secret).is_ok(); // als root lässt sich alles lesen
+        lib.scan().unwrap();
+        fs::set_permissions(&secret, fs::Permissions::from_mode(0o755)).unwrap();
+        if !readable {
+            assert_eq!(lib.items().unwrap().len(), 2, "ohne Leserecht heißt nicht gelöscht");
+        }
+        // Bibliotheksordner fehlt ganz: Fehler statt leerer Bibliothek
+        let parked = tmp.path().join("Bib-weg");
+        fs::rename(&root, &parked).unwrap();
+        assert!(lib.scan().is_err());
+        fs::rename(&parked, &root).unwrap();
+        assert_eq!(lib.items().unwrap().len(), 2);
     }
 
     #[test]

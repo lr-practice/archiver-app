@@ -215,7 +215,11 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
 - **Nicht:** Keine Rahmenlinie. Die Karte setzt sich nur über die Fläche ab.
 - **Externe Zone (0.30.1):** Ordner außerhalb der Bibliothek, angelegt nur in
   Einstellungen › Bibliothek (Verknüpfung im Bibliotheksordner). Sieht aus wie
-  jede Zone; ✕ löst nur die Verknüpfung.
+  jede Zone; ✕ löst nur die Verknüpfung. Seit 0.31.0 gelten dieselben Schranken
+  wie für eine Bibliothek (kein Benutzer- oder Systemordner, höchstens 20.000
+  Dateien), und verschachtelte Ziele werden abgelehnt. Ist das Ziel nicht
+  erreichbar, bleibt die Zone mit ihren Vorschauen stehen; in den Einstellungen
+  steht hinter dem Namen „· offline“.
 
 ### 4.5 Ordnerkarte (`.p-folder-card`)
 - **Zweck:** Unterordner neben dem Zonen-Titel als Karten (3/6, die Liste
