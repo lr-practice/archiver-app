@@ -69,15 +69,12 @@
 
   // Auswahl: ruhige gestrichelte Outline oder eine, die langsam um das Objekt läuft
   // Fensterhintergrund (Mac): wie stark die Farbe die macOS-Unschärfe deckt, getrennt von den Zonen
+  // 0.28: Standard ist das Glas des Trays (Dunkel 72 %, Hell 78 %), immer aktiv
   function applyWinAlpha(v) {
     const root = document.documentElement;
-    if (typeof v !== "number") {
-      delete root.dataset.winalpha;
-      root.style.removeProperty("--win-alpha");
-    } else {
-      root.dataset.winalpha = "on";
-      root.style.setProperty("--win-alpha", String(v));
-    }
+    root.dataset.winalpha = "on";
+    if (typeof v !== "number") root.style.removeProperty("--win-alpha");
+    else root.style.setProperty("--win-alpha", String(v));
   }
 
   function applyFocusAnim(on) {
@@ -146,6 +143,7 @@
 
   const SIZES = [72, 96, 120, 160, 220, 300];
   const ALL = "\u0000all";
+  const DELETED = "\u0000deleted"; // „Zuletzt gelöscht“ (0.27)
   const isZone = (f) => f != null && !String(f).startsWith("\u0000");
   // Startseite: Vorschaubilder im Index, Spalten im Mosaik, Titelbild der Karten
   const HOME_SIZES = [
@@ -158,7 +156,7 @@
   applyRadius(pref("radius", "round"));
   applyTopFade(pref("topFade", "fade"));
   applyFocusAnim(pref("focusAnim", false));
-  applyWinAlpha(pref("winAlpha", null));
+  applyWinAlpha(pref("winGlass", null));
   applyNavPos(pref("navPos", "tl"));
 
   const state = {
@@ -189,7 +187,8 @@
     order: {}, // Zone → Hashes in eigener Reihenfolge (zones.json, Schlüssel "sort")
     shared: false, // geteilte Bibliothek (studio.rs)
     user: "", // Name für „abgelegt von“
-    folder: null, // gewählter Ordner in der offenen Zone (Chips), null = alle
+    folder: null, // Filter in der offenen Zone (Chips), null = alle
+    level: null, // betretener Ordner (Karten, Pfad), null = oberste Ebene der Zone
   };
 
   // ---- Helfer ----
@@ -270,6 +269,7 @@
   // nur als Bild; dann aus der Texterkennung („TEXT … domain · Datum“).
   function quoteOf(item) {
     if (item.quote) return item.quote;
+    if (isNote(item)) return " "; // leere Notiz bleibt ein Blatt
     if (item.width !== 1400 || item.imageUrl || !item.text || item.format !== "png") return "";
     const m = /^TEXT\s+([\s\S]+?)(?:\s+(?:[\w.-]+\.[a-z]{2,}\s+·\s+)?[\d./-]+)?\s*$/i.exec(item.text.trim());
     return m ? m[1].trim() : "";
@@ -286,12 +286,14 @@
     cyan: ["#00b0f0", "#003d54", 0.7],
     yellow: ["#ffff00", "#5c5c00", 0.75],
     white: ["#f4f3ef", "#141414", 0.5],
+    black: ["#141414", "#ededed", 0.5],
   };
   const RANDOM_TONES = ["red", "green", "violet", "cyan", "yellow"];
   // Eigene Farbe (beim Markieren im Web bestimmt oder in den Details gewählt),
   // sonst fest aus dem Inhalt abgeleitet
   function quoteTone(item) {
     if (QUOTE_TONES[item.tone]) return QUOTE_TONES[item.tone];
+    if (isNote(item)) return QUOTE_TONES.white; // Notizen: Papier, bis eine Farbe gewählt ist
     const key = String(item.hash || item.path || "");
     let h = 0;
     for (let i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) >>> 0;
@@ -299,11 +301,13 @@
   }
   function toneKey(item) {
     if (QUOTE_TONES[item.tone]) return item.tone;
+    if (isNote(item)) return "white";
     return RANDOM_TONES.find((k) => QUOTE_TONES[k] === quoteTone(item));
   }
 
   // Textkarte als Text statt Bild: Kennung, Zitat, Quelle und Datum
   function textSheet(item, cls) {
+    if (isNote(item)) return noteSheet(item, cls);
     const len = quoteOf(item).length;
     const sheet = el("div", cls + (len < 140 ? " short" : len < 400 ? " medium" : " long"));
     const [bg, fg, dim] = quoteTone(item);
@@ -427,6 +431,9 @@
     state.defaultZone = snap.defaultZone || "Unsorted";
     state.structure = snap.structure || { depth: 2, skip: [], subzones: false };
     state.user = snap.user || "";
+    state.folders = snap.folders || [];
+    state.deletedCount = snap.deleted || 0;
+    if (state.focus === DELETED) state.deletedItems = await invoke("deleted_items").catch(() => []);
     if (isZone(state.focus) && !state.zones.some((z) => z.path === state.focus)) state.focus = null;
     for (const p of [...state.selection]) if (!state.byPath.has(p)) state.selection.delete(p);
     // Offenes Menü nicht unter der Maus wegzeichnen (z. B. während „Wirklich löschen?“)
@@ -704,8 +711,8 @@
     const f = state.filters;
     const bar = el("div", "p-bar p-filters");
     bar.appendChild(mono("(" + t("filterTitle") + ")", "dim p-facet-title"));
-    // Art zuerst: Bilder, Tracks, Video, PDF
-    for (const k of ["image", "audio", "video", "pdf"])
+    // Art zuerst: Bilder, Tracks, Video, PDF, Notizen
+    for (const k of ["image", "audio", "video", "pdf", "note"])
       bar.appendChild(chip("(" + t("kind_" + k) + ")", f.kind === k, () => setFilter("kind", k)));
     bar.appendChild(el("span", "p-filter-gap"));
     const dots = el("span", "p-colors");
@@ -840,6 +847,10 @@
         if (!last && !exists) b.classList.add("dim");
         btns.push(b);
       });
+    } else if (state.focus === DELETED && !state.query.trim()) {
+      btns.push(navButton(t("navAll"), false, () => setFocus(ALL)));
+      btns.push(el("span", "p-nav-sep", "›"));
+      btns.push(navButton(t("deletedTitle"), true));
     } else {
       btns.push(navButton(t("navAll"), state.focus === ALL || !!state.query.trim(), () => setFocus(ALL)));
     }
@@ -973,12 +984,21 @@
 
   // Ordner einer Ebene mit Anzahl (samt Unterordnern). Oben in der Zone kommen
   // lose Dateien ("") zuletzt; im Ordner zählen nur seine eigenen Unterordner.
-  function zoneFolders(items, base) {
+  function zoneFolders(items, base, zone) {
     const counts = new Map();
     for (const i of items) {
       if (base && !inFolder(i, base)) continue;
       const f = childFolder(i, base);
       counts.set(f, (counts.get(f) || 0) + 1);
+    }
+    // 0.27: auch leere Ordner (gerade angelegt) zeigen
+    if (zone != null) {
+      const pre = (zone ? zone + "/" : "") + (base ? base + "/" : "");
+      for (const d of state.folders || []) {
+        if (!d.startsWith(pre)) continue;
+        const f = (base ? base + "/" : "") + d.slice(pre.length).split("/")[0];
+        if (!counts.has(f)) counts.set(f, 0);
+      }
     }
     const named = [...counts].filter(([f]) => f).sort((a, b) => a[0].localeCompare(b[0], undefined, { numeric: true }));
     return counts.has("") && !base ? [...named, ["", counts.get("")]] : named;
@@ -996,27 +1016,96 @@
 
   // Ordner-Chips unter dem Zonentitel: (All 282) (Typefaces 165) (Loose 3).
   // Im Ordner: (Alle n) für diese Ebene, dahinter nur seine Unterordner.
+  // 0.27: Chips filtern nur, die Ebene (Titel, Pfad, Karten) bleibt stehen.
   function folderChips(zone, folders, total) {
     const wrap = el("span", "p-folder-chips");
-    const base = state.folder || null;
-    wrap.appendChild(chip("(" + t("folderAll") + " " + total + ")", state.folder == null || state.folder === base, () => {
-      state.folder = base;
+    const base = state.level || null;
+    const pick = (f) => {
+      state.folder = f;
       renderZones();
-    }));
-    for (const [f, n] of folders) wrap.appendChild(chip("(" + (f ? lastSegment(f) : t("folderLoose")) + " " + n + ")", state.folder === f, () => openFolder(f)));
+    };
+    wrap.appendChild(chip("(" + t("folderAll") + " " + total + ")", state.folder == null || state.folder === base, () => pick(base)));
+    for (const [f, n] of folders) wrap.appendChild(chip("(" + (f ? lastSegment(f) : t("folderLoose")) + " " + n + ")", state.folder === f, () => pick(f)));
     return wrap;
   }
 
   // Ordner betreten bzw. eine Ebene zurück (Esc, ⌘↑, Klick im Pfad)
   function openFolder(f) {
+    state.level = f;
     state.folder = f;
     state.folderKbd = null;
     renderZones();
   }
 
+  // Neuer Unterordner auf der aktuellen Ebene, auf Wunsch mit der Auswahl darin.
+  // Er heißt erst „Neuer Ordner“ und lässt sich gleich umbenennen (wie im Finder).
+  async function newFolder(withSelection) {
+    if (!isZone(state.focus)) return;
+    const parent = state.focus + (state.level ? "/" + state.level : "");
+    const items = withSelection ? selectedItems() : [];
+    try {
+      const rel = await invoke("create_folder", { parent, name: t("newFolderName") });
+      if (items.length) await invoke("move_items", { paths: items.map((i) => i.path), zone: rel, exact: true });
+      await refresh();
+      renameFolder(rel);
+    } catch (e) {
+      fail(e);
+    }
+  }
+
+  function renameFolder(rel) {
+    const card = [...document.querySelectorAll(".p-folder-card")].find((c) => c.dataset.zone === rel);
+    const name = card && card.querySelector(".zone-card-name");
+    if (!name) return;
+    inlineInput(
+      name,
+      lastSegment(rel),
+      async (value) => {
+        try {
+          const next = await invoke("rename_zone", { zone: rel, name: value });
+          const inZone = (p) => p.slice(state.focus.length + 1);
+          for (const key of ["level", "folder"]) if (state[key] === inZone(rel)) state[key] = inZone(next);
+          await refresh();
+        } catch (e) {
+          fail(e);
+          renderZones();
+        }
+      },
+      renderZones
+    );
+  }
+
+  function openZoneBackgroundMenu(x, y) {
+    closeMenus();
+    closeMoreMenu();
+    const menu = el("div", "zone-menu p-ctx-menu");
+    menu.addEventListener("click", (e) => e.stopPropagation());
+    menu.addEventListener("contextmenu", (e) => e.preventDefault());
+    const noteBtn = button("zone-menu-item", t("noteNew"), () => {
+      closeMenus();
+      newNote();
+    });
+    noteBtn.appendChild(el("span", "p-ctx-key", "⌘⇧N"));
+    menu.appendChild(noteBtn);
+    menu.appendChild(button("zone-menu-item", t("newFolder"), () => {
+      closeMenus();
+      newFolder(false);
+    }));
+    document.body.appendChild(menu);
+    const r = menu.getBoundingClientRect();
+    menu.style.left = Math.max(8, Math.min(x, window.innerWidth - r.width - 8)) + "px";
+    menu.style.top = Math.max(8, Math.min(y, window.innerHeight - r.height - 8)) + "px";
+  }
+
   function folderUp() {
-    if (state.folder == null) return false;
-    openFolder(parentFolder(state.folder));
+    // Erst den Chip-Filter lösen, dann eine Ebene hoch
+    if (state.folder != null && state.folder !== state.level) {
+      state.folder = state.level;
+      renderZones();
+      return true;
+    }
+    if (state.level == null) return false;
+    openFolder(parentFolder(state.level));
     return true;
   }
 
@@ -1034,11 +1123,112 @@
       text.appendChild(el("div", "p-card-meta", n === 1 ? t("countImage") : t("countImages", { n })));
       body.appendChild(text);
       card.appendChild(body);
-      card.addEventListener("click", () => openFolder(f));
+      const rel = zone.path + "/" + f;
+      // 0.28: ⋯ wie bei Zonen (Umbenennen, im Finder zeigen, löschen)
+      const menuWrap = el("span", "zone-menu-wrap");
+      menuWrap.appendChild(zoneMenuButton({ path: rel, count: n }, () => folderMenu(rel, n)));
+      body.appendChild(menuWrap);
+      card.addEventListener("click", (e) => {
+        if (cardDragged || e.target.closest(".zone-menu-btn, .zone-menu, input")) return;
+        openFolder(f);
+      });
+      card.addEventListener("contextmenu", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        closeMenus();
+        const menu = folderMenu(rel, n);
+        menu.classList.add("p-ctx-menu");
+        document.body.appendChild(menu);
+        const r = menu.getBoundingClientRect();
+        menu.style.left = Math.max(8, Math.min(e.clientX, window.innerWidth - r.width - 8)) + "px";
+        menu.style.top = Math.max(8, Math.min(e.clientY, window.innerHeight - r.height - 8)) + "px";
+      });
+      // 0.28: Ordner auf einen anderen Ordner ziehen legt ihn hinein
+      card.addEventListener("pointerdown", (e) => dragFolder(e, card));
+      card.addEventListener("dragstart", (e) => e.preventDefault());
       card.dataset.folder = f;
+      card.dataset.zone = rel; // Ablageziel beim Ziehen (0.27)
       wrap.appendChild(card);
     }
     return wrap;
+  }
+
+  // ⋯-Menü eines Unterordners: dieselben Einträge wie bei einer Zone
+  function folderMenu(rel, count) {
+    const menu = el("div", "zone-menu");
+    menu.addEventListener("click", (e) => e.stopPropagation());
+    menu.addEventListener("contextmenu", (e) => e.preventDefault());
+    menu.appendChild(button("zone-menu-item", t("rename"), () => {
+      closeMenus();
+      renameFolder(rel);
+    }));
+    menu.appendChild(button("zone-menu-item", t("reveal"), () => {
+      closeMenus();
+      invoke("reveal_zone", { zone: rel }).catch(fail);
+    }));
+    const del = button("zone-menu-item danger", t("trashZone"));
+    let armed = false;
+    del.addEventListener("click", async () => {
+      if (!armed) {
+        armed = true;
+        del.textContent = t("trashZoneConfirm", { count: count === 1 ? t("countImage") : t("countImages", { n: count }) });
+        del.classList.add("armed");
+        return;
+      }
+      closeMenus();
+      const inZone = rel.slice(state.focus.length + 1);
+      for (const key of ["level", "folder"]) if (state[key] === inZone || (state[key] || "").startsWith(inZone + "/")) state[key] = parentFolder(inZone);
+      trashZone({ path: rel, count });
+    });
+    menu.appendChild(del);
+    return menu;
+  }
+
+  function dragFolder(e, card) {
+    if (e.button !== 0 || e.target.closest(".zone-menu-btn, .zone-menu, input")) return;
+    card.setPointerCapture(e.pointerId);
+    const start = { x: e.clientX, y: e.clientY };
+    let lifted = false;
+    let target = null;
+    const onMove = (ev) => {
+      if (!lifted) {
+        if (Math.hypot(ev.clientX - start.x, ev.clientY - start.y) < DRAG_THRESHOLD) return;
+        lifted = true;
+        card.classList.add("lifted");
+        document.body.classList.add("sorting");
+      }
+      card.style.transform = `translate(${ev.clientX - start.x}px, ${ev.clientY - start.y}px)`;
+      target = null;
+      for (const other of document.querySelectorAll(".p-folder-card")) {
+        if (other === card) continue;
+        const r = other.getBoundingClientRect();
+        if (ev.clientX >= r.left && ev.clientX <= r.right && ev.clientY >= r.top && ev.clientY <= r.bottom) target = other;
+      }
+      for (const other of document.querySelectorAll(".p-folder-card")) other.classList.toggle("drop-target", other === target);
+    };
+    const onUp = async () => {
+      card.removeEventListener("pointermove", onMove);
+      card.removeEventListener("pointerup", onUp);
+      card.removeEventListener("pointercancel", onUp);
+      if (!lifted) return;
+      cardDragged = true;
+      setTimeout(() => (cardDragged = false), 0);
+      document.body.classList.remove("sorting");
+      card.classList.remove("lifted");
+      card.style.transform = "";
+      for (const n of document.querySelectorAll(".drop-target")) n.classList.remove("drop-target");
+      if (!target) return;
+      try {
+        await invoke("move_folder", { from: card.dataset.zone, into: target.dataset.zone });
+        await refresh();
+        toast(t("folderMoved", { folder: lastSegment(card.dataset.zone), into: lastSegment(target.dataset.zone) }));
+      } catch (err) {
+        fail(err);
+      }
+    };
+    card.addEventListener("pointermove", onMove);
+    card.addEventListener("pointerup", onUp);
+    card.addEventListener("pointercancel", onUp);
   }
 
   // Vorschaubild für Startseite und Karten; fehlt das Thumbnail noch, das Original nehmen.
@@ -1113,7 +1303,7 @@
     const scroll = key === lastViewKey ? grid.scrollTop : 0;
     lastViewKey = key;
 
-    grid.replaceChildren(home ? renderHome() : renderGallery(words.length > 0 || filtering));
+    grid.replaceChildren(home ? renderHome() : state.focus === DELETED && !words.length && !filtering ? renderDeleted() : renderGallery(words.length > 0 || filtering));
     if (home) applyHomeCursor(false);
     layoutMasonry(true);
     grid.scrollTop = scroll;
@@ -1195,9 +1385,7 @@
     if (state.home === "overview") wrap.appendChild(overviewLayout());
     else if (state.home === "cards") {
       // Active Zones stehen in jeder Ansicht oben, je nach Darstellung als Karten oder Zeilen
-      const row = el("div", "p-hotrow");
-      for (let i = 0; i < HOT_ZONES; i++) row.appendChild(state.zones[i] ? hotCard(state.zones[i], i) : hotSlot(i));
-      wrap.appendChild(row);
+      wrap.appendChild(hotRow());
       wrap.appendChild(restBar(state.zones.length - HOT_ZONES));
       wrap.appendChild(cardsLayout());
     } else if (state.home === "preview") {
@@ -1373,6 +1561,18 @@
     add.appendChild(el("span"));
     add.addEventListener("click", startNewZone);
     list.appendChild(add);
+    // Zuletzt gelöscht: letzte Zeile, nur wenn etwas darin liegt
+    if (!compact && state.deletedCount) {
+      const del = el("div", "p-row p-deleted-row");
+      del.appendChild(mono("", "dim"));
+      del.appendChild(el("span", "zone-card-name", t("deletedTitle")));
+      del.appendChild(el("span", "p-num", String(state.deletedCount)));
+      del.appendChild(el("span", "p-num", t("deletedRow", { days: DELETED_DAYS })));
+      del.appendChild(el("span", "p-thumbs"));
+      del.appendChild(el("span"));
+      del.addEventListener("click", openDeleted);
+      list.appendChild(del);
+    }
     return list;
   }
 
@@ -1398,11 +1598,18 @@
     return label;
   }
 
+  // 0.28: Active Zones brechen wie der Index um; passen keine vier Karten, dann 2 × 2
+  function hotRow() {
+    const row = el("div", "p-hotrow");
+    const width = $("zones").clientWidth - 80;
+    row.style.setProperty("--hot-cols", Math.floor((width + 10) / 280) >= 4 ? "4" : "2");
+    for (let i = 0; i < HOT_ZONES; i++) row.appendChild(state.zones[i] ? hotCard(state.zones[i], i) : hotSlot(i));
+    return row;
+  }
+
   function overviewLayout() {
     const wrap = el("div", "p-overview");
-    const row = el("div", "p-hotrow");
-    for (let i = 0; i < HOT_ZONES; i++) row.appendChild(state.zones[i] ? hotCard(state.zones[i], i) : hotSlot(i));
-    wrap.appendChild(row);
+    wrap.appendChild(hotRow());
     const rest = state.zones.slice(HOT_ZONES);
     const label = el("div", "p-bar p-overview-bar");
     label.appendChild(mono(t("indexLabel") + " (" + rest.length + ")", "strong"));
@@ -1607,6 +1814,8 @@
     for (const [top, zones] of groups) {
       const card = zones.length === 1 && !zones[0].path.includes("/") ? zoneCardTile(zones[0]) : groupCard(top, zones);
       card.dataset.group = top;
+      // eine einzelne Zone lässt sich auch mit einer Active Zone oben tauschen (0.27)
+      if (zones.length === 1) card.dataset.single = card.dataset.swap = zones[0].path;
       card.addEventListener("pointerdown", (e) => dragCard(e, card, [...groups.keys()]));
       card.addEventListener("dragstart", (e) => e.preventDefault());
       cards.push(card);
@@ -1643,6 +1852,7 @@
     const start = { x: e.clientX, y: e.clientY };
     let lifted = false;
     let target = null;
+    let hot = null;
     let after = false;
     const onMove = (ev) => {
       if (!lifted) {
@@ -1653,6 +1863,14 @@
       }
       card.style.transform = `translate(${ev.clientX - start.x}px, ${ev.clientY - start.y}px)`;
       target = null;
+      hot = null;
+      if (card.dataset.single != null) {
+        for (const other of document.querySelectorAll(".p-hotrow .p-hot-card[data-swap]")) {
+          const r = other.getBoundingClientRect();
+          if (ev.clientX >= r.left && ev.clientX <= r.right && ev.clientY >= r.top && ev.clientY <= r.bottom) hot = other;
+        }
+      }
+      for (const other of document.querySelectorAll(".p-hotrow .p-hot-card[data-swap]")) other.classList.toggle("swap-target", other === hot);
       for (const other of document.querySelectorAll(".p-cards .p-card[data-group]")) {
         if (other === card) continue;
         const r = other.getBoundingClientRect();
@@ -1676,7 +1894,19 @@
       document.body.classList.remove("sorting");
       card.classList.remove("lifted");
       card.style.transform = "";
-      for (const n of document.querySelectorAll(".drop-target")) n.classList.remove("drop-target");
+      for (const n of document.querySelectorAll(".drop-target, .swap-target")) n.classList.remove("drop-target", "swap-target");
+      if (hot) {
+        // Mit der Active Zone tauschen: die Zone rückt nach oben, die Active Zone an ihren Platz
+        const zones = state.zones.map((z) => z.path);
+        const a = zones.indexOf(card.dataset.single);
+        const b = zones.indexOf(hot.dataset.swap);
+        if (a < 0 || b < 0) return;
+        [zones[a], zones[b]] = [zones[b], zones[a]];
+        setZoneOrder(zones);
+        renderZones();
+        toast(t("hotSwapped", { zone: zoneLabel(zones[b]) }));
+        return;
+      }
       if (!target) return;
       const tops = order.filter((top) => top !== card.dataset.group);
       tops.splice(tops.indexOf(target.dataset.group) + (after ? 1 : 0), 0, card.dataset.group);
@@ -2077,10 +2307,13 @@
   // Zeile am Griff ziehen: wandert live mit, beim Loslassen wird gespeichert
   // Einstellungen: oben eine ruhige Liste der Bereiche, jeder öffnet sein Untermenü.
   // Ganz unten steht immer der Freischalt-Code.
-  const SETTINGS_SECTIONS = ["library", "view", "look", "start", "studio", "connect", "general"];
+  // 0.28: Tray, Observer und Extension je ein eigener Bereich (Tray und Observer nur am Mac)
+  const SETTINGS_SECTIONS = ["library", "view", "look", "start", "tray", "observer", "extension", "studio", "general"].filter(
+    (id) => isMac || (id !== "tray" && id !== "observer")
+  );
 
   function sectionTitle(id) {
-    return t({ library: "setLibrary", view: "setSecView", look: "setLook", start: "setSecStart", studio: "setStudio", connect: "setConnect", general: "setGeneral" }[id]);
+    return t({ library: "setLibrary", view: "setSecView", look: "setLook", start: "setSecStart", tray: "setTray", observer: "setViewer", extension: "setExtension", studio: "setStudio", general: "setGeneral" }[id]);
   }
 
   function sectionSummary(id) {
@@ -2091,10 +2324,16 @@
     }
     if (id === "look") {
       const th = window.ArchiverI18n.theme();
-      const scheme = window.ArchiverI18n.scheme() === "sage" ? t("schemeSage") : t("schemeStandard");
-      return t({ system: "themeSystem", light: "themeLight", dark: "themeDark" }[th]) + " · " + scheme;
+      return t({ system: "themeSystem", light: "themeLight", dark: "themeDark" }[th]);
     }
-    if (id === "connect") return t("setConnectSummary");
+    if (id === "tray") {
+      const p = state.sysPrefs;
+      if (!p) return "";
+      const key = PALETTE_KEYS.find(([k]) => k === p.shortcut);
+      return (p.shortcut ? (key && key[1]) || p.shortcut : t("setOff")) + " · " + t("setTrayBar") + " " + (p.dropbar ? t("setOn") : t("setOff")).toLowerCase();
+    }
+    if (id === "observer") return t("setObserverSummary");
+    if (id === "extension") return t("setExtensionSummary");
     if (id === "studio") {
       const on = FEATURES.filter(feat).length;
       return on + " / " + FEATURES.length + (state.shared ? " · " + t("featSharedOn") : "");
@@ -2104,6 +2343,55 @@
     if (id === "start")
       return t(pref("revealForm", "wave") === "lid" ? "revealLid" : "revealWave") + " · " + t("setSound") + " " + (pref("startSound", true) ? t("setOn") : t("setOff")).toLowerCase();
     return lang === "de" ? "Deutsch" : "English";
+  }
+
+  // Am ganzen Mac (system.rs): Kürzel der Palette und Zonenleiste beim Ziehen.
+  // Feste Auswahl statt Tastenrekorder; ⌥⌘ Space ist die Finder-Suche.
+  const PALETTE_KEYS = [
+    ["Alt+Space", "⌥ Space"],
+    ["Control+Alt+Space", "⌃⌥ Space"],
+    ["Shift+Alt+Space", "⇧⌥ Space"],
+    ["", null],
+  ];
+  function renderSystemSettings() {
+    const sys = block(t("setSystem"));
+    sys.appendChild(blockRow(el("div", "p-block-text", t("setSystemText"))));
+    const rows = el("div");
+    const show = (prefs) => {
+      const save = (next) =>
+        invoke("set_system_prefs", { prefs: next })
+          .then(() => {
+            state.sysPrefs = next;
+            show(next);
+          })
+          .catch((e) => {
+            const key = PALETTE_KEYS.find(([id]) => id === next.shortcut);
+            if (String(e) === "shortcut-taken") toast(t("setKeyTaken", { key: key ? key[1] : next.shortcut }), false, 6000);
+            else fail(e);
+          });
+      rows.replaceChildren(
+        blockRow(
+          t("setPaletteKey"),
+          choice(
+            PALETTE_KEYS.map(([id, label]) => [id || "off", label || t("setOff")]),
+            prefs.shortcut || "off",
+            (id) => save({ ...prefs, shortcut: id === "off" ? "" : id })
+          )
+        ),
+        blockRow(
+          t("setDropbarSys"),
+          choice([["on", t("setOn")], ["off", t("setOff")]], prefs.dropbar ? "on" : "off", (id) => save({ ...prefs, dropbar: id === "on" }))
+        )
+      );
+    };
+    invoke("system_prefs")
+      .then((p) => {
+        state.sysPrefs = p;
+        show(p);
+      })
+      .catch(fail);
+    sys.appendChild(rows);
+    return sys;
   }
 
   function openSettingsSection(id) {
@@ -2116,6 +2404,13 @@
     const wrap = el("div", "p-sheet-inner");
     const sub = state.settingsSub;
     if (!sub) {
+      if (isMac && !state.sysPrefs)
+        invoke("system_prefs")
+          .then((p) => {
+            state.sysPrefs = p;
+            if (state.page === "settings" && !state.settingsSub) renderPage(true);
+          })
+          .catch(() => {});
       wrap.appendChild(headline(t("settings"), t("settingsText")));
       const list = el("section", "p-block p-settings-nav");
       for (const id of SETTINGS_SECTIONS) {
@@ -2213,15 +2508,6 @@
       );
       look.appendChild(
         blockRow(
-          t("setScheme"),
-          choice([["standard", t("schemeStandard")], ["sage", t("schemeSage")]], window.ArchiverI18n.scheme(), (id) => {
-            window.ArchiverI18n.setScheme(id);
-            rerender();
-          })
-        )
-      );
-      look.appendChild(
-        blockRow(
           t("setRadius"),
           choice(
             [["square", t("radiusSquare")], ["soft", t("radiusSoft")], ["round", t("radiusRound")], ["xl", t("radiusXl")]],
@@ -2261,16 +2547,17 @@
         slider.type = "range";
         slider.min = "0";
         slider.max = "100";
-        slider.step = "5";
+        slider.step = "1";
         const show = (pct) => (value.textContent = pct + " %");
-        const start = Math.round((typeof pref("winAlpha", null) === "number" ? pref("winAlpha", null) : 0.85) * 100);
+        const glass = pref("winGlass", null);
+        const start = Math.round((typeof glass === "number" ? glass : document.documentElement.classList.contains("light") ? 0.78 : 0.72) * 100);
         slider.value = String(start);
         show(start);
         slider.addEventListener("input", () => {
           show(slider.value);
           applyWinAlpha(Number(slider.value) / 100);
         });
-        slider.addEventListener("change", () => setPref("winAlpha", Number(slider.value) / 100));
+        slider.addEventListener("change", () => setPref("winGlass", Number(slider.value) / 100));
         look.appendChild(blockRow(t("setWinAlpha"), [slider, value]));
       }
       look.appendChild(
@@ -2305,7 +2592,7 @@
       wrap.appendChild(renderSoundSettings());
     }
 
-    if (sub === "connect") {
+    if (sub === "extension") {
       const extBlock = block(t("setExtension"));
       const ext = el("div", null, "…");
       invoke("bridge_browsers")
@@ -2313,7 +2600,12 @@
         .catch(() => (ext.textContent = t("setBridgeOff")));
       extBlock.appendChild(blockRow(ext, [button("p-link", t("import"), openImportDialog)]));
       wrap.appendChild(extBlock);
-      if (isMac) {
+    }
+
+    if (sub === "tray" && isMac) wrap.appendChild(renderSystemSettings());
+
+    if (sub === "observer" && isMac) {
+      {
         const viewerBlock = block(t("setViewer"));
         viewerBlock.appendChild(blockRow(el("div", "p-block-text", t("setViewerText"))));
         const rows = el("div");
@@ -2640,15 +2932,16 @@
     const wrap = el("div", "p-page p-gallery");
 
     const all = single && shown[0] ? zoneItems(shown[0].path) : [];
-    const hasFolders = zoneFolders(all).some(([f]) => f);
+    const zonePath = single && shown[0] ? shown[0].path : null;
+    const hasFolders = zoneFolders(all, null, zonePath).some(([f]) => f);
     // Ebenenweise: im Ordner nur seine eigenen Unterordner
-    const folders = zoneFolders(all, state.folder || null);
-    const here = state.folder ? all.filter((i) => inFolder(i, state.folder)) : all;
+    const folders = zoneFolders(all, state.level || null, zonePath);
+    const here = state.level ? all.filter((i) => inFolder(i, state.level)) : all;
     if (single && shown[0]) {
       const zone = shown[0];
       const items = all;
       const latest = lastSaved(zone.path);
-      const named = zoneFolders(all).filter(([f]) => f).length;
+      const named = zoneFolders(all, null, zone.path).filter(([f]) => f).length;
       const sentence = items.length
         ? [t("headZone", { count: countText(items.length), date: recentDate(latest) }).replace(/\.\.$/, "."), hasFolders ? t(named === 1 ? "headFolder1" : "headFolders", { n: named }) : "", topDomains(items)].filter(Boolean).join(" ")
         : t("headZoneEmpty");
@@ -2659,7 +2952,7 @@
         title.title = t("renameHint");
         title.addEventListener("dblclick", () => startRename(title, zone.path));
       }
-      if (hasFolders && state.folder != null) {
+      if (hasFolders && state.level != null) {
         // Im Unterordner: Pfad „Zone / Ordner / Unterordner“, jeder Teil führt auf seine Ebene
         const title = h.querySelector(".p-head-title");
         const back = (node, target) => {
@@ -2668,7 +2961,7 @@
           node.addEventListener("click", () => openFolder(target));
         };
         back(title, null);
-        const parts = state.folder ? state.folder.split("/") : [""];
+        const parts = state.level ? state.level.split("/") : [""];
         let after = title;
         parts.forEach((part, i) => {
           const span = el("span", "p-head-title p-head-folder", " / " + (part || t("folderLoose")));
@@ -2723,6 +3016,16 @@
         render();
       });
       c.title = t(v === "grid" ? "viewGridTitle" : "viewOriginalTitle");
+      bar.appendChild(c);
+    }
+    // 0.29: Bildtext unter den Bildern (nur in „Original“)
+    if (state.view === "original") {
+      const c = chip("(+ " + t("captionChip") + ")", captionsOn(), () => {
+        setPref("captions", !captionsOn());
+        renderToolbar();
+        renderZones();
+      });
+      c.title = t("captionChipTitle");
       bar.appendChild(c);
     }
     bar.appendChild(sizeChips(Math.max(0, SIZES.indexOf(state.size)), SIZES.length, (step) => {
@@ -2893,7 +3196,7 @@
     }
   }
 
-  function zoneMenuButton(zone) {
+  function zoneMenuButton(zone, makeMenu) {
     const btn = button("zone-menu-btn", "⋯");
     btn.title = t("zoneOptions");
     btn.addEventListener("click", (e) => {
@@ -2902,7 +3205,7 @@
       closeMenus();
       if (open) return;
       // Schwebt über allem: Karten schneiden ihren Inhalt ab
-      const menu = zoneMenu(zone);
+      const menu = makeMenu ? makeMenu() : zoneMenu(zone);
       menu.classList.add("floating");
       document.body.appendChild(menu);
       const r = btn.getBoundingClientRect();
@@ -3054,9 +3357,38 @@
       if (!force && node.dataset.cols === String(count)) continue;
       node.dataset.cols = String(count);
       const cols = Array.from({ length: count }, () => el("div", "p-masonry-col"));
-      list.forEach((item, i) => cols[i % count].appendChild(itemCard(item)));
+      list.forEach((item, i) => {
+        cols[i % count].appendChild(itemCard(item));
+        if (captionsOn() && hasCaption(item)) cols[i % count].appendChild(captionBlock(item, i, list.length, "card-cap"));
+      });
       node.replaceChildren(...cols);
     }
+  }
+
+  // ---- Bildtext (0.29): Kennung, Text, Notiz – unter dem Bild und in der Lightbox ----
+  function captionsOn() {
+    return pref("captions", true) !== false;
+  }
+  function hasCaption(item) {
+    return !!(item && (item.caption || (feat("notes") && item.note)));
+  }
+
+  // Kennung wie im Magazin: Zone—Nummer Position/Anzahl, etwa TYPO—02 3/7
+  function captionId(item, i, total) {
+    const n = state.zones.findIndex((z) => z.path === item.zone);
+    return zoneLabel(item.zone) + "—" + String(n + 1).padStart(2, "0") + (total ? " " + (i + 1) + "/" + total : "");
+  }
+
+  function captionBlock(item, i, total, cls) {
+    const box = el("div", cls);
+    box.appendChild(el("div", "cap-id", captionId(item, i, total)));
+    if (item.caption) box.appendChild(el("div", "cap-text", item.caption));
+    if (feat("notes") && item.note) {
+      const note = el("div", "cap-note");
+      note.append(el("span", "cap-note-label", t("note") + ": "), document.createTextNode(item.note));
+      box.appendChild(note);
+    }
+    return box;
   }
 
   function itemCard(item) {
@@ -3085,13 +3417,15 @@
     const img = card.querySelector("img");
     const quote = quoteOf(item);
     card.classList.toggle("card-text", !!quote);
+    card.classList.toggle("card-note", isNote(item));
     let sheet = card.querySelector(".text-sheet");
     if (quote) {
       const tone = toneKey(item);
-      if (!sheet || sheet.dataset.quote !== quote || sheet.dataset.tone !== tone) {
+      const key = quote + "|" + (item.links || []).length;
+      if (!sheet || sheet.dataset.quote !== key || sheet.dataset.tone !== tone) {
         if (sheet) sheet.remove();
         sheet = textSheet(item, "text-sheet");
-        sheet.dataset.quote = quote;
+        sheet.dataset.quote = key;
         sheet.dataset.tone = tone;
         card.insertBefore(sheet, img);
       }
@@ -3119,11 +3453,60 @@
     return card;
   }
 
+  // Kurzversion eines Videos: acht Standbilder aus dem ganzen Clip, nacheinander
+  // (wie ein Daumenkino), solange der Zeiger auf der Karte liegt. Ohne Ton.
+  const SCRUB_FRAMES = 8;
+  const SCRUB_MS = 320;
+  function videoScrub(card) {
+    const item = state.byPath.get(card.dataset.path);
+    if (!item || kindOf(item) !== "video" || card.querySelector(".card-scrub")) return;
+    if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    let timer = 0;
+    let video = null;
+    const stop = () => {
+      clearTimeout(timer);
+      clearInterval(timer);
+      card.removeEventListener("pointerleave", stop);
+      if (video) {
+        video.removeAttribute("src");
+        video.load();
+        video.remove();
+      }
+    };
+    card.addEventListener("pointerleave", stop);
+    // kurz verweilen, damit Überfahren keine Videos lädt
+    timer = setTimeout(() => {
+      video = document.createElement("video");
+      video.className = "card-scrub";
+      video.muted = true;
+      video.playsInline = true;
+      video.preload = "auto";
+      video.src = fileSrc(item.abs);
+      card.appendChild(video);
+      let k = 0;
+      let at = [];
+      const step = () => {
+        if (!at.length) return;
+        video.currentTime = at[k++ % at.length];
+      };
+      video.addEventListener("loadedmetadata", () => {
+        const d = video.duration;
+        if (!isFinite(d) || d <= 0) return stop();
+        at = Array.from({ length: SCRUB_FRAMES }, (_, i) => ((i + 0.5) / SCRUB_FRAMES) * d);
+        step();
+        timer = setInterval(step, SCRUB_MS);
+      });
+      video.addEventListener("seeked", () => video.classList.add("on"), { once: true });
+      video.addEventListener("error", stop);
+    }, 250);
+  }
+
   function setFocus(path) {
     // Zone verlassen: was darin neu von anderen war, gilt als gesehen
     if (path !== state.focus && isZone(state.focus) && state.shared) markSeen(zoneItems(state.focus));
     if (path !== state.focus) {
       state.folder = null;
+      state.level = null;
       state.folderKbd = null;
     }
     state.focus = path;
@@ -3372,8 +3755,10 @@
     }
   }
 
+  const dirOf = (p) => p.slice(0, Math.max(0, p.lastIndexOf("/")));
+
   async function moveSelection(zone) {
-    const items = selectedItems().filter((i) => i.zone !== zone);
+    const items = selectedItems().filter((i) => i.zone !== zone && dirOf(i.path) !== zone);
     if (!items.length) return;
     const pos = rememberPosition(items);
     try {
@@ -3383,13 +3768,12 @@
         const back = items.map((i, k) => [moved[k], i.path.includes("/") ? i.path.slice(0, i.path.lastIndexOf("/")) : i.zone]);
         pushUndo(t("undoMove"), async () => {
           for (const z of new Set(back.map(([, z]) => z))) {
-            await invoke("move_items", { paths: back.filter(([, b]) => b === z).map(([p]) => p), zone: z });
+            await invoke("move_items", { paths: back.filter(([, b]) => b === z).map(([p]) => p), zone: z, exact: true });
           }
         });
       }
       await refresh();
       selectNextAt(pos);
-      tourStats.drops++;
       toast(t("moved", { n: items.length, zone: zoneLabel(zone) }));
     } catch (e) {
       fail(e);
@@ -3549,6 +3933,436 @@
   const LB_PAD = { top: 48, bottom: 84, side: 32 };
   const lbView = { w: 0, h: 0, scale: 1, x: 0, y: 0, fitted: true };
   let lbInfoOpen = false;
+  // 0.29: Bildtext links neben dem Bild, unten bündig; das Bild bleibt, wo es ist
+  const LB_TEXT_W = 300;
+  function lbTextShown() {
+    return !lbInfoOpen && pref("lbText", true) !== false && hasCaption(lightboxItem());
+  }
+
+  function lbRenderText() {
+    const item = lightboxItem();
+    const box = $("lbText");
+    const btn = $("lbTextBtn");
+    btn.hidden = !hasCaption(item) || quoteOf(item);
+    btn.classList.toggle("active", lbTextShown());
+    const on = lbTextShown() && !quoteOf(item);
+    $("lightbox").classList.toggle("text-open", on);
+    box.hidden = !on;
+    if (!on) return;
+    const lb = state.lightbox;
+    const list = lbList(lb);
+    box.replaceChildren(captionBlock(item, lb.index, list.length, "lb-caption-inner"));
+    lbPlaceText();
+  }
+
+  // Unterkante des Textes auf der Unterkante des Bildes, rechte Kante 40 px vor dem Bild.
+  // Der Text wird schmaler, wenn links wenig Platz ist; reicht es nicht einmal
+  // für 180 px, liegt er unten links auf einer Fläche über dem Bild.
+  function lbPlaceText() {
+    const box = $("lbText");
+    if (box.hidden) return;
+    let room = LB_TEXT_W;
+    let bottom = window.innerHeight - LB_PAD.bottom;
+    if (lbMode === "image" && lbView.w) {
+      room = lbView.x - 40 - LB_PAD.side;
+      bottom = Math.min(window.innerHeight - LB_PAD.bottom, lbView.y + lbView.h * lbView.scale);
+    }
+    const over = room < 180;
+    box.classList.toggle("over", over);
+    const width = over ? LB_TEXT_W : Math.min(LB_TEXT_W, room);
+    box.style.width = width + "px";
+    box.style.left = (over ? LB_PAD.side : LB_PAD.side + room - width) + "px";
+    box.style.top = Math.max(LB_PAD.top, bottom - box.offsetHeight - (over ? 16 : 0)) + "px";
+  }
+
+  function lbToggleText() {
+    setPref("lbText", !(pref("lbText", true) !== false));
+    if (lbInfoOpen) lbToggleInfo();
+    lbRenderText();
+    if (lbView.fitted) lbFit(true);
+    else {
+      lbClamp();
+      lbApply(true);
+    }
+  }
+
+  // ---- Notiz-Objekte (0.29): ein Blatt im Raster, geschrieben wird in der Lightbox ----
+  // Der Text liegt als .md in der Zone. Erste Zeile = Titel (beim Verlassen auch
+  // Dateiname), Verknüpfungen stehen links neben dem Blatt.
+  const NOTE_TONES = ["white", "yellow", "red", "cyan", "black"];
+  function isNote(item) {
+    return !!item && kindOf(item) === "note";
+  }
+
+  function noteParts(text) {
+    const lines = String(text || "").replace(/\r\n?/g, "\n").split("\n");
+    const i = lines.findIndex((l) => l.trim());
+    if (i < 0) return { title: "", body: "" };
+    return { title: lines[i].replace(/^\s*#+\s*/, "").trim(), body: lines.slice(i + 1).join("\n").replace(/^\n+/, "").trimEnd() };
+  }
+  function noteText(title, body) {
+    title = title.trim();
+    body = body.trimEnd();
+    return (title ? "# " + title + (body ? "\n\n" : "\n") : "") + body;
+  }
+  function noteDate(item, year) {
+    const d = new Date(item.addedAt || item.mtime || Date.now());
+    return d.toLocaleDateString(lang === "de" ? "de-DE" : "en-GB", year ? undefined : { day: "2-digit", month: "2-digit" });
+  }
+  function noteWords(text) {
+    const m = String(text).match(/[^\s#]+/g);
+    return m ? m.length : 0;
+  }
+  function linkedItems(item) {
+    const byHash = new Map(state.items.map((i) => [i.hash, i]));
+    return (item.links || []).map((h) => byHash.get(h)).filter(Boolean);
+  }
+
+  // Blatt im Raster (A1): Kennung, fetter Titel, Text, Fuß mit Verknüpfungen
+  function noteSheet(item, cls) {
+    const { title, body } = noteParts(item.quote);
+    const len = (title + body).length;
+    const sheet = el("div", cls + " note-sheet" + (len < 140 ? " short" : len < 400 ? " medium" : " long"));
+    const [bg, fg, dim] = quoteTone(item);
+    sheet.style.setProperty("--ts-bg", bg);
+    sheet.style.setProperty("--ts-fg", fg);
+    sheet.style.setProperty("--ts-dim", dim);
+    sheet.dataset.tone = toneKey(item);
+    sheet.appendChild(el("div", "ts-label", t("noteLabel") + " · " + noteDate(item)));
+    sheet.appendChild(el("div", "ts-title", title || t("noteUntitled")));
+    sheet.appendChild(el("div", "ts-body", body));
+    const n = linkedItems(item).length;
+    sheet.appendChild(el("div", "ts-foot", n ? t("noteObjects", { n }) : ""));
+    return sheet;
+  }
+
+  // Speichern der Reihe nach: der Hash ändert sich mit jedem Text, Farbe und
+  // Verknüpfungen müssen den aktuellen treffen.
+  let noteQueue = Promise.resolve();
+  function noteChain(fn) {
+    noteQueue = noteQueue.then(fn, fn).catch(fail);
+    return noteQueue;
+  }
+
+  let noteEd = null;
+  async function noteSave(rename) {
+    const ed = noteEd;
+    if (!ed) return;
+    clearTimeout(ed.timer);
+    const text = noteText(ed.title.value, ed.body.value);
+    if (!ed.dirty && !(rename && ed.renameDue)) return false;
+    ed.dirty = false;
+    if (!rename) ed.renameDue = true;
+    else ed.renameDue = false;
+    ed.status.textContent = t("noteSaving");
+    const item = ed.item;
+    await noteChain(async () => {
+      const r = await invoke("write_note", { path: item.path, text, rename: !!rename });
+      const old = item.path;
+      Object.assign(item, { hash: r.hash, quote: text.trim() || null, path: r.path, mtime: Date.now() });
+      if (r.path !== old) {
+        item.abs = item.abs.slice(0, item.abs.length - old.length) + r.path;
+        item.filename = r.path.split("/").pop();
+        state.byPath.delete(old);
+        state.byPath.set(r.path, item);
+        cardCache.delete(old);
+      }
+      if (noteEd === ed) {
+        ed.status.textContent = t("noteSaved");
+        $("lbName").textContent = item.filename;
+      }
+    });
+    return true;
+  }
+
+  function noteLeave() {
+    if (!noteEd) return;
+    const ed = noteEd;
+    noteSave(true).then((saved) => saved && render());
+    noteEd = null;
+    closeNoteChooser();
+    return ed;
+  }
+
+  // Lightbox (A2): Papier zum Schreiben, Verknüpfungen links daneben
+  function lbNoteEditor(item, box) {
+    const { title, body } = noteParts(item.quote);
+    const wrap = el("div", "lb-note");
+    const paper = el("div", "note-paper");
+    lbNoteTone(paper, item);
+    paper.appendChild(el("div", "np-label", [t("noteLabel"), zoneLabel(item.zone), noteDate(item, true)].join(" · ")));
+    const titleIn = el("input", "np-title");
+    titleIn.value = title;
+    titleIn.placeholder = t("noteTitlePh");
+    titleIn.spellcheck = false;
+    const bodyIn = el("textarea", "np-body");
+    bodyIn.value = body;
+    bodyIn.placeholder = t("noteBodyPh");
+    const foot = el("div", "np-foot");
+    const words = el("span", null, t("noteWords", { n: noteWords(title + " " + body) }));
+    const status = el("span", null, t("noteSaved"));
+    foot.append(words, status);
+    paper.append(titleIn, bodyIn, noteLinks(item), foot);
+    wrap.appendChild(paper);
+    box.appendChild(wrap);
+    noteEd = { item, title: titleIn, body: bodyIn, status, paper, dirty: false, renameDue: false, timer: null };
+    const ed = noteEd;
+    const changed = () => {
+      ed.dirty = true;
+      words.textContent = t("noteWords", { n: noteWords(titleIn.value + " " + bodyIn.value) });
+      status.textContent = "";
+      clearTimeout(ed.timer);
+      ed.timer = setTimeout(() => noteEd === ed && noteSave(false), 600);
+    };
+    for (const f of [titleIn, bodyIn]) {
+      f.addEventListener("input", changed);
+      f.addEventListener("keydown", (e) => {
+        e.stopPropagation(); // Pfeile, Leertaste, 1–4 gehören hier dem Text
+        if (e.key === "Escape") {
+          e.preventDefault();
+          f.blur();
+        } else if ((e.metaKey || e.ctrlKey) && e.key === "s") {
+          e.preventDefault();
+          noteSave(false);
+        } else if (f === titleIn && (e.key === "Enter" || (e.key === "ArrowDown" && !e.shiftKey))) {
+          e.preventDefault();
+          bodyIn.focus();
+          bodyIn.setSelectionRange(0, 0);
+        } else if (f === bodyIn && e.key === "ArrowUp" && bodyIn.selectionStart === 0 && bodyIn.selectionEnd === 0) {
+          e.preventDefault();
+          titleIn.focus();
+        } else if (f === bodyIn && e.key === "Backspace" && bodyIn.selectionStart === 0 && bodyIn.selectionEnd === 0) {
+          e.preventDefault();
+          titleIn.focus();
+          titleIn.setSelectionRange(titleIn.value.length, titleIn.value.length);
+        }
+      });
+    }
+    // Ohne Schreibrechte (geteilte Zone eines anderen) nur lesen
+    if (!canEdit(item.zone)) {
+      titleIn.readOnly = bodyIn.readOnly = true;
+      status.textContent = "";
+    }
+    $("lightboxZoom").textContent = "";
+    lbRenderTones(item);
+    return ed;
+  }
+
+  function lbNoteTone(node, item) {
+    node.dataset.tone = toneKey(item);
+    const [bg, fg, dim] = quoteTone(item);
+    node.style.setProperty("--ts-bg", bg);
+    node.style.setProperty("--ts-fg", fg);
+    node.style.setProperty("--ts-dim", dim);
+  }
+
+  // Farbpunkte in der Leiste, nur bei Notizen
+  function lbRenderTones(item) {
+    const box = $("lbTones");
+    box.hidden = !isNote(item);
+    if (box.hidden) return box.replaceChildren();
+    const current = toneKey(item);
+    box.replaceChildren(
+      ...NOTE_TONES.map((key) => {
+        const b = el("button", "tone-dot" + (key === current ? " active" : ""));
+        b.type = "button";
+        b.title = t("tone_" + key);
+        b.style.setProperty("--dot", QUOTE_TONES[key][0]);
+        b.addEventListener("click", () => setNoteTone(item, key));
+        return b;
+      })
+    );
+  }
+
+  function setNoteTone(item, key) {
+    if (key === toneKey(item)) return;
+    item.tone = key;
+    saveNote(item, { tone: key });
+    if (noteEd && noteEd.item === item) lbNoteTone(noteEd.paper, item);
+    lbRenderTones(item);
+    render();
+  }
+
+  // Verknüpfungen: Vorschauen in zwei Spalten, „+“ wählt weitere aus der Bibliothek
+  function noteLinks(item) {
+    const col = el("aside", "note-links");
+    const fill = () => {
+      const list = linkedItems(item);
+      const grid = el("div", "nl-grid");
+      list.forEach((it, i) => {
+        const tile = el("button", "nl-tile");
+        tile.type = "button";
+        tile.title = it.filename;
+        tile.appendChild(quoteOf(it) ? (isNote(it) ? noteSheet(it, "text-sheet mini") : textSheet(it, "text-sheet mini")) : Object.assign(el("img"), { src: thumbSrc(it), alt: "", loading: "lazy" }));
+        const x = el("span", "nl-remove", "×");
+        x.title = t("noteLinkRemove");
+        x.addEventListener("click", (e) => {
+          e.stopPropagation();
+          setNoteLinks(item, (item.links || []).filter((h) => h !== it.hash));
+          fill();
+        });
+        tile.appendChild(x);
+        tile.addEventListener("click", () => openNoteLink(item, i));
+        grid.appendChild(tile);
+      });
+      if (canEdit(item.zone)) {
+        const add = el("button", "nl-tile nl-add", "+");
+        add.type = "button";
+        add.title = t("noteLinkAdd");
+        add.addEventListener("click", (e) => {
+          e.stopPropagation();
+          openNoteChooser(item, add, fill);
+        });
+        grid.appendChild(add);
+      }
+      col.replaceChildren(el("div", "nl-label", t("noteLinks") + (list.length ? " (" + list.length + ")" : "")), grid);
+    };
+    fill();
+    return col;
+  }
+
+  function setNoteLinks(item, links) {
+    item.links = links.length ? links : null;
+    saveNote(item, { links });
+  }
+
+  // Verknüpftes Objekt groß: die Lightbox blättert dann durch Notiz und Verknüpfte
+  function openNoteLink(item, i) {
+    const list = [item, ...linkedItems(item)];
+    noteLeave();
+    state.lightbox = { zone: null, list, index: i + 1 };
+    showLightboxItem();
+  }
+
+  let noteChooser = null;
+  function closeNoteChooser() {
+    if (!noteChooser) return;
+    noteChooser.remove();
+    noteChooser = null;
+  }
+
+  // Auswahl (0.29.1, Variante A): erst die Zonen als kleine Karten wie im Tray,
+  // Klick öffnet die Zone mit ihren Objekten. Das Suchfeld durchsucht alles.
+  function openNoteChooser(item, anchor, onChange) {
+    closeNoteChooser();
+    const pop = el("div", "note-chooser zone-menu p-ctx-menu");
+    noteChooser = pop;
+    pop.addEventListener("click", (e) => e.stopPropagation());
+    pop.addEventListener("pointerdown", (e) => e.stopPropagation());
+    const input = el("input", "nc-search");
+    input.placeholder = t("noteLinkSearch");
+    const head = el("div", "nc-head");
+    const body = el("div", "nc-body");
+    const foot = el("div", "nc-foot");
+    let zone = null;
+    const tile = (it, linked) => {
+      const b = el("button", "nc-tile" + (linked.has(it.hash) ? " on" : ""));
+      b.type = "button";
+      b.title = it.filename;
+      b.appendChild(quoteOf(it) ? textSheet(it, "text-sheet mini") : Object.assign(el("img"), { src: thumbSrc(it), alt: "", loading: "lazy" }));
+      b.addEventListener("click", () => {
+        const now = new Set(item.links || []);
+        if (now.has(it.hash)) now.delete(it.hash);
+        else now.add(it.hash);
+        setNoteLinks(item, [...now]);
+        b.classList.toggle("on", now.has(it.hash));
+        onChange();
+        footer();
+      });
+      return b;
+    };
+    const zoneCard = (z) => {
+      const list = orderedItems(z.path).filter((i) => i !== item);
+      const c = el("button", "nc-zone");
+      c.type = "button";
+      const cover = el("div", "nc-cover" + (list.length >= 3 ? " trio" : "") + (list.length ? "" : " empty"));
+      for (const it of list.slice(0, list.length >= 3 ? 3 : 1)) cover.appendChild(quoteOf(it) ? textSheet(it, "text-sheet mini") : Object.assign(el("img"), { src: thumbSrc(it), alt: "", loading: "lazy" }));
+      const name = el("div", "nc-zone-name");
+      name.append(el("span", null, lastSegment(z.path) || z.name), el("span", "nc-count", String(list.length)));
+      c.append(cover, name);
+      c.title = zoneLabel(z.path);
+      c.addEventListener("click", () => {
+        zone = z.path;
+        fill();
+      });
+      return c;
+    };
+    const footer = () => {
+      const n = (item.links || []).length;
+      foot.replaceChildren(el("span", null, zone || input.value.trim() ? t("noteLinkHintPick") : t("noteLinkHintZone")), el("span", null, n ? t("noteObjects", { n }) : ""));
+    };
+    const fill = () => {
+      const words = input.value.trim().toLowerCase().split(/\s+/).filter(Boolean);
+      const linked = new Set(item.links || []);
+      const pool = state.items.filter((i) => i !== item && i.hash !== item.hash);
+      let tiles = null;
+      if (words.length) {
+        head.replaceChildren(el("span", null, t("noteLinkFound")));
+        tiles = pool.filter((i) => matches(i, words));
+      } else if (zone != null) {
+        const back = el("button", "nc-back", "‹ " + t("noteLinkZones"));
+        back.type = "button";
+        back.addEventListener("click", () => {
+          zone = null;
+          fill();
+        });
+        const list = orderedItems(zone).filter((i) => i !== item && i.hash !== item.hash);
+        head.replaceChildren(back, el("span", "nc-crumb", "/ " + zoneLabel(zone) + " (" + list.length + ")"));
+        tiles = list;
+      } else {
+        head.replaceChildren(el("span", null, t("noteLinkZones") + " (" + state.zones.length + ")"));
+        body.className = "nc-body nc-zones";
+        body.replaceChildren(...state.zones.map(zoneCard));
+      }
+      if (tiles) {
+        body.className = "nc-body nc-grid";
+        const shown = tiles.slice(0, 120).map((it) => tile(it, linked));
+        body.replaceChildren(...(shown.length ? shown : [el("div", "nc-empty", t("noteLinkEmpty"))]));
+      }
+      footer();
+    };
+    input.addEventListener("input", debounce(fill, 120));
+    input.addEventListener("keydown", (e) => {
+      e.stopPropagation();
+      if (e.key === "Escape") {
+        if (input.value) {
+          input.value = "";
+          fill();
+        } else if (zone != null) {
+          zone = null;
+          fill();
+        } else closeNoteChooser();
+      }
+    });
+    pop.append(input, head, body, foot);
+    document.body.appendChild(pop);
+    fill();
+    const r = anchor.getBoundingClientRect();
+    const pr = pop.getBoundingClientRect();
+    pop.style.left = Math.max(8, Math.min(r.left, window.innerWidth - pr.width - 8)) + "px";
+    pop.style.top = Math.max(8, Math.min(r.bottom + 8, window.innerHeight - pr.height - 8)) + "px";
+    input.focus();
+    setTimeout(() => document.addEventListener("pointerdown", closeNoteChooser, { once: true }), 0);
+  }
+
+  // Neue Notiz auf der aktuellen Ebene, öffnet gleich zum Schreiben
+  async function newNote() {
+    if (!isZone(state.focus) || !canEdit(state.focus)) return toast(t("noteNeedsZone"));
+    const dir = state.focus + (state.level ? "/" + state.level : "");
+    try {
+      const rel = await invoke("create_note", { dir, title: t("noteNew") });
+      await refresh();
+      const item = state.byPath.get(rel);
+      if (!item) return;
+      openLightbox(item);
+      if (noteEd && noteEd.item === item) {
+        noteEd.title.focus();
+        noteEd.title.select();
+      }
+    } catch (e) {
+      fail(e);
+    }
+  }
 
   function lbArea() {
     const right = lbInfoOpen ? $("lbInfo").offsetWidth : 0;
@@ -3581,6 +4395,7 @@
     img.classList.toggle("anim", !!animate);
     img.style.transform = `translate(${lbView.x}px, ${lbView.y}px) scale(${lbView.scale})`;
     $("lightbox").classList.toggle("zoomed", !lbView.fitted);
+    lbPlaceText();
     // PDF, Video und Audio führen ihr eigenes Etikett (Seite bzw. Dauer)
     if (lbMode === "image") $("lightboxZoom").textContent = "(" + (lbView.fitted ? t("viewerFit") : `${Math.round(lbView.scale * 100)} %`) + ")";
   }
@@ -3628,6 +4443,7 @@
   // Finden: die Lightbox blättert durch die Treffer in ihrer Rangfolge, sonst durch die Zone
   const FOUND = "\u0000found";
   function lbList(lb) {
+    if (lb.list) return lb.list; // Notiz und ihre Verknüpfungen
     return lb.zone === FOUND ? state.found || [] : state.lists.get(lb.zone) || [];
   }
 
@@ -3654,6 +4470,8 @@
     const list = lbList(lb);
     const item = list[Math.min(lb.index, list.length - 1)];
     if (!item) return closeLightbox();
+    noteLeave();
+    lbRenderTones(item);
     lb.index = list.indexOf(item);
     $("lbName").textContent = item.filename;
     $("lbName").title = item.filename;
@@ -3665,8 +4483,25 @@
     $("lbBrowse").hidden = list.length < 2;
     $("lbCount").textContent = `${lb.index + 1} / ${list.length}`;
     lbCloseZones();
+    // Zuletzt gelöscht: nur ansehen, zurückholen oder endgültig löschen
+    const gone = !!lb.deleted;
+    $("lightbox").classList.toggle("is-deleted", gone);
+    $("lbAction").hidden = gone;
+    $("lbInfoBtn").hidden = gone;
+    $("lbRestoreBtn").hidden = !gone;
+    $("lbRemoveBtn").hidden = !gone;
+    if (gone && lbInfoOpen) lbToggleInfo();
     if (lbInfoOpen) lbRenderInfo(item);
-    selectAndShow(item.path);
+    lbRenderText();
+    if (gone) {
+      state.delSel = new Set([item.abs]);
+      const card = document.querySelector(`.card.del[data-del="${CSS.escape(item.abs)}"]`);
+      document.querySelectorAll(".card.del.selected").forEach((c) => c !== card && c.classList.remove("selected"));
+      if (card) {
+        card.classList.add("selected");
+        card.scrollIntoView({ block: "nearest" });
+      }
+    } else selectAndShow(item.path);
     if (lbShowMedia(item)) return;
     const img = $("lightboxImg");
     const src = fileSrc(item.abs);
@@ -3715,7 +4550,8 @@
 
   // Zeigt PDF oder Video statt des Bildes. false = normales Bild.
   function lbShowMedia(item) {
-    const k = quoteOf(item) ? "text" : kindOf(item);
+    const gone = state.lightbox && state.lightbox.deleted;
+    const k = isNote(item) && !gone ? "note" : quoteOf(item) ? "text" : kindOf(item);
     const box = $("lbMedia");
     const img = $("lightboxImg");
     lbMode = k;
@@ -3738,6 +4574,10 @@
     if (lbPdf) lbPdf.destroy();
     lbPdf = null;
     box.replaceChildren();
+    if (k === "note") {
+      lbNoteEditor(item, box);
+      return true;
+    }
     if (k === "text") {
       const wrap = el("div", "lb-text");
       wrap.appendChild(textSheet(item, "text-sheet large"));
@@ -3813,7 +4653,9 @@
     const lead = [size, formatBytes(item.bytes)].filter(Boolean).join(", ");
     head.appendChild(el("span", "lead", lead + "."));
     inner.appendChild(head);
-    if (quoteOf(item)) inner.appendChild(lbBlock(t("quote"), [quoteBox(item, "lb-quote"), lbRow(t("toneLabel"), tonePicker(item))]));
+    if (isNote(item)) inner.appendChild(lbBlock(t("noteLabelTitle"), [lbRow(t("noteLinks"), String(linkedItems(item).length)), lbRow(t("toneLabel"), tonePicker(item))]));
+    else if (quoteOf(item)) inner.appendChild(lbBlock(t("quote"), [quoteBox(item, "lb-quote"), lbRow(t("toneLabel"), tonePicker(item))]));
+    if (!quoteOf(item)) inner.appendChild(lbBlock(t("captionTitle"), [noteField(item, "caption", t("captionPlaceholder"), true)]));
     if (feat("notes")) inner.appendChild(lbBlock(t("note"), [noteField(item, "note", t("notePlaceholder"), true)]));
 
     let source = null;
@@ -3922,7 +4764,7 @@
   function tonePicker(item) {
     const row = el("div", "tone-picker");
     const current = toneKey(item);
-    for (const key of [...RANDOM_TONES, "white"]) {
+    for (const key of isNote(item) ? NOTE_TONES : [...RANDOM_TONES, "white"]) {
       const b = el("button", "tone-dot" + (key === current ? " active" : ""));
       b.type = "button";
       b.title = t("tone_" + key);
@@ -3933,7 +4775,12 @@
         saveNote(item, { tone: key });
         for (const d of row.children) d.classList.toggle("active", d === b);
         render();
-        if (state.lightbox && lightboxItem() === item) showLightboxItem();
+        if (state.lightbox && lightboxItem() === item) {
+          if (noteEd && noteEd.item === item) {
+            lbNoteTone(noteEd.paper, item);
+            lbRenderTones(item);
+          } else showLightboxItem();
+        }
       });
       row.appendChild(b);
     }
@@ -3941,6 +4788,8 @@
   }
 
   function saveNote(item, patch) {
+    // Notiz-Objekte: nach dem Text, damit der neue Hash getroffen wird
+    if (isNote(item)) return noteChain(() => invoke("set_note", { hashes: [item.hash], patch }));
     invoke("set_note", { hashes: [item.hash], patch }).catch(fail);
   }
 
@@ -3969,10 +4818,12 @@
   }
 
   function lbToggleInfo() {
+    if (!lbInfoOpen && state.lightbox && state.lightbox.deleted) return;
     lbInfoOpen = !lbInfoOpen;
     $("lightbox").classList.toggle("info-open", lbInfoOpen);
     $("lbInfoBtn").classList.toggle("active", lbInfoOpen);
     if (lbInfoOpen) lbRenderInfo();
+    lbRenderText();
     if (lbView.fitted) lbFit(true);
     else {
       lbClamp();
@@ -4038,6 +4889,13 @@
   }
 
   function closeLightbox() {
+    noteLeave();
+    $("lightbox").classList.remove("is-deleted");
+    $("lbAction").hidden = false;
+    $("lbInfoBtn").hidden = false;
+    $("lbRestoreBtn").hidden = true;
+    $("lbRemoveBtn").hidden = true;
+    $("lbTones").hidden = true;
     state.lightbox = null;
     lbCloseZones();
     if (lbPdf) lbPdf.destroy();
@@ -4061,6 +4919,19 @@
     $("lightboxZoom").addEventListener("click", () => lbToggleZoom());
     $("lbInfoBtn").textContent = t("viewerInfo");
     $("lbInfoBtn").addEventListener("click", lbToggleInfo);
+    $("lbTextBtn").textContent = t("captionChip");
+    $("lbTextBtn").title = t("captionLbTitle");
+    $("lbTextBtn").addEventListener("click", lbToggleText);
+    $("lbRestoreBtn").textContent = t("deletedRestore");
+    $("lbRestoreBtn").addEventListener("click", () => {
+      const item = lightboxItem();
+      if (item) restoreDeleted([item.abs]);
+    });
+    $("lbRemoveBtn").textContent = t("deletedRemove");
+    $("lbRemoveBtn").addEventListener("click", () => {
+      const item = lightboxItem();
+      if (item) askRemoveDeleted([item.abs]);
+    });
     $("lbSourceBtn").textContent = t("source");
     $("lbSourceBtn").addEventListener("click", () => {
       const item = lightboxItem();
@@ -4070,8 +4941,14 @@
     action.replaceChildren(el("span", "lb-dot"), el("span", "lb-action-zone", "Archiver"));
     action.title = t("dropBar");
     action.addEventListener("click", () => ($("lbZones").hidden ? lbOpenZones() : lbCloseZones()));
-    stage.addEventListener("click", lbCloseZones);
-    $("lbMedia").addEventListener("click", lbCloseZones);
+    // 0.28: Klick neben das Objekt schließt (offene Zonen erst zuklappen, gezoomt nicht)
+    const backdropClick = (e) => {
+      if (!$("lbZones").hidden) return lbCloseZones();
+      const bg = e.target === stage || e.target === $("lbMedia") || e.target.classList.contains("pdf-scroll") || e.target.classList.contains("lb-note");
+      if (bg && lbView.fitted && state.lightbox) closeLightbox();
+    };
+    stage.addEventListener("click", backdropClick);
+    $("lbMedia").addEventListener("click", backdropClick);
     // PDF: Zwei-Finger-Zoom bzw. ⌘ + Scrollen zoomt, Scrollen blättert
     $("lbMedia").addEventListener(
       "wheel",
@@ -4124,7 +5001,7 @@
     });
     stage.addEventListener("pointerdown", (e) => {
       if (e.button !== 0 || !lbView.fitted || lbMode !== "image") return;
-      if (e.target !== $("lightboxImg")) return;
+      if (e.target !== $("lightboxImg") || state.lightbox.deleted) return;
       lift = { x: e.clientX, y: e.clientY };
     });
     stage.addEventListener("pointermove", (e) => {
@@ -4197,12 +5074,21 @@
       else return false;
       return true;
     }
+    if (state.lightbox.deleted) {
+      if (e.key === "Backspace" || e.key === "Delete") {
+        const item = lightboxItem();
+        if (item) askRemoveDeleted([item.abs]);
+        return true;
+      }
+      if (/^[1-4]$/.test(e.key) || e.key === "Enter" || e.key === "i" || e.key === "I") return true;
+    }
     if (lbMode === "pdf" && lbPdf && (e.key === "ArrowDown" || e.key === "ArrowUp")) lbPdf.step(e.key === "ArrowDown" ? 1 : -1);
     else if (lbMode === "pdf" && lbPdf && e.key === "Escape" && !lbPdf.fitted() && $("lbZones").hidden) lbPdf.setZoom(1);
     else if (e.key === "ArrowRight") stepLightbox(1);
     else if (e.key === "ArrowLeft") stepLightbox(-1);
     else if (e.key === "z" || e.key === "Z") lbToggleZoom();
     else if (e.key === "i" || e.key === "I") lbToggleInfo();
+    else if ((e.key === "t" || e.key === "T") && hasCaption(lightboxItem())) lbToggleText();
     else if (e.key === "Enter") $("lbZones").hidden ? lbOpenZones() : lbCloseZones();
     else if (e.key === "Escape" && !$("lbZones").hidden) lbCloseZones();
     else if (e.key === "Escape" && lbMode === "video" && lbVZoom && lbVZoom.scale() > 1) lbVZoom.reset();
@@ -4422,7 +5308,6 @@
   let dragPaths = [];
   let lastTarget = null;
   let lastReorder = null;
-  let dropCount = 0; // für die Tour: wurde schon etwas abgelegt?
 
   function onDragDrop(event) {
     if (!isUnlocked()) return;
@@ -4468,9 +5353,20 @@
       landOn(target && dragPaths.length && target.dataset.zone !== dragHome ? target : null);
       const paths = dragPaths;
       dragPaths = [];
-      if (!target || !paths.length) return;
-      dropCount++;
-      tourStats.drops++;
+      if (!paths.length) return;
+      if (!target) {
+        // 0.27: Ordner (und Dateien) von außen ohne Ziel: Ordner werden zu Zonen,
+        // lose Dateien landen in der Standard-Zone
+        const outside = paths.filter((path) => !insideLibrary(path));
+        if (outside.length && state.focus !== DELETED)
+          invoke("import_files", { paths: outside, zone: "" })
+            .then((r) => {
+              toast(t("importDone", { imported: r.imported, duplicates: r.duplicates, sources: r.withSource }));
+              return refresh();
+            })
+            .catch(fail);
+        return;
+      }
       const zone = target.dataset.zone;
       // Aus der Lightbox auf eine ihrer Zonen: wie ein Klick auf die Zone
       const lbItem = state.lightbox && target.classList.contains("lb-chip") ? lightboxItem() : null;
@@ -4479,7 +5375,7 @@
       const foreign = paths.filter((path) => !insideLibrary(path));
       const toMove = own.filter((rel) => {
         const item = state.byPath.get(rel);
-        return item && item.zone !== zone;
+        return item && item.zone !== zone && dirOf(rel) !== zone;
       });
       if (toMove.length) {
         state.selection = new Set(toMove);
@@ -5057,7 +5953,6 @@
               layout: { cols, rows, portrait: opts.portrait, captions: opts.captions, poster: opts.poster, notes: opts.captions && opts.notes && !opts.poster },
             });
         if (path) {
-          tourStats.pdfs++;
           toast(t("pdfDone", { name: path.split("/").pop() }));
           close();
           return;
@@ -5125,6 +6020,7 @@
     });
     menu.appendChild(grid);
     rule();
+    if (isZone(state.focus) && !state.query.trim() && canEdit(state.focus)) entry(menu, t("newFolderWith"), () => newFolder(true));
     entry(menu, t("ctxCopy"), () => copyImages(items), "⌘C");
     if (one) entry(menu, t("reveal"), () => invoke("reveal", { path: one.abs }).catch(fail));
     entry(menu, t("pdfExport"), exportPdf, "⌘P");
@@ -5134,6 +6030,181 @@
     const r = menu.getBoundingClientRect();
     menu.style.left = Math.max(8, Math.min(x, window.innerWidth - r.width - 8)) + "px";
     menu.style.top = Math.max(8, Math.min(y, window.innerHeight - r.height - 8)) + "px";
+  }
+
+  // ---- Zuletzt gelöscht (0.27) ----
+  // Gelöschtes liegt 7 Tage unter .archiver/deleted in der Bibliothek, dann geht
+  // es in den Papierkorb des Macs. Hier lässt es sich zurückholen.
+
+  const DELETED_DAYS = 7;
+
+  async function openDeleted() {
+    state.deletedItems = await invoke("deleted_items").catch(() => []);
+    state.delSel = new Set();
+    setFocus(DELETED);
+  }
+
+  function daysLeft(item) {
+    return Math.max(1, Math.ceil(DELETED_DAYS - (Date.now() - item.deletedAt) / 86400000));
+  }
+
+  function renderDeleted() {
+    const list = state.deletedItems || [];
+    const sel = state.delSel || (state.delSel = new Set());
+    for (const k of [...sel]) if (!list.some((i) => i.abs === k)) sel.delete(k);
+    const wrap = el("div", "p-page p-gallery p-deleted");
+    wrap.appendChild(headline(t("deletedTitle"), list.length ? t("deletedText", { count: countText(list.length), days: DELETED_DAYS }) : t("deletedEmpty")));
+    const bar = el("div", "p-bar");
+    bar.appendChild(mono((sel.size ? t("ctxSelected", { n: sel.size }) : t("allLabel")) + " (" + (sel.size || list.length) + ")", "strong"));
+    bar.appendChild(el("span", "p-flex"));
+    const targets = () => (sel.size ? [...sel] : list.map((i) => i.abs));
+    if (list.length) {
+      bar.appendChild(chip("(" + t(sel.size ? "deletedRestore" : "deletedRestoreAll") + ")", false, () => restoreDeleted(targets())));
+      bar.appendChild(el("span", "p-filter-gap"));
+      const rm = chip("(" + t(sel.size ? "deletedRemove" : "deletedRemoveAll") + ")", false, () => askRemoveDeleted(targets()));
+      rm.classList.add("danger");
+      bar.appendChild(rm);
+    }
+    bar.appendChild(el("span", "p-filter-gap"));
+    bar.appendChild(sizeChips(Math.max(0, SIZES.indexOf(state.size)), SIZES.length, (step) => {
+      state.size = SIZES[step];
+      setPref("size", state.size);
+      renderToolbar();
+      renderZones();
+    }));
+    wrap.appendChild(bar);
+    // 0.28: dieselbe Karte und dasselbe Raster wie in jeder Zone; Badge zeigt Zone und Resttage
+    const section = el("section", "zone-card p-section");
+    const body = el("div", "zone-card-grid");
+    body.tabIndex = -1;
+    const items = el("div", "zone-card-items");
+    for (const item of list) {
+      const card = el("div", "card del" + (sel.has(item.abs) ? " selected" : ""));
+      card.dataset.del = item.abs;
+      card.title = item.path;
+      const img = quoteOf(item) ? textSheet(item, "text-sheet") : previewImg(item);
+      if (img.tagName === "IMG") img.loading = "lazy";
+      card.classList.toggle("card-text", !!quoteOf(item));
+      card.appendChild(img);
+      card.appendChild(el("div", "card-badge", zoneLabel(item.zone) + " · " + t("deletedDays", { n: daysLeft(item) })));
+      const label = item.format ? mediaLabel({ ...item, duration: null, pages: null }) : "";
+      const media = el("div", "card-media", label);
+      media.hidden = !label;
+      card.appendChild(media);
+      card.addEventListener("click", (e) => {
+        if (!(e.metaKey || e.shiftKey)) sel.clear();
+        if (sel.has(item.abs) && (e.metaKey || e.shiftKey)) sel.delete(item.abs);
+        else sel.add(item.abs);
+        renderZones();
+      });
+      card.addEventListener("dblclick", () => openDeletedLightbox(item));
+      card.addEventListener("contextmenu", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (!sel.has(item.abs)) {
+          sel.clear();
+          sel.add(item.abs);
+          renderZones();
+        }
+        openDeletedMenu(e.clientX, e.clientY);
+      });
+      items.appendChild(card);
+    }
+    body.appendChild(items);
+    section.appendChild(body);
+    wrap.appendChild(section);
+    return wrap;
+  }
+
+  function openDeletedMenu(x, y) {
+    closeMenus();
+    closeMoreMenu();
+    const files = [...(state.delSel || [])];
+    const menu = el("div", "zone-menu p-ctx-menu");
+    menu.addEventListener("click", (e) => e.stopPropagation());
+    menu.addEventListener("contextmenu", (e) => e.preventDefault());
+    const entry = (text, fn, cls = "") =>
+      menu.appendChild(button("zone-menu-item" + cls, text, () => {
+        closeMenus();
+        fn();
+      }));
+    entry(t("deletedRestore"), () => restoreDeleted(files));
+    menu.appendChild(el("div", "p-more-rule"));
+    entry(t("deletedRemove"), () => askRemoveDeleted(files), " danger");
+    document.body.appendChild(menu);
+    const r = menu.getBoundingClientRect();
+    menu.style.left = Math.max(8, Math.min(x, window.innerWidth - r.width - 8)) + "px";
+    menu.style.top = Math.max(8, Math.min(y, window.innerHeight - r.height - 8)) + "px";
+  }
+
+  async function restoreDeleted(files) {
+    if (!files.length) return;
+    try {
+      const n = await invoke("restore_deleted", { files });
+      state.delSel = new Set();
+      await refresh();
+      lbSyncDeleted();
+      toast(t("deletedRestored", { n }));
+    } catch (e) {
+      fail(e);
+    }
+  }
+
+  // Lightbox in „Zuletzt gelöscht“ (0.29.1): Doppelklick, Leertaste oder Enter
+  function openDeletedLightbox(item) {
+    const list = state.deletedItems || [];
+    if (!item || !list.length) return;
+    state.lightbox = { zone: null, list, index: Math.max(0, list.indexOf(item)), deleted: true };
+    $("lightbox").hidden = false;
+    document.body.classList.add("lightbox-open");
+    lbView.fitted = true;
+    showLightboxItem();
+  }
+
+  // Nach Zurückholen oder Löschen: die Lightbox blättert in der neuen Liste weiter
+  function lbSyncDeleted() {
+    const lb = state.lightbox;
+    if (!lb || !lb.deleted) return;
+    lb.list = state.deletedItems || [];
+    if (!lb.list.length) return closeLightbox();
+    lb.index = Math.min(lb.index, lb.list.length - 1);
+    showLightboxItem();
+  }
+
+  // ⌫ und „Sofort löschen“ fragen nach: danach liegt es im Papierkorb des Macs
+  function askRemoveDeleted(files) {
+    if (!files.length) return;
+    const n = files.length;
+    const dialog = el("div", "dialog confirm");
+    dialog.appendChild(el("h3", null, n === 1 ? t("deletedAskOne") : t("deletedAskMany", { n })));
+    dialog.appendChild(el("p", null, t("deletedAskText")));
+    const foot = el("div", "confirm-foot");
+    const go = () => {
+      closeModal();
+      removeDeleted(files);
+    };
+    foot.appendChild(button("btn", t("cancel"), closeModal));
+    const ok = button("btn danger-fill", t("deletedRemove"), go);
+    foot.appendChild(ok);
+    dialog.appendChild(foot);
+    const modal = $("modal");
+    modal.replaceChildren(dialog);
+    modal.hidden = false;
+    modal.onEnter = go;
+    ok.focus();
+  }
+
+  async function removeDeleted(files) {
+    if (!files.length) return;
+    try {
+      const n = await invoke("remove_deleted", { files });
+      state.delSel = new Set();
+      await refresh();
+      lbSyncDeleted();
+      toast(t("deletedRemoved", { n }));
+    } catch (e) {
+      fail(e);
+    }
   }
 
   // ---- Menü ⋯ in der Navigation ----
@@ -5173,6 +6244,7 @@
     item("+ " + t("newZone"), startNewZone, false, "⌘N");
     item(t("infoPanel"), toggleInfo, state.infoOpen, "⌘D");
     item(t("pdfExport"), exportPdf, false, "⌘P");
+    item(t("deletedTitle") + (state.deletedCount ? " · " + state.deletedCount : ""), openDeleted, state.focus === DELETED);
     menu.appendChild(el("div", "p-more-rule"));
     (state.libraries || []).forEach((slot, i) => {
       if (slot.path) item(libraryName(slot, i), () => switchLibrary(i), slot.active, "⌘" + (i + 1));
@@ -5180,7 +6252,6 @@
     if ((state.libraries || []).some((l) => l.path)) menu.appendChild(el("div", "p-more-rule"));
     item(t("settings"), () => togglePage("settings"), state.page === "settings", "⌘,");
     item(t("about"), () => togglePage("about"), state.page === "about");
-    item(t("tour"), () => startTour());
     const note = el("div", "p-more-note");
     note.appendChild(el("div", null, state.root.replace(/^\/(Users|home)\/[^/]+/, "~")));
     menu.appendChild(note);
@@ -5200,7 +6271,7 @@
 
     zones.addEventListener("mousedown", (e) => {
       if (e.button !== 0) return;
-      const card = e.target.closest(".card");
+      const card = e.target.closest(".card:not(.del)");
       suppressClick = false;
       if (!card) {
         const control = e.target.closest("button, input, select, a, .p-bar, .p-section-head, .p-head-title, .zone-menu, .zone-card-name, .p-card, .p-row");
@@ -5230,7 +6301,7 @@
         suppressClick = false;
         return;
       }
-      const card = e.target.closest(".card");
+      const card = e.target.closest(".card:not(.del)");
       if (card) clickCard(card.dataset.path, e);
     });
 
@@ -5240,20 +6311,34 @@
 
     zones.addEventListener("contextmenu", (e) => {
       const zoneEl = e.target.closest(".p-home [data-zone]");
-      if (zoneEl && !e.target.closest(".card")) {
+      if (zoneEl && !e.target.closest(".card:not(.del)")) {
         e.preventDefault();
         openZoneContext(zoneEl.dataset.zone, e.clientX, e.clientY);
         return;
       }
-      const card = e.target.closest(".card");
-      if (!card) return;
+      const card = e.target.closest(".card:not(.del)");
+      if (!card) {
+        if (state.focus === DELETED) return;
+        // In einer Zone: Rechtsklick in den Hintergrund legt einen Unterordner an
+        if (isZone(state.focus) && !state.query.trim() && canEdit(state.focus)) {
+          e.preventDefault();
+          openZoneBackgroundMenu(e.clientX, e.clientY);
+        }
+        return;
+      }
       e.preventDefault();
       openItemMenu(card.dataset.path, e.clientX, e.clientY);
     });
 
     zones.addEventListener("dblclick", (e) => {
-      const card = e.target.closest(".card");
+      const card = e.target.closest(".card:not(.del)");
       if (card) openLightbox(state.byPath.get(card.dataset.path));
+    });
+
+    // 0.27: Video beim Hover als kurze Vorschau aus wenigen Bildern
+    zones.addEventListener("pointerover", (e) => {
+      const card = e.target.closest(".card:not(.del)");
+      if (card && !card.contains(e.relatedTarget)) videoScrub(card);
     });
 
     $("search").placeholder = t("search");
@@ -5311,10 +6396,26 @@
       state.homeKbd = false;
       applyHomeCursor(false);
     });
+    // 0.29: ⌘V mit Text auf ein gewähltes Bild (oder in der Lightbox) setzt den Bildtext
+    document.addEventListener("paste", (e) => {
+      if (e.target.closest && e.target.closest("input, textarea, [contenteditable]")) return;
+      const text = (e.clipboardData && e.clipboardData.getData("text/plain") || "").trim();
+      if (!text || (e.clipboardData.files && e.clipboardData.files.length)) return;
+      const items = state.lightbox ? [lightboxItem()].filter(Boolean) : selectedItems();
+      if (items.length !== 1 || quoteOf(items[0])) return;
+      e.preventDefault();
+      const item = items[0];
+      const had = !!item.caption;
+      item.caption = text.slice(0, 4000);
+      saveNote(item, { caption: item.caption });
+      toast(t(had ? "captionReplaced" : "captionSet"));
+      if (state.lightbox) lbRenderText();
+    });
+
     window.addEventListener(
       "resize",
       debounce(() => {
-        if (document.body.classList.contains("at-home") && state.home === "cards") renderZones();
+        if (document.body.classList.contains("at-home") && (state.home === "cards" || state.home === "overview")) renderZones();
         else layoutMasonry(false);
       }, 120)
     );
@@ -5366,6 +6467,22 @@
       return;
     }
 
+    // Zuletzt gelöscht: Leertaste/Enter groß ansehen, ⌫ fragt vor dem endgültigen Löschen
+    if (!mod && !e.altKey && !state.page && state.focus === DELETED && !state.query.trim()) {
+      const list = state.deletedItems || [];
+      const sel = [...(state.delSel || [])];
+      if (e.key === " " || e.key === "Enter") {
+        e.preventDefault();
+        openDeletedLightbox(list.find((i) => i.abs === sel[0]) || list[0]);
+        return;
+      }
+      if (e.key === "Backspace" || e.key === "Delete") {
+        e.preventDefault();
+        if (sel.length) askRemoveDeleted(sel);
+        return;
+      }
+    }
+
     if (!mod && !e.altKey && document.body.classList.contains("at-home") && !state.page && homeKey(e)) {
       e.preventDefault();
       return;
@@ -5391,7 +6508,9 @@
       return;
     }
 
-    if (mod && (e.key === "n" || e.key === "N") && !e.shiftKey) {
+    if (mod && (e.key === "n" || e.key === "N") && e.shiftKey) {
+      newNote();
+    } else if (mod && (e.key === "n" || e.key === "N") && !e.shiftKey) {
       startNewZone();
     } else if (mod && !e.shiftKey && (e.key === "r" || e.key === "R")) {
       e.preventDefault();
@@ -5676,585 +6795,7 @@
   async function showFirstDropStep() {
     setPref("onboarded", true);
     await showApp();
-    startTour(showDropHint);
-  }
-
-  // ---- Getting Started (0.19): neun Kapitel, fünf zum Mitmachen ----
-  // Läuft im Vollbild, auf Wunsch in einer Demo-Bibliothek (~/Archiver Demo/,
-  // lib.rs: open_demo / close_demo). Mitmach-Schritte (live) lassen die
-  // Oberfläche bedienbar und gehen erst nach der Aktion weiter. Am Ende
-  // verlässt die App das Vollbild, dann öffnet Licht die Oberfläche (reveal.js).
-
-  const TOUR_PREF = "tour3Done";
-  // Mitgelieferte Grafiken für das Schema, wenn die Tour in der eigenen Bibliothek läuft
-  const TOUR_WEB = ["welle-plakat", "dreieck", "zitrone-etikett", "buchstabe-g", "raster-gelb", "abend-verlauf"];
-  // Eintrag im Chrome Web Store, sobald es ihn gibt; bis dahin der Weg über chrome://extensions
-  const EXT_STORE_URL = null;
-  const tourStats = { drops: 0, pdfs: 0, collected: 0 };
-  const tourDemo = { on: false, prevOrder: null, zones: [], web: [] };
-  const demoHot = () => tourDemo.zones.filter((z) => z !== "Unsorted").slice(0, HOT_ZONES);
-
-  const zoneByName = (name) => state.zones.find((z) => z.path === name);
-  const kbdHtml = (s) => s; // Texte stammen aus i18n.js und enthalten <kbd>
-
-  async function enterDemo() {
-    tourDemo.prevOrder = pref("zoneOrder", []);
-    setPref("demoPrevOrder", tourDemo.prevOrder);
-    const info = await invoke("open_demo");
-    tourDemo.zones = info.zones;
-    tourDemo.web = info.web;
-    setPref("zoneOrder", info.zones);
-    tourDemo.on = true;
-    document.body.classList.add("demo-lib");
-    if (state.focus != null || state.query) setFocus(null);
-    state.home = "overview";
-    await refresh();
-  }
-
-  async function leaveDemo(keep) {
-    if (!tourDemo.on) return 0;
-    tourDemo.on = false;
-    document.body.classList.remove("demo-lib");
-    const moved = await invoke("close_demo", { keep }).catch((e) => (fail(e), 0));
-    setPref("zoneOrder", tourDemo.prevOrder || []);
-    localStorage.removeItem("archiver.demoPrevOrder");
-    if (state.focus != null || state.query) setFocus(null);
-    state.home = "cards";
-    await refresh();
-    return moved;
-  }
-
-  // Ein Absturz mitten in der Demo: beim nächsten Start die eigene Reihenfolge zurückholen
-  function restoreAfterDemo() {
-    const prev = pref("demoPrevOrder", null);
-    if (prev == null) return;
-    setPref("zoneOrder", prev);
-    localStorage.removeItem("archiver.demoPrevOrder");
-  }
-  restoreAfterDemo();
-
-
-  function finderList() {
-    const list = el("div", "tour-finder");
-    const zones = (tourDemo.on ? demoHot().map(zoneByName) : state.zones.slice(0, HOT_ZONES)).filter(Boolean).slice(0, 3);
-    for (const z of zones) {
-      const row = el("div", "tour-finder-row");
-      row.innerHTML =
-        '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M1.5 3.5h5l1.5 1.5h6.5v8h-13z" fill="none" stroke="currentColor"/></svg>';
-      row.append(el("span", null, shortPath(state.root + "/" + z.path) + "/"), el("span", "tour-mono", countText(z.count)));
-      list.appendChild(row);
-    }
-    return list;
-  }
-
-  // Vorschläge aus dem, was die Bildanalyse in den Objekten gefunden hat:
-  // zwei häufige Farben und zwei häufige Bildinhalte, auf Deutsch, wo es geht.
-  function tourSearchWords() {
-    const de = new Map();
-    if (lang === "de") for (const [word, en] of Object.entries(SEARCH_DE)) if (!de.has(en)) de.set(en, word);
-    const colors = new Map();
-    const labels = new Map();
-    for (const item of state.items) {
-      const idx = searchIndex(item);
-      for (const [c, share] of idx.colors) if (share >= COLOR_SHARE && c !== "white" && c !== "black" && c !== "gray") colors.set(c, (colors.get(c) || 0) + 1);
-      for (const l of idx.labels.slice(0, 3)) labels.set(l, (labels.get(l) || 0) + 1);
-    }
-    const top = (m, n) => [...m].sort((a, b) => b[1] - a[1]).slice(0, n).map(([k]) => de.get(k) || k);
-    const words = [...top(colors, 2), ...top(labels, 2)];
-    return words.length >= 2 ? words : t("tourSearchTry").split(", ");
-  }
-
-  function keyList() {
-    const list = el("div", "tour-keys");
-    for (const [k, label] of [["1–4", "tourKeyFile"], [t("tourSpace"), "tourKeyView"], ["⌘F", "tourKeySearch"], ["+ −", "tourKeySize"], ["⌫", "tourKeyTrash"]])
-      list.append(el("kbd", null, k), el("span", null, t(label)));
-    return list;
-  }
-
-  // Schema-Browser wie auf der Website: die Geste spielt dreimal von selbst,
-  // dann zieht man selbst. Ein Drop legt das Bild wirklich in die Demo-Zone.
-  function browserSchema(ctx) {
-    const s = el("div", "tour-schema");
-    const tag = el("span", "tour-schema-tag", "(" + t("tourSchemaAuto") + ")");
-    const bar = el("div", "tour-schema-bar");
-    bar.append(el("span", "tour-schema-dots"), el("span", "tour-schema-url", t("tourSchemaUrl")));
-    const grid = el("div", "tour-schema-grid");
-    const drop = el("div", "tour-schema-drop");
-    const zones = (tourDemo.on ? demoHot() : state.zones.slice(0, HOT_ZONES).map((z) => z.path)).slice(0, HOT_ZONES);
-    zones.forEach((z, i) => {
-      const d = el("div", "tour-schema-zone");
-      d.dataset.zone = z;
-      d.append(el("span", "tour-mono", String(i + 1).padStart(2, "0")), el("span", null, zoneLabel(z)));
-      drop.appendChild(d);
-    });
-    const cursor = el("div", "tour-schema-cursor");
-    cursor.innerHTML =
-      '<svg viewBox="0 0 22 22" width="22" height="22"><path d="M4 2l13 9.5-6.2.9 3.6 7-2.6 1.3-3.6-7L4 18z" fill="#fff" stroke="#111" stroke-width="1.2" stroke-linejoin="round"/></svg>';
-    s.append(tag, bar, grid, drop, cursor);
-    ctx.user = false;
-
-    const saved = (node, zone, zoneEl, byUser) => {
-      node.classList.add("taken");
-      zoneEl.classList.remove("flash");
-      void zoneEl.offsetWidth;
-      zoneEl.classList.add("flash");
-      if (tourDemo.on && node.dataset.file) invoke("demo_collect", { file: node.dataset.file, zone }).catch(() => {});
-      if (byUser) {
-        tourStats.collected++;
-        toast(t("tourSchemaSaved", { zone: zoneLabel(zone) }));
-      }
-    };
-
-    const web = tourDemo.on && tourDemo.web.length ? tourDemo.web : TOUR_WEB.map((n) => ({ file: "", show: "tour/" + n + ".jpg" }));
-    for (const w of web) {
-      const item = el("div", "tour-schema-item");
-      item.dataset.file = w.file;
-      const img = el("img");
-      img.src = w.show.startsWith("/") ? fileSrc(w.show) : w.show;
-      img.alt = "";
-      img.draggable = false;
-      item.appendChild(img);
-      item.addEventListener("pointerdown", (e) => {
-        if (e.button || item.classList.contains("taken")) return;
-        ctx.user = true;
-        tag.textContent = "(" + t("tourSchemaYou") + ")";
-        const sx = e.clientX;
-        const sy = e.clientY;
-        let ghost = null;
-        let over = null;
-        const move = (ev) => {
-          if (!ghost) {
-            if (Math.hypot(ev.clientX - sx, ev.clientY - sy) < 6) return;
-            ghost = el("div", "tour-schema-ghost");
-            ghost.appendChild(img.cloneNode());
-            document.body.appendChild(ghost);
-            item.classList.add("lifted");
-            s.classList.add("dragging");
-          }
-          ghost.style.left = ev.clientX + "px";
-          ghost.style.top = ev.clientY + "px";
-          const hit = document.elementFromPoint(ev.clientX, ev.clientY);
-          const z = hit && hit.closest(".tour-schema-zone");
-          const ok = z && drop.contains(z) ? z : null;
-          if (ok !== over) {
-            if (over) over.classList.remove("over");
-            if (ok) ok.classList.add("over");
-            over = ok;
-          }
-        };
-        const up = () => {
-          removeEventListener("pointermove", move);
-          removeEventListener("pointerup", up);
-          if (!ghost) return;
-          ghost.remove();
-          item.classList.remove("lifted");
-          s.classList.remove("dragging");
-          if (over) {
-            over.classList.remove("over");
-            saved(item, over.dataset.zone, over, true);
-          }
-        };
-        addEventListener("pointermove", move);
-        addEventListener("pointerup", up);
-      });
-      grid.appendChild(item);
-    }
-
-    // Selbstlauf
-    const still = matchMedia("(prefers-reduced-motion: reduce)").matches;
-    const wait = (ms) => new Promise((r) => setTimeout(r, ms));
-    const rel = (n) => {
-      const a = n.getBoundingClientRect();
-      const b = s.getBoundingClientRect();
-      return { x: a.left - b.left + a.width / 2, y: a.top - b.top + a.height / 2 };
-    };
-    const glide = (n, a, b, ms) =>
-      n.animate([{ left: a.x + "px", top: a.y + "px" }, { left: b.x + "px", top: b.y + "px" }], {
-        duration: ms,
-        easing: "cubic-bezier(.55,.05,.25,1)",
-        fill: "forwards",
-      }).finished;
-    (async () => {
-      await wait(800);
-      for (let k = 0; k < 3; k++) {
-        if (ctx.user || !s.isConnected || still) break;
-        const free = [...grid.children].filter((n) => !n.classList.contains("taken"));
-        if (!free.length) break;
-        const card = free[k % free.length];
-        const zoneEl = drop.children[[1, 0, 2][k] % drop.children.length];
-        if (!zoneEl) break;
-        const start = { x: s.clientWidth * 0.5, y: s.clientHeight * 0.55 };
-        const a = rel(card);
-        cursor.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 200, fill: "forwards" });
-        await glide(cursor, start, a, 650);
-        if (ctx.user) break;
-        await wait(140);
-        const ghost = el("div", "tour-schema-ghost local");
-        ghost.appendChild(card.firstChild.cloneNode());
-        s.appendChild(ghost);
-        ghost.style.left = a.x + "px";
-        ghost.style.top = a.y + "px";
-        card.classList.add("lifted");
-        s.classList.add("dragging");
-        await wait(260);
-        const z = rel(zoneEl);
-        setTimeout(() => zoneEl.classList.add("over"), 600);
-        await Promise.all([glide(cursor, a, z, 850), glide(ghost, a, z, 850)]);
-        await wait(220);
-        zoneEl.classList.remove("over");
-        ghost.remove();
-        card.classList.remove("lifted");
-        s.classList.remove("dragging");
-        saved(card, zoneEl.dataset.zone, zoneEl, false);
-        await cursor.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 260, delay: 200, fill: "forwards" }).finished;
-        await wait(700);
-      }
-      if (s.isConnected) tag.textContent = "(" + t("tourSchemaYou") + ")";
-    })();
-    return s;
-  }
-
-  const TOUR = [
-    {
-      key: "Start",
-      center: true,
-      buttons: (api) => [
-        [t("tourOwn"), () => api.next()],
-        [
-          t("tourDemo"),
-          async () => {
-            try {
-              await enterDemo();
-            } catch (e) {
-              fail(e);
-            }
-            api.next();
-          },
-          true,
-        ],
-      ],
-    },
-    {
-      key: "Folders",
-      setup: () => {
-        if (state.focus != null || state.query) setFocus(null);
-        if (state.home !== "overview") {
-          state.home = "overview";
-          renderZones();
-        }
-      },
-      target: () => document.querySelector(".p-hotrow"),
-      extra: finderList,
-    },
-    {
-      key: "Active",
-      setup: (ctx) => {
-        if (state.focus != null || state.query) setFocus(null);
-        if (state.home !== "overview") {
-          state.home = "overview";
-          renderZones();
-        }
-        // Die Leiste fährt ein und bleibt stehen, solange der Schritt offen ist
-        ctx.peek = setTimeout(() => {
-          showDropbar();
-          document.body.classList.remove("dragging");
-          $("dropbar").classList.add("preview");
-        }, 500);
-      },
-      teardown: (ctx) => {
-        clearTimeout(ctx.peek);
-        $("dropbar").classList.remove("preview");
-        hideDropbar();
-      },
-      target: () => document.querySelector(".p-hotrow"),
-    },
-    {
-      key: "Browser",
-      center: true,
-      wide: true,
-      setup: (ctx) => {
-        ctx.n = tourStats.collected;
-        const check = () =>
-          invoke("bridge_browsers")
-            .then((list) => (ctx.browsers = list))
-            .catch(() => (ctx.browsers = []));
-        check();
-        ctx.timer = setInterval(check, 2000);
-      },
-      teardown: (ctx) => clearInterval(ctx.timer),
-      extra: (ctx) => ctx.schema || (ctx.schema = browserSchema(ctx)),
-      done: (ctx) => tourStats.collected > ctx.n,
-      status: (ctx) =>
-        ctx.browsers && ctx.browsers.length
-          ? { ok: true, text: t("onbExtOn", { list: ctx.browsers.join(", ") }) }
-          : { ok: false, text: t("onbExtWaiting") },
-      third: (ctx) =>
-        ctx.browsers && ctx.browsers.length
-          ? null
-          : EXT_STORE_URL
-            ? [t("tourStore"), () => invoke("open_url", { url: EXT_STORE_URL }).catch(fail)]
-            : [
-                t("onbExtOpen"),
-                () =>
-                  navigator.clipboard
-                    .writeText("chrome://extensions")
-                    .then(() => toast(t("onbExtCopied")))
-                    .catch(fail),
-              ],
-    },
-    {
-      key: "File",
-      live: true,
-      corner: true,
-      setup: (ctx) => {
-        ctx.n = tourStats.drops;
-        const inbox = zoneByName("Unsorted");
-        if (tourDemo.on && inbox) setFocus(inbox.path);
-        else if (state.items.length) setFocus(ALL);
-      },
-      text: () => (tourDemo.on || state.items.length ? "tourFileText" : "tourFileEmpty"),
-      done: (ctx) => tourStats.drops > ctx.n || dropCount > (ctx.d ?? (ctx.d = dropCount)),
-    },
-    {
-      key: "View",
-      live: true,
-      corner: true,
-      setup: (ctx) => {
-        ctx.seen = false;
-        const zone = tourDemo.on && zoneByName(demoHot()[0]);
-        if (zone) setFocus(zone.path);
-        else if (state.items.length && state.focus == null) setFocus(ALL);
-      },
-      done: (ctx) => ctx.seen || (ctx.seen = !!state.lightbox),
-    },
-    {
-      key: "Search",
-      live: true,
-      corner: true,
-      setup: () => {
-        if (state.lightbox) closeLightbox();
-        setFocus(null);
-        openSearch();
-      },
-      extra: () => {
-        const chips = el("div", "tour-chips");
-        for (const w of tourSearchWords()) {
-          chips.appendChild(
-            chip("„" + w + "“", false, () => {
-              const input = $("search");
-              input.value = w;
-              input.dispatchEvent(new Event("input", { bubbles: true }));
-              input.focus();
-            })
-          );
-        }
-        return chips;
-      },
-      target: () => $("navSearch"),
-      done: () => !!state.query.trim() && !!state.found && state.found.length > 0,
-    },
-    {
-      key: "Poster",
-      live: true,
-      corner: true,
-      setup: (ctx) => {
-        ctx.n = tourStats.pdfs;
-        $("search").value = "";
-        $("search").blur();
-        const zone = tourDemo.on && zoneByName(demoHot()[1] || demoHot()[0]);
-        if (zone) setFocus(zone.path);
-        else if (state.focus == null && state.items.length) setFocus(ALL);
-      },
-      buttons: (api, ctx) =>
-        ctx.finished
-          ? null
-          : [
-              [
-                t("tourPosterDo"),
-                () => {
-                  const items = allVisible();
-                  if (!items.length) return toast(t("pdfNothing"));
-                  const title = isZone(state.focus) ? zoneLabel(state.focus) : t("pdfSelection");
-                  openPdfMaker(items.slice(), title, { poster: true });
-                },
-                true,
-              ],
-            ],
-      done: (ctx) => tourStats.pdfs > ctx.n,
-    },
-    {
-      key: "End",
-      center: true,
-      extra: keyList,
-      buttons: (api) =>
-        tourDemo.on
-          ? [
-              [t("tourKeepDemo"), () => api.end("keep")],
-              [t("tourToOwn"), () => api.end("own"), true],
-            ]
-          : [[t("tourDone"), () => api.end("own"), true]],
-    },
-  ];
-
-  function startTour(done) {
-    if (document.querySelector(".tour") || !isUnlocked()) return;
-    closeMenus();
-    closeMoreMenu();
-    if (state.page) closePage();
-    let step = 0;
-    let ctx = {};
-    let poll = 0;
-    let ending = false;
-    const layer = el("div", "tour");
-    const ring = el("div", "tour-ring");
-    const card = el("div", "tour-card");
-    layer.append(ring, card);
-    document.body.appendChild(layer);
-
-    const leave = () => {
-      clearInterval(poll);
-      const s = TOUR[step];
-      if (s && s.teardown) s.teardown(ctx);
-    };
-    const end = async (mode) => {
-      if (ending) return;
-      ending = true;
-      leave();
-      setPref(TOUR_PREF, true);
-      document.removeEventListener("keydown", onKey, true);
-      window.removeEventListener("resize", render);
-      await layer.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 260, fill: "forwards" }).finished;
-      layer.remove();
-      await finale(mode !== "keep");
-      if (done) done();
-    };
-    const go = (to) => {
-      leave();
-      step = Math.max(0, to);
-      if (step >= TOUR.length) return end("own");
-      enter();
-    };
-    const api = { next: () => go(step + 1), end };
-    const onKey = (e) => {
-      // Tippen und offene Ansichten (Vorschau, PDF-Ersteller) gehören nicht der Tour
-      if (e.target.closest && e.target.closest("input, textarea, [contenteditable]")) return;
-      if (state.lightbox || document.querySelector(".pdf-maker")) return;
-      const s = TOUR[step];
-      if (e.key === "Escape") end("own");
-      else if (e.key === "Enter" && !e.target.closest("button") && !s.buttons && !(s.done && !ctx.finished)) api.next();
-      else if (e.key === "ArrowRight" && !s.live && !s.buttons && !(s.done && !ctx.finished)) api.next();
-      else if (e.key === "ArrowLeft" && !s.live && step > 0) go(step - 1);
-      else return;
-      e.preventDefault();
-      e.stopPropagation();
-    };
-
-    function enter() {
-      const s = TOUR[step];
-      ctx = { finished: false };
-      card.replaceChildren();
-      if (s.setup) s.setup(ctx);
-      render();
-      if (s.done || s.status)
-        poll = setInterval(() => {
-          layer.classList.toggle("away", !!document.querySelector(".pdf-maker"));
-          if (s.done && !ctx.finished && s.done(ctx)) {
-            ctx.finished = true;
-            render();
-          } else if (s.status) renderStatus();
-        }, 400);
-    }
-
-    function renderStatus() {
-      const s = TOUR[step];
-      const node = card.querySelector(".tour-status");
-      if (!s.status || !node) return;
-      const st = s.status(ctx);
-      node.className = "tour-status" + (st.ok ? " ok" : "");
-      node.textContent = st.text;
-      const acts = card.querySelector(".tour-actions");
-      if (acts) acts.replaceWith(actions());
-    }
-
-    function actions() {
-      const s = TOUR[step];
-      const row = el("div", "tour-actions");
-      const left = el("div", "tour-actions-group");
-      const right = el("div", "tour-actions-group");
-      if (step < TOUR.length - 1) left.appendChild(button("p-chip", "(" + t("tourSkip") + ")", () => end("own")));
-      if (step > 0) left.appendChild(button("p-chip", "(" + t("tourBack") + ")", () => go(step - 1)));
-      const third = s.third && !ctx.finished ? s.third(ctx) : null;
-      if (third) right.appendChild(button("p-chip", "(" + third[0] + ")", third[1]));
-      const custom = s.buttons ? s.buttons(api, ctx) : null;
-      if (custom) for (const [label, fn, primary] of custom) right.appendChild(button("p-chip" + (primary ? " active" : ""), "(" + label + ")", fn));
-      if (!custom || (s.key === "Poster" && ctx.finished)) {
-        const waiting = s.done && !ctx.finished;
-        right.appendChild(button("p-chip" + (waiting ? "" : " active"), "(" + t(waiting ? "tourLater" : "tourNext") + ")", api.next));
-      }
-      row.append(left, right);
-      return row;
-    }
-
-    function render() {
-      const s = TOUR[step];
-      const keepSchema = s.key === "Browser" && ctx.schema && card.contains(ctx.schema);
-      const title = t("tour" + s.key + (ctx.finished ? "Done" : "Title"));
-      const textKey = ctx.finished ? "tour" + s.key + "DoneText" : s.text ? s.text() : "tour" + s.key + "Text";
-      if (keepSchema) {
-        card.querySelector(".tour-title").textContent = title;
-        card.querySelector(".tour-text").innerHTML = kbdHtml(t(textKey));
-        renderStatus();
-        card.querySelector(".tour-actions").replaceWith(actions());
-      } else {
-        const count = el("div", "tour-progress");
-        TOUR.forEach((_, i) => count.appendChild(el("i", i <= step ? "on" : null)));
-        const text = el("div", "tour-text");
-        text.innerHTML = kbdHtml(t(textKey));
-        card.replaceChildren(count, el("div", "tour-title", title), text);
-        if (s.extra) {
-          const extra = el("div", "tour-extra");
-          extra.appendChild(s.extra(ctx));
-          card.appendChild(extra);
-        }
-        if (s.status) card.appendChild(el("div", "tour-status"));
-        card.appendChild(actions());
-        renderStatus();
-      }
-      layer.classList.toggle("live", !!s.live);
-      card.className = "tour-card" + (s.wide ? " wide" : "") + (s.corner ? " corner" : "") + (s.center ? " center" : "");
-      card.style.cssText = "";
-      const target = s.target && s.target();
-      const r = target ? target.getBoundingClientRect() : null;
-      ring.hidden = !r || !r.width;
-      if (ring.hidden) return;
-      const pad = 6;
-      ring.style.cssText = `left:${r.left - pad}px;top:${r.top - pad}px;width:${r.width + pad * 2}px;height:${Math.min(r.height, innerHeight - r.top - 12) + pad * 2}px`;
-      if (s.corner || s.center) return;
-      const w = Math.min(380, innerWidth - 32);
-      const left = Math.max(16, Math.min(innerWidth - w - 16, r.left + r.width / 2 - w / 2));
-      if (r.bottom < innerHeight * 0.55) card.style.cssText = `left:${left}px;top:${Math.min(r.bottom + 18, innerHeight - card.offsetHeight - 16)}px`;
-      else card.style.cssText = `left:${left}px;bottom:${innerHeight - r.top + 18}px`;
-    }
-
-    document.addEventListener("keydown", onKey, true);
-    window.addEventListener("resize", render);
-    enter();
-  }
-
-  // Abschluss: zurück zur eigenen Bibliothek, Licht-Öffnung
-  async function finale(own) {
-    const cover = el("div", "reveal-cover");
-    document.body.appendChild(cover);
-    await cover.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 420, easing: "ease-in-out", fill: "forwards" }).finished;
-    const demo = tourDemo.on;
-    const moved = demo ? await leaveDemo(!own) : 0;
-    if (!demo) {
-      if (state.focus != null || state.query) setFocus(null);
-      state.home = "cards";
-      renderZones();
-    }
-    await playReveal(cover);
-    if (demo) toast(moved ? t("tourBackOwnMoved", { n: moved }) : t("tourBackOwn"));
+    showDropHint();
   }
 
   function revealTargets() {
@@ -6413,6 +6954,11 @@
     TAURI.event.listen("thumbs-ready", (e) => applyThumbs(e.payload));
     TAURI.event.listen("analysis-ready", (e) => applyAnalysis(e.payload));
     TAURI.event.listen("reveal-in-app", (e) => revealFromViewer(e.payload));
+    // Bibliothek anderswo gewechselt (Palette, ⌘1–3): nachziehen
+    TAURI.event.listen("library-switched", (e) => {
+      if (!e || e.payload === state.root || $("app").hidden) return;
+      afterLibrarySwitch();
+    });
     const info = await invoke("start_info");
     // Die Bibliothek wird erst hier geöffnet (im Hintergrund, mit Ordner-Schutz),
     // damit das Fenster nie hängt.
@@ -6426,8 +6972,6 @@
     }
     if (info.library) {
       await showApp();
-      // Einmal für alle, die vor der Tour schon eingerichtet waren
-      if (!pref(TOUR_PREF, false)) setTimeout(() => startTour(), 2800);
     } else showWelcome(info);
     hideSplash();
     setTimeout(checkUpdate, 3000);

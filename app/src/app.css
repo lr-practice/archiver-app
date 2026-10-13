@@ -4137,84 +4137,6 @@ body.page-open .p-lock {
   font-size: 10px;
 }
 
-/* ---- Farbschema „Salbei“: Periwinkle auf Grau-Grün (Einstellungen → Darstellung) ---- */
-
-html[data-scheme="sage"]:not(.light) {
-  --splash-bg: #2b312e;
-  --bg: rgba(43, 49, 46, 0.9);
-  --card-bg: rgba(56, 63, 59, 0.42);
-  --panel: rgba(43, 49, 46, 0.97);
-  --sheet-bg: #2b312e;
-  --menu-bg: rgba(54, 61, 57, 0.97);
-  --thumb-bg: #353c38;
-  --muted: #8e938f;
-  --ink: #e4e7e5;
-  --ink-rgb: 228, 231, 229;
-  --ink-inverse: #1c211e;
-  --accent: #a6b5d6;
-  --accent-rgb: 166, 181, 214;
-  --accent-ink: #161b26;
-  --glow-rgb: 166, 181, 214;
-  --p-text: #e4e7e5;
-  --p-dim: #8e938f;
-  --p-faint: #646a66;
-  --p-pill: rgba(58, 66, 61, 0.86);
-}
-
-html[data-scheme="sage"]:not(.mac):not(.light) {
-  --bg: #2b312e;
-}
-
-html[data-scheme="sage"].light {
-  --splash-bg: #e9ece9;
-  --bg: rgba(233, 236, 233, 0.92);
-  --card-bg: rgba(0, 0, 0, 0.04);
-  --panel: #e9ece9;
-  --sheet-bg: #e9ece9;
-  --menu-bg: rgba(238, 241, 238, 0.98);
-  --thumb-bg: #d9ddd9;
-  --muted: #6c726d;
-  --ink: #1c211e;
-  --ink-rgb: 28, 33, 30;
-  --ink-inverse: #e9ece9;
-  --accent: #5f6f94;
-  --accent-rgb: 95, 111, 148;
-  --accent-ink: #ffffff;
-  --glow-rgb: 95, 111, 148;
-  --p-text: #1c211e;
-  --p-dim: #6c726d;
-  --p-faint: #a3a8a4;
-  --p-pill: rgba(222, 227, 222, 0.94);
-}
-
-/* Wortmarke und aktive Knöpfe im Akzent, Knopf-Schrift dunkel */
-html[data-scheme="sage"] .p-nav-brand,
-html[data-scheme="sage"] .splash-word {
-  color: var(--accent);
-}
-
-html[data-scheme="sage"] .p-nav-btn.active,
-html[data-scheme="sage"] .p-nav.has-glide .p-nav-btn.active:hover {
-  background: var(--accent);
-  color: var(--accent-ink);
-}
-
-html[data-scheme="sage"] .p-chip.active {
-  color: var(--accent);
-}
-
-html[data-scheme="sage"] .btn.primary,
-html[data-scheme="sage"] .p-unlock-go,
-html[data-scheme="sage"] .p-lock-btn {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: var(--accent-ink);
-}
-
-html[data-scheme="sage"] .toast {
-  color: var(--accent-ink);
-}
-
 /* ---- Einstellungen: Bereiche als Liste, Untermenüs mit Zurück ---- */
 
 .p-settings-nav {
@@ -5650,12 +5572,6 @@ html.light .p-hot {
 html.light {
   --bg-solid: #d6d6d6;
 }
-html[data-scheme="sage"] {
-  --bg-solid: #2b312e;
-}
-html[data-scheme="sage"].light {
-  --bg-solid: #e9ece9;
-}
 html.mac[data-winalpha] {
   --bg: color-mix(in srgb, var(--bg-solid) calc(var(--win-alpha, 0.6) * 100%), transparent);
 }
@@ -5728,7 +5644,7 @@ html.mac[data-winalpha] {
    haben. Übersetzt aus Dunkel: gleiche Kontraste, Karten eine Stufe vom Grund
    abgesetzt, Navigation als weißes Glas, Zonenkarten beim Ziehen als helles
    Glas ohne Sättigung (Deckkraft über den Regler). Salbei bleibt unverändert. */
-html.light:not([data-scheme="sage"]) {
+html.light {
   --bg-solid: #f4f4f4;
   --bg: #f4f4f4;
   --panel: #f4f4f4;
@@ -5750,32 +5666,32 @@ html.light:not([data-scheme="sage"]) {
   --menu-bg: rgba(250, 250, 250, 0.97);
   --menu-shadow: 0 14px 44px rgba(0, 0, 0, 0.14), inset 0 0 0 1px rgba(0, 0, 0, 0.06);
 }
-html.mac[data-winalpha].light:not([data-scheme="sage"]) {
+html.mac[data-winalpha].light {
   --bg: color-mix(in srgb, var(--bg-solid) calc(var(--win-alpha, 0.6) * 100%), transparent);
 }
-html.light:not([data-scheme="sage"]) .p-nav {
+html.light .p-nav {
   background: var(--p-pill);
   -webkit-backdrop-filter: blur(24px) saturate(0);
   backdrop-filter: blur(24px) saturate(0);
   box-shadow: 0 10px 34px rgba(0, 0, 0, 0.08), inset 0 0 0 1px rgba(0, 0, 0, 0.05);
 }
-html.light:not([data-scheme="sage"]) .p-nav-btn.active {
+html.light .p-nav-btn.active {
   background: rgba(0, 0, 0, 0.08);
 }
-html.light:not([data-scheme="sage"]) .p-nav > .p-nav-glide {
+html.light .p-nav > .p-nav-glide {
   background: rgba(0, 0, 0, 0.06);
 }
-html.light:not([data-scheme="sage"]) .p-lib-tab {
+html.light .p-lib-tab {
   background: transparent;
   box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.08);
 }
-html.light:not([data-scheme="sage"]) .p-card {
+html.light .p-card {
   background: rgba(0, 0, 0, 0.045);
 }
-html.light:not([data-scheme="sage"]) .p-card:hover {
+html.light .p-card:hover {
   background: rgba(0, 0, 0, 0.07);
 }
-html.light:not([data-scheme="sage"]) .p-dropbar .p-hot {
+html.light .p-dropbar .p-hot {
   --menu-bg: #fafafa;
   --hot-shadow: 0.16;
   -webkit-backdrop-filter: blur(calc(28px * var(--hot-in))) saturate(0);
@@ -5784,4 +5700,583 @@ html.light:not([data-scheme="sage"]) .p-dropbar .p-hot {
     0 14px 44px rgba(0, 0, 0, calc(0.16 * var(--hot-in))),
     inset 0 0 0 1px rgba(255, 255, 255, calc(0.7 * var(--hot-in))),
     inset 0 0 0 0.5px rgba(0, 0, 0, calc(0.08 * var(--hot-in)));
+}
+
+/* ---- 0.27: Titel der Zone steht oben fest, springt nicht mit den Ordnerkarten ---- */
+.p-head-row > .p-head {
+  align-self: start;
+}
+
+/* ---- 0.27: Ordnerkarte als Ablageziel (Ring wie 4.1) ---- */
+.p-folder-card.drop-active {
+  --ring: var(--ring-lg);
+  --ring-gap: 3px;
+  position: relative;
+  overflow: visible;
+}
+.p-head-row.is-list .p-folder-card.drop-active {
+  --ring: var(--ring-in);
+  --ring-gap: 0px;
+}
+.p-folder-card.drop-active::after {
+  content: "";
+  position: absolute;
+  inset: calc(-1 * var(--ring-gap));
+  z-index: 4;
+  pointer-events: none;
+  background: var(--p-text, var(--ink));
+  -webkit-mask: var(--ring) 0 0 / 100% 100% no-repeat;
+  mask: var(--ring) 0 0 / 100% 100% no-repeat;
+}
+
+/* ---- 0.27: Zuletzt gelöscht ---- */
+.p-chip.danger:hover {
+  color: var(--danger);
+}
+.p-deleted-row {
+  cursor: pointer;
+  color: var(--p-dim);
+}
+.p-deleted-row .zone-card-name {
+  color: var(--p-dim);
+}
+.p-deleted-row:hover .zone-card-name {
+  color: var(--p-text);
+}
+
+/* ---- 0.27: Video-Vorschau beim Hover (Daumenkino aus acht Bildern) ---- */
+.card-scrub {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  z-index: 1;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.18s ease;
+}
+.card-scrub.on {
+  opacity: 1;
+}
+.card > .card-badge,
+.card > .card-media {
+  z-index: 2;
+}
+
+/* ---- 0.28: Fensterglas wie im Tray ----
+   Grundfarbe und Deckkraft des Trays gelten jetzt für das ganze Fenster:
+   Dunkel rgb(28,28,28) zu 72 %, Hell rgb(244,244,244) zu 78 %. Der Regler in
+   Einstellungen › Aussehen startet auf diesem Wert und setzt --win-alpha. */
+:root {
+  --bg-solid: #1c1c1c;
+  --win-alpha: 0.72;
+}
+html.light {
+  --bg-solid: #f4f4f4;
+  --win-alpha: 0.78;
+}
+
+/* ---- 0.28: Active Zones brechen um wie der Index (vier oder 2 × 2) ---- */
+.p-hotrow {
+  grid-template-columns: repeat(var(--hot-cols, 4), minmax(0, 1fr));
+}
+
+/* ---- 0.28: Leiste der Lightbox in den Maßen der Hauptnavigation ----
+   Rand --nav-rim, Knopfhöhe --nav-h, 13,5 px, Abstand 3 px, Ecke --r-md. */
+.lb-bar,
+.lb-group {
+  gap: 3px;
+}
+.lb-bar {
+  padding: var(--nav-rim, 5px);
+  border-radius: var(--r-md);
+}
+.lb-btn {
+  height: var(--nav-h, 36px);
+  font-size: 13.5px;
+  letter-spacing: -0.005em;
+}
+.lb-name {
+  font-size: 13.5px;
+}
+/* die Leiste ist 6 px höher: Zonen und Player rücken mit */
+.lb-zones {
+  bottom: 76px;
+}
+.lightbox.has-player .lb-zones {
+  bottom: 120px;
+}
+.lightbox.has-player .lb-media .media-video {
+  bottom: 134px;
+  height: calc(100% - 48px - 134px);
+}
+.lightbox.has-player .lb-media .media-audio {
+  bottom: 134px;
+}
+
+/* ---- 0.29: Bildtext (Kennung, Text, Notiz) ----
+   Unter dem Bild in „Original“ mit (+ Text) und in der Lightbox links neben
+   dem Bild, unten bündig; das Bild verrückt dafür nicht. Mono-Kennung wie ein Etikett, Text in Geist, Notiz fett. */
+.card-cap {
+  padding: 7px 3px 16px;
+  color: var(--p-text);
+}
+.card-cap .cap-id,
+.lb-caption .cap-id {
+  font-family: "Geist Mono", ui-monospace, monospace;
+  font-size: 10px;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--p-dim);
+}
+.card-cap .cap-text {
+  margin-top: 4px;
+  font-size: 13px;
+  line-height: 1.35;
+  letter-spacing: -0.005em;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.card-cap .cap-note {
+  margin-top: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.35;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.cap-note-label {
+  color: var(--p-dim);
+  font-weight: 500;
+}
+.lb-caption {
+  position: absolute;
+  z-index: 2;
+  width: 300px;
+  max-height: calc(100% - 140px);
+  overflow-y: auto;
+  color: var(--p-text);
+  user-select: text;
+  -webkit-user-select: text;
+}
+.lb-caption .cap-id {
+  font-size: 11px;
+}
+.lb-caption.over {
+  margin-left: 16px;
+  padding: 14px 16px 16px;
+  background: var(--menu-bg);
+  box-shadow: var(--menu-shadow);
+  border-radius: var(--r-md);
+}
+.lb-caption .cap-text {
+  margin-top: 8px;
+  font-size: 17px;
+  line-height: 1.38;
+  letter-spacing: -0.01em;
+}
+.lb-caption .cap-note {
+  margin-top: 14px;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+/* ---- 0.29: Notiz-Objekte ----
+   Im Raster ein Blatt wie die Textkarten (Kennung NOTIZ · Datum, fetter Titel,
+   Text, Fuß), Papier statt Zufallsfarbe. In der Lightbox wird auf dem Blatt
+   geschrieben; die Verknüpfungen stehen 40 px links daneben. */
+.original .card-note {
+  aspect-ratio: 3 / 4;
+}
+.note-sheet .ts-title {
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.15;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.card-text .note-sheet .ts-title {
+  padding: 3cqw 6cqw 0;
+  font-size: 6.4cqw;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  flex: none;
+}
+.card-text .note-sheet .ts-body {
+  padding-top: 2.4cqw;
+  font-weight: 400;
+  line-height: 1.35;
+}
+.card-text .note-sheet.short .ts-body {
+  font-size: 4.4cqw;
+}
+.card-text .note-sheet.medium .ts-body,
+.card-text .note-sheet.long .ts-body {
+  font-size: 3.8cqw;
+}
+.text-sheet.mini.note-sheet .ts-title {
+  font-size: 9cqw;
+  padding: 0 8cqw;
+}
+.text-sheet.mini.note-sheet .ts-body {
+  display: none;
+}
+
+/* Lightbox: Papier, max. 620 × 760, Titel 30 px, Text 17 px */
+.lb-note {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 48px 32px 84px;
+  box-sizing: border-box;
+}
+.note-paper {
+  position: relative;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  width: min(620px, 100%);
+  height: min(760px, 100%);
+  padding: 48px 52px 36px;
+  background: var(--ts-bg, #f4f3ef);
+  color: var(--ts-fg, #141414);
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+  font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
+  caret-color: var(--accent);
+}
+/* Schwarzes Blatt auf dunklem Grund: feine Kante */
+.note-paper[data-tone="black"] {
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12), 0 10px 40px rgba(0, 0, 0, 0.3);
+}
+.text-sheet[data-tone="black"] {
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12);
+}
+.note-paper .np-label,
+.note-paper .np-foot {
+  font-family: "Geist Mono", ui-monospace, monospace;
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  opacity: var(--ts-dim, 0.5);
+}
+.np-title,
+.np-body {
+  display: block;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: inherit;
+  font-family: inherit;
+}
+.np-title {
+  margin: 14px 0 18px;
+  font-size: 30px;
+  font-weight: 600;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+}
+.np-body {
+  flex: 1;
+  min-height: 0;
+  resize: none;
+  font-size: 17px;
+  line-height: 1.45;
+  letter-spacing: -0.005em;
+  scrollbar-width: none;
+}
+.np-title::placeholder,
+.np-body::placeholder {
+  color: inherit;
+  opacity: 0.35;
+}
+.note-paper ::selection {
+  background: rgba(var(--accent-rgb), 0.25);
+}
+.np-foot {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 16px;
+}
+
+/* Verknüpfungen: Spalte links neben dem Blatt, oben bündig, zwei Reihen à 72 px */
+.note-links {
+  position: absolute;
+  top: 0;
+  right: calc(100% + 40px);
+  width: 150px;
+  color: var(--p-text);
+}
+.nl-label {
+  margin-bottom: 8px;
+  font-family: "Geist Mono", ui-monospace, monospace;
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--p-dim);
+}
+.nl-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 72px);
+  gap: 6px;
+}
+.nl-tile,
+.nc-tile {
+  position: relative;
+  width: 72px;
+  height: 72px;
+  padding: 0;
+  border: none;
+  background: rgba(var(--ink-rgb), 0.06);
+  overflow: hidden;
+  cursor: default;
+}
+.nl-tile img,
+.nc-tile img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.nl-tile .text-sheet.mini,
+.nc-tile .text-sheet.mini {
+  position: absolute;
+  inset: 0;
+}
+.nl-add {
+  background: none;
+  box-shadow: inset 0 0 0 1px rgba(var(--ink-rgb), 0.25);
+  color: var(--p-dim);
+  font-size: 20px;
+  font-weight: 300;
+}
+.nl-add:hover {
+  color: var(--p-text);
+  box-shadow: inset 0 0 0 1px rgba(var(--ink-rgb), 0.5);
+}
+.nl-remove {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  width: 18px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.6);
+  color: #fff;
+  font-size: 12px;
+  line-height: 1;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+.nl-tile:hover .nl-remove {
+  opacity: 1;
+}
+/* Schmales Fenster: Verknüpfungen rücken unter den Text, auf das Blatt */
+@media (max-width: 1080px) {
+  .note-links {
+    position: static;
+    width: auto;
+    margin-top: 16px;
+    color: inherit;
+  }
+  .note-links .nl-label {
+    color: inherit;
+    opacity: var(--ts-dim, 0.5);
+  }
+  .note-links .nl-grid {
+    grid-template-columns: repeat(auto-fill, 48px);
+  }
+  .note-links .nl-tile {
+    width: 48px;
+    height: 48px;
+  }
+}
+
+/* Farbpunkte der Notiz in der Leiste */
+.lb-tones {
+  align-items: center;
+  gap: 9px;
+  padding: 0 10px;
+}
+.lb-tones:not([hidden]) {
+  display: flex;
+}
+.lb-tones .tone-dot {
+  width: 16px;
+  height: 16px;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.25);
+}
+
+/* Auswahl zum Verknüpfen (Variante A): Suchfeld, Zonen als kleine Tray-Karten,
+   in der Zone ein Raster mit sechs Spalten, gewählte gestrichelt */
+.zone-menu.p-ctx-menu.note-chooser {
+  width: 430px;
+  min-width: 0;
+  padding: 10px;
+  box-sizing: border-box;
+}
+.nc-search {
+  width: 100%;
+  box-sizing: border-box;
+  height: 32px;
+  padding: 0 10px;
+  border: none;
+  border-radius: var(--r-sm, 4px);
+  outline: none;
+  background: rgba(var(--ink-rgb), 0.07);
+  color: var(--p-text);
+  font: inherit;
+  font-size: 13px;
+}
+.nc-head,
+.nc-foot {
+  display: flex;
+  align-items: baseline;
+  font-family: "Geist Mono", ui-monospace, monospace;
+  font-size: 10px;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--p-dim);
+}
+.nc-head {
+  margin: 12px 2px 6px;
+}
+.nc-back {
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  color: var(--p-text);
+  cursor: default;
+}
+.nc-crumb {
+  margin-left: 0.6em;
+}
+.nc-back:hover {
+  text-decoration: underline;
+}
+.nc-foot {
+  justify-content: space-between;
+  margin: 10px 2px 0;
+  color: var(--p-faint);
+}
+.nc-body {
+  max-height: 300px;
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+.nc-zones {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+}
+.nc-zone {
+  padding: 0;
+  border: none;
+  border-radius: var(--r-sm, 4px);
+  overflow: hidden;
+  background: rgba(var(--ink-rgb), 0.06);
+  color: var(--p-text);
+  text-align: left;
+  font: inherit;
+  cursor: default;
+  transition: background 0.12s ease;
+}
+.nc-zone:hover {
+  background: rgba(var(--ink-rgb), 0.1);
+}
+.nc-cover {
+  position: relative;
+  display: grid;
+  height: 58px;
+  gap: 2px;
+}
+.nc-cover.trio {
+  grid-template-columns: 2fr 1fr;
+  grid-template-rows: 1fr 1fr;
+}
+.nc-cover.trio > :first-child {
+  grid-row: span 2;
+}
+.nc-cover > img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  object-fit: cover;
+}
+.nc-cover > .text-sheet.mini {
+  min-height: 0;
+  overflow: hidden;
+}
+.nc-cover.empty {
+  background: rgba(var(--ink-rgb), 0.04);
+}
+.nc-zone-name {
+  display: flex;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 6px 8px 7px;
+  font-size: 12px;
+  font-weight: 500;
+}
+.nc-zone-name > :first-child {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.nc-count {
+  font-family: "Geist Mono", ui-monospace, monospace;
+  font-size: 10px;
+  font-weight: 400;
+  color: var(--p-dim);
+}
+.nc-grid {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 4px;
+}
+.nc-tile {
+  width: 100%;
+  height: auto;
+  aspect-ratio: 1;
+}
+.nc-tile.on {
+  outline: 1px dashed var(--ink);
+  outline-offset: -3px;
+}
+.nc-tile.on::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: rgba(var(--accent-rgb), 0.18);
+}
+.nc-empty {
+  grid-column: 1 / -1;
+  padding: 18px 0;
+  text-align: center;
+  color: var(--p-dim);
+  font-size: 13px;
+}
+
+/* ---- 0.29.1: Lightbox in „Zuletzt gelöscht“ ----
+   Statt Zone und Info: „Wiederherstellen“ und „Sofort löschen“ (rot beim Überfahren, wie der Chip). */
+.lb-remove:hover {
+  color: var(--danger);
 }

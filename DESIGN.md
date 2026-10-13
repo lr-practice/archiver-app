@@ -1,6 +1,6 @@
 # Archiver – Design-System
 
-Stand: App 0.25.0 · Extension 3.20.0
+Stand: App 0.29.1 · Extension 3.21.1
 
 Diese Datei hält fest, wie Archiver aussieht und warum. Sie gilt für die Mac-App
 (`app/src`) und die Chrome-Extension (`extension/`). Wer an der Oberfläche
@@ -45,7 +45,6 @@ Klassen und Attribute auf `html`:
 |---|---|
 | Dunkel (Standard) | `:root` |
 | Hell | `html.light` (setzt `app.js` je nach Einstellung) |
-| Salbei dunkel / hell | `html[data-scheme="sage"]` / `…[data-scheme="sage"].light` |
 | Mac mit Fensterglas | `html.mac` (halbtransparent über der macOS-Unschärfe) |
 
 Bei neuen Regeln gilt:
@@ -58,8 +57,9 @@ Bei neuen Regeln gilt:
 
 | Token | Dunkel | Hell (0.25.0) | Zweck |
 |---|---|---|---|
-| `--bg-solid` | `#101010` | `#f4f4f4` | Grundfarbe des Fensters |
-| `--bg` | aus `--bg-solid` × `--win-alpha` | dito | Fenster über dem Mac-Glas (Regler in Einstellungen › Aussehen) |
+| `--bg-solid` | `#1c1c1c` | `#f4f4f4` | Grundfarbe des Fensters, gleich dem Tray (0.28) |
+| `--win-alpha` | 0.72 | 0.78 | Deckkraft über dem Mac-Glas, Standard wie im Tray; Regler in Einstellungen › Aussehen |
+| `--bg` | aus `--bg-solid` × `--win-alpha` | dito | Fenster über dem Mac-Glas |
 | `--ink` / `--ink-rgb` | `#ffffff` / `255,255,255` | `#111111` / `17,17,17` | Text und Basis aller Alpha-Flächen |
 | `--ink-inverse` | `#0f0f0f` | `#f4f4f4` | Text auf `--ink`-Flächen (Primärknopf) |
 | `--p-text` | `#ededed` | `#111111` | Haupttext |
@@ -76,10 +76,6 @@ Bei neuen Regeln gilt:
 | `--accent` / `--accent-rgb` | `#2d5aeb` | dito | Toast, aktive Systemzustände |
 | `--glow-rgb` | `91,124,255` | dito | Glühen der Zielkarte beim Ablegen |
 | `--danger` | `#e5484d` | dito | Fehler-Toast, Löschen |
-
-Für das Schema Salbei stehen die Werte in `app.css` im Abschnitt
-`html[data-scheme="sage"]`. Dessen Akzent ist ein Graublau (`#a6b5d6` dunkel,
-`#5f6f94` hell).
 
 Für die Farbe gilt:
 
@@ -158,12 +154,17 @@ Für die Bewegung gilt:
 
 **App** (`app/src`): Fenster mit macOS-Glas, Navigation oben in der Titelzeile
 auf Höhe der Fensterknöpfe, Bibliotheks-Reiter oben rechts. Startseite mit den
-Zonen als Karten, Active Zones oben in jeder Übersicht.
+Zonen als Karten, Active Zones oben in jeder Übersicht. Passen keine vier
+Karten nebeneinander, stehen sie 2 × 2 wie der Index (0.28).
 
 **Extension** (`extension/`): Overlay im Shadow DOM auf fremden Seiten
 (`overlay.css`, `:host`), Galerie im App-Layout (`gallery.css`), Panel
 (`panel.css`). Sie folgt der App 1:1. Seit 3.20.0 gilt das für die Übersicht,
 die Zone, die Glasleiste beim Ziehen, Geist und die Bibliothek oben rechts.
+
+**Am ganzen Mac** (`palette.*`, `dropbar.*`, `src-tauri/src/system.rs`):
+schwebende Fenster über anderen Programmen, auch wenn das Archiver-Fenster zu
+ist. Sie nutzen dieselben Karten, Ringe und Glaswerte wie die App (4.12, 4.13).
 
 ---
 
@@ -210,13 +211,25 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
 
 ### 4.5 Ordnerkarte (`.p-folder-card`)
 - **Zweck:** Unterordner neben dem Zonen-Titel, als Karten (3/6) oder als
-  Liste (2/6).
+  Liste (2/6). Klick betritt den Ordner (Titel wird zum Pfad), die Chips
+  links filtern nur und lassen Titel und Karten stehen.
 - **Form:** Wie die Zonenkarte, ein Sechstel breit. Aktiv zeigt sie den Ring.
+  Auch leere Ordner haben eine Karte (0 Objekte).
+- **Ablageziel (0.27):** Objekte und Ordner lassen sich auf die Karte ziehen,
+  sie zeigt dabei den Ring (4.1).
+- **⋯ und Ziehen (0.28):** ⋯ und Rechtsklick öffnen Umbenennen, Im Finder
+  zeigen und Löschen wie bei Zonen. Eine Ordnerkarte auf eine andere gezogen
+  legt den Ordner hinein (gleiches Anheben wie 4.4, Ziel mit Ring).
+- **Titel:** Steht oben im Kopf (`align-self: start`) und springt nicht, wenn
+  sich die Zahl der Karten beim Wechsel der Ebene ändert.
 
 ### 4.6 Objekt (`.card`)
 - **Zweck:** Ein gesichertes Bild, Video, PDF oder eine Text- bzw. Seitenkarte
   im Raster.
 - **Form:** Eckig, ohne Fläche. Solange es lädt, steht ein Glasplatzhalter da.
+- **Video beim Hover (0.27):** Nach 250 ms Verweilen zeigt `.card-scrub` acht
+  Standbilder aus dem ganzen Clip nacheinander (alle 320 ms), ohne Ton. Mit
+  `prefers-reduced-motion` bleibt das Standbild.
 - **Nicht:** Keine Rundung, kein Schatten und keine Bildunterschrift im Raster.
   Die Info gibt es per `I` oder im Seitenblatt.
 
@@ -244,8 +257,100 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
 
 ### 4.11 Lightbox und Seitenblatt
 - **Lightbox:** Das Bild steht groß auf `--lightbox-bg`. Leertaste öffnet sie,
-  Pfeile blättern, `I` zeigt die Info.
+  Pfeile blättern, `I` zeigt die Info. Klick neben das Objekt schließt sie
+  (offene Zonen klappen erst zu, vergrößert schließt nichts).
+- **Leiste der Lightbox (0.28):** dieselben Maße wie die Navigation (4.2):
+  Innenrand `--nav-rim`, Knöpfe `--nav-h`, 13,5 px, Abstand 3 px, Ecke `--r-md`.
 - **Seitenblatt:** Details von rechts, `--sheet-w` = min(560 px, 46 vw).
+
+### 4.11a Bildtext (`.card-cap`, `.lb-caption`, 0.29)
+- **Zweck:** Credits oder Unterschrift zu einem Bild, wie unter einem Bild im
+  Magazin. Kommt nur aus Text, den man beim Sichern auf der Seite markiert hat,
+  aus dem Feld „Bildtext“ in der Info oder per ⌘V auf ein gewähltes Bild.
+- **Form:** Drei Zeilen: Kennung in Geist Mono 10/11 px, Versalien, `--p-dim`
+  (Zone—Nummer Position/Anzahl, etwa TYPO—02 3/7), Text in Geist 13 px (Raster,
+  zwei Zeilen) bzw. 17 px (Lightbox), Notiz 11/13 px fett mit „Notiz:“ in
+  `--p-dim`.
+- **Raster:** Nur in „Original“ mit dem Chip „(+ Text)“, unter dem Bild in
+  derselben Spalte. Bilder ohne Text bleiben stumm.
+- **Lightbox:** Links neben dem Bild, Unterkante bündig, rechte Kante 40 px vor
+  dem Bild. Das Bild verrückt dafür nicht. Wenig Platz: der Text wird schmaler
+  (bis 180 px), sonst liegt er unten links auf einer Menüfläche über dem Bild.
+  Knopf „Text“ und Taste T blenden ihn aus.
+
+### 4.11b Notiz-Objekt (`.note-sheet`, `.note-paper`, `.note-links`, 0.29)
+- **Datei:** Eine Notiz ist eine `.md`-Datei in der Zone. Erste Zeile = Titel
+  (als `# Titel` gespeichert), beim Verlassen der Notiz auch Dateiname.
+  Anlegen per Rechtsklick in den Hintergrund einer Zone („Neue Notiz“) oder
+  ⌘⇧N; sie öffnet sich gleich in der Lightbox, der Titel ist markiert.
+- **Raster:** Ein Blatt wie die Textkarte (4.6): Kennung NOTIZ · Datum in Mono,
+  Titel fett (6,4 cqw, höchstens drei Zeilen), Text darunter normal, Fuß mit
+  „n verknüpft“. Grundton Papier (`white`), keine Zufallsfarbe. In „Original“
+  steht das Blatt hochkant 3 : 4.
+- **Lightbox:** Papier max. 620 × 760 px, Innenrand 48/52 px. Kennung NOTIZ ·
+  Zone · Datum (Mono 11 px), Titel 30 px/600, Text 17 px/1,45, Fuß mit Wörtern
+  und „Gesichert“. Geschrieben wird direkt auf dem Blatt, gesichert nach 0,6 s
+  Pause und beim Verlassen. Die Farbpunkte (Papier, Gelb, Rot, Cyan, Schwarz)
+  stehen in der Leiste. Schwarzes Blatt bekommt eine feine helle Kante.
+- **Verknüpfungen:** Spalte 40 px links neben dem Blatt, oben bündig, 150 px
+  breit: Mono-Kennung „Verknüpft (n)“, Kacheln 72 px in zwei Reihen, „+“ als
+  Rahmenkachel. „+“ öffnet eine Auswahl (Menüfläche 430 px, Suchfeld). Erst
+  stehen die Zonen als kleine Tray-Karten da (drei Spalten, Cover 58 px mit
+  einem großen und zwei kleinen Bildern, Name 12 px, Anzahl in Mono). Klick
+  öffnet die Zone: Raster mit sechs Spalten, gewählte gestrichelt, „‹ Zonen“
+  bzw. Esc führt zurück. Suchen durchsucht die ganze Bibliothek (0.29.1). Klick auf eine Kachel öffnet das Objekt; die Lightbox
+  blättert dann durch Notiz und Verknüpfte. Fenster schmaler als 1080 px: die
+  Kacheln (48 px) stehen auf dem Blatt über dem Fuß.
+
+### 4.12 Tray (`palette.css`)
+- **Name (0.28):** In der Oberfläche heißt sie „Tray“, im Code weiter `palette`.
+- **Zweck:** Per Kürzel (Standard ⌥ Space, Einstellungen › Tray) über
+  jedem Programm Zonen und Objekte holen, etwa in einen InDesign-Rahmen.
+- **Form:** 860 × 620 px, macOS-Glas, Suchfeld 17 px oben. Grund `--pal-bg`
+  (Dunkel rgb 28 × 0.72, Hell rgb 244 × 0.78) ist seit 0.28 auch der Standard
+  des App-Fensters (2.1). Hell/Dunkel und Ecken folgen Einstellungen › Aussehen;
+  die Fensterecke ist eckig 0, klein 6, mittel 12 (Standard), groß 18 px.
+  Start: Active Zones als Zonenkarten (4.4) mit 01–04 und „Active Zone“,
+  darunter der Index als flachere Karten (8:3). Zone: Active Zones als Reiter,
+  Objekte eckig in sechs Spalten (4.6). Suche: passende Zonen als Karten,
+  darunter Objekte. Fußzeile: links „Tray“, rechts die Tasten als
+  Mono-Etiketten, esc am Ende.
+- **Verhalten:** Aus InDesign geöffnet heißt ↵ „Platzieren“ (markierter
+  Rahmen oder Platzieren-Cursor), sonst „Kopieren“. Beim Herausziehen eines Objekts wird die Palette auf 6 %
+  Deckkraft gesetzt und lässt Klicks durch. Klick in ein anderes Programm
+  blendet sie aus.
+- **Textkarten (0.27):** wie in der App in ihrer Grundfarbe (`.pal-text`).
+- **Leertaste (0.27):** zeigt das gewählte Objekt groß, innerhalb der Palette
+  (`.pal-preview` ersetzt den Inhalt, Suchfeld und Fußzeile bleiben). ←→
+  blättern, Leertaste oder esc schließen. Im Suchfeld mit Text tippt die
+  Leertaste weiter.
+- **⌘1–3:** wechselt die Bibliothek wie in der App.
+- **Nicht:** Sie aktiviert Archiver nicht und holt das Hauptfenster nicht nach vorne.
+  Liegt Archiver hinten, wird das Hauptfenster beim Öffnen weggelegt und beim
+  Schließen hinter alle Fenster zurückgelegt (0.28).
+
+### 4.13 Zonenleiste am ganzen Mac (`dropbar.css`)
+- **Zweck:** Wie 4.3, aber beim Ziehen von Dateien in jedem Programm.
+- **Form:** Volle Breite unten auf dem Bildschirm mit dem Zeiger, 280 px hoch,
+  dieselben vier Glaskarten, Ring und Glühen wie 4.3. Die Karten haben keine
+  eigene Unschärfe (das Fenster ist durchsichtig), deshalb gilt `--zone-alpha`.
+- **Nicht:** Erscheint nicht, wenn Archiver selbst vorne ist, und nicht bei
+  Text oder Links ohne Datei.
+
+### 4.14 Zuletzt gelöscht (`.p-deleted`, `.card.del`)
+- **Zweck:** Gelöschte Objekte und Zonen liegen 7 Tage unter
+  `.archiver/deleted/<Zeit>/<alter Pfad>` in der Bibliothek, dann gehen sie in
+  den Papierkorb des Macs. Erreichbar über die letzte Zeile im Index und ≡.
+- **Form (0.28):** Dasselbe Raster und dieselbe Karte wie in jeder Zone (4.6),
+  mit Größenstufen. Das Badge zeigt Zone und Resttage. Auswahl zeigt den Ring
+  (4.1). Wiederherstellen und Sofort löschen stehen als Chips rechts.
+- **Lightbox (0.29.1):** Doppelklick, Leertaste oder Enter öffnen sie wie in
+  jeder Zone. In der Leiste stehen statt Zone und Info „Wiederherstellen“ und
+  „Sofort löschen“ (rot beim Überfahren). Notizen sind hier nur lesbar.
+- **Endgültig löschen fragt immer nach** (⌫, Chip, Menü, Lightbox): Dialog mit
+  „Abbrechen“ und rotem „Sofort löschen“, Enter bestätigt.
+- **Nicht:** Kein eigener Zonenplatz unter den Active Zones, keine Zeile, wenn
+  nichts gelöscht ist.
 
 ---
 
@@ -276,7 +381,7 @@ sie nur auf ausdrückliches Go.
 
 - [ ] Die neue Regel nutzt Tokens und keine festen Farben, Dauern oder Radien
       außerhalb der Stufen.
-- [ ] Sie funktioniert in Dunkel, Hell und Salbei sowie mit und ohne `html.mac`.
+- [ ] Sie funktioniert in Dunkel und Hell sowie mit und ohne `html.mac`.
 - [ ] Hervorhebungen laufen über den Ring (4.1) und nicht über Farbe.
 - [ ] Wenn die Komponente auch in der Extension vorkommt, ist sie dort gleich
       oder als Abweichung in Abschnitt 5 notiert.

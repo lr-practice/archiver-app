@@ -10,6 +10,7 @@ pub mod bridge;
 pub mod library;
 pub mod pdf;
 pub mod studio;
+mod system;
 mod viewer;
 #[cfg(target_os = "macos")]
 mod macos;
@@ -43,6 +44,9 @@ struct Settings {
     /// Drei feste Plätze für Bibliotheken, zwischen denen man umschaltet
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     libraries: Vec<LibrarySlot>,
+    /// Palette per Kürzel und Zonenleiste beim Ziehen am ganzen Mac
+    #[serde(default)]
+    system: system::SystemPrefs,
 }
 
 #[derive(Serialize, Deserialize, Default, Clone)]
@@ -257,6 +261,9 @@ fn start_analysis_worker(app: AppHandle, lib: Arc<Library>) -> mpsc::Sender<()> 
 fn activate(app: &AppHandle, root: &Path) -> Result<(), String> {
     let lib = Arc::new(Library::open(root)?);
     lib.set_user(load_settings(app).user);
+    // „Zuletzt gelöscht“: was älter als 7 Tage ist, geht in den Papierkorb des Macs
+    let purge = lib.clone();
+    std::thread::spawn(move || purge.purge_deleted(library::DELETED_DAYS));
     let state = app.state::<AppState>();
     *state.watcher.lock().unwrap() = None;
 
@@ -381,8 +388,11 @@ async fn open_library(app: AppHandle, path: String) -> Result<(), String> {
             slots[i] = LibrarySlot { name: folder_name(&path), path: Some(path.clone()) };
         }
         settings.libraries = slots;
-        settings.library = Some(path);
-        save_settings(&worker, &settings)
+        settings.library = Some(path.clone());
+        save_settings(&worker, &settings)?;
+        // Hauptfenster, Palette und Leiste ziehen nach (auch beim Wechsel aus der Palette)
+        let _ = worker.emit("library-switched", path);
+        Ok(())
     })
     .await
     .map_err(|e| e.to_string())?
@@ -674,6 +684,10 @@ struct Snapshot {
     default_zone: String,
     /// Zonentiefe und übersprungene Ordner
     structure: library::Structure,
+    /// Alle Ordner unterhalb der Zonen, auch leere (0.27)
+    folders: Vec<String>,
+    /// Anzahl unter „Zuletzt gelöscht“
+    deleted: usize,
 }
 
 #[tauri::command]
@@ -706,6 +720,8 @@ async fn snapshot(state: State<'_, AppState>) -> Result<Snapshot, String> {
         user,
         default_zone: lib.default_zone(),
         structure: lib.structure(),
+        folders: lib.folders(),
+        deleted: lib.deleted_count(),
     })
 }
 
@@ -795,8 +811,8 @@ async fn export_moodboard(app: AppHandle, title: String, meta: String, file_name
 }
 
 #[tauri::command]
-async fn move_items(app: AppHandle, state: State<'_, AppState>, paths: Vec<String>, zone: String) -> Result<Vec<String>, String> {
-    let moved = current(&state)?.move_items(&paths, &zone)?;
+async fn move_items(app: AppHandle, state: State<'_, AppState>, paths: Vec<String>, zone: String, exact: Option<bool>) -> Result<Vec<String>, String> {
+    let moved = current(&state)?.move_items_to(&paths, &zone, exact.unwrap_or(false))?;
     let _ = app.emit("library-changed", ());
     Ok(moved)
 }
@@ -804,6 +820,62 @@ async fn move_items(app: AppHandle, state: State<'_, AppState>, paths: Vec<Strin
 #[tauri::command]
 async fn trash_items(app: AppHandle, state: State<'_, AppState>, paths: Vec<String>) -> Result<Vec<(String, String)>, String> {
     let n = current(&state)?.trash_items(&paths)?;
+    let _ = app.emit("library-changed", ());
+    Ok(n)
+}
+
+#[tauri::command]
+async fn create_folder(app: AppHandle, state: State<'_, AppState>, parent: String, name: String) -> Result<String, String> {
+    let f = current(&state)?.create_folder(&parent, &name)?;
+    let _ = app.emit("library-changed", ());
+    Ok(f)
+}
+
+/// Notiz-Objekte (0.29)
+#[tauri::command]
+async fn create_note(app: AppHandle, state: State<'_, AppState>, dir: String, title: String) -> Result<String, String> {
+    let p = current(&state)?.create_note(&dir, &title)?;
+    let _ = app.emit("library-changed", ());
+    Ok(p)
+}
+
+#[tauri::command]
+async fn read_note(state: State<'_, AppState>, path: String) -> Result<String, String> {
+    current(&state)?.read_note(&path)
+}
+
+#[derive(serde::Serialize)]
+struct NoteSaved {
+    path: String,
+    hash: String,
+}
+
+#[tauri::command]
+async fn write_note(app: AppHandle, state: State<'_, AppState>, path: String, text: String, rename: bool) -> Result<NoteSaved, String> {
+    let (path, hash) = current(&state)?.write_note(&path, &text, rename)?;
+    if rename {
+        let _ = app.emit("library-changed", ());
+    }
+    Ok(NoteSaved { path, hash })
+}
+
+#[tauri::command]
+async fn deleted_items(state: State<'_, AppState>) -> Result<Vec<library::DeletedItem>, String> {
+    let lib = current(&state)?;
+    tauri::async_runtime::spawn_blocking(move || lib.deleted_items()).await.map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+async fn restore_deleted(app: AppHandle, state: State<'_, AppState>, files: Vec<String>) -> Result<usize, String> {
+    let n = current(&state)?.restore_deleted(&files)?;
+    let _ = app.emit("library-changed", ());
+    kick_thumbs(&app);
+    Ok(n)
+}
+
+#[tauri::command]
+async fn remove_deleted(app: AppHandle, state: State<'_, AppState>, files: Vec<String>) -> Result<usize, String> {
+    let n = current(&state)?.remove_deleted(&files)?;
     let _ = app.emit("library-changed", ());
     Ok(n)
 }
@@ -820,6 +892,13 @@ async fn rename_zone(app: AppHandle, state: State<'_, AppState>, zone: String, n
     let z = current(&state)?.rename_zone(&zone, &name)?;
     let _ = app.emit("library-changed", ());
     Ok(z)
+}
+
+#[tauri::command]
+async fn move_folder(app: AppHandle, state: State<'_, AppState>, from: String, into: String) -> Result<String, String> {
+    let p = current(&state)?.move_folder(&from, &into)?;
+    let _ = app.emit("library-changed", ());
+    Ok(p)
 }
 
 /// Deckkraft der Zonen beim Ziehen (App und Extension)
@@ -961,15 +1040,41 @@ struct UpdateInfo {
     notes: Option<String>,
 }
 
+// ---- Am ganzen Mac: Palette und Zonenleiste (system.rs) ----
+
+#[tauri::command]
+fn system_prefs(app: AppHandle) -> system::SystemPrefs {
+    load_settings(&app).system
+}
+
+#[tauri::command]
+fn set_system_prefs(app: AppHandle, prefs: system::SystemPrefs) -> Result<(), String> {
+    let mut s = load_settings(&app);
+    s.system = prefs.clone();
+    save_settings(&app, &s)?;
+    system::apply(&app, &prefs)
+}
+
 /// Hell / Dunkel aus den Einstellungen: Fensterrahmen und Glas passend setzen.
 /// Dunkel bleibt das HUD-Glas, Hell nimmt das helle Seitenleisten-Glas.
+/// Ecke des Trays in Punkt, aus Einstellungen › Aussehen (0.28)
+static TRAY_RADIUS: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(12);
+
 #[tauri::command]
-fn set_appearance(window: tauri::WebviewWindow, light: bool) {
+fn set_appearance(window: tauri::WebviewWindow, light: bool, radius: Option<f64>) {
     let _ = window.set_theme(Some(if light { tauri::Theme::Light } else { tauri::Theme::Dark }));
-    if window.label() == "main" {
+    if let Some(r) = radius.filter(|_| window.label() == system::PALETTE) {
+        TRAY_RADIUS.store(r.clamp(0.0, 24.0) as u32, std::sync::atomic::Ordering::Relaxed);
+    }
+    if window.label() == "main" || window.label() == system::PALETTE {
         use tauri::window::{Effect, EffectState, EffectsBuilder};
         let effect = if light { Effect::Sidebar } else { Effect::HudWindow };
-        let _ = window.set_effects(EffectsBuilder::new().effect(effect).state(EffectState::Active).build());
+        let radius = if window.label() == system::PALETTE { TRAY_RADIUS.load(std::sync::atomic::Ordering::Relaxed) as f64 } else { 0.0 };
+        let mut fx = EffectsBuilder::new().effect(effect).state(EffectState::Active);
+        if radius > 0.0 {
+            fx = fx.radius(radius);
+        }
+        let _ = window.set_effects(fx.build());
     }
 }
 
@@ -1103,6 +1208,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_drag::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(system::shortcut_plugin())
         .manage(AppState::default())
         .setup(|app| {
             let handle = app.handle().clone();
@@ -1113,16 +1219,24 @@ pub fn run() {
             if let Some(path) = viewer::from_args() {
                 viewer::open(&handle, path);
             }
+            system::setup(&handle, &load_settings(&handle).system);
             Ok(())
         })
         .on_window_event(|window, event| {
-            // Ist der Betrachter offen, wird das Hauptfenster nur ausgeblendet,
-            // damit „In Archiver zeigen“ es wieder hervorholen kann.
-            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-                if window.label() == "main" && window.app_handle().get_webview_window(viewer::LABEL).is_some() {
+            // Das Hauptfenster wird beim Schließen nur ausgeblendet: Archiver läuft
+            // weiter für Palette und Zonenleiste (system.rs), der Betrachter kann es
+            // mit „In Archiver zeigen“ hervorholen, das Dock-Symbol ebenso. ⌘Q beendet.
+            match event {
+                tauri::WindowEvent::CloseRequested { api, .. }
+                    if window.label() == "main" && (cfg!(target_os = "macos") || window.app_handle().get_webview_window(viewer::LABEL).is_some()) =>
+                {
                     api.prevent_close();
                     let _ = window.hide();
                 }
+                tauri::WindowEvent::Focused(false) if window.label() == system::PALETTE => {
+                    system::palette_blurred(window.app_handle());
+                }
+                _ => {}
             }
         })
         .invoke_handler(tauri::generate_handler![
@@ -1142,7 +1256,15 @@ pub fn run() {
             trash_items,
             restore_items,
             create_zone,
+            create_folder,
+            create_note,
+            read_note,
+            write_note,
+            deleted_items,
+            restore_deleted,
+            remove_deleted,
             rename_zone,
+            move_folder,
             set_zone_order,
             set_default_zone,
             set_structure,
@@ -1181,6 +1303,11 @@ pub fn run() {
             viewer::show_in_app,
             viewer::viewer_defaults,
             viewer::viewer_make_default,
+            system::palette_hide,
+            system::palette_ghost,
+            system::palette_place,
+            system_prefs,
+            set_system_prefs,
         ])
         .build(tauri::generate_context!())
         .expect("Archiver konnte nicht starten")
@@ -1197,6 +1324,11 @@ pub fn run() {
             // Das Hauptfenster startet unsichtbar: wurde die App mit einem Bild
             // geöffnet, erscheint nur der Betrachter, sonst wie gewohnt die App.
             tauri::RunEvent::Ready => {
+                // Mit einem Bild gestartet (Finder): nur der Betrachter, nie das Hauptfenster
+                #[cfg(target_os = "macos")]
+                if macos::launched_with_documents() {
+                    return;
+                }
                 let app = app.clone();
                 std::thread::spawn(move || {
                     std::thread::sleep(Duration::from_millis(450));

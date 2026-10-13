@@ -13,13 +13,14 @@
     return m ? m[1].toLowerCase() : String(name || "").toLowerCase();
   }
 
-  // "pdf" | "video" | "audio" | "image" — aus Dateiname, Pfad oder Format
+  // "pdf" | "video" | "audio" | "text" | "note" | "image" — aus Dateiname, Pfad oder Format
   function kind(nameOrFormat) {
     const ext = extOf(nameOrFormat);
     if (PDF_EXTS.includes(ext)) return "pdf";
     if (VIDEO_EXTS.includes(ext)) return "video";
     if (AUDIO_EXTS.includes(ext)) return "audio";
     if (ext === "txt") return "text";
+    if (ext === "md") return "note";
     return "image";
   }
 

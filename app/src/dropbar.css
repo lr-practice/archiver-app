@@ -1,0 +1,109 @@
+/* dropbar.css — Active-Zones-Leiste am ganzen Mac (system.rs). Dieselbe Leiste
+   wie beim Ziehen in der App (DESIGN.md 4.3): vier Glaskarten unten, Ziel
+   unter dem Zeiger mit Ring, Abgelegt mit kurzem Glühen. Tokens aus palette.css. */
+
+:root {
+  --menu-bg: rgba(40, 40, 40, 0.97);
+  --glow-rgb: 91, 124, 255;
+}
+
+html.light {
+  --menu-bg: rgba(250, 250, 250, 0.97);
+}
+
+.db-bar {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  gap: 10px;
+  padding: 4px 14px 14px; /* oben Platz für den Ring */
+}
+
+.db-hot {
+  position: relative;
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 16px 18px;
+  border-radius: var(--r-lg);
+  background: color-mix(in srgb, var(--menu-bg) calc(var(--zone-alpha, 0.97) * 100%), transparent);
+  box-shadow: inset 0 0 0 1px rgba(var(--ink-rgb), 0.07);
+  transition: background 0.12s ease;
+  animation: db-in 0.14s ease-out;
+}
+
+html.light .db-hot {
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.7), inset 0 0 0 0.5px rgba(0, 0, 0, 0.08);
+}
+
+@keyframes db-in {
+  from {
+    opacity: 0;
+  }
+}
+
+.db-name {
+  font-size: 17px;
+  font-weight: 400;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.db-hint {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--p-dim);
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+
+.db-hot.drop-active {
+  background: color-mix(
+    in srgb,
+    color-mix(in srgb, var(--menu-bg) 88%, #fff) calc(var(--zone-alpha, 0.97) * 100%),
+    transparent
+  );
+}
+
+.db-hot.drop-active .db-hint,
+.db-hot.landed .db-hint {
+  opacity: 1;
+  color: var(--p-text);
+}
+
+/* Ziel unter dem Zeiger: Ring (4.1) */
+.db-hot.drop-active::after {
+  content: "";
+  position: absolute;
+  inset: -3px;
+  pointer-events: none;
+  background: var(--p-text);
+  -webkit-mask: var(--ring-in) 0 0 / 100% 100% no-repeat;
+  mask: var(--ring-in) 0 0 / 100% 100% no-repeat;
+}
+
+/* Abgelegt: kurzes Glühen, dann blendet die Leiste aus */
+.db-hot.landed {
+  box-shadow: 0 0 0 1px rgba(var(--glow-rgb), 0.9), 0 0 28px rgba(var(--glow-rgb), 0.45);
+}
+
+.db-bar.leaving {
+  animation: db-out 0.2s ease 0.3s forwards;
+}
+
+@keyframes db-out {
+  to {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .db-hot,
+  .db-bar.leaving {
+    animation: none;
+  }
+}
