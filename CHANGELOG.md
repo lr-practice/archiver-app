@@ -1,5 +1,9 @@
 # Changelog
 
+## Extension 3.21.1 (13.10.2026, lokal, erscheint mit der nächsten App)
+
+- Bilder mit Kommas in der Adresse (Substack, Cloudinary) laden wieder in voller Größe. Bisher brach die Bildadresse am Komma ab und der Download schlug fehl, etwa beim Sichern von Bild und markiertem Text.
+
 ## App 0.29.1 · Extension 3.21.0 (13.10.2026)
 
 Zuletzt gelöscht:

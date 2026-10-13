@@ -654,7 +654,7 @@
   // Schluss ist bei der Pin-Zahl des Boards oder bei „Mehr Ideen“.
 
   function bestPinImage(img) {
-    const set = (img.getAttribute("srcset") || "").split(",").map((s) => s.trim().split(/\s+/)[0]).filter(Boolean);
+    const set = parseSrcset(img.getAttribute("srcset")).map((c) => c.url);
     const url = set.length ? set[set.length - 1] : img.src;
     return url.includes("/originals/") ? url : url.replace(/\/\d+x(\d+)?\//, "/736x/");
   }
@@ -833,23 +833,40 @@
 
   // ---- Bildquelle ermitteln (High-Res statt Thumbnail) ----
 
+  // srcset nach dem Verfahren der HTML-Spezifikation lesen: eine Adresse endet
+  // erst an Leerraum, Kommas darin gehören dazu (Substack, Cloudinary:
+  // ".../w_1456,c_limit,f_webp/..."). Ein Komma nach der Adresse oder nach den
+  // Angaben trennt die Kandidaten.
+  function parseSrcset(srcset) {
+    const out = [];
+    const s = String(srcset || "");
+    let i = 0;
+    while (i < s.length) {
+      while (i < s.length && /[\s,]/.test(s[i])) i++;
+      if (i >= s.length) break;
+      let j = i;
+      while (j < s.length && !/\s/.test(s[j])) j++;
+      let url = s.slice(i, j);
+      i = j;
+      let desc = "";
+      if (/,$/.test(url)) url = url.replace(/,+$/, "");
+      else {
+        while (i < s.length && s[i] !== ",") desc += s[i++];
+        i++;
+      }
+      if (url) out.push({ url, desc: desc.trim() });
+    }
+    return out;
+  }
+
   function parseSrcsetBest(srcset) {
-    if (!srcset) return null;
-    const candidates = srcset
-      .split(",")
-      .map((s) => s.trim())
-      .filter(Boolean)
-      .map((entry) => {
-        const parts = entry.split(/\s+/);
-        const url = parts[0];
-        let score = 0;
-        if (parts[1]) {
-          const d = parts[1];
-          if (d.endsWith("w")) score = parseInt(d, 10) || 0;
-          else if (d.endsWith("x")) score = (parseFloat(d) || 1) * 1000;
-        }
-        return { url, score };
-      });
+    const candidates = parseSrcset(srcset).map(({ url, desc }) => {
+      let score = 0;
+      const d = desc.split(/\s+/)[0] || "";
+      if (d.endsWith("w")) score = parseInt(d, 10) || 0;
+      else if (d.endsWith("x")) score = (parseFloat(d) || 1) * 1000;
+      return { url, score };
+    });
     if (!candidates.length) return null;
     candidates.sort((a, b) => b.score - a.score);
     return candidates[0].url;
