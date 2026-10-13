@@ -278,6 +278,27 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
   (bis 180 px), sonst liegt er unten links auf einer Menüfläche über dem Bild.
   Knopf „Text“ und Taste T blenden ihn aus.
 
+### 4.11b Notiz-Objekt (`.note-sheet`, `.note-paper`, `.note-links`, 0.29)
+- **Datei:** Eine Notiz ist eine `.md`-Datei in der Zone. Erste Zeile = Titel
+  (als `# Titel` gespeichert), beim Verlassen der Notiz auch Dateiname.
+  Anlegen per Rechtsklick in den Hintergrund einer Zone („Neue Notiz“) oder
+  ⌘⇧N; sie öffnet sich gleich in der Lightbox, der Titel ist markiert.
+- **Raster:** Ein Blatt wie die Textkarte (4.6): Kennung NOTIZ · Datum in Mono,
+  Titel fett (6,4 cqw, höchstens drei Zeilen), Text darunter normal, Fuß mit
+  „n verknüpft“. Grundton Papier (`white`), keine Zufallsfarbe. In „Original“
+  steht das Blatt hochkant 3 : 4.
+- **Lightbox:** Papier max. 620 × 760 px, Innenrand 48/52 px. Kennung NOTIZ ·
+  Zone · Datum (Mono 11 px), Titel 30 px/600, Text 17 px/1,45, Fuß mit Wörtern
+  und „Gesichert“. Geschrieben wird direkt auf dem Blatt, gesichert nach 0,6 s
+  Pause und beim Verlassen. Die Farbpunkte (Papier, Gelb, Rot, Cyan, Schwarz)
+  stehen in der Leiste. Schwarzes Blatt bekommt eine feine helle Kante.
+- **Verknüpfungen:** Spalte 40 px links neben dem Blatt, oben bündig, 150 px
+  breit: Mono-Kennung „Verknüpft (n)“, Kacheln 72 px in zwei Reihen, „+“ als
+  Rahmenkachel. „+“ öffnet eine Auswahl (Menüfläche, Suchfeld, Raster 5 × 56 px,
+  gewählte gestrichelt). Klick auf eine Kachel öffnet das Objekt; die Lightbox
+  blättert dann durch Notiz und Verknüpfte. Fenster schmaler als 1080 px: die
+  Kacheln (48 px) stehen auf dem Blatt über dem Fuß.
+
 ### 4.12 Tray (`palette.css`)
 - **Name (0.28):** In der Oberfläche heißt sie „Tray“, im Code weiter `palette`.
 - **Zweck:** Per Kürzel (Standard ⌥ Space, Einstellungen › Tray) über

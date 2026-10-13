@@ -8,6 +8,13 @@ Bildtext:
 - In der Ansicht „Original“ zeigt „(+ Text)“ Kennung, Bildtext und Notiz unter den Bildern.
 - In der Lightbox steht der Bildtext links neben dem Bild, unten bündig. „Text“ oder T blendet ihn aus.
 
+Notizen:
+- Neue Notiz per Rechtsklick in eine Zone oder ⌘⇧N. Sie liegt als .md-Datei in der Zone.
+- Im Raster ein Blatt mit Titel und Text, in der Lightbox schreibt man direkt darauf. Gesichert wird von selbst, der Titel wird beim Verlassen zum Dateinamen.
+- Farbe über die Punkte in der Leiste: Papier, Gelb, Rot, Cyan, Schwarz.
+- Links neben dem Blatt stehen die verknüpften Objekte. „+“ sucht in der ganzen Bibliothek, Klick öffnet das Objekt.
+- Finden hat den Filter „(Notizen)“. .md-Dateien, die schon in Zonen liegen, erscheinen jetzt ebenfalls als Notiz.
+
 ## App 0.28.0 (13.10.2026)
 
 Tray (bisher „Palette“):

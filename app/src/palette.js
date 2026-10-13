@@ -39,10 +39,12 @@
     cyan: ["#00b0f0", "#003d54", 0.7],
     yellow: ["#ffff00", "#5c5c00", 0.75],
     white: ["#f4f3ef", "#141414", 0.5],
+    black: ["#141414", "#ededed", 0.5],
   };
   const RANDOM_TONES = ["red", "green", "violet", "cyan", "yellow"];
   function quoteTone(item) {
     if (QUOTE_TONES[item.tone]) return QUOTE_TONES[item.tone];
+    if (item.format === "md") return QUOTE_TONES.white; // Notiz: Papier
     const key = String(item.hash || item.path || "");
     let h = 0;
     for (let i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) >>> 0;
@@ -54,7 +56,8 @@
     const [bg, fg] = quoteTone(item);
     node.style.setProperty("--ts-bg", bg);
     node.style.setProperty("--ts-fg", fg);
-    node.appendChild(el("div", "pal-text-body", item.quote));
+    // Notiz (.md): Titel ohne Markdown-Raute
+    node.appendChild(el("div", "pal-text-body", item.format === "md" ? String(item.quote || "").replace(/^\s*#+\s*/, "") : item.quote));
     return node;
   }
 

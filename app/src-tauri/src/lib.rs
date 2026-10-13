@@ -831,6 +831,34 @@ async fn create_folder(app: AppHandle, state: State<'_, AppState>, parent: Strin
     Ok(f)
 }
 
+/// Notiz-Objekte (0.29)
+#[tauri::command]
+async fn create_note(app: AppHandle, state: State<'_, AppState>, dir: String, title: String) -> Result<String, String> {
+    let p = current(&state)?.create_note(&dir, &title)?;
+    let _ = app.emit("library-changed", ());
+    Ok(p)
+}
+
+#[tauri::command]
+async fn read_note(state: State<'_, AppState>, path: String) -> Result<String, String> {
+    current(&state)?.read_note(&path)
+}
+
+#[derive(serde::Serialize)]
+struct NoteSaved {
+    path: String,
+    hash: String,
+}
+
+#[tauri::command]
+async fn write_note(app: AppHandle, state: State<'_, AppState>, path: String, text: String, rename: bool) -> Result<NoteSaved, String> {
+    let (path, hash) = current(&state)?.write_note(&path, &text, rename)?;
+    if rename {
+        let _ = app.emit("library-changed", ());
+    }
+    Ok(NoteSaved { path, hash })
+}
+
 #[tauri::command]
 async fn deleted_items(state: State<'_, AppState>) -> Result<Vec<library::DeletedItem>, String> {
     let lib = current(&state)?;
@@ -1229,6 +1257,9 @@ pub fn run() {
             restore_items,
             create_zone,
             create_folder,
+            create_note,
+            read_note,
+            write_note,
             deleted_items,
             restore_deleted,
             remove_deleted,

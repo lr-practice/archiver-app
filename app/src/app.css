@@ -5886,3 +5886,288 @@ html.light {
   font-weight: 600;
   line-height: 1.4;
 }
+
+/* ---- 0.29: Notiz-Objekte ----
+   Im Raster ein Blatt wie die Textkarten (Kennung NOTIZ · Datum, fetter Titel,
+   Text, Fuß), Papier statt Zufallsfarbe. In der Lightbox wird auf dem Blatt
+   geschrieben; die Verknüpfungen stehen 40 px links daneben. */
+.original .card-note {
+  aspect-ratio: 3 / 4;
+}
+.note-sheet .ts-title {
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.15;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.card-text .note-sheet .ts-title {
+  padding: 3cqw 6cqw 0;
+  font-size: 6.4cqw;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  flex: none;
+}
+.card-text .note-sheet .ts-body {
+  padding-top: 2.4cqw;
+  font-weight: 400;
+  line-height: 1.35;
+}
+.card-text .note-sheet.short .ts-body {
+  font-size: 4.4cqw;
+}
+.card-text .note-sheet.medium .ts-body,
+.card-text .note-sheet.long .ts-body {
+  font-size: 3.8cqw;
+}
+.text-sheet.mini.note-sheet .ts-title {
+  font-size: 9cqw;
+  padding: 0 8cqw;
+}
+.text-sheet.mini.note-sheet .ts-body {
+  display: none;
+}
+
+/* Lightbox: Papier, max. 620 × 760, Titel 30 px, Text 17 px */
+.lb-note {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 48px 32px 84px;
+  box-sizing: border-box;
+}
+.note-paper {
+  position: relative;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  width: min(620px, 100%);
+  height: min(760px, 100%);
+  padding: 48px 52px 36px;
+  background: var(--ts-bg, #f4f3ef);
+  color: var(--ts-fg, #141414);
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+  font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
+  caret-color: var(--accent);
+}
+/* Schwarzes Blatt auf dunklem Grund: feine Kante */
+.note-paper[data-tone="black"] {
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12), 0 10px 40px rgba(0, 0, 0, 0.3);
+}
+.text-sheet[data-tone="black"] {
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12);
+}
+.note-paper .np-label,
+.note-paper .np-foot {
+  font-family: "Geist Mono", ui-monospace, monospace;
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  opacity: var(--ts-dim, 0.5);
+}
+.np-title,
+.np-body {
+  display: block;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: inherit;
+  font-family: inherit;
+}
+.np-title {
+  margin: 14px 0 18px;
+  font-size: 30px;
+  font-weight: 600;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+}
+.np-body {
+  flex: 1;
+  min-height: 0;
+  resize: none;
+  font-size: 17px;
+  line-height: 1.45;
+  letter-spacing: -0.005em;
+  scrollbar-width: none;
+}
+.np-title::placeholder,
+.np-body::placeholder {
+  color: inherit;
+  opacity: 0.35;
+}
+.note-paper ::selection {
+  background: rgba(var(--accent-rgb), 0.25);
+}
+.np-foot {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 16px;
+}
+
+/* Verknüpfungen: Spalte links neben dem Blatt, oben bündig, zwei Reihen à 72 px */
+.note-links {
+  position: absolute;
+  top: 0;
+  right: calc(100% + 40px);
+  width: 150px;
+  color: var(--p-text);
+}
+.nl-label {
+  margin-bottom: 8px;
+  font-family: "Geist Mono", ui-monospace, monospace;
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--p-dim);
+}
+.nl-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 72px);
+  gap: 6px;
+}
+.nl-tile,
+.nc-tile {
+  position: relative;
+  width: 72px;
+  height: 72px;
+  padding: 0;
+  border: none;
+  background: rgba(var(--ink-rgb), 0.06);
+  overflow: hidden;
+  cursor: default;
+}
+.nl-tile img,
+.nc-tile img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.nl-tile .text-sheet.mini,
+.nc-tile .text-sheet.mini {
+  position: absolute;
+  inset: 0;
+}
+.nl-add {
+  background: none;
+  box-shadow: inset 0 0 0 1px rgba(var(--ink-rgb), 0.25);
+  color: var(--p-dim);
+  font-size: 20px;
+  font-weight: 300;
+}
+.nl-add:hover {
+  color: var(--p-text);
+  box-shadow: inset 0 0 0 1px rgba(var(--ink-rgb), 0.5);
+}
+.nl-remove {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  width: 18px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.6);
+  color: #fff;
+  font-size: 12px;
+  line-height: 1;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+.nl-tile:hover .nl-remove {
+  opacity: 1;
+}
+/* Schmales Fenster: Verknüpfungen rücken unter den Text, auf das Blatt */
+@media (max-width: 1080px) {
+  .note-links {
+    position: static;
+    width: auto;
+    margin-top: 16px;
+    color: inherit;
+  }
+  .note-links .nl-label {
+    color: inherit;
+    opacity: var(--ts-dim, 0.5);
+  }
+  .note-links .nl-grid {
+    grid-template-columns: repeat(auto-fill, 48px);
+  }
+  .note-links .nl-tile {
+    width: 48px;
+    height: 48px;
+  }
+}
+
+/* Farbpunkte der Notiz in der Leiste */
+.lb-tones {
+  align-items: center;
+  gap: 9px;
+  padding: 0 10px;
+}
+.lb-tones:not([hidden]) {
+  display: flex;
+}
+.lb-tones .tone-dot {
+  width: 16px;
+  height: 16px;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.25);
+}
+
+/* Auswahl zum Verknüpfen: Suchfeld, Raster mit 56 px, gewählte mit Rahmen */
+.zone-menu.p-ctx-menu.note-chooser {
+  width: 340px;
+  min-width: 0;
+  padding: 8px;
+  box-sizing: border-box;
+}
+.nc-search {
+  width: 100%;
+  box-sizing: border-box;
+  margin-bottom: 8px;
+  padding: 7px 9px;
+  border: none;
+  border-radius: var(--r-sm, 4px);
+  outline: none;
+  background: rgba(var(--ink-rgb), 0.07);
+  color: var(--p-text);
+  font: inherit;
+  font-size: 13px;
+}
+.nc-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 4px;
+  max-height: 260px;
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+.nc-tile {
+  width: 100%;
+  height: auto;
+  aspect-ratio: 1;
+}
+.nc-tile.on {
+  outline: 1px dashed var(--ink);
+  outline-offset: -3px;
+}
+.nc-tile.on::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: rgba(var(--accent-rgb), 0.18);
+}
+.nc-empty {
+  grid-column: 1 / -1;
+  padding: 18px 0;
+  text-align: center;
+  color: var(--p-dim);
+  font-size: 13px;
+}

@@ -269,6 +269,7 @@
   // nur als Bild; dann aus der Texterkennung („TEXT … domain · Datum“).
   function quoteOf(item) {
     if (item.quote) return item.quote;
+    if (isNote(item)) return " "; // leere Notiz bleibt ein Blatt
     if (item.width !== 1400 || item.imageUrl || !item.text || item.format !== "png") return "";
     const m = /^TEXT\s+([\s\S]+?)(?:\s+(?:[\w.-]+\.[a-z]{2,}\s+·\s+)?[\d./-]+)?\s*$/i.exec(item.text.trim());
     return m ? m[1].trim() : "";
@@ -285,12 +286,14 @@
     cyan: ["#00b0f0", "#003d54", 0.7],
     yellow: ["#ffff00", "#5c5c00", 0.75],
     white: ["#f4f3ef", "#141414", 0.5],
+    black: ["#141414", "#ededed", 0.5],
   };
   const RANDOM_TONES = ["red", "green", "violet", "cyan", "yellow"];
   // Eigene Farbe (beim Markieren im Web bestimmt oder in den Details gewählt),
   // sonst fest aus dem Inhalt abgeleitet
   function quoteTone(item) {
     if (QUOTE_TONES[item.tone]) return QUOTE_TONES[item.tone];
+    if (isNote(item)) return QUOTE_TONES.white; // Notizen: Papier, bis eine Farbe gewählt ist
     const key = String(item.hash || item.path || "");
     let h = 0;
     for (let i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) >>> 0;
@@ -298,11 +301,13 @@
   }
   function toneKey(item) {
     if (QUOTE_TONES[item.tone]) return item.tone;
+    if (isNote(item)) return "white";
     return RANDOM_TONES.find((k) => QUOTE_TONES[k] === quoteTone(item));
   }
 
   // Textkarte als Text statt Bild: Kennung, Zitat, Quelle und Datum
   function textSheet(item, cls) {
+    if (isNote(item)) return noteSheet(item, cls);
     const len = quoteOf(item).length;
     const sheet = el("div", cls + (len < 140 ? " short" : len < 400 ? " medium" : " long"));
     const [bg, fg, dim] = quoteTone(item);
@@ -706,8 +711,8 @@
     const f = state.filters;
     const bar = el("div", "p-bar p-filters");
     bar.appendChild(mono("(" + t("filterTitle") + ")", "dim p-facet-title"));
-    // Art zuerst: Bilder, Tracks, Video, PDF
-    for (const k of ["image", "audio", "video", "pdf"])
+    // Art zuerst: Bilder, Tracks, Video, PDF, Notizen
+    for (const k of ["image", "audio", "video", "pdf", "note"])
       bar.appendChild(chip("(" + t("kind_" + k) + ")", f.kind === k, () => setFilter("kind", k)));
     bar.appendChild(el("span", "p-filter-gap"));
     const dots = el("span", "p-colors");
@@ -1076,6 +1081,12 @@
     const menu = el("div", "zone-menu p-ctx-menu");
     menu.addEventListener("click", (e) => e.stopPropagation());
     menu.addEventListener("contextmenu", (e) => e.preventDefault());
+    const noteBtn = button("zone-menu-item", t("noteNew"), () => {
+      closeMenus();
+      newNote();
+    });
+    noteBtn.appendChild(el("span", "p-ctx-key", "⌘⇧N"));
+    menu.appendChild(noteBtn);
     menu.appendChild(button("zone-menu-item", t("newFolder"), () => {
       closeMenus();
       newFolder(false);
@@ -3406,13 +3417,15 @@
     const img = card.querySelector("img");
     const quote = quoteOf(item);
     card.classList.toggle("card-text", !!quote);
+    card.classList.toggle("card-note", isNote(item));
     let sheet = card.querySelector(".text-sheet");
     if (quote) {
       const tone = toneKey(item);
-      if (!sheet || sheet.dataset.quote !== quote || sheet.dataset.tone !== tone) {
+      const key = quote + "|" + (item.links || []).length;
+      if (!sheet || sheet.dataset.quote !== key || sheet.dataset.tone !== tone) {
         if (sheet) sheet.remove();
         sheet = textSheet(item, "text-sheet");
-        sheet.dataset.quote = quote;
+        sheet.dataset.quote = key;
         sheet.dataset.tone = tone;
         card.insertBefore(sheet, img);
       }
@@ -3973,6 +3986,329 @@
     }
   }
 
+  // ---- Notiz-Objekte (0.29): ein Blatt im Raster, geschrieben wird in der Lightbox ----
+  // Der Text liegt als .md in der Zone. Erste Zeile = Titel (beim Verlassen auch
+  // Dateiname), Verknüpfungen stehen links neben dem Blatt.
+  const NOTE_TONES = ["white", "yellow", "red", "cyan", "black"];
+  function isNote(item) {
+    return !!item && kindOf(item) === "note";
+  }
+
+  function noteParts(text) {
+    const lines = String(text || "").replace(/\r\n?/g, "\n").split("\n");
+    const i = lines.findIndex((l) => l.trim());
+    if (i < 0) return { title: "", body: "" };
+    return { title: lines[i].replace(/^\s*#+\s*/, "").trim(), body: lines.slice(i + 1).join("\n").replace(/^\n+/, "").trimEnd() };
+  }
+  function noteText(title, body) {
+    title = title.trim();
+    body = body.trimEnd();
+    return (title ? "# " + title + (body ? "\n\n" : "\n") : "") + body;
+  }
+  function noteDate(item, year) {
+    const d = new Date(item.addedAt || item.mtime || Date.now());
+    return d.toLocaleDateString(lang === "de" ? "de-DE" : "en-GB", year ? undefined : { day: "2-digit", month: "2-digit" });
+  }
+  function noteWords(text) {
+    const m = String(text).match(/[^\s#]+/g);
+    return m ? m.length : 0;
+  }
+  function linkedItems(item) {
+    const byHash = new Map(state.items.map((i) => [i.hash, i]));
+    return (item.links || []).map((h) => byHash.get(h)).filter(Boolean);
+  }
+
+  // Blatt im Raster (A1): Kennung, fetter Titel, Text, Fuß mit Verknüpfungen
+  function noteSheet(item, cls) {
+    const { title, body } = noteParts(item.quote);
+    const len = (title + body).length;
+    const sheet = el("div", cls + " note-sheet" + (len < 140 ? " short" : len < 400 ? " medium" : " long"));
+    const [bg, fg, dim] = quoteTone(item);
+    sheet.style.setProperty("--ts-bg", bg);
+    sheet.style.setProperty("--ts-fg", fg);
+    sheet.style.setProperty("--ts-dim", dim);
+    sheet.dataset.tone = toneKey(item);
+    sheet.appendChild(el("div", "ts-label", t("noteLabel") + " · " + noteDate(item)));
+    sheet.appendChild(el("div", "ts-title", title || t("noteUntitled")));
+    sheet.appendChild(el("div", "ts-body", body));
+    const n = linkedItems(item).length;
+    sheet.appendChild(el("div", "ts-foot", n ? t("noteObjects", { n }) : ""));
+    return sheet;
+  }
+
+  // Speichern der Reihe nach: der Hash ändert sich mit jedem Text, Farbe und
+  // Verknüpfungen müssen den aktuellen treffen.
+  let noteQueue = Promise.resolve();
+  function noteChain(fn) {
+    noteQueue = noteQueue.then(fn, fn).catch(fail);
+    return noteQueue;
+  }
+
+  let noteEd = null;
+  async function noteSave(rename) {
+    const ed = noteEd;
+    if (!ed) return;
+    clearTimeout(ed.timer);
+    const text = noteText(ed.title.value, ed.body.value);
+    if (!ed.dirty && !(rename && ed.renameDue)) return false;
+    ed.dirty = false;
+    if (!rename) ed.renameDue = true;
+    else ed.renameDue = false;
+    ed.status.textContent = t("noteSaving");
+    const item = ed.item;
+    await noteChain(async () => {
+      const r = await invoke("write_note", { path: item.path, text, rename: !!rename });
+      const old = item.path;
+      Object.assign(item, { hash: r.hash, quote: text.trim() || null, path: r.path, mtime: Date.now() });
+      if (r.path !== old) {
+        item.abs = item.abs.slice(0, item.abs.length - old.length) + r.path;
+        item.filename = r.path.split("/").pop();
+        state.byPath.delete(old);
+        state.byPath.set(r.path, item);
+        cardCache.delete(old);
+      }
+      if (noteEd === ed) {
+        ed.status.textContent = t("noteSaved");
+        $("lbName").textContent = item.filename;
+      }
+    });
+    return true;
+  }
+
+  function noteLeave() {
+    if (!noteEd) return;
+    const ed = noteEd;
+    noteSave(true).then((saved) => saved && render());
+    noteEd = null;
+    closeNoteChooser();
+    return ed;
+  }
+
+  // Lightbox (A2): Papier zum Schreiben, Verknüpfungen links daneben
+  function lbNoteEditor(item, box) {
+    const { title, body } = noteParts(item.quote);
+    const wrap = el("div", "lb-note");
+    const paper = el("div", "note-paper");
+    lbNoteTone(paper, item);
+    paper.appendChild(el("div", "np-label", [t("noteLabel"), zoneLabel(item.zone), noteDate(item, true)].join(" · ")));
+    const titleIn = el("input", "np-title");
+    titleIn.value = title;
+    titleIn.placeholder = t("noteTitlePh");
+    titleIn.spellcheck = false;
+    const bodyIn = el("textarea", "np-body");
+    bodyIn.value = body;
+    bodyIn.placeholder = t("noteBodyPh");
+    const foot = el("div", "np-foot");
+    const words = el("span", null, t("noteWords", { n: noteWords(title + " " + body) }));
+    const status = el("span", null, t("noteSaved"));
+    foot.append(words, status);
+    paper.append(titleIn, bodyIn, noteLinks(item), foot);
+    wrap.appendChild(paper);
+    box.appendChild(wrap);
+    noteEd = { item, title: titleIn, body: bodyIn, status, paper, dirty: false, renameDue: false, timer: null };
+    const ed = noteEd;
+    const changed = () => {
+      ed.dirty = true;
+      words.textContent = t("noteWords", { n: noteWords(titleIn.value + " " + bodyIn.value) });
+      status.textContent = "";
+      clearTimeout(ed.timer);
+      ed.timer = setTimeout(() => noteEd === ed && noteSave(false), 600);
+    };
+    for (const f of [titleIn, bodyIn]) {
+      f.addEventListener("input", changed);
+      f.addEventListener("keydown", (e) => {
+        e.stopPropagation(); // Pfeile, Leertaste, 1–4 gehören hier dem Text
+        if (e.key === "Escape") {
+          e.preventDefault();
+          f.blur();
+        } else if ((e.metaKey || e.ctrlKey) && e.key === "s") {
+          e.preventDefault();
+          noteSave(false);
+        } else if (f === titleIn && (e.key === "Enter" || (e.key === "ArrowDown" && !e.shiftKey))) {
+          e.preventDefault();
+          bodyIn.focus();
+          bodyIn.setSelectionRange(0, 0);
+        } else if (f === bodyIn && e.key === "ArrowUp" && bodyIn.selectionStart === 0 && bodyIn.selectionEnd === 0) {
+          e.preventDefault();
+          titleIn.focus();
+        } else if (f === bodyIn && e.key === "Backspace" && bodyIn.selectionStart === 0 && bodyIn.selectionEnd === 0) {
+          e.preventDefault();
+          titleIn.focus();
+          titleIn.setSelectionRange(titleIn.value.length, titleIn.value.length);
+        }
+      });
+    }
+    // Ohne Schreibrechte (geteilte Zone eines anderen) nur lesen
+    if (!canEdit(item.zone)) {
+      titleIn.readOnly = bodyIn.readOnly = true;
+      status.textContent = "";
+    }
+    $("lightboxZoom").textContent = "";
+    lbRenderTones(item);
+    return ed;
+  }
+
+  function lbNoteTone(node, item) {
+    node.dataset.tone = toneKey(item);
+    const [bg, fg, dim] = quoteTone(item);
+    node.style.setProperty("--ts-bg", bg);
+    node.style.setProperty("--ts-fg", fg);
+    node.style.setProperty("--ts-dim", dim);
+  }
+
+  // Farbpunkte in der Leiste, nur bei Notizen
+  function lbRenderTones(item) {
+    const box = $("lbTones");
+    box.hidden = !isNote(item);
+    if (box.hidden) return box.replaceChildren();
+    const current = toneKey(item);
+    box.replaceChildren(
+      ...NOTE_TONES.map((key) => {
+        const b = el("button", "tone-dot" + (key === current ? " active" : ""));
+        b.type = "button";
+        b.title = t("tone_" + key);
+        b.style.setProperty("--dot", QUOTE_TONES[key][0]);
+        b.addEventListener("click", () => setNoteTone(item, key));
+        return b;
+      })
+    );
+  }
+
+  function setNoteTone(item, key) {
+    if (key === toneKey(item)) return;
+    item.tone = key;
+    saveNote(item, { tone: key });
+    if (noteEd && noteEd.item === item) lbNoteTone(noteEd.paper, item);
+    lbRenderTones(item);
+    render();
+  }
+
+  // Verknüpfungen: Vorschauen in zwei Spalten, „+“ wählt weitere aus der Bibliothek
+  function noteLinks(item) {
+    const col = el("aside", "note-links");
+    const fill = () => {
+      const list = linkedItems(item);
+      const grid = el("div", "nl-grid");
+      list.forEach((it, i) => {
+        const tile = el("button", "nl-tile");
+        tile.type = "button";
+        tile.title = it.filename;
+        tile.appendChild(quoteOf(it) ? (isNote(it) ? noteSheet(it, "text-sheet mini") : textSheet(it, "text-sheet mini")) : Object.assign(el("img"), { src: thumbSrc(it), alt: "", loading: "lazy" }));
+        const x = el("span", "nl-remove", "×");
+        x.title = t("noteLinkRemove");
+        x.addEventListener("click", (e) => {
+          e.stopPropagation();
+          setNoteLinks(item, (item.links || []).filter((h) => h !== it.hash));
+          fill();
+        });
+        tile.appendChild(x);
+        tile.addEventListener("click", () => openNoteLink(item, i));
+        grid.appendChild(tile);
+      });
+      if (canEdit(item.zone)) {
+        const add = el("button", "nl-tile nl-add", "+");
+        add.type = "button";
+        add.title = t("noteLinkAdd");
+        add.addEventListener("click", (e) => {
+          e.stopPropagation();
+          openNoteChooser(item, add, fill);
+        });
+        grid.appendChild(add);
+      }
+      col.replaceChildren(el("div", "nl-label", t("noteLinks") + (list.length ? " (" + list.length + ")" : "")), grid);
+    };
+    fill();
+    return col;
+  }
+
+  function setNoteLinks(item, links) {
+    item.links = links.length ? links : null;
+    saveNote(item, { links });
+  }
+
+  // Verknüpftes Objekt groß: die Lightbox blättert dann durch Notiz und Verknüpfte
+  function openNoteLink(item, i) {
+    const list = [item, ...linkedItems(item)];
+    noteLeave();
+    state.lightbox = { zone: null, list, index: i + 1 };
+    showLightboxItem();
+  }
+
+  let noteChooser = null;
+  function closeNoteChooser() {
+    if (!noteChooser) return;
+    noteChooser.remove();
+    noteChooser = null;
+  }
+
+  // Auswahl: Objekte der Zone zuerst, Suchfeld durchsucht die ganze Bibliothek
+  function openNoteChooser(item, anchor, onChange) {
+    closeNoteChooser();
+    const pop = el("div", "note-chooser zone-menu p-ctx-menu");
+    noteChooser = pop;
+    pop.addEventListener("click", (e) => e.stopPropagation());
+    pop.addEventListener("pointerdown", (e) => e.stopPropagation());
+    const input = el("input", "nc-search");
+    input.placeholder = t("noteLinkSearch");
+    const grid = el("div", "nc-grid");
+    const fill = () => {
+      const q = input.value.trim().toLowerCase();
+      const words = q.split(/\s+/).filter(Boolean);
+      const linked = new Set(item.links || []);
+      let pool = state.items.filter((i) => i !== item && i.hash !== item.hash);
+      pool = words.length ? pool.filter((i) => matches(i, words)) : pool.filter((i) => i.zone === item.zone);
+      const tiles = pool.slice(0, 60).map((it) => {
+        const b = el("button", "nc-tile" + (linked.has(it.hash) ? " on" : ""));
+        b.type = "button";
+        b.title = it.filename;
+        b.appendChild(quoteOf(it) ? (isNote(it) ? noteSheet(it, "text-sheet mini") : textSheet(it, "text-sheet mini")) : Object.assign(el("img"), { src: thumbSrc(it), alt: "", loading: "lazy" }));
+        b.addEventListener("click", () => {
+          const now = new Set(item.links || []);
+          if (now.has(it.hash)) now.delete(it.hash);
+          else now.add(it.hash);
+          setNoteLinks(item, [...now]);
+          b.classList.toggle("on", now.has(it.hash));
+          onChange();
+        });
+        return b;
+      });
+      grid.replaceChildren(...(tiles.length ? tiles : [el("div", "nc-empty", t("noteLinkEmpty"))]));
+    };
+    input.addEventListener("input", debounce(fill, 120));
+    input.addEventListener("keydown", (e) => {
+      e.stopPropagation();
+      if (e.key === "Escape") closeNoteChooser();
+    });
+    pop.append(input, grid);
+    document.body.appendChild(pop);
+    fill();
+    const r = anchor.getBoundingClientRect();
+    const pr = pop.getBoundingClientRect();
+    pop.style.left = Math.max(8, Math.min(r.left, window.innerWidth - pr.width - 8)) + "px";
+    pop.style.top = Math.max(8, Math.min(r.bottom + 8, window.innerHeight - pr.height - 8)) + "px";
+    input.focus();
+    setTimeout(() => document.addEventListener("pointerdown", closeNoteChooser, { once: true }), 0);
+  }
+
+  // Neue Notiz auf der aktuellen Ebene, öffnet gleich zum Schreiben
+  async function newNote() {
+    if (!isZone(state.focus) || !canEdit(state.focus)) return toast(t("noteNeedsZone"));
+    const dir = state.focus + (state.level ? "/" + state.level : "");
+    try {
+      const rel = await invoke("create_note", { dir, title: t("noteNew") });
+      await refresh();
+      const item = state.byPath.get(rel);
+      if (!item) return;
+      openLightbox(item);
+      if (noteEd && noteEd.item === item) {
+        noteEd.title.focus();
+        noteEd.title.select();
+      }
+    } catch (e) {
+      fail(e);
+    }
+  }
+
   function lbArea() {
     const right = lbInfoOpen ? $("lbInfo").offsetWidth : 0;
     return { width: window.innerWidth - right, height: window.innerHeight };
@@ -4052,6 +4388,7 @@
   // Finden: die Lightbox blättert durch die Treffer in ihrer Rangfolge, sonst durch die Zone
   const FOUND = "\u0000found";
   function lbList(lb) {
+    if (lb.list) return lb.list; // Notiz und ihre Verknüpfungen
     return lb.zone === FOUND ? state.found || [] : state.lists.get(lb.zone) || [];
   }
 
@@ -4078,6 +4415,8 @@
     const list = lbList(lb);
     const item = list[Math.min(lb.index, list.length - 1)];
     if (!item) return closeLightbox();
+    noteLeave();
+    lbRenderTones(item);
     lb.index = list.indexOf(item);
     $("lbName").textContent = item.filename;
     $("lbName").title = item.filename;
@@ -4140,7 +4479,7 @@
 
   // Zeigt PDF oder Video statt des Bildes. false = normales Bild.
   function lbShowMedia(item) {
-    const k = quoteOf(item) ? "text" : kindOf(item);
+    const k = isNote(item) ? "note" : quoteOf(item) ? "text" : kindOf(item);
     const box = $("lbMedia");
     const img = $("lightboxImg");
     lbMode = k;
@@ -4163,6 +4502,10 @@
     if (lbPdf) lbPdf.destroy();
     lbPdf = null;
     box.replaceChildren();
+    if (k === "note") {
+      lbNoteEditor(item, box);
+      return true;
+    }
     if (k === "text") {
       const wrap = el("div", "lb-text");
       wrap.appendChild(textSheet(item, "text-sheet large"));
@@ -4238,7 +4581,8 @@
     const lead = [size, formatBytes(item.bytes)].filter(Boolean).join(", ");
     head.appendChild(el("span", "lead", lead + "."));
     inner.appendChild(head);
-    if (quoteOf(item)) inner.appendChild(lbBlock(t("quote"), [quoteBox(item, "lb-quote"), lbRow(t("toneLabel"), tonePicker(item))]));
+    if (isNote(item)) inner.appendChild(lbBlock(t("noteLabelTitle"), [lbRow(t("noteLinks"), String(linkedItems(item).length)), lbRow(t("toneLabel"), tonePicker(item))]));
+    else if (quoteOf(item)) inner.appendChild(lbBlock(t("quote"), [quoteBox(item, "lb-quote"), lbRow(t("toneLabel"), tonePicker(item))]));
     if (!quoteOf(item)) inner.appendChild(lbBlock(t("captionTitle"), [noteField(item, "caption", t("captionPlaceholder"), true)]));
     if (feat("notes")) inner.appendChild(lbBlock(t("note"), [noteField(item, "note", t("notePlaceholder"), true)]));
 
@@ -4348,7 +4692,7 @@
   function tonePicker(item) {
     const row = el("div", "tone-picker");
     const current = toneKey(item);
-    for (const key of [...RANDOM_TONES, "white"]) {
+    for (const key of isNote(item) ? NOTE_TONES : [...RANDOM_TONES, "white"]) {
       const b = el("button", "tone-dot" + (key === current ? " active" : ""));
       b.type = "button";
       b.title = t("tone_" + key);
@@ -4359,7 +4703,12 @@
         saveNote(item, { tone: key });
         for (const d of row.children) d.classList.toggle("active", d === b);
         render();
-        if (state.lightbox && lightboxItem() === item) showLightboxItem();
+        if (state.lightbox && lightboxItem() === item) {
+          if (noteEd && noteEd.item === item) {
+            lbNoteTone(noteEd.paper, item);
+            lbRenderTones(item);
+          } else showLightboxItem();
+        }
       });
       row.appendChild(b);
     }
@@ -4367,6 +4716,8 @@
   }
 
   function saveNote(item, patch) {
+    // Notiz-Objekte: nach dem Text, damit der neue Hash getroffen wird
+    if (isNote(item)) return noteChain(() => invoke("set_note", { hashes: [item.hash], patch }));
     invoke("set_note", { hashes: [item.hash], patch }).catch(fail);
   }
 
@@ -4465,6 +4816,8 @@
   }
 
   function closeLightbox() {
+    noteLeave();
+    $("lbTones").hidden = true;
     state.lightbox = null;
     lbCloseZones();
     if (lbPdf) lbPdf.destroy();
@@ -4503,7 +4856,7 @@
     // 0.28: Klick neben das Objekt schließt (offene Zonen erst zuklappen, gezoomt nicht)
     const backdropClick = (e) => {
       if (!$("lbZones").hidden) return lbCloseZones();
-      const bg = e.target === stage || e.target === $("lbMedia") || e.target.classList.contains("pdf-scroll");
+      const bg = e.target === stage || e.target === $("lbMedia") || e.target.classList.contains("pdf-scroll") || e.target.classList.contains("lb-note");
       if (bg && lbView.fitted && state.lightbox) closeLightbox();
     };
     stage.addEventListener("click", backdropClick);
@@ -5997,7 +6350,9 @@
       return;
     }
 
-    if (mod && (e.key === "n" || e.key === "N") && !e.shiftKey) {
+    if (mod && (e.key === "n" || e.key === "N") && e.shiftKey) {
+      newNote();
+    } else if (mod && (e.key === "n" || e.key === "N") && !e.shiftKey) {
       startNewZone();
     } else if (mod && !e.shiftKey && (e.key === "r" || e.key === "R")) {
       e.preventDefault();

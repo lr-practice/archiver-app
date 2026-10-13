@@ -43,7 +43,9 @@ pub const VIDEO_EXTS: &[&str] = &["mp4", "m4v", "mov", "webm"];
 pub const AUDIO_EXTS: &[&str] = &["wav", "mp3", "aif", "aiff", "m4a", "flac"];
 /// Textkarten liegen als reine Textdatei in der Zone; die Oberfläche zeigt
 /// sie als farbige Karte (Text aus der Quelle oder aus der Datei selbst).
-pub const TEXT_EXTS: &[&str] = &["txt"];
+pub const TEXT_EXTS: &[&str] = &["txt", "md"];
+/// Notiz-Objekte (0.29): eigene Texte als Markdown in der Zone
+pub const NOTE_EXTS: &[&str] = &["md"];
 const TEXT_MAX_CHARS: usize = 20_000;
 
 pub type Result<T> = std::result::Result<T, String>;
@@ -113,6 +115,8 @@ pub struct Item {
     pub tone: Option<String>,
     /// Bildtext: Credits oder Unterschrift (0.29)
     pub caption: Option<String>,
+    /// Notiz-Objekt: verknüpfte Objekte (Hashes, 0.29)
+    pub links: Option<Vec<String>>,
 }
 
 /// Seitenzahl, Dauer und Maße eines PDFs oder Videos, bei Audio dazu Titel und Format.
@@ -210,6 +214,16 @@ fn is_av(path: &Path) -> bool {
 
 pub fn is_text(path: &Path) -> bool {
     TEXT_EXTS.contains(&ext_of(path).as_str())
+}
+
+pub fn is_note(path: &Path) -> bool {
+    NOTE_EXTS.contains(&ext_of(path).as_str())
+}
+
+/// Titel einer Notiz: erste Zeile mit Text, ohne Markdown-Raute
+pub fn note_title(text: &str) -> String {
+    let line = text.lines().map(str::trim).find(|l| !l.is_empty()).unwrap_or("");
+    line.trim_start_matches('#').trim().chars().take(80).collect()
 }
 
 /// Alles, was in die Bibliothek gehört: Bilder, PDFs, Videos, Audio, Textkarten.
@@ -659,7 +673,8 @@ CREATE TABLE IF NOT EXISTS note (
   added_by   TEXT,
   updated_at INTEGER NOT NULL DEFAULT 0,
   tone       TEXT,
-  caption    TEXT
+  caption    TEXT,
+  links      TEXT
 );
 ";
 
@@ -681,6 +696,8 @@ impl Library {
         let _ = conn.execute("ALTER TABLE note ADD COLUMN tone TEXT", []);
         // ab 0.29: Bildtext
         let _ = conn.execute("ALTER TABLE note ADD COLUMN caption TEXT", []);
+        // ab 0.29: Verknüpfungen einer Notiz
+        let _ = conn.execute("ALTER TABLE note ADD COLUMN links TEXT", []);
         // ab 0.12: Audio-Eckdaten (ältere Datenbanken bekommen die Spalten nachgereicht)
         for col in ["title TEXT", "artist TEXT", "album TEXT", "sample_rate INTEGER", "bit_depth INTEGER", "channels INTEGER"] {
             let _ = conn.execute(&format!("ALTER TABLE media ADD COLUMN {col}"), []);
@@ -1076,7 +1093,7 @@ impl Library {
                         s.image_url, s.page_url, s.page_title, s.captured_at, t.file,
                         a.labels, a.text, a.colors, m.pages, m.duration, s.quote,
                         m.title, m.artist, m.album, m.sample_rate, m.bit_depth, m.channels,
-                        n.note, n.credit, n.license, n.internal, n.added_by, n.tone, n.caption
+                        n.note, n.credit, n.license, n.internal, n.added_by, n.tone, n.caption, n.links
                  FROM item i
                  LEFT JOIN note n ON n.hash = i.hash
                  LEFT JOIN source s ON s.hash = i.hash
@@ -1128,6 +1145,7 @@ impl Library {
                     added_by: r.get(29)?,
                     tone: r.get(30)?,
                     caption: r.get(31)?,
+                    links: crate::studio::links_of(r.get(32)?),
                     path,
                 })
             })
@@ -1965,6 +1983,136 @@ impl Library {
         let dir = unique_path(&base, &name);
         fs::create_dir(&dir).map_err(err)?;
         Ok(rel_path(&self.root, &dir))
+    }
+
+    // ---- Notiz-Objekte (0.29): eigene Texte als .md in der Zone ----
+
+    /// Neue Notiz in einer Zone (bzw. einem ihrer Ordner). Gibt den relativen Pfad zurück.
+    pub fn create_note(&self, dir: &str, title: &str) -> Result<String> {
+        let base = safe_join(&self.root, dir)?;
+        if !base.is_dir() {
+            return Err(format!("Zone nicht gefunden: {dir}"));
+        }
+        let title = title.trim();
+        let name = match clean_segment(title) {
+            n if n.is_empty() => "Notiz".to_string(),
+            n => n,
+        };
+        let path = unique_path(&base, &format!("{name}.md"));
+        fs::write(&path, format!("# {}\n", if title.is_empty() { &name } else { title })).map_err(err)?;
+        let rel = rel_path(&self.root, &path);
+        let hash = self.record_note(&rel, &path)?;
+        self.mark_added_by(&hash)?;
+        Ok(rel)
+    }
+
+    /// Ganzer Text einer Notiz (ohne die Kürzung der Kartenvorschau)
+    pub fn read_note(&self, rel: &str) -> Result<String> {
+        let abs = safe_join(&self.root, rel)?;
+        if !is_note(&abs) {
+            return Err("Keine Notiz".into());
+        }
+        fs::read_to_string(abs).map_err(err)
+    }
+
+    /// Text einer Notiz speichern. Mit `rename` bekommt die Datei den Titel
+    /// (erste Zeile) als Namen. Der Inhalt ändert den Hash: Farbe, Verknüpfungen
+    /// und Reihenfolge wandern zum neuen Hash mit. Gibt (Pfad, Hash) zurück.
+    pub fn write_note(&self, rel: &str, text: &str, rename: bool) -> Result<(String, String)> {
+        let abs = safe_join(&self.root, rel)?;
+        if !is_note(&abs) || !abs.is_file() {
+            return Err("Keine Notiz".into());
+        }
+        let old: Option<String> = {
+            let conn = self.conn.lock().unwrap();
+            conn.query_row("SELECT hash FROM item WHERE path = ?1", params![rel], |r| r.get(0)).optional().map_err(err)?
+        };
+        let body = text.trim_end();
+        fs::write(&abs, if body.trim().is_empty() { String::new() } else { format!("{body}\n") }).map_err(err)?;
+        let mut target = abs.clone();
+        let name = clean_segment(&note_title(text));
+        let stem = abs.file_stem().and_then(|s| s.to_str()).unwrap_or("").to_string();
+        // „Titel 2“ bleibt, wenn „Titel“ schon vergeben war
+        let same = stem == name || stem.strip_prefix(&format!("{name} ")).map(|n| n.parse::<u32>().is_ok()).unwrap_or(false);
+        if rename && !name.is_empty() && !same {
+            let dir = abs.parent().unwrap_or(&self.root);
+            let file = format!("{name}.md");
+            // Nur Groß-/Kleinschreibung anders: direkt umbenennen (macOS sieht dieselbe Datei)
+            target = if stem.to_lowercase() == name.to_lowercase() { dir.join(&file) } else { unique_path(dir, &file) };
+            fs::rename(&abs, &target).map_err(err)?;
+        }
+        let new_rel = rel_path(&self.root, &target);
+        let hash = self.record_note_at(rel, &new_rel, &target)?;
+        if let Some(old) = old.filter(|o| *o != hash) {
+            self.move_note_hash(&old, &hash)?;
+        }
+        Ok((new_rel, hash))
+    }
+
+    fn record_note(&self, rel: &str, abs: &Path) -> Result<String> {
+        self.record_note_at(rel, rel, abs)
+    }
+
+    /// Eintrag einer Notiz nachführen (wie der Scan, aber ohne auf ihn zu warten)
+    fn record_note_at(&self, old_rel: &str, rel: &str, abs: &Path) -> Result<String> {
+        let meta = fs::metadata(abs).map_err(err)?;
+        let hash = hash_file(abs)?;
+        let mtime = time_ms(meta.modified()).unwrap_or(0);
+        let updated = {
+            let conn = self.conn.lock().unwrap();
+            conn.execute(
+                "UPDATE item SET path = ?1, hash = ?2, bytes = ?3, mtime = ?4 WHERE path = ?5",
+                params![rel, hash, meta.len() as i64, mtime, old_rel],
+            )
+            .map_err(err)?
+        };
+        if updated == 0 {
+            self.upsert_item(rel, &hash, meta.len() as i64, mtime, now_ms(), abs)?;
+        }
+        Ok(hash)
+    }
+
+    /// Angaben einer Notiz vom alten zum neuen Hash: Notizzeile, Verweise aus
+    /// anderen Notizen und die eigene Reihenfolge. Teilt sich ein anderes
+    /// Objekt den alten Hash noch, wird nur kopiert.
+    fn move_note_hash(&self, old: &str, new: &str) -> Result<()> {
+        let still_used = {
+            let conn = self.conn.lock().unwrap();
+            let n: i64 = conn.query_row("SELECT COUNT(*) FROM item WHERE hash = ?1", params![old], |r| r.get(0)).map_err(err)?;
+            conn.execute(
+                "INSERT OR IGNORE INTO note (hash, note, credit, license, internal, added_by, updated_at, tone, caption, links)
+                 SELECT ?2, note, credit, license, internal, added_by, ?3, tone, caption, links FROM note WHERE hash = ?1",
+                params![old, new, now_ms()],
+            )
+            .map_err(err)?;
+            if n == 0 {
+                conn.execute("DELETE FROM note WHERE hash = ?1", params![old]).map_err(err)?;
+                // Verweise anderer Notizen umschreiben
+                let mut stmt = conn.prepare("SELECT hash, links FROM note WHERE links LIKE ?1").map_err(err)?;
+                let rows: Vec<(String, Option<String>)> = stmt
+                    .query_map(params![format!("%{old}%")], |r| Ok((r.get(0)?, r.get(1)?)))
+                    .map_err(err)?
+                    .collect::<std::result::Result<_, _>>()
+                    .map_err(err)?;
+                for (h, links) in rows {
+                    let list: Vec<String> = crate::studio::links_of(links)
+                        .unwrap_or_default()
+                        .into_iter()
+                        .map(|l| if l == old { new.to_string() } else { l })
+                        .collect();
+                    conn.execute(
+                        "UPDATE note SET links = ?2, updated_at = MAX(updated_at + 1, ?3) WHERE hash = ?1",
+                        params![h, crate::studio::links_json(&Some(list)), now_ms()],
+                    )
+                    .map_err(err)?;
+                }
+            }
+            n > 0
+        };
+        if !still_used {
+            self.replace_in_order(old, new)?;
+        }
+        self.write_metadata()
     }
 
     /// Alle Ordner unterhalb der Zonen (auch leere), für Ordnerkarten und Chips
