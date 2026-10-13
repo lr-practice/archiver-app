@@ -167,7 +167,7 @@
     byPath: new Map(),
     // Pfad der allein gezeigten Zone, sonst null (alte Seiten-Werte "\u0000…" verwerfen)
     focus: null, // jeder Start beginnt auf der Startseite (Zonen als Karten)
-    page: null, // Seite, die von rechts hereingleitet: null | "settings" | "about"
+    page: null, // Seite, die von rechts hereingleitet: null | "settings" | "about" | "manual"
     home: "overview", // Startseite: "overview" | "index" | "preview" | "cards"; jeder Start beginnt mit der Übersicht
     hover: null, // Zone in der Vorschau (Layout "preview")
     // Bildgröße auf der Startseite, Stufe 0–3, je Ansicht getrennt
@@ -2022,7 +2022,10 @@
     const sheet = $("sheet");
     const wasOpen = document.body.classList.contains("page-open");
     const top = sheet.scrollTop;
-    if (state.page) sheet.replaceChildren(state.page === "settings" ? renderSettings() : renderAbout());
+    if (state.page)
+      sheet.replaceChildren(
+        state.page === "settings" ? renderSettings() : state.page === "manual" ? renderManual() : renderAbout()
+      );
     sheet.scrollTop = keepScroll ? top : 0;
     document.body.classList.toggle("page-open", !!state.page);
     renderToolbar();
@@ -2921,6 +2924,41 @@
     wrap.appendChild(meta);
 
     wrap.appendChild(el("div", "p-sheet-foot", "© 2026 Lukas Rudolph"));
+    return wrap;
+  }
+
+  // ---- Handbuch (manual.js): dieselben Blöcke wie Information ----
+  // Links Titel und Text, rechts die Tasten. `x` im Text wird zur Taste.
+
+  function manualText(text) {
+    const node = el("div", "p-block-text");
+    String(text || "")
+      .split("`")
+      .forEach((part, i) => part && node.appendChild(i % 2 ? el("kbd", null, part) : document.createTextNode(part)));
+    return node;
+  }
+
+  function manualKeys(keys) {
+    if (!keys || !keys.length) return null;
+    const wrap = el("span", "p-keys");
+    for (const k of keys) wrap.appendChild(el("kbd", null, k));
+    return wrap;
+  }
+
+  function renderManual() {
+    const m = MANUAL[lang] || MANUAL.en;
+    const wrap = el("div", "p-sheet-inner p-manual");
+    wrap.appendChild(headline(m.title, m.lead));
+    for (const sec of m.sections) {
+      const b = block(sec.title);
+      if (sec.lead) b.appendChild(blockRow(manualText(sec.lead)));
+      for (const row of sec.rows) {
+        const main = sec.keys ? [el("div", null, row.t)] : [el("div", null, row.t), manualText(row.d)];
+        b.appendChild(blockRow(main, manualKeys(row.k)));
+      }
+      wrap.appendChild(b);
+    }
+    wrap.appendChild(el("div", "p-sheet-foot", "archiver-app.com/manual"));
     return wrap;
   }
 
@@ -6251,6 +6289,7 @@
     });
     if ((state.libraries || []).some((l) => l.path)) menu.appendChild(el("div", "p-more-rule"));
     item(t("settings"), () => togglePage("settings"), state.page === "settings", "⌘,");
+    item(t("manual"), () => togglePage("manual"), state.page === "manual");
     item(t("about"), () => togglePage("about"), state.page === "about");
     const note = el("div", "p-more-note");
     note.appendChild(el("div", null, state.root.replace(/^\/(Users|home)\/[^/]+/, "~")));

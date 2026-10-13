@@ -2198,6 +2198,29 @@ body.lightbox-open .p-dropbar {
   color: var(--p-dim);
 }
 
+/* Handbuch: Tasten wie in der Tour, rechts in der Zeile */
+.p-sheet kbd {
+  font-family: var(--p-mono);
+  font-size: 11px;
+  color: var(--p-text);
+  padding: 1px 5px;
+  border-radius: var(--r-sm);
+  box-shadow: inset 0 0 0 1px rgba(var(--ink-rgb), 0.25);
+  white-space: nowrap;
+}
+
+.p-keys {
+  display: inline-flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 4px;
+  max-width: 140px;
+}
+
+.p-manual .p-block-text {
+  margin-top: 3px;
+}
+
 .p-sheet-foot {
   padding: 14px 4px;
   color: var(--p-faint);

@@ -352,6 +352,17 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
 - **Nicht:** Kein eigener Zonenplatz unter den Active Zones, keine Zeile, wenn
   nichts gelöscht ist.
 
+### 4.15 Handbuch (`.p-manual`, `manual.js`)
+- **Zweck:** Alle Funktionen samt Tasten, erreichbar über ≡ › Handbuch. Der
+  Inhalt steht in `app/src/manual.js` (Deutsch und Englisch) und ist dieselbe
+  Quelle wie archiver-app.com/manual. Neue Funktionen dort nachziehen.
+- **Form:** Seite wie Information und Einstellungen: Seitenblatt von rechts,
+  Blöcke (`.p-block`) je Abschnitt, Zeile mit Titel und grauem Text links,
+  Tasten rechts (`.p-keys`, höchstens 140 px breit, umbrechend).
+- **Taste (`kbd` im Seitenblatt):** Geist Mono 11 px, `--p-text`, Rand als
+  `inset 0 0 0 1px` ink × 0.25, Ecke `--r-sm`.
+- **Nicht:** Keine Bilder, keine Akzentfarbe, kein eigenes Inhaltsverzeichnis.
+
 ---
 
 ## 5. Bekannte Abweichungen
