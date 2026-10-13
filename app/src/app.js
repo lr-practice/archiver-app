@@ -3007,6 +3007,16 @@
       c.title = t(v === "grid" ? "viewGridTitle" : "viewOriginalTitle");
       bar.appendChild(c);
     }
+    // 0.29: Bildtext unter den Bildern (nur in „Original“)
+    if (state.view === "original") {
+      const c = chip("(+ " + t("captionChip") + ")", captionsOn(), () => {
+        setPref("captions", !captionsOn());
+        renderToolbar();
+        renderZones();
+      });
+      c.title = t("captionChipTitle");
+      bar.appendChild(c);
+    }
     bar.appendChild(sizeChips(Math.max(0, SIZES.indexOf(state.size)), SIZES.length, (step) => {
       state.size = SIZES[step];
       setPref("size", state.size);
@@ -3336,9 +3346,38 @@
       if (!force && node.dataset.cols === String(count)) continue;
       node.dataset.cols = String(count);
       const cols = Array.from({ length: count }, () => el("div", "p-masonry-col"));
-      list.forEach((item, i) => cols[i % count].appendChild(itemCard(item)));
+      list.forEach((item, i) => {
+        cols[i % count].appendChild(itemCard(item));
+        if (captionsOn() && hasCaption(item)) cols[i % count].appendChild(captionBlock(item, i, list.length, "card-cap"));
+      });
       node.replaceChildren(...cols);
     }
+  }
+
+  // ---- Bildtext (0.29): Kennung, Text, Notiz – unter dem Bild und in der Lightbox ----
+  function captionsOn() {
+    return pref("captions", true) !== false;
+  }
+  function hasCaption(item) {
+    return !!(item && (item.caption || (feat("notes") && item.note)));
+  }
+
+  // Kennung wie im Magazin: Zone—Nummer Position/Anzahl, etwa TYPO—02 3/7
+  function captionId(item, i, total) {
+    const n = state.zones.findIndex((z) => z.path === item.zone);
+    return zoneLabel(item.zone) + "—" + String(n + 1).padStart(2, "0") + (total ? " " + (i + 1) + "/" + total : "");
+  }
+
+  function captionBlock(item, i, total, cls) {
+    const box = el("div", cls);
+    box.appendChild(el("div", "cap-id", captionId(item, i, total)));
+    if (item.caption) box.appendChild(el("div", "cap-text", item.caption));
+    if (feat("notes") && item.note) {
+      const note = el("div", "cap-note");
+      note.append(el("span", "cap-note-label", t("note") + ": "), document.createTextNode(item.note));
+      box.appendChild(note);
+    }
+    return box;
   }
 
   function itemCard(item) {
@@ -3881,6 +3920,58 @@
   const LB_PAD = { top: 48, bottom: 84, side: 32 };
   const lbView = { w: 0, h: 0, scale: 1, x: 0, y: 0, fitted: true };
   let lbInfoOpen = false;
+  // 0.29: Bildtext links neben dem Bild, unten bündig; das Bild bleibt, wo es ist
+  const LB_TEXT_W = 300;
+  function lbTextShown() {
+    return !lbInfoOpen && pref("lbText", true) !== false && hasCaption(lightboxItem());
+  }
+
+  function lbRenderText() {
+    const item = lightboxItem();
+    const box = $("lbText");
+    const btn = $("lbTextBtn");
+    btn.hidden = !hasCaption(item) || quoteOf(item);
+    btn.classList.toggle("active", lbTextShown());
+    const on = lbTextShown() && !quoteOf(item);
+    $("lightbox").classList.toggle("text-open", on);
+    box.hidden = !on;
+    if (!on) return;
+    const lb = state.lightbox;
+    const list = lbList(lb);
+    box.replaceChildren(captionBlock(item, lb.index, list.length, "lb-caption-inner"));
+    lbPlaceText();
+  }
+
+  // Unterkante des Textes auf der Unterkante des Bildes, rechte Kante 40 px vor dem Bild.
+  // Der Text wird schmaler, wenn links wenig Platz ist; reicht es nicht einmal
+  // für 180 px, liegt er unten links auf einer Fläche über dem Bild.
+  function lbPlaceText() {
+    const box = $("lbText");
+    if (box.hidden) return;
+    let room = LB_TEXT_W;
+    let bottom = window.innerHeight - LB_PAD.bottom;
+    if (lbMode === "image" && lbView.w) {
+      room = lbView.x - 40 - LB_PAD.side;
+      bottom = Math.min(window.innerHeight - LB_PAD.bottom, lbView.y + lbView.h * lbView.scale);
+    }
+    const over = room < 180;
+    box.classList.toggle("over", over);
+    const width = over ? LB_TEXT_W : Math.min(LB_TEXT_W, room);
+    box.style.width = width + "px";
+    box.style.left = (over ? LB_PAD.side : LB_PAD.side + room - width) + "px";
+    box.style.top = Math.max(LB_PAD.top, bottom - box.offsetHeight - (over ? 16 : 0)) + "px";
+  }
+
+  function lbToggleText() {
+    setPref("lbText", !(pref("lbText", true) !== false));
+    if (lbInfoOpen) lbToggleInfo();
+    lbRenderText();
+    if (lbView.fitted) lbFit(true);
+    else {
+      lbClamp();
+      lbApply(true);
+    }
+  }
 
   function lbArea() {
     const right = lbInfoOpen ? $("lbInfo").offsetWidth : 0;
@@ -3913,6 +4004,7 @@
     img.classList.toggle("anim", !!animate);
     img.style.transform = `translate(${lbView.x}px, ${lbView.y}px) scale(${lbView.scale})`;
     $("lightbox").classList.toggle("zoomed", !lbView.fitted);
+    lbPlaceText();
     // PDF, Video und Audio führen ihr eigenes Etikett (Seite bzw. Dauer)
     if (lbMode === "image") $("lightboxZoom").textContent = "(" + (lbView.fitted ? t("viewerFit") : `${Math.round(lbView.scale * 100)} %`) + ")";
   }
@@ -3998,6 +4090,7 @@
     $("lbCount").textContent = `${lb.index + 1} / ${list.length}`;
     lbCloseZones();
     if (lbInfoOpen) lbRenderInfo(item);
+    lbRenderText();
     selectAndShow(item.path);
     if (lbShowMedia(item)) return;
     const img = $("lightboxImg");
@@ -4146,6 +4239,7 @@
     head.appendChild(el("span", "lead", lead + "."));
     inner.appendChild(head);
     if (quoteOf(item)) inner.appendChild(lbBlock(t("quote"), [quoteBox(item, "lb-quote"), lbRow(t("toneLabel"), tonePicker(item))]));
+    if (!quoteOf(item)) inner.appendChild(lbBlock(t("captionTitle"), [noteField(item, "caption", t("captionPlaceholder"), true)]));
     if (feat("notes")) inner.appendChild(lbBlock(t("note"), [noteField(item, "note", t("notePlaceholder"), true)]));
 
     let source = null;
@@ -4305,6 +4399,7 @@
     $("lightbox").classList.toggle("info-open", lbInfoOpen);
     $("lbInfoBtn").classList.toggle("active", lbInfoOpen);
     if (lbInfoOpen) lbRenderInfo();
+    lbRenderText();
     if (lbView.fitted) lbFit(true);
     else {
       lbClamp();
@@ -4393,6 +4488,9 @@
     $("lightboxZoom").addEventListener("click", () => lbToggleZoom());
     $("lbInfoBtn").textContent = t("viewerInfo");
     $("lbInfoBtn").addEventListener("click", lbToggleInfo);
+    $("lbTextBtn").textContent = t("captionChip");
+    $("lbTextBtn").title = t("captionLbTitle");
+    $("lbTextBtn").addEventListener("click", lbToggleText);
     $("lbSourceBtn").textContent = t("source");
     $("lbSourceBtn").addEventListener("click", () => {
       const item = lightboxItem();
@@ -4541,6 +4639,7 @@
     else if (e.key === "ArrowLeft") stepLightbox(-1);
     else if (e.key === "z" || e.key === "Z") lbToggleZoom();
     else if (e.key === "i" || e.key === "I") lbToggleInfo();
+    else if ((e.key === "t" || e.key === "T") && hasCaption(lightboxItem())) lbToggleText();
     else if (e.key === "Enter") $("lbZones").hidden ? lbOpenZones() : lbCloseZones();
     else if (e.key === "Escape" && !$("lbZones").hidden) lbCloseZones();
     else if (e.key === "Escape" && lbMode === "video" && lbVZoom && lbVZoom.scale() > 1) lbVZoom.reset();
@@ -5802,6 +5901,22 @@
       state.homeKbd = false;
       applyHomeCursor(false);
     });
+    // 0.29: ⌘V mit Text auf ein gewähltes Bild (oder in der Lightbox) setzt den Bildtext
+    document.addEventListener("paste", (e) => {
+      if (e.target.closest && e.target.closest("input, textarea, [contenteditable]")) return;
+      const text = (e.clipboardData && e.clipboardData.getData("text/plain") || "").trim();
+      if (!text || (e.clipboardData.files && e.clipboardData.files.length)) return;
+      const items = state.lightbox ? [lightboxItem()].filter(Boolean) : selectedItems();
+      if (items.length !== 1 || quoteOf(items[0])) return;
+      e.preventDefault();
+      const item = items[0];
+      const had = !!item.caption;
+      item.caption = text.slice(0, 4000);
+      saveNote(item, { caption: item.caption });
+      toast(t(had ? "captionReplaced" : "captionSet"));
+      if (state.lightbox) lbRenderText();
+    });
+
     window.addEventListener(
       "resize",
       debounce(() => {

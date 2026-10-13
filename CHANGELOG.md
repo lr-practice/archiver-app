@@ -1,5 +1,13 @@
 # Changelog
 
+## App 0.29.0 (in Arbeit, noch nicht veröffentlicht)
+
+Bildtext:
+- Text, den man beim Sichern auf der Seite markiert, wird zum Bildtext des Bildes (Extension).
+- In der Info gibt es das Feld „Bildtext“. ⌘V mit Text auf ein gewähltes Bild setzt ihn ebenfalls.
+- In der Ansicht „Original“ zeigt „(+ Text)“ Kennung, Bildtext und Notiz unter den Bildern.
+- In der Lightbox steht der Bildtext links neben dem Bild, unten bündig. „Text“ oder T blendet ihn aus.
+
 ## App 0.28.0 (13.10.2026)
 
 Tray (bisher „Palette“):

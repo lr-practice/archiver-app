@@ -37,6 +37,9 @@ pub struct Note {
     /// Farbe einer Textkarte (red, green, violet, cyan, yellow, white)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tone: Option<String>,
+    /// Bildtext (0.29): Credits oder Unterschrift, wie unter einem Bild in einem Magazin
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub caption: Option<String>,
     #[serde(default)]
     pub updated_at: i64,
 }
@@ -50,6 +53,7 @@ pub struct NotePatch {
     pub license: Option<String>,
     pub internal: Option<bool>,
     pub tone: Option<String>,
+    pub caption: Option<String>,
 }
 
 /// Erlaubte Farben einer Textkarte; alles andere heißt „keine eigene Farbe“.
@@ -179,12 +183,12 @@ impl Library {
         for (hash, n) in notes {
             let rows = conn
                 .execute(
-                    "INSERT INTO note (hash, note, credit, license, internal, added_by, updated_at, tone)
-                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
+                    "INSERT INTO note (hash, note, credit, license, internal, added_by, updated_at, tone, caption)
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
                      ON CONFLICT(hash) DO UPDATE SET note=?2, credit=?3, license=?4,
-                       internal=?5, added_by=COALESCE(?6, note.added_by), updated_at=?7, tone=?8
+                       internal=?5, added_by=COALESCE(?6, note.added_by), updated_at=?7, tone=?8, caption=?9
                      WHERE ?7 > note.updated_at",
-                    params![hash, n.note, n.credit, n.license, n.internal as i64, n.added_by, n.updated_at, n.tone],
+                    params![hash, n.note, n.credit, n.license, n.internal as i64, n.added_by, n.updated_at, n.tone, n.caption],
                 )
                 .map_err(err)?;
             changed |= rows > 0;
@@ -195,7 +199,7 @@ impl Library {
     pub(crate) fn all_notes(&self) -> Result<serde_json::Map<String, serde_json::Value>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn
-            .prepare("SELECT hash, note, credit, license, internal, added_by, updated_at, tone FROM note ORDER BY hash")
+            .prepare("SELECT hash, note, credit, license, internal, added_by, updated_at, tone, caption FROM note ORDER BY hash")
             .map_err(err)?;
         let rows = stmt
             .query_map([], |r| {
@@ -209,6 +213,7 @@ impl Library {
                         added_by: r.get(5)?,
                         updated_at: r.get(6)?,
                         tone: r.get(7)?,
+                        caption: r.get(8)?,
                     },
                 ))
             })
@@ -225,7 +230,7 @@ impl Library {
         let conn = self.conn.lock().unwrap();
         let n = conn
             .query_row(
-                "SELECT note, credit, license, internal, added_by, updated_at, tone FROM note WHERE hash = ?1",
+                "SELECT note, credit, license, internal, added_by, updated_at, tone, caption FROM note WHERE hash = ?1",
                 params![hash],
                 |r| {
                     Ok(Note {
@@ -236,6 +241,7 @@ impl Library {
                         added_by: r.get(4)?,
                         updated_at: r.get(5)?,
                         tone: r.get(6)?,
+                        caption: r.get(7)?,
                     })
                 },
             )
@@ -262,6 +268,9 @@ impl Library {
             }
             if let Some(v) = &patch.tone {
                 n.tone = clean_tone(Some(v));
+            }
+            if let Some(v) = &patch.caption {
+                n.caption = clean(Some(v.chars().take(4000).collect()));
             }
             // Immer neuer als alles Bisherige, auch bei schiefer Uhr eines anderen Macs
             n.updated_at = now.max(n.updated_at + 1);
@@ -504,6 +513,7 @@ mod tests {
             note: Some("Kontrast  ".into()),
             credit: Some("Studio X".into()),
             internal: Some(true),
+            caption: Some("Pause II at Ormside Projects, 2025".into()),
             ..Default::default()
         };
         lib.set_note(&[item.hash.clone()], &patch).unwrap();
@@ -521,6 +531,7 @@ mod tests {
         let item = lib.items().unwrap().remove(0);
         assert_eq!(item.note.as_deref(), Some("Kontrast"));
         assert_eq!(item.added_by.as_deref(), Some("Lukas"));
+        assert_eq!(item.caption.as_deref(), Some("Pause II at Ormside Projects, 2025"), "Bildtext übersteht den Verlust der Datenbank");
 
         // Leere Notiz löscht
         lib.set_note(&[item.hash.clone()], &NotePatch { note: Some(" ".into()), ..Default::default() }).unwrap();

@@ -1,6 +1,6 @@
 # Archiver – Design-System
 
-Stand: App 0.28.0 · Extension 3.20.0
+Stand: App 0.28.0 (+ unveröffentlicht 0.29) · Extension 3.20.0
 
 Diese Datei hält fest, wie Archiver aussieht und warum. Sie gilt für die Mac-App
 (`app/src`) und die Chrome-Extension (`extension/`). Wer an der Oberfläche
@@ -262,6 +262,21 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
 - **Leiste der Lightbox (0.28):** dieselben Maße wie die Navigation (4.2):
   Innenrand `--nav-rim`, Knöpfe `--nav-h`, 13,5 px, Abstand 3 px, Ecke `--r-md`.
 - **Seitenblatt:** Details von rechts, `--sheet-w` = min(560 px, 46 vw).
+
+### 4.11a Bildtext (`.card-cap`, `.lb-caption`, 0.29)
+- **Zweck:** Credits oder Unterschrift zu einem Bild, wie unter einem Bild im
+  Magazin. Kommt nur aus Text, den man beim Sichern auf der Seite markiert hat,
+  aus dem Feld „Bildtext“ in der Info oder per ⌘V auf ein gewähltes Bild.
+- **Form:** Drei Zeilen: Kennung in Geist Mono 10/11 px, Versalien, `--p-dim`
+  (Zone—Nummer Position/Anzahl, etwa TYPO—02 3/7), Text in Geist 13 px (Raster,
+  zwei Zeilen) bzw. 17 px (Lightbox), Notiz 11/13 px fett mit „Notiz:“ in
+  `--p-dim`.
+- **Raster:** Nur in „Original“ mit dem Chip „(+ Text)“, unter dem Bild in
+  derselben Spalte. Bilder ohne Text bleiben stumm.
+- **Lightbox:** Links neben dem Bild, Unterkante bündig, rechte Kante 40 px vor
+  dem Bild. Das Bild verrückt dafür nicht. Wenig Platz: der Text wird schmaler
+  (bis 180 px), sonst liegt er unten links auf einer Menüfläche über dem Bild.
+  Knopf „Text“ und Taste T blenden ihn aus.
 
 ### 4.12 Tray (`palette.css`)
 - **Name (0.28):** In der Oberfläche heißt sie „Tray“, im Code weiter `palette`.

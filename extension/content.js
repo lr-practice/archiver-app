@@ -27,6 +27,7 @@
   let manualOpen = false; // true, wenn per Tastenkombination geöffnet (nicht durch Drag)
   let recordingShortcut = false; // true, während in den Einstellungen eine neue Kombination aufgenommen wird
   let fallbackImageUrl = null; // beim dragstart ermittelte (möglichst hochauflösende) Bildquelle
+  let dragCaption = null; // Bildtext zum gezogenen Bild (0.29), siehe captionNear
 
   // ---- Shadow-DOM-Host ----
   // Wird beim ersten Bedarf angelegt (erster Drag, Tastenkombination oder
@@ -310,6 +311,13 @@
     return null;
   }
 
+  // Bildtext zu einem Bild (0.29): nur Text, den man auf der Seite markiert
+  // hat, während man das Bild sichert. Sonst kein Bildtext.
+  function captionNear() {
+    const text = String((window.getSelection && window.getSelection()) || "").replace(/\s+/g, " ").trim();
+    return text ? text.slice(0, 2000) : null;
+  }
+
   function saveMediaFile(url, folder, source) {
     sendSave({ type: "download-image", url: resolveUrl(url), folder, ...source });
   }
@@ -348,7 +356,8 @@
       savePage(folder, source);
     } else if (msg.srcUrl) {
       const best = ctx && ctx.target && ctx.target.tagName === "IMG" ? findBestImageUrl(ctx.target) : null;
-      sendSave({ type: "download-image", url: resolveUrl(best || msg.srcUrl), folder, ...source });
+      const caption = captionNear();
+      sendSave({ type: "download-image", url: resolveUrl(best || msg.srcUrl), folder, caption, ...source });
     } else if (selection) {
       saveCard(textCard(selection, source), folder, { ...source, quote: selection });
     } else if (msg.linkUrl) {
@@ -1108,6 +1117,7 @@
     "dragstart",
     (e) => {
       fallbackImageUrl = findBestImageUrl(e.target);
+      dragCaption = captionNear();
       debugLog("dragstart, target:", e.target, "erkannte Quelle:", fallbackImageUrl);
     },
     true
@@ -1643,7 +1653,7 @@
           };
           reader.readAsDataURL(result.file);
         } else {
-          sendSave({ type: "download-image", url: result, folder, toDownloads: shiftDrop, ...currentPageSource() });
+          sendSave({ type: "download-image", url: result, folder, toDownloads: shiftDrop, caption: dragCaption, ...currentPageSource() });
         }
       }
       removeZones();

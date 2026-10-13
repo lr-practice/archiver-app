@@ -328,10 +328,12 @@ fn handle(msg: &Value, slot: &mut Vec<(PathBuf, Library)>) -> Result<Value, Stri
             };
             let (path, duplicate) = lib.adopt_file(&file, str_arg(msg, "name"), zone, &source)?;
             remove_if_empty(file.parent());
-            // Textkarte: Farbe, die schon beim Markieren gezeigt wurde
-            if let (false, Some(tone)) = (duplicate, crate::studio::clean_tone(str_arg(msg, "tone"))) {
+            // Textkarte: Farbe, die schon beim Markieren gezeigt wurde; Bildtext der Seite (0.29)
+            let tone = crate::studio::clean_tone(str_arg(msg, "tone"));
+            let caption = str_arg(msg, "caption").map(|c| c.trim().to_string()).filter(|c| !c.is_empty());
+            if !duplicate && (tone.is_some() || caption.is_some()) {
                 if let Ok((_, hash)) = lib.locate(&path) {
-                    let patch = crate::studio::NotePatch { tone: Some(tone), ..Default::default() };
+                    let patch = crate::studio::NotePatch { tone, caption, ..Default::default() };
                     let _ = lib.set_note(&[hash], &patch);
                 }
             }
