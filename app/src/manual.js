@@ -12,7 +12,7 @@ const MANUAL = {
         title: "Prinzip",
         lead: "Vier Teile schreiben in dieselbe Bibliothek. Extension, Observer und Zonenleiste holen Material hinein, die App sichtet es, der Tray bringt es in jedes Programm.",
         rows: [
-          { t: "Bibliothek", d: "Ein Ordner auf dem Mac, auch in iCloud, Dropbox, Google Drive oder auf einem NAS. Bis zu drei Bibliotheken. Bestehende Ordnersysteme lassen sich direkt öffnen.", k: ["⌘1", "⌘2", "⌘3"] },
+          { t: "Bibliothek", d: "Ein Ordner auf dem Mac, auch in iCloud, Dropbox, Google Drive oder auf einem NAS. Bis zu drei Bibliotheken. Bestehende Ordnersysteme lassen sich direkt öffnen. Ordner außerhalb (etwa ein Projektordner) werden unter Einstellungen › Bibliothek zur Zone, ihre Dateien bleiben, wo sie sind.", k: ["⌘1", "⌘2", "⌘3"] },
           { t: "Zone", d: "Jeder Ordner der obersten Ebene. Seine Unterordner erscheinen in der Zone als Ordnerkarten. Alles ohne Ziel landet in der Standard-Zone „Unsorted“." },
           { t: "Active Zones", d: "Die vier Zonen, an denen du gerade arbeitest. Sie stehen überall gleich: oben in der Übersicht, in der Leiste beim Ziehen, in der Extension und im Tray. Eine Zone aus dem Index auf eine Active Zone ziehen tauscht beide.", k: ["1", "2", "3", "4"] },
           { t: "Objekte", d: "Bilder, Video, Audio, PDF, Textkarten und Notizen. Alles bleibt eine normale Datei im Finder." },
@@ -130,7 +130,7 @@ const MANUAL = {
         title: "Principle",
         lead: "Four parts write into the same library. The extension, the Observer and the zone bar bring material in, the app is where you look at it, the Tray takes it into any program.",
         rows: [
-          { t: "Library", d: "A folder on your Mac, also in iCloud, Dropbox, Google Drive or on a NAS. Up to three libraries. Existing folder systems open as they are.", k: ["⌘1", "⌘2", "⌘3"] },
+          { t: "Library", d: "A folder on your Mac, also in iCloud, Dropbox, Google Drive or on a NAS. Up to three libraries. Existing folder systems open as they are. Folders elsewhere (a project folder, say) become zones under Settings › Library, their files stay where they are.", k: ["⌘1", "⌘2", "⌘3"] },
           { t: "Zone", d: "Every top-level folder. Its subfolders appear inside the zone as folder cards. Anything without a target goes to the default zone “Unsorted”." },
           { t: "Active Zones", d: "The four zones you are working on right now. They are the same everywhere: at the top of the overview, in the bar while dragging, in the extension and in the Tray. Dragging a zone from the index onto an Active Zone swaps them.", k: ["1", "2", "3", "4"] },
           { t: "Objects", d: "Images, video, audio, PDF, text cards and notes. Everything stays a normal file in the Finder." },

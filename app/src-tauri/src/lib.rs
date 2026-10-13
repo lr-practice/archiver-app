@@ -1032,6 +1032,33 @@ async fn export_pdf(
     Ok(Some(path.to_string_lossy().into_owned()))
 }
 
+/// Externe Zonen (0.30.1): Ordner außerhalb der Bibliothek, als Zone verknüpft
+#[derive(Serialize)]
+struct ExternalZone {
+    zone: String,
+    path: String,
+}
+
+#[tauri::command]
+async fn external_zones(state: State<'_, AppState>) -> Result<Vec<ExternalZone>, String> {
+    Ok(current(&state)?.external_zones().into_iter().map(|(zone, path)| ExternalZone { zone, path }).collect())
+}
+
+#[tauri::command]
+async fn link_folder(app: AppHandle, state: State<'_, AppState>, path: String) -> Result<String, String> {
+    let lib = current(&state)?;
+    let zone = tauri::async_runtime::spawn_blocking(move || lib.link_folder(std::path::Path::new(&path))).await.map_err(|e| e.to_string())??;
+    let _ = app.emit("library-changed", ());
+    Ok(zone)
+}
+
+#[tauri::command]
+async fn unlink_folder(app: AppHandle, state: State<'_, AppState>, zone: String) -> Result<(), String> {
+    current(&state)?.unlink_folder(&zone)?;
+    let _ = app.emit("library-changed", ());
+    Ok(())
+}
+
 /// Gesicherte Webseite einer Linkkarte (0.30.1), sonst None
 #[tauri::command]
 async fn web_archive(state: State<'_, AppState>, hash: String) -> Result<Option<String>, String> {
@@ -1310,6 +1337,9 @@ pub fn run() {
             set_note,
             set_quote,
             web_archive,
+            external_zones,
+            link_folder,
+            unlink_folder,
             open_web_archive,
             set_item_order,
             set_sharing,

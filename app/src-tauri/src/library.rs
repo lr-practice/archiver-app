@@ -413,6 +413,11 @@ pub struct DeletedItem {
     pub deleted_at: i64,
 }
 
+/// Verknüpfung (Symlink), ohne ihr zu folgen
+fn is_link(p: &Path) -> bool {
+    fs::symlink_metadata(p).map(|m| m.file_type().is_symlink()).unwrap_or(false)
+}
+
 /// Verschieben, notfalls über Volumegrenzen (kopieren, dann löschen)
 fn move_file(src: &Path, dst: &Path) -> Result<()> {
     if fs::rename(src, dst).is_ok() {
@@ -989,10 +994,19 @@ impl Library {
         let mut changed = false;
         let st = self.structure();
         let root = self.root.clone();
-        let walker = WalkDir::new(&self.root)
-            .min_depth(1)
-            .into_iter()
-            .filter_entry(|e| !is_hidden(e.file_name()) && !(e.file_type().is_dir() && st.skips(&rel_path(&root, e.path()))));
+        // Bibliothek, dazu jede externe Zone (Verknüpfung auf einen Ordner
+        // außerhalb, 0.30.1); deren Pfade bleiben „Zone/…“ unter der Bibliothek
+        let starts: Vec<PathBuf> = std::iter::once(self.root.clone())
+            .chain(self.external_zones().into_iter().map(|(zone, _)| self.root.join(zone)))
+            .collect();
+        let walker = starts.into_iter().flat_map(|start| {
+            let root = root.clone();
+            let st = st.clone();
+            WalkDir::new(start)
+                .min_depth(1)
+                .into_iter()
+                .filter_entry(move |e| !is_hidden(e.file_name()) && !(e.file_type().is_dir() && st.skips(&rel_path(&root, e.path()))))
+        });
         for entry in walker.filter_map(|e| e.ok()) {
             if !entry.file_type().is_file() || !is_media(entry.path()) {
                 continue;
@@ -1078,7 +1092,7 @@ impl Library {
             .into_iter()
             .filter_entry(|e| !is_hidden(e.file_name()) && !(e.file_type().is_dir() && st.skips(&rel_path(&root, e.path()))))
             .filter_map(|e| e.ok())
-            .filter(|e| e.file_type().is_dir())
+            .filter(|e| e.file_type().is_dir() || (e.depth() == 1 && e.path_is_symlink() && e.path().is_dir()))
             .filter_map(|e| {
                 let path = rel_path(&self.root, e.path());
                 let count = counts.get(&path).copied().unwrap_or(0);
@@ -1500,7 +1514,7 @@ impl Library {
                 continue;
             }
             let dst = unique_path(&target, &file_name(rel));
-            fs::rename(&src, &dst).map_err(err)?;
+            move_file(&src, &dst)?; // externe Zonen liegen evtl. auf einem anderen Volume
             let new_rel = rel_path(&self.root, &dst);
             let mtime = fs::metadata(&dst).ok().and_then(|m| time_ms(m.modified()));
             let conn = self.conn.lock().unwrap();
@@ -1641,6 +1655,68 @@ impl Library {
         Ok(new_path)
     }
 
+    // ---- Externe Zonen (0.30.1) ----
+    // Ein Ordner außerhalb der Bibliothek wird Zone über eine Verknüpfung
+    // (Symlink) im Bibliotheksordner. Dateien bleiben, wo sie sind; Archiver
+    // liest und sichert direkt dort. Lösen entfernt nur die Verknüpfung.
+
+    /// Externe Zonen: (Zone, Ordner draußen)
+    pub fn external_zones(&self) -> Vec<(String, String)> {
+        let Ok(rd) = fs::read_dir(&self.root) else { return Vec::new() };
+        let mut out: Vec<(String, String)> = rd
+            .filter_map(|e| e.ok())
+            .filter(|e| is_link(&e.path()) && e.path().is_dir() && !is_hidden(&e.file_name()))
+            .filter_map(|e| {
+                let target = fs::read_link(e.path()).ok()?;
+                Some((e.file_name().to_string_lossy().into_owned(), target.to_string_lossy().into_owned()))
+            })
+            .collect();
+        out.sort_by(|a, b| a.0.to_lowercase().cmp(&b.0.to_lowercase()));
+        out
+    }
+
+    /// Ordner außerhalb als Zone verknüpfen. Gibt den Zonennamen zurück.
+    pub fn link_folder(&self, folder: &Path) -> Result<String> {
+        let folder = folder.canonicalize().map_err(err)?;
+        let root = self.root.canonicalize().map_err(err)?;
+        if !folder.is_dir() {
+            return Err("Kein Ordner".into());
+        }
+        if folder.starts_with(&root) {
+            return Err("Der Ordner liegt schon in der Bibliothek".into());
+        }
+        if root.starts_with(&folder) {
+            return Err("Die Bibliothek liegt in diesem Ordner".into());
+        }
+        if let Some((zone, _)) = self.external_zones().into_iter().find(|(_, t)| Path::new(t) == folder) {
+            return Ok(zone);
+        }
+        let name = clean_segment(folder.file_name().and_then(|n| n.to_str()).unwrap_or("Ordner"));
+        let name = if name.is_empty() { "Ordner".to_string() } else { name };
+        let dst = unique_path(&self.root, &name);
+        #[cfg(unix)]
+        std::os::unix::fs::symlink(&folder, &dst).map_err(err)?;
+        #[cfg(not(unix))]
+        return Err("Externe Zonen gibt es nur auf dem Mac".into());
+        #[allow(unreachable_code)]
+        {
+            self.scan()?;
+            Ok(rel_path(&self.root, &dst))
+        }
+    }
+
+    /// Verknüpfung lösen: die Zone verschwindet, der Ordner draußen bleibt.
+    pub fn unlink_folder(&self, zone: &str) -> Result<()> {
+        let link = safe_join(&self.root, zone)?;
+        if zone.contains('/') || !is_link(&link) {
+            return Err(format!("Keine externe Zone: {zone}"));
+        }
+        fs::remove_file(&link).map_err(err)?;
+        let conn = self.conn.lock().unwrap();
+        conn.execute("DELETE FROM item WHERE path LIKE ?1 || '/%'", params![zone]).map_err(err)?;
+        Ok(())
+    }
+
     /// Legt eine Zone samt Inhalt in den Papierkorb. Inbox und Bibliotheksordner bleiben.
     pub fn trash_zone(&self, zone: &str) -> Result<()> {
         if zone.is_empty() || zone == self.default_zone() {
@@ -1649,6 +1725,10 @@ impl Library {
         let dir = safe_join(&self.root, zone)?;
         if !dir.is_dir() {
             return Err(format!("Zone nicht gefunden: {zone}"));
+        }
+        // Externe Zone: nur die Verknüpfung lösen, der Ordner draußen bleibt unberührt
+        if is_link(&dir) {
+            return self.unlink_folder(zone);
         }
         let stamp = self.deleted_stamp()?;
         let hashes: HashMap<String, String> = {

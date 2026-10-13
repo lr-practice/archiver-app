@@ -1,5 +1,19 @@
 # Changelog
 
+## App 0.30.1 · Extension 3.23.0 (13.10.2026)
+
+Bildtext in der Lightbox:
+- Der Bildtext steht auf einer farbigen Karte wie die Textkarten. Einstellungen › Aussehen wählt die Form: Rückseite (Standard, das Bild wird mit T, „Text“ oder dem Eselsohr unten rechts gewendet) oder Doppelseite (Karte links neben dem Bild).
+- Bildtext und Textkarten lassen sich in der Lightbox direkt editieren.
+- Der Hintergrund der Lightbox verschwimmt, kein Text aus dem Raster scheint mehr durch.
+
+Sichern:
+- Ein Bild, das schon in der Bibliothek liegt, wandert beim erneuten Sichern in die gewählte Zone und übernimmt den markierten Text. Bisher blieb es still in seiner alten Zone.
+- Die Adresse der offenen Seite in eine Zone gezogen: Linkkarte, dahinter die ganze Seite offline (MHTML). „Gesichert“ in der Lightbox öffnet sie in Chrome.
+
+Externe Zonen:
+- Einstellungen › Bibliothek › „Ordner außerhalb der Bibliothek“: ein Projektordner wird zur Zone, die Dateien bleiben, wo sie sind. ✕ löst nur die Zone, nie den Ordner.
+
 ## App 0.30.0 · Extension 3.22.0 (13.10.2026)
 
 Handbuch:

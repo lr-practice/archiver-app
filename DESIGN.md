@@ -1,6 +1,6 @@
 # Archiver – Design-System
 
-Stand: App 0.30.0 · Extension 3.22.0
+Stand: App 0.30.1 · Extension 3.23.0
 
 Diese Datei hält fest, wie Archiver aussieht und warum. Sie gilt für die Mac-App
 (`app/src`) und die Chrome-Extension (`extension/`). Wer an der Oberfläche
@@ -213,6 +213,9 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
 - **Form:** 2:1, `--r-lg`, Fläche ink × 0.055, beim Hover × 0.08.
   Umsortieren hebt die Karte an (Schatten, 85 %).
 - **Nicht:** Keine Rahmenlinie. Die Karte setzt sich nur über die Fläche ab.
+- **Externe Zone (0.30.1):** Ordner außerhalb der Bibliothek, angelegt nur in
+  Einstellungen › Bibliothek (Verknüpfung im Bibliotheksordner). Sieht aus wie
+  jede Zone; ✕ löst nur die Verknüpfung.
 
 ### 4.5 Ordnerkarte (`.p-folder-card`)
 - **Zweck:** Unterordner neben dem Zonen-Titel als Karten (3/6, die Liste

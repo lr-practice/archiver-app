@@ -2383,6 +2383,7 @@
 
     if (sub === "library") {
       wrap.appendChild(renderLibrarySlots());
+      wrap.appendChild(renderExternalZones());
       wrap.appendChild(renderDefaultZone());
       wrap.appendChild(renderStructure());
       wrap.appendChild(renderZoneSettings());
@@ -6832,6 +6833,50 @@
       b.appendChild(row);
     });
     b.appendChild(el("p", "p-block-hint", t("libHint")));
+    return b;
+  }
+
+  // 0.30.1: Ordner außerhalb der Bibliothek als Zone. Nur hier anzulegen;
+  // im Raster, in Tray, Zonenleiste und Extension wie jede andere Zone.
+  function renderExternalZones() {
+    const b = block(t("extZones"));
+    const list = el("div");
+    b.appendChild(list);
+    const fill = (rows) => {
+      list.replaceChildren(
+        ...rows.map(({ zone, path }) =>
+          blockRow(
+            [el("div", "p-lib-name", zone), pathEl(path, "p-lib-path")],
+            [
+              button("p-link", t("reveal"), () => invoke("reveal_zone", { zone }).catch(fail)),
+              button("p-link p-lib-clear", "✕", async () => {
+                await invoke("unlink_folder", { zone }).catch(fail);
+                await refresh();
+                renderPage(true);
+              }),
+            ]
+          )
+        )
+      );
+    };
+    invoke("external_zones").then(fill, () => fill([]));
+    b.appendChild(
+      blockRow(
+        el("div", "p-block-text", t("extZonesHint")),
+        button("p-link", t("extZonesAdd"), async () => {
+          const path = await invoke("pick_folder");
+          if (!path) return;
+          try {
+            const zone = await invoke("link_folder", { path });
+            await refresh();
+            toast(t("extZonesAdded", { zone }));
+          } catch (e) {
+            fail(e);
+          }
+          renderPage(true);
+        })
+      )
+    );
     return b;
   }
 

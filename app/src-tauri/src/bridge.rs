@@ -30,7 +30,7 @@ const EXTENSION_IDS: &[&str] = &["gddcmkfpdfkpnieegdplpilmoodghgdd"];
 
 /// Version der Extension, die diese App mindestens braucht. Meldet sich eine
 /// ältere (oder eine ohne Versionsangabe, vor 3.22.0), zeigt die App einen Hinweis.
-pub const EXTENSION_MIN: &str = "3.22.0";
+pub const EXTENSION_MIN: &str = "3.23.0";
 
 /// Wurde das Programm von Chrome als Native-Messaging-Host gestartet?
 pub fn is_host_invocation() -> bool {
