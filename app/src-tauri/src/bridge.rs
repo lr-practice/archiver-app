@@ -18,10 +18,15 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
+use std::sync::Mutex;
+use std::time::{Duration, Instant};
 
 pub const HOST_NAME: &str = "app.archiver.bridge";
 const APP_IDENTIFIER: &str = "app.archiver.desktop";
 const LIST_LIMIT: usize = 500;
+/// Chrome nimmt vom Host höchstens 1 MB je Nachricht; etwas Luft bleibt
+const MAX_OUT: usize = 900 * 1024;
+const SCAN_EVERY: Duration = Duration::from_secs(30);
 
 /// Erlaubte Extensions. Die erste ID ergibt sich aus dem "key" in
 /// extension/manifest.json (entpackte Version). Die Chrome-Web-Store-ID kommt
@@ -269,7 +274,13 @@ pub fn run_host() {
             }
         };
         let mut reply = reply;
-        reply["id"] = id;
+        reply["id"] = id.clone();
+        // Zu groß für Chrome: Chrome würde die Verbindung kappen, alle offenen
+        // Anfragen gingen verloren. Stattdessen ein klarer Fehler (0.31.0).
+        if serde_json::to_vec(&reply).map(|b| b.len() > 1024 * 1024).unwrap_or(true) {
+            crate::log::error("bridge", "Antwort größer als 1 MB");
+            reply = json!({ "ok": false, "error": "reply-too-large", "id": id });
+        }
         if write_message(&mut output, &reply).is_err() {
             break;
         }
@@ -293,26 +304,44 @@ fn library<'a>(slot: &'a mut Vec<(PathBuf, Library)>, msg: &Value) -> Result<&'a
 }
 
 /// Ordner innerhalb der Zonen (bis zwei Ebenen tief) fürs Rechtsklickmenü der Extension.
-fn zone_folders(lib: &Library, zones: &[Zone]) -> Result<Value, String> {
-    let mut map = serde_json::Map::new();
+/// Ordner je Zone (bis zwei Ebenen) fürs Rechtsklickmenü. Aus den Ordnern
+/// selbst statt aus allen Objekten der Bibliothek (0.31.0): schneller, und auch
+/// leere, gerade in der App angelegte Ordner stehen im Menü.
+fn zone_folders(lib: &Library, zones: &[Zone]) -> Value {
     let mut sets: std::collections::BTreeMap<String, std::collections::BTreeSet<String>> = Default::default();
-    for item in lib.items()? {
-        if !zones.iter().any(|z| z.path == item.zone) {
+    for dir in lib.folders() {
+        // die längste passende Zone (Unterzonen haben eigene Einträge)
+        let Some(zone) = zones.iter().filter(|z| !z.path.is_empty() && dir.starts_with(&format!("{}/", z.path))).max_by_key(|z| z.path.len()) else {
             continue;
+        };
+        let rest = &dir[zone.path.len() + 1..];
+        if zones.iter().any(|z| z.path == dir) {
+            continue; // selbst eine Zone
         }
-        let dir = item.path.rsplit_once('/').map(|(d, _)| d).unwrap_or("");
-        let Some(rest) = dir.strip_prefix(&format!("{}/", item.zone)) else { continue };
         let parts: Vec<&str> = rest.split('/').take(2).collect();
-        let set = sets.entry(item.zone.clone()).or_default();
+        let set = sets.entry(zone.path.clone()).or_default();
         set.insert(parts[0].to_string());
         if parts.len() > 1 {
             set.insert(format!("{}/{}", parts[0], parts[1]));
         }
     }
-    for (zone, set) in sets {
-        map.insert(zone, json!(set.into_iter().collect::<Vec<_>>()));
+    Value::Object(sets.into_iter().map(|(zone, set)| (zone, json!(set.into_iter().collect::<Vec<_>>()))).collect())
+}
+
+/// Die Brücke liest den Ordner höchstens alle 30 s neu ein. Vorher lief bei
+/// jedem Ziehen und jeder Galerie ein ganzer Scan, auch auf Netzlaufwerken
+/// (0.31.0). Läuft die App, hält ihr Watcher die Datenbank ohnehin aktuell.
+fn scan_now_and_then(lib: &Library) -> Result<(), String> {
+    static LAST: Mutex<Vec<(PathBuf, Instant)>> = Mutex::new(Vec::new());
+    {
+        let mut last = LAST.lock().unwrap_or_else(|e| e.into_inner());
+        if last.iter().any(|(r, at)| r == &lib.root && at.elapsed() < SCAN_EVERY) {
+            return Ok(());
+        }
+        last.retain(|(r, _)| r != &lib.root);
+        last.push((lib.root.clone(), Instant::now()));
     }
-    Ok(Value::Object(map))
+    lib.scan().map(|_| ())
 }
 
 /// Zonen wie in der App: ohne Bibliotheksordner selbst und ohne leere Elternordner.
@@ -345,14 +374,14 @@ fn handle(msg: &Value, slot: &mut Vec<(PathBuf, Library)>) -> Result<Value, Stri
         }
         "zones" => {
             let lib = library(slot, msg)?;
-            lib.scan()?;
+            scan_now_and_then(lib)?;
             // Reihenfolge und Hot Zones aus der Übersicht der App
             let (order, hot) = lib.zone_order();
             let mut zones = visible_zones(lib.zones()?);
             let rank = |p: &str| order.iter().position(|o| o == p).unwrap_or(order.len());
             zones.sort_by_key(|z| rank(&z.path));
             let hot: Vec<&String> = hot.iter().filter(|h| zones.iter().any(|z| &z.path == *h)).collect();
-            let folders = zone_folders(lib, &zones).unwrap_or(Value::Null);
+            let folders = zone_folders(lib, &zones);
             Ok(json!({
                 "zones": zones,
                 "hot": hot,
@@ -387,13 +416,15 @@ fn handle(msg: &Value, slot: &mut Vec<(PathBuf, Library)>) -> Result<Value, Stri
         }
         "list" => {
             let lib = library(slot, msg)?;
-            lib.scan()?;
+            scan_now_and_then(lib)?;
             let fallback = lib.default_zone();
             let zone = str_arg(msg, "zone").unwrap_or(&fallback);
-            let items: Vec<Value> = lib
-                .items()?
+            let offset = msg.get("offset").and_then(|v| v.as_u64()).unwrap_or(0) as usize;
+            let all: Vec<_> = lib.items_under(Some(zone).filter(|z| !z.is_empty()))?.into_iter().filter(|i| i.zone == zone).collect();
+            let total = all.len();
+            let items: Vec<Value> = all
                 .into_iter()
-                .filter(|i| i.zone == zone)
+                .skip(offset)
                 .take(LIST_LIMIT)
                 .map(|i| {
                     json!({
@@ -409,7 +440,10 @@ fn handle(msg: &Value, slot: &mut Vec<(PathBuf, Library)>) -> Result<Value, Stri
                     })
                 })
                 .collect();
-            Ok(json!({ "items": items }))
+            // Chrome nimmt vom Host höchstens 1 MB je Nachricht: lieber kürzen und
+            // „next“ mitgeben, als dass die ganze Antwort verloren geht (0.31.0)
+            let (items, next) = fit_reply(items, offset, total);
+            Ok(json!({ "items": items, "next": next, "total": total }))
         }
         "preview" => {
             let lib = library(slot, msg)?;
@@ -440,6 +474,22 @@ fn handle(msg: &Value, slot: &mut Vec<(PathBuf, Library)>) -> Result<Value, Stri
         }
         other => Err(format!("Unbekannter Befehl: {other}")),
     }
+}
+
+/// So viele Einträge, wie unter das Limit passen; `next` ist der Versatz für die
+/// nächste Seite oder null, wenn alles drin ist.
+fn fit_reply(items: Vec<Value>, offset: usize, total: usize) -> (Vec<Value>, Option<usize>) {
+    let mut size = 200; // Hülle der Antwort
+    let mut out = Vec::new();
+    for item in items {
+        size += item.to_string().len() + 1;
+        if size > MAX_OUT && !out.is_empty() {
+            break;
+        }
+        out.push(item);
+    }
+    let end = offset + out.len();
+    (out, (end < total).then_some(end))
 }
 
 /// Bild (oder Text-/Linkkarte) aus dem Zwischenordner übernehmen
@@ -565,6 +615,36 @@ mod tests {
         write_message(&mut buf, &json!({ "cmd": "hello", "id": 1 })).unwrap();
         let back = read_message(&mut buf.as_slice()).unwrap().unwrap();
         assert_eq!(back["cmd"], "hello");
+    }
+
+    #[test]
+    fn list_fits_into_one_chrome_message() {
+        let items: Vec<Value> = (0..400).map(|i| json!({ "path": format!("Z/{i}.png"), "quote": "x".repeat(4000) })).collect();
+        let (page, next) = fit_reply(items, 0, 400);
+        assert!(page.len() < 400 && !page.is_empty());
+        assert_eq!(next, Some(page.len()));
+        assert!(serde_json::to_vec(&json!({ "items": page })).unwrap().len() < 1024 * 1024);
+        let small: Vec<Value> = (0..3).map(|i| json!({ "path": i })).collect();
+        assert_eq!(fit_reply(small, 10, 13).1, None, "letzte Seite");
+    }
+
+    #[test]
+    fn folders_per_zone_without_items() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path().join("Bib");
+        for d in ["Typo/Serif/Alt", "Typo/Grotesk", "Farbe"] {
+            std::fs::create_dir_all(root.join(d)).unwrap();
+        }
+        std::fs::write(root.join("Typo/a.txt"), "Zone mit Inhalt").unwrap();
+        let lib = Library::open(&root).unwrap();
+        lib.scan().unwrap();
+        let zones = visible_zones(lib.zones().unwrap());
+        let map = zone_folders(&lib, &zones);
+        let typo: Vec<&str> = map["Typo"].as_array().unwrap().iter().map(|v| v.as_str().unwrap()).collect();
+        assert_eq!(typo, ["Grotesk", "Serif", "Serif/Alt"], "auch leere Ordner, bis zwei Ebenen");
+        assert!(map.get("Farbe").is_none());
+        assert_eq!(lib.items_under(Some("Typo")).unwrap().len(), 1);
+        assert!(lib.items_under(Some("Typ")).unwrap().is_empty(), "nur ganze Ordnernamen");
     }
 
     #[test]

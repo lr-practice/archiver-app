@@ -1280,6 +1280,12 @@ impl Library {
 
     /// Alle Einträge mit Quelle und Vorschaubild, neueste zuerst.
     pub fn items(&self) -> Result<Vec<Item>> {
+        self.items_under(None)
+    }
+
+    /// Nur Objekte unter diesem Ordner (Zone), für die Brücke: die Galerie der
+    /// Extension braucht nicht die ganze Bibliothek (0.31.0)
+    pub fn items_under(&self, prefix: Option<&str>) -> Result<Vec<Item>> {
         let depth = self.structure().zone_depth();
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn
@@ -1296,12 +1302,13 @@ impl Library {
                  LEFT JOIN thumb t ON t.hash = i.hash
                  LEFT JOIN analysis a ON a.hash = i.hash
                  LEFT JOIN media m ON m.hash = i.hash
+                 WHERE ?1 IS NULL OR substr(i.path, 1, length(?1) + 1) = ?1 || '/'
                  ORDER BY COALESCE(s.captured_at, i.added_at) DESC, i.path",
             )
             .map_err(err)?;
         let thumbs = self.thumbs_dir();
         let rows = stmt
-            .query_map([], |r| {
+            .query_map([prefix], |r| {
                 let path: String = r.get(0)?;
                 let thumb: Option<String> = r.get(12)?;
                 let zone = zone_at(&parent_rel(&path), depth);
@@ -2493,7 +2500,12 @@ impl Library {
                     .min_depth(st.zone_depth() + 1 - offset)
                     .max_depth(st.zone_depth() + 4 - offset)
                     .into_iter()
-                    .filter_entry(|e| !is_hidden(e.file_name()) && !(e.file_type().is_dir() && st.skips(&rel_path(&root, e.path()))))
+                    // Unterhalb von min_depth prüft WalkDir den Filter nicht: .archiver/thumbs
+                    // kam sonst als Ordner mit, deshalb den ganzen Pfad prüfen (0.31.0)
+                    .filter_entry(|e| {
+                        let rel = rel_path(&root, e.path());
+                        !rel.split('/').any(|s| s.starts_with('.')) && !(e.file_type().is_dir() && st.skips(&rel))
+                    })
                     .filter_map(|e| e.ok())
                     .filter(|e| e.file_type().is_dir())
                     .map(|e| rel_path(&self.root, e.path())),

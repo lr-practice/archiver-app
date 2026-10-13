@@ -56,6 +56,12 @@
   // ---- PDF ----
 
   let pdfjs = null;
+
+  // Breite 0 gibt den Bildspeicher einer Canvas sofort frei (WebKit wartet sonst auf den GC)
+  function freeCanvas(c) {
+    if (c) c.width = c.height = 0;
+  }
+
   function loadPdfjs() {
     if (!pdfjs) {
       pdfjs = import("./vendor/pdfjs/pdf.min.mjs").then((lib) => {
@@ -116,7 +122,10 @@
     }
 
     clear() {
-      for (const p of this.pages) p.page.cleanup && p.page.cleanup();
+      for (const p of this.pages) {
+        p.page.cleanup && p.page.cleanup();
+        freeCanvas(p.canvas);
+      }
       this.pages = [];
       this.pagesEl.replaceChildren();
       if (this.doc) this.doc.destroy();
@@ -185,8 +194,19 @@
       const top = this.scroll.scrollTop - this.scroll.clientHeight;
       const bottom = this.scroll.scrollTop + this.scroll.clientHeight * 2;
       const s = this.scale() * (window.devicePixelRatio || 1);
+      // Weit weg gescrollte Seiten geben ihr Bild wieder frei: ein langes PDF
+      // hielt sonst jede je gezeigte Seite in voller Auflösung (0.31.0)
+      const keepTop = this.scroll.scrollTop - this.scroll.clientHeight * 4;
+      const keepBottom = this.scroll.scrollTop + this.scroll.clientHeight * 5;
       for (const p of this.pages) {
         const y = p.el.offsetTop;
+        if (p.drawn && !p.rendering && (y + p.el.offsetHeight < keepTop || y > keepBottom)) {
+          freeCanvas(p.canvas);
+          p.canvas = document.createElement("canvas");
+          p.el.replaceChildren(p.canvas);
+          p.drawn = 0;
+          continue;
+        }
         const visible = y + p.el.offsetHeight > top && y < bottom;
         if (!visible || Math.abs(p.drawn - s) < 0.01 || p.rendering) continue;
         p.rendering = true;
@@ -200,11 +220,13 @@
         const task = p.page.render({ canvasContext: canvas.getContext("2d"), viewport: vp, transform: fit });
         task.promise
           .then(() => {
+            if (!this.pages.includes(p)) return freeCanvas(canvas); // Dokument inzwischen gewechselt
             p.el.replaceChildren(canvas);
+            freeCanvas(p.canvas);
             p.canvas = canvas;
             p.drawn = s;
           })
-          .catch(() => {})
+          .catch(() => freeCanvas(canvas))
           .finally(() => {
             p.rendering = false;
             if (Math.abs(this.scale() * (window.devicePixelRatio || 1) - s) > 0.01) this.drawVisible();

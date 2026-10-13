@@ -791,11 +791,20 @@
     renderZones();
   }, 800);
 
+  // Während eines Zeichendurchgangs werden Objekte je Zone und „zuletzt
+  // gesichert“ nur einmal ausgerechnet statt für jede Zeile neu über die ganze
+  // Bibliothek (0.31.0). Außerhalb von render() rechnet alles frisch.
+  let pass = null;
   function render() {
-    renderZones();
-    renderToolbar();
-    renderInfo();
-    renderLibTab();
+    pass = { byZone: null, saved: null };
+    try {
+      renderZones();
+      renderToolbar();
+      renderInfo();
+      renderLibTab();
+    } finally {
+      pass = null;
+    }
   }
 
   // Prototyp: keine Toolbar mehr. Die Navigation schwebt unten in der Mitte,
@@ -915,7 +924,16 @@
   }
 
   function zoneItems(path) {
-    return state.items.filter((i) => i.zone === path); // neueste zuerst (Reihenfolge aus Rust)
+    if (!pass) return state.items.filter((i) => i.zone === path); // neueste zuerst (Reihenfolge aus Rust)
+    if (!pass.byZone) {
+      pass.byZone = new Map();
+      for (const i of state.items) {
+        const list = pass.byZone.get(i.zone);
+        if (list) list.push(i);
+        else pass.byZone.set(i.zone, [i]);
+      }
+    }
+    return (pass.byZone.get(path) || []).slice();
   }
 
   // Für Übersichten (Karten-Cover, Index-Thumbs, Vorschau): in der eigenen Reihenfolge der Zone
@@ -1469,6 +1487,7 @@
     head.appendChild(el("span"));
     list.appendChild(head);
 
+    const current = compact ? previewZone() : null;
     zones.forEach((zone, i) => {
       const index = offset + i;
       const row = el("div", "p-row p-zone");
@@ -1478,7 +1497,7 @@
         row.dataset.swap = zone.path;
         row.addEventListener("pointerdown", (e) => dragSwap(e, row));
       }
-      if (compact && zone.path === previewZone()) row.classList.add("current");
+      if (compact && zone.path === current) row.classList.add("current");
       const no = mono(String(index + 1).padStart(2, "0"), "dim");
       if (index < HOT_ZONES) no.title = t("keyHint", { n: index + 1 });
       row.appendChild(no);
@@ -3143,6 +3162,13 @@
   }
 
   function lastSaved(zonePath) {
+    if (pass) {
+      if (!pass.saved) {
+        pass.saved = new Map();
+        for (const item of state.items) pass.saved.set(item.zone, Math.max(pass.saved.get(item.zone) || 0, item.capturedAt || item.addedAt || 0));
+      }
+      return pass.saved.get(zonePath) || 0;
+    }
     let latest = 0;
     for (const item of state.items) {
       if (item.zone === zonePath) latest = Math.max(latest, item.capturedAt || item.addedAt || 0);

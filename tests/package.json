@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node --test unit/ && node extension-security.mjs"
+    "test": "node --test unit/*.test.mjs && node extension-security.mjs"
   },
   "devDependencies": {
     "playwright": "1.56.1"

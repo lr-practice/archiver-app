@@ -190,6 +190,13 @@ fn current(state: &State<AppState>) -> Result<Arc<Library>, String> {
     state.library.lock().unwrap().clone().ok_or_else(|| "Keine Bibliothek geöffnet".into())
 }
 
+/// Dateiarbeit im Hintergrund-Pool: eine lange Kopie (anderes Laufwerk, großer
+/// Ordner) belegt sonst einen der wenigen Befehls-Threads, und die Oberfläche
+/// wartet auf alles andere mit (0.31.0)
+async fn blocking<T: Send + 'static>(f: impl FnOnce() -> Result<T, String> + Send + 'static) -> Result<T, String> {
+    tauri::async_runtime::spawn_blocking(f).await.map_err(|e| e.to_string())?
+}
+
 /// Bestand neu einlesen und bei Änderungen die Oberfläche und den Vorschau-Worker anstoßen.
 fn rescan(app: &AppHandle, lib: &Library) {
     match lib.scan() {
@@ -781,20 +788,24 @@ async fn set_default_zone(app: AppHandle, state: State<'_, AppState>, zone: Stri
 #[tauri::command]
 async fn snapshot(state: State<'_, AppState>) -> Result<Snapshot, String> {
     let lib = current(&state)?;
-    let user = lib.user.lock().unwrap().clone();
-    Ok(Snapshot {
-        root: lib.root.to_string_lossy().into_owned(),
-        name: lib.root.file_name().and_then(|n| n.to_str()).unwrap_or("Archiver").to_string(),
-        zones: lib.zones()?,
-        items: lib.items()?,
-        order: lib.item_order(),
-        shared: lib.shared,
-        user,
-        default_zone: lib.default_zone(),
-        structure: lib.structure(),
-        folders: lib.folders(),
-        deleted: lib.deleted_count(),
+    // Liest alle Objekte und läuft durch die Ordner: nicht auf den Befehls-Threads
+    blocking(move || {
+        let user = lib.user.lock().unwrap().clone();
+        Ok(Snapshot {
+            root: lib.root.to_string_lossy().into_owned(),
+            name: lib.root.file_name().and_then(|n| n.to_str()).unwrap_or("Archiver").to_string(),
+            zones: lib.zones()?,
+            items: lib.items()?,
+            order: lib.item_order(),
+            shared: lib.shared,
+            user,
+            default_zone: lib.default_zone(),
+            structure: lib.structure(),
+            folders: lib.folders(),
+            deleted: lib.deleted_count(),
+        })
     })
+    .await
 }
 
 // ---- Notiz, Rechte, geteilte Bibliothek, Reihenfolge, Paket, Moodboard (studio.rs) ----
@@ -891,14 +902,16 @@ async fn export_moodboard(app: AppHandle, title: String, meta: String, file_name
 
 #[tauri::command]
 async fn move_items(app: AppHandle, state: State<'_, AppState>, paths: Vec<String>, zone: String, exact: Option<bool>) -> Result<Vec<String>, String> {
-    let moved = current(&state)?.move_items_to(&paths, &zone, exact.unwrap_or(false))?;
+    let lib = current(&state)?;
+    let moved = blocking(move || lib.move_items_to(&paths, &zone, exact.unwrap_or(false))).await?;
     let _ = app.emit("library-changed", ());
     Ok(moved)
 }
 
 #[tauri::command]
 async fn trash_items(app: AppHandle, state: State<'_, AppState>, paths: Vec<String>) -> Result<Vec<(String, String)>, String> {
-    let n = current(&state)?.trash_items(&paths)?;
+    let lib = current(&state)?;
+    let n = blocking(move || lib.trash_items(&paths)).await?;
     let _ = app.emit("library-changed", ());
     Ok(n)
 }
@@ -946,7 +959,8 @@ async fn deleted_items(state: State<'_, AppState>) -> Result<Vec<library::Delete
 
 #[tauri::command]
 async fn restore_deleted(app: AppHandle, state: State<'_, AppState>, files: Vec<String>) -> Result<usize, String> {
-    let n = current(&state)?.restore_deleted(&files)?;
+    let lib = current(&state)?;
+    let n = blocking(move || lib.restore_deleted(&files)).await?;
     let _ = app.emit("library-changed", ());
     kick_thumbs(&app);
     Ok(n)
@@ -954,7 +968,8 @@ async fn restore_deleted(app: AppHandle, state: State<'_, AppState>, files: Vec<
 
 #[tauri::command]
 async fn remove_deleted(app: AppHandle, state: State<'_, AppState>, files: Vec<String>) -> Result<usize, String> {
-    let n = current(&state)?.remove_deleted(&files)?;
+    let lib = current(&state)?;
+    let n = blocking(move || lib.remove_deleted(&files)).await?;
     let _ = app.emit("library-changed", ());
     Ok(n)
 }
@@ -968,14 +983,16 @@ async fn create_zone(app: AppHandle, state: State<'_, AppState>, name: String) -
 
 #[tauri::command]
 async fn rename_zone(app: AppHandle, state: State<'_, AppState>, zone: String, name: String) -> Result<String, String> {
-    let z = current(&state)?.rename_zone(&zone, &name)?;
+    let lib = current(&state)?;
+    let z = blocking(move || lib.rename_zone(&zone, &name)).await?;
     let _ = app.emit("library-changed", ());
     Ok(z)
 }
 
 #[tauri::command]
 async fn move_folder(app: AppHandle, state: State<'_, AppState>, from: String, into: String) -> Result<String, String> {
-    let p = current(&state)?.move_folder(&from, &into)?;
+    let lib = current(&state)?;
+    let p = blocking(move || lib.move_folder(&from, &into)).await?;
     let _ = app.emit("library-changed", ());
     Ok(p)
 }
@@ -994,7 +1011,8 @@ async fn set_zone_order(state: State<'_, AppState>, order: Vec<String>, hot: Vec
 
 #[tauri::command]
 async fn restore_items(app: AppHandle, state: State<'_, AppState>, items: Vec<(String, String)>) -> Result<usize, String> {
-    let n = current(&state)?.restore_items(&items)?;
+    let lib = current(&state)?;
+    let n = blocking(move || lib.restore_items(&items)).await?;
     let _ = app.emit("library-changed", ());
     kick_thumbs(&app);
     Ok(n)
@@ -1002,7 +1020,8 @@ async fn restore_items(app: AppHandle, state: State<'_, AppState>, items: Vec<(S
 
 #[tauri::command]
 async fn trash_zone(app: AppHandle, state: State<'_, AppState>, zone: String) -> Result<(), String> {
-    current(&state)?.trash_zone(&zone)?;
+    let lib = current(&state)?;
+    blocking(move || lib.trash_zone(&zone)).await?;
     let _ = app.emit("library-changed", ());
     Ok(())
 }

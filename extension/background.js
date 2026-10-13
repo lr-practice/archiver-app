@@ -272,12 +272,28 @@ async function sweepStrayTransfers() {
 let bridgeDefaultZone = null; // Standard-Zone der App (Standard: Unsorted)
 let bridgeFolders = {}; // Zone → Ordner darin (bis zwei Ebenen), fürs Rechtsklickmenü
 
+// Zonenantwort der App, kurz zwischengespeichert: jedes Ziehen und jede
+// Overlay-Ansicht fragte sonst neu, und die App las dafür den Ordner ein
+// (3.24.0). Nach Sichern, Verschieben und neuer Zone wird sie verworfen.
+const ZONES_CACHE_MS = 10000;
+const zonesCache = new Map(); // Bibliothek ("" = aktive) -> { at, promise }
+function hostZones(library) {
+  const key = library || "";
+  const hit = zonesCache.get(key);
+  if (hit && Date.now() - hit.at < ZONES_CACHE_MS) return hit.promise;
+  const promise = hostCall("zones", library ? { library } : {});
+  zonesCache.set(key, { at: Date.now(), promise });
+  promise.catch(() => zonesCache.delete(key));
+  return promise;
+}
+const forgetZones = () => zonesCache.clear();
+
 // Zonen einer anderen Bibliothek (⇧ beim Ziehen): nur die Active Zones zählen
 async function libraryZones(library) {
   const info = await appBridge();
   if (!info) return { app: false };
   const libraries = info.libraries || [];
-  const r = await hostCall("zones", { library: library || null });
+  const r = await hostZones(library);
   const zones = (r.zones || []).map((z) => z.path);
   const hot = Array.isArray(r.hot) && r.hot.length ? r.hot.filter((n) => zones.includes(n)) : zones.slice(0, 4);
   return { app: true, libraries, library: library || null, zones, hot, alpha: typeof r.alpha === "number" ? r.alpha : null };
@@ -298,7 +314,7 @@ async function getZones() {
   const info = await appBridge();
   if (info) {
     try {
-      const r = await hostCall("zones");
+      const r = await hostZones(null);
       const zones = (r.zones || []).map((z) => z.path);
       bridgeDefaultZone = r.default || null;
       const hot = Array.isArray(r.hot) ? r.hot.filter((n) => zones.includes(n)) : zones.slice(0, 4);
@@ -385,6 +401,7 @@ async function saveToApp(message, sender) {
       library: message.library || null,
     });
     if (!message.library) rememberRecent(zone || bridgeDefaultZone);
+    forgetZones();
     await eraseDownload(id);
     if (archive) await eraseDownload(archive.id); // Datei liegt jetzt in der Bibliothek, Eintrag im Verlauf wäre tot
     // Gleiches Bild schon in der Bibliothek: nicht doppelt ablegen, sagen wo es liegt
@@ -412,19 +429,33 @@ async function saveToApp(message, sender) {
   }
 }
 
+// Liste einer Zone aus der App. Vorschauen kommen nicht mehr alle vorab mit
+// (bis zu 500 Bilder je Zone, auch für die Übersicht mit nur drei sichtbaren):
+// die Galerie holt sie einzeln, sobald eine Karte sichtbar wird (3.24.0).
+const LIST_MAX = 500;
 async function listAppFolder(zone) {
-  const r = await hostCall("list", { zone: zone || null });
-  const items = await Promise.all(
-    (r.items || []).map(async (it) => ({
+  const raw = [];
+  let offset = 0;
+  do {
+    const r = await hostCall("list", { zone: zone || null, offset });
+    raw.push(...(r.items || []));
+    offset = typeof r.next === "number" && r.next > offset ? r.next : null;
+  } while (offset != null && raw.length < LIST_MAX);
+  const items = raw.map((it) => {
+    const cached = !it.quote && previewCache.get(it.hash);
+    return {
       id: it.path,
-      url: it.quote ? textPreview(it.quote, it.tone, it.hash) : (await appPreview(it)) || it.imageUrl || "",
+      url: it.quote ? textPreview(it.quote, it.tone, it.hash) : cached || "",
+      preview: it.quote || cached ? null : it.path,
+      hash: it.hash,
+      fallback: it.imageUrl || null,
       filename: it.path,
       inHistory: true,
       pageUrl: it.pageUrl || null,
       pageTitle: it.pageTitle || null,
       ts: it.ts || null,
-    }))
-  );
+    };
+  });
   return { items };
 }
 
@@ -477,6 +508,7 @@ async function appPreview(it) {
 async function moveInApp(path, targetZone) {
   try {
     const r = await hostCall("move", { paths: [path], zone: targetZone || bridgeDefaultZone || "Unsorted" });
+    forgetZones();
     return { ok: true, newId: (r.moved || [])[0] || path };
   } catch (err) {
     return { ok: false, error: err.message || t("moveFailed") };
@@ -486,6 +518,7 @@ async function moveInApp(path, targetZone) {
 async function createAppZone(name) {
   const r = await hostCall("create_zone", { name });
   bridgeCache.at = 0;
+  forgetZones();
   return r.zone;
 }
 
@@ -714,6 +747,7 @@ async function captureVisible(message, sender) {
 const PRIVILEGED = new Set([
   "create-app-zone",
   "list-folder-downloads",
+  "app-preview",
   "show-download",
   "move-download",
   "open-chrome-page",
@@ -782,6 +816,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       (zone) => sendResponse({ ok: true, zone }),
       (err) => sendResponse({ ok: false, error: err.message })
     );
+    return true;
+  }
+
+  if (message.type === "app-preview" && typeof message.path === "string") {
+    appPreview({ path: message.path, hash: message.hash }).then((url) => sendResponse({ url }), () => sendResponse({ url: null }));
     return true;
   }
 
