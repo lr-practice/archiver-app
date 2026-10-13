@@ -1,6 +1,6 @@
 # Changelog
 
-## App 0.29.0 (in Arbeit, noch nicht veröffentlicht)
+## App 0.29.0 (13.10.2026)
 
 Bildtext:
 - Text, den man beim Sichern auf der Seite markiert, wird zum Bildtext des Bildes (Extension).
