@@ -28,6 +28,10 @@ const LIST_LIMIT: usize = 500;
 /// in Phase 4 dazu.
 const EXTENSION_IDS: &[&str] = &["gddcmkfpdfkpnieegdplpilmoodghgdd"];
 
+/// Version der Extension, die diese App mindestens braucht. Meldet sich eine
+/// ältere (oder eine ohne Versionsangabe, vor 3.22.0), zeigt die App einen Hinweis.
+pub const EXTENSION_MIN: &str = "3.23.0";
+
 /// Wurde das Programm von Chrome als Native-Messaging-Host gestartet?
 pub fn is_host_invocation() -> bool {
     std::env::args().skip(1).any(|a| a.starts_with("chrome-extension://"))
@@ -108,6 +112,36 @@ pub fn install_manifests() -> Vec<PathBuf> {
         }
     }
     written
+}
+
+// ---- Welche Extension hat sich zuletzt gemeldet? ----
+// Der Host schreibt bei jedem "hello" Version und Zeit in extension.json neben
+// die Einstellungen der App. Die App liest das für den Hinweis „fehlt/veraltet“.
+
+fn extension_file() -> Option<PathBuf> {
+    Some(dirs::config_dir()?.join(APP_IDENTIFIER).join("extension.json"))
+}
+
+fn note_extension(msg: &Value) {
+    let Some(file) = extension_file() else { return };
+    let entry = json!({ "version": str_arg(msg, "ext"), "seen": now_ms() });
+    if let Some(dir) = file.parent() {
+        let _ = std::fs::create_dir_all(dir);
+    }
+    let _ = std::fs::write(file, serde_json::to_vec(&entry).unwrap());
+}
+
+/// Zuletzt gemeldete Extension (Version, Zeit) und die Mindestversion.
+pub fn extension_status() -> Value {
+    let seen: Value = extension_file()
+        .and_then(|f| std::fs::read_to_string(f).ok())
+        .and_then(|t| serde_json::from_str(&t).ok())
+        .unwrap_or(Value::Null);
+    json!({
+        "version": seen.get("version").cloned().unwrap_or(Value::Null),
+        "seen": seen.get("seen").cloned().unwrap_or(Value::Null),
+        "min": EXTENSION_MIN,
+    })
 }
 
 // ---- Host ----
@@ -281,6 +315,7 @@ fn handle(msg: &Value, slot: &mut Vec<(PathBuf, Library)>) -> Result<Value, Stri
     let cmd = str_arg(msg, "cmd").unwrap_or("");
     match cmd {
         "hello" => {
+            note_extension(msg);
             let root = library_root();
             Ok(json!({
                 "app": "Archiver",
@@ -303,7 +338,8 @@ fn handle(msg: &Value, slot: &mut Vec<(PathBuf, Library)>) -> Result<Value, Stri
             Ok(json!({
                 "zones": zones,
                 "hot": hot,
-                "alpha": lib.drag_alpha(),
+                "alpha": lib.look_alpha(),
+                "radius": lib.look_radius(),
                 "default": lib.default_zone(),
                 "folders": folders,
                 "libraries": library_list(),
@@ -326,14 +362,34 @@ fn handle(msg: &Value, slot: &mut Vec<(PathBuf, Library)>) -> Result<Value, Stri
                 captured_at: msg.get("capturedAt").and_then(|v| v.as_i64()).or_else(|| Some(now_ms())),
                 quote: str_arg(msg, "quote").map(|q| q.chars().take(20_000).collect()),
             };
-            let (path, duplicate) = lib.adopt_file(&file, str_arg(msg, "name"), zone, &source)?;
+            let (mut path, mut duplicate) = lib.adopt_file(&file, str_arg(msg, "name"), zone, &source)?;
             remove_if_empty(file.parent());
-            // Textkarte: Farbe, die schon beim Markieren gezeigt wurde
-            if let (false, Some(tone)) = (duplicate, crate::studio::clean_tone(str_arg(msg, "tone"))) {
+            // Schon in der Bibliothek, aber auf eine andere Zone gezogen (0.30.1):
+            // das vorhandene Bild wandert dorthin, statt still liegen zu bleiben.
+            if duplicate && str_arg(msg, "zone").is_some() && !path.starts_with(&format!("{zone}/")) {
+                let _ = std::fs::create_dir_all(lib.root.join(zone));
+                if let Some(moved) = lib.move_items(&[path.clone()], zone)?.pop() {
+                    path = moved;
+                    duplicate = false;
+                }
+            }
+            // Textkarte: Farbe, die schon beim Markieren gezeigt wurde; Bildtext der Seite (0.29).
+            // Mitgebrachter Bildtext gilt auch für ein schon vorhandenes Bild.
+            let tone = crate::studio::clean_tone(str_arg(msg, "tone")).filter(|_| !duplicate);
+            let caption = str_arg(msg, "caption").map(|c| c.trim().to_string()).filter(|c| !c.is_empty());
+            if tone.is_some() || caption.is_some() {
                 if let Ok((_, hash)) = lib.locate(&path) {
-                    let patch = crate::studio::NotePatch { tone: Some(tone), ..Default::default() };
+                    let patch = crate::studio::NotePatch { tone, caption, ..Default::default() };
                     let _ = lib.set_note(&[hash], &patch);
                 }
+            }
+            // Linkkarte der offenen Seite: die ganze Seite als MHTML dahinter (0.30.1)
+            if let Some(archive) = str_arg(msg, "archive") {
+                let archive = PathBuf::from(archive);
+                if let Ok((_, hash)) = lib.locate(&path) {
+                    let _ = lib.attach_web_archive(&hash, &archive);
+                }
+                remove_if_empty(archive.parent());
             }
             Ok(json!({ "path": path, "duplicate": duplicate }))
         }

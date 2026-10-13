@@ -27,6 +27,7 @@
   let manualOpen = false; // true, wenn per Tastenkombination geöffnet (nicht durch Drag)
   let recordingShortcut = false; // true, während in den Einstellungen eine neue Kombination aufgenommen wird
   let fallbackImageUrl = null; // beim dragstart ermittelte (möglichst hochauflösende) Bildquelle
+  let dragCaption = null; // Bildtext zum gezogenen Bild (0.29), siehe captionNear
 
   // ---- Shadow-DOM-Host ----
   // Wird beim ersten Bedarf angelegt (erster Drag, Tastenkombination oder
@@ -310,6 +311,35 @@
     return null;
   }
 
+  // Bildtext zu einem Bild (0.29): nur Text, den man auf der Seite markiert
+  // hat, während man das Bild sichert. Sonst kein Bildtext.
+  function captionNear() {
+    const text = String((window.getSelection && window.getSelection()) || "").replace(/\s+/g, " ").trim();
+    return text ? text.slice(0, 2000) : null;
+  }
+
+  // Bilder in der Markierung (0.29.1): wer Bild und Text zusammen markiert,
+  // sichert das Bild mit dem Text als Bildtext, nicht nur eine Textkarte.
+  function selectedImages() {
+    const sel = window.getSelection && window.getSelection();
+    if (!sel || sel.isCollapsed || !sel.rangeCount) return [];
+    const range = sel.getRangeAt(0);
+    const c = range.commonAncestorContainer;
+    const root = c.nodeType === 1 ? c : c.parentElement;
+    if (!root) return [];
+    const imgs = [root, ...root.querySelectorAll("img")].filter((n) => n.tagName === "IMG" && range.intersectsNode(n));
+    return imgs.filter((i) => Math.max(i.naturalWidth || 0, i.width || 0) >= 80).slice(0, 12);
+  }
+
+  function saveSelectedImages(imgs, folder) {
+    const caption = captionNear();
+    const source = currentPageSource();
+    for (const img of imgs) {
+      const url = findBestImageUrl(img) || img.currentSrc || img.src;
+      if (url) sendSave({ type: "download-image", url: resolveUrl(url), folder, caption, ...source });
+    }
+  }
+
   function saveMediaFile(url, folder, source) {
     sendSave({ type: "download-image", url: resolveUrl(url), folder, ...source });
   }
@@ -329,12 +359,13 @@
     else saveCard(linkCard(title, link), folder, { pageUrl: link, pageTitle: title || link });
   }
 
-  // Die geöffnete Seite selbst: PDF als Datei, Video als Karte, sonst Bildschirmfoto
+  // Die geöffnete Seite selbst: PDF als Datei, Video als Karte, sonst Linkkarte
+  // mit der ganzen Seite als MHTML dahinter (3.23.0, background.js archiveTab)
   function savePage(folder, source) {
     const video = videoPageUrl(location.href);
     if (isPdfPage()) saveMediaFile(location.href, folder, { pageUrl: location.href, pageTitle: document.title || null });
     else if (video) saveVideoCard(video, folder, document.title.replace(/ - YouTube$/, ""));
-    else sendSave({ type: "capture-visible", folder, ...source });
+    else saveCard(linkCard(document.title.trim(), location.href), folder, { ...source, pageUrl: location.href, pageTitle: document.title || null, archivePage: true });
   }
 
   function contextSave(msg) {
@@ -348,7 +379,10 @@
       savePage(folder, source);
     } else if (msg.srcUrl) {
       const best = ctx && ctx.target && ctx.target.tagName === "IMG" ? findBestImageUrl(ctx.target) : null;
-      sendSave({ type: "download-image", url: resolveUrl(best || msg.srcUrl), folder, ...source });
+      const caption = captionNear();
+      sendSave({ type: "download-image", url: resolveUrl(best || msg.srcUrl), folder, caption, ...source });
+    } else if (selection && selectedImages().length) {
+      saveSelectedImages(selectedImages(), folder);
     } else if (selection) {
       saveCard(textCard(selection, source), folder, { ...source, quote: selection });
     } else if (msg.linkUrl) {
@@ -621,7 +655,7 @@
   // Schluss ist bei der Pin-Zahl des Boards oder bei „Mehr Ideen“.
 
   function bestPinImage(img) {
-    const set = (img.getAttribute("srcset") || "").split(",").map((s) => s.trim().split(/\s+/)[0]).filter(Boolean);
+    const set = parseSrcset(img.getAttribute("srcset")).map((c) => c.url);
     const url = set.length ? set[set.length - 1] : img.src;
     return url.includes("/originals/") ? url : url.replace(/\/\d+x(\d+)?\//, "/736x/");
   }
@@ -800,23 +834,40 @@
 
   // ---- Bildquelle ermitteln (High-Res statt Thumbnail) ----
 
+  // srcset nach dem Verfahren der HTML-Spezifikation lesen: eine Adresse endet
+  // erst an Leerraum, Kommas darin gehören dazu (Substack, Cloudinary:
+  // ".../w_1456,c_limit,f_webp/..."). Ein Komma nach der Adresse oder nach den
+  // Angaben trennt die Kandidaten.
+  function parseSrcset(srcset) {
+    const out = [];
+    const s = String(srcset || "");
+    let i = 0;
+    while (i < s.length) {
+      while (i < s.length && /[\s,]/.test(s[i])) i++;
+      if (i >= s.length) break;
+      let j = i;
+      while (j < s.length && !/\s/.test(s[j])) j++;
+      let url = s.slice(i, j);
+      i = j;
+      let desc = "";
+      if (/,$/.test(url)) url = url.replace(/,+$/, "");
+      else {
+        while (i < s.length && s[i] !== ",") desc += s[i++];
+        i++;
+      }
+      if (url) out.push({ url, desc: desc.trim() });
+    }
+    return out;
+  }
+
   function parseSrcsetBest(srcset) {
-    if (!srcset) return null;
-    const candidates = srcset
-      .split(",")
-      .map((s) => s.trim())
-      .filter(Boolean)
-      .map((entry) => {
-        const parts = entry.split(/\s+/);
-        const url = parts[0];
-        let score = 0;
-        if (parts[1]) {
-          const d = parts[1];
-          if (d.endsWith("w")) score = parseInt(d, 10) || 0;
-          else if (d.endsWith("x")) score = (parseFloat(d) || 1) * 1000;
-        }
-        return { url, score };
-      });
+    const candidates = parseSrcset(srcset).map(({ url, desc }) => {
+      let score = 0;
+      const d = desc.split(/\s+/)[0] || "";
+      if (d.endsWith("w")) score = parseInt(d, 10) || 0;
+      else if (d.endsWith("x")) score = (parseFloat(d) || 1) * 1000;
+      return { url, score };
+    });
     if (!candidates.length) return null;
     candidates.sort((a, b) => b.score - a.score);
     return candidates[0].url;
@@ -1026,7 +1077,7 @@
       ensureOverlay().then(() => {
         if (textDrag !== d) return;
         // in der Überlagerung, damit die Karte über den Zonen liegt
-        d.ghost = cardGhost(d.text);
+        d.ghost = d.images.length ? imageGhost(d.images[0], d.text) : cardGhost(d.text);
         rootEl.appendChild(d.ghost);
         moveGhost(d, d.lastX ?? e.clientX, d.lastY ?? e.clientY);
       });
@@ -1053,6 +1104,17 @@
     return g;
   }
 
+  // Bild mit Bildtext: am Zeiger das Bild, darunter der Anfang des Textes
+  function imageGhost(img, text) {
+    const g = UI.el("div", "text-ghost card");
+    const pic = document.createElement("img");
+    pic.src = img.currentSrc || img.src;
+    pic.style.cssText = "display:block;width:100%;max-height:180px;object-fit:cover;margin-bottom:8px";
+    g.appendChild(pic);
+    g.appendChild(UI.el("div", "text-ghost-text", text.length > 120 ? text.slice(0, 120).trim() + " …" : text));
+    return g;
+  }
+
   function moveGhost(d, x, y) {
     if (!d.ghost) return;
     // am rechten und unteren Rand auf die andere Seite des Zeigers
@@ -1075,8 +1137,12 @@
       if (idx !== -1) {
         const name = barZones[idx];
         landZones(idx);
-        const source = currentPageSource();
-        saveCard(textCard(d.text, source), isRootZoneName(name) ? null : name, { ...source, quote: d.text });
+        const folder = isRootZoneName(name) ? null : name;
+        if (d.images.length) saveSelectedImages(d.images, folder);
+        else {
+          const source = currentPageSource();
+          saveCard(textCard(d.text, source), folder, { ...source, quote: d.text });
+        }
       }
     }
     endTextDrag();
@@ -1096,7 +1162,7 @@
       if (!text || !insideSelection(e.clientX, e.clientY)) return;
       // Kein neues Markieren und kein natives Ziehen: Archiver zieht selbst.
       e.preventDefault();
-      textDrag = { x: e.clientX, y: e.clientY, text, moving: false, ghost: null, rect: spotRect ? { ...spotRect } : null };
+      textDrag = { x: e.clientX, y: e.clientY, text, images: selectedImages(), moving: false, ghost: null, rect: spotRect ? { ...spotRect } : null };
       document.addEventListener("mousemove", onTextDragMove, true);
       document.addEventListener("mouseup", onTextDragUp, true);
       document.addEventListener("keydown", onTextDragKey, true);
@@ -1108,6 +1174,7 @@
     "dragstart",
     (e) => {
       fallbackImageUrl = findBestImageUrl(e.target);
+      dragCaption = captionNear();
       debugLog("dragstart, target:", e.target, "erkannte Quelle:", fallbackImageUrl);
     },
     true
@@ -1606,6 +1673,18 @@
         return;
       }
 
+      // Markierung mit Bild: Bild sichern, Text wird Bildtext
+      const marked = selectedImages();
+      const fromMark = !fallbackImageUrl || marked.some((i) => findBestImageUrl(i) === fallbackImageUrl);
+      if (marked.length && fromMark && e.dataTransfer.getData("text/plain").trim()) {
+        e.preventDefault();
+        e.stopPropagation();
+        saveSelectedImages(marked, folder);
+        removeZones();
+        fallbackImageUrl = null;
+        return;
+      }
+
       // Kein Bild im Spiel: Link, Adresszeile oder markierter Text
       if (!fallbackImageUrl && !looksLikeImageDrop(e.dataTransfer)) {
         const uri = (e.dataTransfer.getData("text/uri-list") || "").split("\n").find((l) => l && !l.startsWith("#"));
@@ -1643,7 +1722,7 @@
           };
           reader.readAsDataURL(result.file);
         } else {
-          sendSave({ type: "download-image", url: result, folder, toDownloads: shiftDrop, ...currentPageSource() });
+          sendSave({ type: "download-image", url: result, folder, toDownloads: shiftDrop, caption: dragCaption, ...currentPageSource() });
         }
       }
       removeZones();

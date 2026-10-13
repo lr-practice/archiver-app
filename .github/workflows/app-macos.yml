@@ -1,6 +1,13 @@
 # Baut die Archiver-App für den Mac (Apple Silicon) und legt sie als
-# Vorabversion "app-latest" unter Releases ab. Noch ohne Apple-Signatur
-# (kommt in Phase 4), deshalb nur ad-hoc signiert.
+# Vorabversion "app-latest" unter Releases ab.
+#
+# Apple-Signatur und Notarisierung laufen, sobald diese Secrets gesetzt sind:
+#   APPLE_CERTIFICATE           Developer-ID-Application-Zertifikat als .p12, base64
+#   APPLE_CERTIFICATE_PASSWORD  Passwort der .p12
+#   APPLE_ID                    Apple-ID des Developer-Kontos
+#   APPLE_PASSWORD              App-spezifisches Passwort (appleid.apple.com)
+#   APPLE_TEAM_ID               Team-ID (10 Zeichen, developer.apple.com › Membership)
+# Ohne sie bleibt alles wie bisher: ad-hoc signiert, erster Start über „Trotzdem öffnen“.
 name: App macOS
 
 # Nur von Hand: Mac-Minuten zählen bei GitHub zehnfach, daher kein Build bei jedem Push.
@@ -19,6 +26,8 @@ jobs:
     runs-on: macos-14
     env:
       PUBLISH_UPDATE: ${{ secrets.RELEASES_TOKEN != '' && secrets.TAURI_SIGNING_PRIVATE_KEY != '' }}
+      APPLE_SIGN: ${{ secrets.APPLE_CERTIFICATE != '' }}
+      APPLE_NOTARIZE: ${{ secrets.APPLE_CERTIFICATE != '' && secrets.APPLE_ID != '' && secrets.APPLE_PASSWORD != '' && secrets.APPLE_TEAM_ID != '' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -40,18 +49,68 @@ jobs:
         working-directory: app/src-tauri
         run: cargo test --lib
 
+      # Zertifikat in einen eigenen Schlüsselbund, damit codesign es findet.
+      - name: Apple-Zertifikat
+        id: cert
+        if: env.APPLE_SIGN == 'true'
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+        run: |
+          KC="$RUNNER_TEMP/archiver.keychain-db"; KP=$(uuidgen)
+          echo "$APPLE_CERTIFICATE" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security create-keychain -p "$KP" "$KC"
+          security set-keychain-settings -lut 21600 "$KC"
+          security unlock-keychain -p "$KP" "$KC"
+          security import "$RUNNER_TEMP/cert.p12" -k "$KC" -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple: -k "$KP" "$KC" >/dev/null
+          security list-keychains -d user -s "$KC" $(security list-keychains -d user | tr -d '"')
+          rm "$RUNNER_TEMP/cert.p12"
+          ID=$(security find-identity -v -p codesigning "$KC" | grep -o '"Developer ID Application:[^"]*"' | head -1 | tr -d '"')
+          if [ -z "$ID" ]; then echo "Kein Developer-ID-Application-Zertifikat in APPLE_CERTIFICATE"; exit 1; fi
+          echo "identity=$ID" >> "$GITHUB_OUTPUT"
+
       - name: App bauen
         working-directory: app
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          IDENTITY: ${{ steps.cert.outputs.identity }}
+          # Tauri notarisiert und heftet das Ticket an, wenn diese drei gesetzt sind.
+          APPLE_ID: ${{ env.APPLE_NOTARIZE == 'true' && secrets.APPLE_ID || '' }}
+          APPLE_PASSWORD: ${{ env.APPLE_NOTARIZE == 'true' && secrets.APPLE_PASSWORD || '' }}
+          APPLE_TEAM_ID: ${{ env.APPLE_NOTARIZE == 'true' && secrets.APPLE_TEAM_ID || '' }}
         run: |
-          # Ohne Schlüssel keine Update-Pakete, die App baut trotzdem.
+          # Ohne Update-Schlüssel keine Update-Pakete, ohne Zertifikat ad-hoc signiert.
+          CONFIG='{}'
           if [ -z "$TAURI_SIGNING_PRIVATE_KEY" ]; then
-            npx tauri build --bundles app,dmg --config '{"bundle":{"createUpdaterArtifacts":false}}'
-          else
-            npx tauri build --bundles app,dmg
+            CONFIG=$(echo "$CONFIG" | jq -c '.bundle.createUpdaterArtifacts=false')
           fi
+          if [ -n "$IDENTITY" ]; then
+            CONFIG=$(echo "$CONFIG" | jq -c --arg id "$IDENTITY" '.bundle.macOS.signingIdentity=$id')
+          fi
+          for v in APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID; do [ -z "${!v}" ] && unset $v; done
+          npx tauri build --bundles app,dmg --config "$CONFIG"
+
+      # Das DMG selbst signieren, notarisieren und das Ticket anheften,
+      # damit schon das Öffnen des Downloads ohne Warnung klappt.
+      - name: DMG signieren und notarisieren
+        if: env.APPLE_NOTARIZE == 'true'
+        env:
+          IDENTITY: ${{ steps.cert.outputs.identity }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          BUNDLE=app/src-tauri/target/release/bundle
+          DMG=$(ls "$BUNDLE"/dmg/*.dmg | head -1)
+          APP=$(ls -d "$BUNDLE"/macos/*.app | head -1)
+          codesign --verify --deep --strict "$APP"
+          xcrun stapler validate "$APP"
+          codesign --force --timestamp --sign "$IDENTITY" "$DMG"
+          xcrun notarytool submit "$DMG" --apple-id "$APPLE_ID" --password "$APPLE_PASSWORD" --team-id "$APPLE_TEAM_ID" --wait
+          xcrun stapler staple "$DMG"
+          spctl --assess --type open --context context:primary-signature -v "$DMG"
 
       - name: Dateien einsammeln
         id: out
@@ -76,7 +135,11 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           TAG=app-latest; TITLE="Archiver App (Testversion)"
-          NOTES="Testversion ${{ steps.out.outputs.version }} aus ${GITHUB_REF_NAME} (${GITHUB_SHA::7}). Nicht von Apple signiert: beim ersten Start unter Systemeinstellungen → Datenschutz & Sicherheit auf „Trotzdem öffnen“ klicken."
+          if [ "$APPLE_NOTARIZE" = "true" ]; then
+            NOTES="Testversion ${{ steps.out.outputs.version }} aus ${GITHUB_REF_NAME} (${GITHUB_SHA::7}). Von Apple signiert und notarisiert."
+          else
+            NOTES="Testversion ${{ steps.out.outputs.version }} aus ${GITHUB_REF_NAME} (${GITHUB_SHA::7}). Nicht von Apple signiert: beim ersten Start unter Systemeinstellungen → Datenschutz & Sicherheit auf „Trotzdem öffnen“ klicken."
+          fi
           gh release view "$TAG" >/dev/null 2>&1 || gh release create "$TAG" --prerelease --title "$TITLE" --notes "$NOTES" --target "$GITHUB_SHA"
           gh release edit "$TAG" --notes "$NOTES"
           gh release upload "$TAG" dist/* --clobber

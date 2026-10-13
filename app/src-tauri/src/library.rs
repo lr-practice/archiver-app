@@ -43,7 +43,9 @@ pub const VIDEO_EXTS: &[&str] = &["mp4", "m4v", "mov", "webm"];
 pub const AUDIO_EXTS: &[&str] = &["wav", "mp3", "aif", "aiff", "m4a", "flac"];
 /// Textkarten liegen als reine Textdatei in der Zone; die Oberfläche zeigt
 /// sie als farbige Karte (Text aus der Quelle oder aus der Datei selbst).
-pub const TEXT_EXTS: &[&str] = &["txt"];
+pub const TEXT_EXTS: &[&str] = &["txt", "md"];
+/// Notiz-Objekte (0.29): eigene Texte als Markdown in der Zone
+pub const NOTE_EXTS: &[&str] = &["md"];
 const TEXT_MAX_CHARS: usize = 20_000;
 
 pub type Result<T> = std::result::Result<T, String>;
@@ -111,6 +113,10 @@ pub struct Item {
     pub added_by: Option<String>,
     /// Farbe der Textkarte, falls gewählt
     pub tone: Option<String>,
+    /// Bildtext: Credits oder Unterschrift (0.29)
+    pub caption: Option<String>,
+    /// Notiz-Objekt: verknüpfte Objekte (Hashes, 0.29)
+    pub links: Option<Vec<String>>,
 }
 
 /// Seitenzahl, Dauer und Maße eines PDFs oder Videos, bei Audio dazu Titel und Format.
@@ -208,6 +214,16 @@ fn is_av(path: &Path) -> bool {
 
 pub fn is_text(path: &Path) -> bool {
     TEXT_EXTS.contains(&ext_of(path).as_str())
+}
+
+pub fn is_note(path: &Path) -> bool {
+    NOTE_EXTS.contains(&ext_of(path).as_str())
+}
+
+/// Titel einer Notiz: erste Zeile mit Text, ohne Markdown-Raute
+pub fn note_title(text: &str) -> String {
+    let line = text.lines().map(str::trim).find(|l| !l.is_empty()).unwrap_or("");
+    line.trim_start_matches('#').trim().chars().take(80).collect()
 }
 
 /// Alles, was in die Bibliothek gehört: Bilder, PDFs, Videos, Audio, Textkarten.
@@ -371,6 +387,85 @@ impl Structure {
             let s = s.trim().trim_matches('/').to_lowercase();
             !s.is_empty() && (lower == s || lower.ends_with(&format!("/{s}")))
         })
+    }
+}
+
+/// Tage unter „Zuletzt gelöscht“, bevor eine Datei in den Papierkorb des Macs geht
+pub const DELETED_DAYS: i64 = 7;
+const DELETED_HASHES: &str = ".hashes.json";
+
+/// Eintrag unter „Zuletzt gelöscht“: alter Pfad in der Bibliothek, Ort unter
+/// .archiver/deleted, Zeitpunkt des Löschens
+#[derive(Serialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct DeletedItem {
+    pub path: String,
+    pub abs: String,
+    pub zone: String,
+    pub filename: String,
+    pub hash: String,
+    pub format: String,
+    pub width: Option<i64>,
+    pub height: Option<i64>,
+    pub thumb: Option<String>,
+    pub quote: Option<String>,
+    pub tone: Option<String>,
+    pub deleted_at: i64,
+}
+
+/// Verknüpfung (Symlink), ohne ihr zu folgen
+fn is_link(p: &Path) -> bool {
+    fs::symlink_metadata(p).map(|m| m.file_type().is_symlink()).unwrap_or(false)
+}
+
+/// Verschieben, notfalls über Volumegrenzen (kopieren, dann löschen)
+fn move_file(src: &Path, dst: &Path) -> Result<()> {
+    if fs::rename(src, dst).is_ok() {
+        return Ok(());
+    }
+    if src.is_dir() {
+        for entry in WalkDir::new(src).min_depth(1).into_iter().filter_map(|e| e.ok()) {
+            let to = dst.join(entry.path().strip_prefix(src).map_err(err)?);
+            if entry.file_type().is_dir() {
+                fs::create_dir_all(&to).map_err(err)?;
+            } else {
+                if let Some(d) = to.parent() {
+                    fs::create_dir_all(d).map_err(err)?;
+                }
+                fs::copy(entry.path(), &to).map_err(err)?;
+            }
+        }
+        fs::remove_dir_all(src).map_err(err)
+    } else {
+        fs::copy(src, dst).map_err(err)?;
+        fs::remove_file(src).map_err(err)
+    }
+}
+
+fn write_deleted_hashes(stamp: &Path, hashes: &HashMap<String, String>) -> Result<()> {
+    if hashes.is_empty() {
+        return Ok(());
+    }
+    let mut all = read_deleted_hashes(stamp);
+    all.extend(hashes.iter().map(|(k, v)| (k.clone(), v.clone())));
+    fs::write(stamp.join(DELETED_HASHES), serde_json::to_vec(&all).map_err(err)?).map_err(err)
+}
+
+fn read_deleted_hashes(stamp: &Path) -> HashMap<String, String> {
+    fs::read(stamp.join(DELETED_HASHES)).ok().and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or_default()
+}
+
+/// Leere Ordner von unten nach oben entfernen, samt `dir` selbst. Eine Liste
+/// der Hashes allein hält einen Ordner nicht am Leben.
+fn prune_empty(dir: &Path) {
+    let mut dirs: Vec<PathBuf> = WalkDir::new(dir).into_iter().filter_map(|e| e.ok()).filter(|e| e.file_type().is_dir()).map(|e| e.into_path()).collect();
+    dirs.sort_by_key(|d| std::cmp::Reverse(d.components().count()));
+    for d in dirs {
+        let only_meta = fs::read_dir(&d).map(|rd| rd.filter_map(|e| e.ok()).all(|e| e.file_name() == DELETED_HASHES)).unwrap_or(false);
+        if only_meta {
+            let _ = fs::remove_file(d.join(DELETED_HASHES));
+            let _ = fs::remove_dir(&d);
+        }
     }
 }
 
@@ -582,7 +677,9 @@ CREATE TABLE IF NOT EXISTS note (
   internal   INTEGER,
   added_by   TEXT,
   updated_at INTEGER NOT NULL DEFAULT 0,
-  tone       TEXT
+  tone       TEXT,
+  caption    TEXT,
+  links      TEXT
 );
 ";
 
@@ -602,6 +699,18 @@ impl Library {
         let _ = conn.execute("ALTER TABLE source ADD COLUMN quote TEXT", []);
         // ab 0.20.1: Farbe der Textkarten
         let _ = conn.execute("ALTER TABLE note ADD COLUMN tone TEXT", []);
+        // ab 0.29: Bildtext
+        let _ = conn.execute("ALTER TABLE note ADD COLUMN caption TEXT", []);
+        // ab 0.30: Das Feld „Notiz“ geht im Bildtext auf (hängt sich an einen vorhandenen
+        // Bildtext an). Läuft bei jedem Öffnen, betrifft nur noch nicht übernommene Zeilen.
+        let _ = conn.execute(
+            "UPDATE note SET caption = CASE WHEN caption IS NULL OR trim(caption) = '' THEN note \
+             ELSE caption || char(10) || char(10) || note END, note = NULL \
+             WHERE note IS NOT NULL AND trim(note) <> ''",
+            [],
+        );
+        // ab 0.29: Verknüpfungen einer Notiz
+        let _ = conn.execute("ALTER TABLE note ADD COLUMN links TEXT", []);
         // ab 0.12: Audio-Eckdaten (ältere Datenbanken bekommen die Spalten nachgereicht)
         for col in ["title TEXT", "artist TEXT", "album TEXT", "sample_rate INTEGER", "bit_depth INTEGER", "channels INTEGER"] {
             let _ = conn.execute(&format!("ALTER TABLE media ADD COLUMN {col}"), []);
@@ -751,14 +860,25 @@ impl Library {
         Ok(())
     }
 
-    /// Deckkraft der Zonen beim Ziehen (0.3–1.0), gilt in App und Extension.
-    pub fn drag_alpha(&self) -> Option<f64> {
+    /// Ecken (square, soft, round, xl) und Deckkraft der Zonenkarten (Glas-Regler,
+    /// None = Standard) aus Einstellungen › Aussehen. Die App trägt sie hier ein,
+    /// damit die Extension dieselben Werte zeigt.
+    pub fn look_radius(&self) -> Option<String> {
+        self.zone_file().get("radius").and_then(|r| r.as_str()).map(String::from)
+    }
+
+    pub fn look_alpha(&self) -> Option<f64> {
         self.zone_file().get("alpha").and_then(|a| a.as_f64())
     }
 
-    pub fn set_drag_alpha(&self, alpha: f64) -> Result<()> {
+    pub fn set_look(&self, radius: &str, alpha: Option<f64>) -> Result<()> {
+        let alpha = alpha.map(|a| a.clamp(0.3, 1.0));
+        if self.look_radius().as_deref() == Some(radius) && self.look_alpha() == alpha {
+            return Ok(());
+        }
         let mut v = self.zone_file();
-        v["alpha"] = serde_json::json!(alpha.clamp(0.3, 1.0));
+        v["radius"] = serde_json::json!(radius);
+        v["alpha"] = serde_json::json!(alpha);
         self.write_zone_file(&v)
     }
 
@@ -874,10 +994,19 @@ impl Library {
         let mut changed = false;
         let st = self.structure();
         let root = self.root.clone();
-        let walker = WalkDir::new(&self.root)
-            .min_depth(1)
-            .into_iter()
-            .filter_entry(|e| !is_hidden(e.file_name()) && !(e.file_type().is_dir() && st.skips(&rel_path(&root, e.path()))));
+        // Bibliothek, dazu jede externe Zone (Verknüpfung auf einen Ordner
+        // außerhalb, 0.30.1); deren Pfade bleiben „Zone/…“ unter der Bibliothek
+        let starts: Vec<PathBuf> = std::iter::once(self.root.clone())
+            .chain(self.external_zones().into_iter().map(|(zone, _)| self.root.join(zone)))
+            .collect();
+        let walker = starts.into_iter().flat_map(|start| {
+            let root = root.clone();
+            let st = st.clone();
+            WalkDir::new(start)
+                .min_depth(1)
+                .into_iter()
+                .filter_entry(move |e| !is_hidden(e.file_name()) && !(e.file_type().is_dir() && st.skips(&rel_path(&root, e.path()))))
+        });
         for entry in walker.filter_map(|e| e.ok()) {
             if !entry.file_type().is_file() || !is_media(entry.path()) {
                 continue;
@@ -963,7 +1092,7 @@ impl Library {
             .into_iter()
             .filter_entry(|e| !is_hidden(e.file_name()) && !(e.file_type().is_dir() && st.skips(&rel_path(&root, e.path()))))
             .filter_map(|e| e.ok())
-            .filter(|e| e.file_type().is_dir())
+            .filter(|e| e.file_type().is_dir() || (e.depth() == 1 && e.path_is_symlink() && e.path().is_dir()))
             .filter_map(|e| {
                 let path = rel_path(&self.root, e.path());
                 let count = counts.get(&path).copied().unwrap_or(0);
@@ -997,7 +1126,7 @@ impl Library {
                         s.image_url, s.page_url, s.page_title, s.captured_at, t.file,
                         a.labels, a.text, a.colors, m.pages, m.duration, s.quote,
                         m.title, m.artist, m.album, m.sample_rate, m.bit_depth, m.channels,
-                        n.note, n.credit, n.license, n.internal, n.added_by, n.tone
+                        n.note, n.credit, n.license, n.internal, n.added_by, n.tone, n.caption, n.links
                  FROM item i
                  LEFT JOIN note n ON n.hash = i.hash
                  LEFT JOIN source s ON s.hash = i.hash
@@ -1048,6 +1177,8 @@ impl Library {
                     internal: r.get::<_, Option<i64>>(28)?.unwrap_or(0) != 0,
                     added_by: r.get(29)?,
                     tone: r.get(30)?,
+                    caption: r.get(31)?,
+                    links: crate::studio::links_of(r.get(32)?),
                     path,
                 })
             })
@@ -1362,7 +1493,13 @@ impl Library {
     // ---- Sortieren ----
 
     /// Verschiebt Dateien in eine Zone. Gibt die neuen relativen Pfade zurück.
+    /// `exact`: nur überspringen, was schon genau in diesem Ordner liegt (⌘Z,
+    /// Ordnerkarten). Sonst gilt: was schon in der Zone liegt, bleibt, wo es ist.
     pub fn move_items(&self, paths: &[String], zone: &str) -> Result<Vec<String>> {
+        self.move_items_to(paths, zone, false)
+    }
+
+    pub fn move_items_to(&self, paths: &[String], zone: &str, exact: bool) -> Result<Vec<String>> {
         let target = safe_join(&self.root, zone)?;
         if !target.is_dir() {
             return Err(format!("Zone nicht gefunden: {zone}"));
@@ -1371,11 +1508,13 @@ impl Library {
         let mut moved = Vec::new();
         for rel in paths {
             let src = safe_join(&self.root, rel)?;
-            if zone_at(&parent_rel(rel), depth) == zone || !src.is_file() {
+            let dir = parent_rel(rel);
+            let in_zone = !exact && zone_at(zone, depth) == zone && zone_at(&dir, depth) == zone;
+            if dir == zone || in_zone || !src.is_file() {
                 continue;
             }
             let dst = unique_path(&target, &file_name(rel));
-            fs::rename(&src, &dst).map_err(err)?;
+            move_file(&src, &dst)?; // externe Zonen liegen evtl. auf einem anderen Volume
             let new_rel = rel_path(&self.root, &dst);
             let mtime = fs::metadata(&dst).ok().and_then(|m| time_ms(m.modified()));
             let conn = self.conn.lock().unwrap();
@@ -1389,35 +1528,35 @@ impl Library {
         Ok(moved)
     }
 
-    /// Legt Dateien in den macOS-Papierkorb (wiederherstellbar). Gibt je Datei
-    /// (Pfad in der Bibliothek, Ort im Papierkorb) zurück, soweit bekannt (für ⌘Z).
+    /// Legt Dateien unter „Zuletzt gelöscht“ ab (.archiver/deleted/<Zeit>/<Pfad>).
+    /// Nach 7 Tagen wandern sie in den Papierkorb des Macs (purge_deleted).
+    /// Gibt je Datei (Pfad in der Bibliothek, neuer Ort) zurück, für ⌘Z.
     pub fn trash_items(&self, paths: &[String]) -> Result<Vec<(String, String)>> {
-        #[allow(unused_mut)]
+        let stamp = self.deleted_stamp()?;
         let mut done = Vec::new();
-        let mut plain = Vec::new();
+        let mut hashes = HashMap::new();
         for rel in paths {
             let abs = safe_join(&self.root, rel)?;
             if !abs.is_file() {
                 continue;
             }
-            #[cfg(target_os = "macos")]
-            {
-                if let Some(at) = crate::macos::trash_with_location(&abs)? {
-                    done.push((rel.clone(), at));
-                    continue;
-                }
-                plain.push(rel.clone());
+            let dst = stamp.join(rel);
+            if let Some(dir) = dst.parent() {
+                fs::create_dir_all(dir).map_err(err)?;
             }
-            #[cfg(not(target_os = "macos"))]
-            {
-                trash::delete(&abs).map_err(err)?;
-                plain.push(rel.clone());
+            move_file(&abs, &dst)?;
+            if let Some(h) = self.hash_of(rel) {
+                hashes.insert(rel.clone(), h);
             }
+            done.push((rel.clone(), dst.to_string_lossy().into_owned()));
         }
+        write_deleted_hashes(&stamp, &hashes)?;
         let conn = self.conn.lock().unwrap();
-        for p in done.iter().map(|(p, _)| p).chain(plain.iter()) {
+        for (p, _) in &done {
             conn.execute("DELETE FROM item WHERE path = ?1", params![p]).map_err(err)?;
         }
+        drop(conn);
+        prune_empty(&stamp);
         Ok(done)
     }
 
@@ -1441,6 +1580,7 @@ impl Library {
             n += 1;
         }
         if n > 0 {
+            self.prune_deleted();
             self.scan()?;
         }
         Ok(n)
@@ -1483,6 +1623,100 @@ impl Library {
         Ok(new_zone)
     }
 
+    /// Verschiebt einen Unterordner samt Inhalt in einen anderen Ordner (0.28).
+    /// Gibt den neuen Pfad zurück; gleichnamige Ziele bekommen eine Nummer.
+    pub fn move_folder(&self, from: &str, into: &str) -> Result<String> {
+        if from.is_empty() || !from.contains('/') {
+            return Err("Nur Unterordner lassen sich verschieben".into());
+        }
+        if into == from || into.starts_with(&format!("{from}/")) {
+            return Err("Ein Ordner kann nicht in sich selbst liegen".into());
+        }
+        let src = safe_join(&self.root, from)?;
+        let parent = safe_join(&self.root, into)?;
+        if !src.is_dir() || !parent.is_dir() {
+            return Err(format!("Ordner nicht gefunden: {from}"));
+        }
+        if src.parent() == Some(parent.as_path()) {
+            return Ok(from.to_string());
+        }
+        let name = src.file_name().and_then(|n| n.to_str()).unwrap_or("Ordner").to_string();
+        let dst = unique_path(&parent, &name);
+        move_file(&src, &dst)?;
+        let new_path = rel_path(&self.root, &dst);
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "UPDATE item SET path = ?2 || substr(path, length(?1) + 1) WHERE path LIKE ?1 || '/%'",
+            params![from, new_path],
+        )
+        .map_err(err)?;
+        drop(conn);
+        self.rename_item_order(from, &new_path)?;
+        Ok(new_path)
+    }
+
+    // ---- Externe Zonen (0.30.1) ----
+    // Ein Ordner außerhalb der Bibliothek wird Zone über eine Verknüpfung
+    // (Symlink) im Bibliotheksordner. Dateien bleiben, wo sie sind; Archiver
+    // liest und sichert direkt dort. Lösen entfernt nur die Verknüpfung.
+
+    /// Externe Zonen: (Zone, Ordner draußen)
+    pub fn external_zones(&self) -> Vec<(String, String)> {
+        let Ok(rd) = fs::read_dir(&self.root) else { return Vec::new() };
+        let mut out: Vec<(String, String)> = rd
+            .filter_map(|e| e.ok())
+            .filter(|e| is_link(&e.path()) && e.path().is_dir() && !is_hidden(&e.file_name()))
+            .filter_map(|e| {
+                let target = fs::read_link(e.path()).ok()?;
+                Some((e.file_name().to_string_lossy().into_owned(), target.to_string_lossy().into_owned()))
+            })
+            .collect();
+        out.sort_by(|a, b| a.0.to_lowercase().cmp(&b.0.to_lowercase()));
+        out
+    }
+
+    /// Ordner außerhalb als Zone verknüpfen. Gibt den Zonennamen zurück.
+    pub fn link_folder(&self, folder: &Path) -> Result<String> {
+        let folder = folder.canonicalize().map_err(err)?;
+        let root = self.root.canonicalize().map_err(err)?;
+        if !folder.is_dir() {
+            return Err("Kein Ordner".into());
+        }
+        if folder.starts_with(&root) {
+            return Err("Der Ordner liegt schon in der Bibliothek".into());
+        }
+        if root.starts_with(&folder) {
+            return Err("Die Bibliothek liegt in diesem Ordner".into());
+        }
+        if let Some((zone, _)) = self.external_zones().into_iter().find(|(_, t)| Path::new(t) == folder) {
+            return Ok(zone);
+        }
+        let name = clean_segment(folder.file_name().and_then(|n| n.to_str()).unwrap_or("Ordner"));
+        let name = if name.is_empty() { "Ordner".to_string() } else { name };
+        let dst = unique_path(&self.root, &name);
+        #[cfg(unix)]
+        std::os::unix::fs::symlink(&folder, &dst).map_err(err)?;
+        #[cfg(not(unix))]
+        return Err("Externe Zonen gibt es nur auf dem Mac".into());
+        #[allow(unreachable_code)]
+        {
+            self.scan()?;
+            Ok(rel_path(&self.root, &dst))
+        }
+    }
+
+    /// Verknüpfung lösen: die Zone verschwindet, der Ordner draußen bleibt.
+    pub fn unlink_folder(&self, zone: &str) -> Result<()> {
+        let link = safe_join(&self.root, zone)?;
+        if zone.contains('/') || !is_link(&link) {
+            return Err(format!("Keine externe Zone: {zone}"));
+        }
+        fs::remove_file(&link).map_err(err)?;
+        let conn = self.conn.lock().unwrap();
+        conn.execute("DELETE FROM item WHERE path LIKE ?1 || '/%'", params![zone]).map_err(err)?;
+        Ok(())
+    }
+
     /// Legt eine Zone samt Inhalt in den Papierkorb. Inbox und Bibliotheksordner bleiben.
     pub fn trash_zone(&self, zone: &str) -> Result<()> {
         if zone.is_empty() || zone == self.default_zone() {
@@ -1492,10 +1726,184 @@ impl Library {
         if !dir.is_dir() {
             return Err(format!("Zone nicht gefunden: {zone}"));
         }
-        trash::delete(&dir).map_err(err)?;
+        // Externe Zone: nur die Verknüpfung lösen, der Ordner draußen bleibt unberührt
+        if is_link(&dir) {
+            return self.unlink_folder(zone);
+        }
+        let stamp = self.deleted_stamp()?;
+        let hashes: HashMap<String, String> = {
+            let conn = self.conn.lock().unwrap();
+            let mut stmt = conn.prepare("SELECT path, hash FROM item WHERE path LIKE ?1 || '/%'").map_err(err)?;
+            let rows = stmt.query_map(params![zone], |r| Ok((r.get(0)?, r.get(1)?))).map_err(err)?;
+            rows.filter_map(|r| r.ok()).collect()
+        };
+        let dst = stamp.join(zone);
+        if let Some(parent) = dst.parent() {
+            fs::create_dir_all(parent).map_err(err)?;
+        }
+        move_file(&dir, &dst)?;
+        write_deleted_hashes(&stamp, &hashes)?;
         let conn = self.conn.lock().unwrap();
         conn.execute("DELETE FROM item WHERE path LIKE ?1 || '/%'", params![zone]).map_err(err)?;
         Ok(())
+    }
+
+    // ---- Zuletzt gelöscht (0.27) ----
+
+    fn deleted_dir(&self) -> PathBuf {
+        self.root.join(META_DIR).join("deleted")
+    }
+
+    /// Neuer Ordner für einen Löschvorgang, benannt nach der Zeit in ms
+    fn deleted_stamp(&self) -> Result<PathBuf> {
+        let base = self.deleted_dir();
+        let mut t = now_ms();
+        loop {
+            let dir = base.join(t.to_string());
+            if !dir.exists() {
+                fs::create_dir_all(&dir).map_err(err)?;
+                return Ok(dir);
+            }
+            t += 1;
+        }
+    }
+
+    fn hash_of(&self, rel: &str) -> Option<String> {
+        let conn = self.conn.lock().unwrap();
+        conn.query_row("SELECT hash FROM item WHERE path = ?1", params![rel], |r| r.get(0)).optional().ok().flatten()
+    }
+
+    /// Alles unter „Zuletzt gelöscht“, zuletzt Gelöschtes zuerst
+    pub fn deleted_items(&self) -> Result<Vec<DeletedItem>> {
+        self.purge_deleted(DELETED_DAYS);
+        let thumbs = self.thumbs_dir();
+        let mut out = Vec::new();
+        let Ok(rd) = fs::read_dir(self.deleted_dir()) else { return Ok(out) };
+        for stamp in rd.filter_map(|e| e.ok()).map(|e| e.path()).filter(|p| p.is_dir()) {
+            let Some(at) = stamp.file_name().and_then(|n| n.to_str()).and_then(|n| n.parse::<i64>().ok()) else { continue };
+            let hashes = read_deleted_hashes(&stamp);
+            for entry in WalkDir::new(&stamp).min_depth(1).into_iter().filter_map(|e| e.ok()) {
+                if !entry.file_type().is_file() || is_hidden(entry.file_name()) || !is_media(entry.path()) {
+                    continue;
+                }
+                let rel = rel_path(&stamp, entry.path());
+                let hash = hashes.get(&rel).cloned().unwrap_or_default();
+                let (thumb, w, h, tone) = {
+                    let conn = self.conn.lock().unwrap();
+                    let thumb: Option<String> = conn.query_row("SELECT file FROM thumb WHERE hash = ?1", params![hash], |r| r.get(0)).optional().ok().flatten();
+                    let (w, h): (Option<i64>, Option<i64>) = conn
+                        .query_row("SELECT width, height FROM media WHERE hash = ?1", params![hash], |r| Ok((r.get(0)?, r.get(1)?)))
+                        .optional()
+                        .ok()
+                        .flatten()
+                        .unwrap_or((None, None));
+                    let tone: Option<String> = conn.query_row("SELECT tone FROM note WHERE hash = ?1", params![hash], |r| r.get(0)).optional().ok().flatten();
+                    (thumb, w, h, tone)
+                };
+                let (w, h) = match (w, h) {
+                    (Some(w), Some(h)) => (Some(w), Some(h)),
+                    _ => match image::image_dimensions(entry.path()) {
+                        Ok((w, h)) => (Some(w as i64), Some(h as i64)),
+                        Err(_) => (None, None),
+                    },
+                };
+                let format = ext_of(entry.path());
+                let quote = if TEXT_EXTS.contains(&format.as_str()) {
+                    fs::read_to_string(entry.path()).ok().map(|t| t.trim().chars().take(TEXT_MAX_CHARS).collect())
+                } else {
+                    None
+                };
+                out.push(DeletedItem {
+                    abs: entry.path().to_string_lossy().into_owned(),
+                    zone: zone_at(&parent_rel(&rel), self.structure().zone_depth()),
+                    filename: file_name(&rel),
+                    path: rel,
+                    hash,
+                    format,
+                    width: w,
+                    height: h,
+                    thumb: thumb.map(|f| thumbs.join(f).to_string_lossy().into_owned()),
+                    quote,
+                    tone,
+                    deleted_at: at,
+                });
+            }
+        }
+        out.sort_by(|a, b| b.deleted_at.cmp(&a.deleted_at).then_with(|| a.path.cmp(&b.path)));
+        Ok(out)
+    }
+
+    pub fn deleted_count(&self) -> usize {
+        WalkDir::new(self.deleted_dir())
+            .min_depth(2)
+            .into_iter()
+            .filter_map(|e| e.ok())
+            .filter(|e| e.file_type().is_file() && !is_hidden(e.file_name()) && is_media(e.path()))
+            .count()
+    }
+
+    /// Gelöschte Dateien (absolute Pfade unter .archiver/deleted) zurück an ihren Platz
+    pub fn restore_deleted(&self, files: &[String]) -> Result<usize> {
+        let base = self.deleted_dir();
+        let mut n = 0;
+        for f in files {
+            let src = PathBuf::from(f);
+            let Ok(inside) = src.strip_prefix(&base) else { continue };
+            let rel = rel_path(Path::new(""), inside);
+            let Some((_, rel)) = rel.split_once('/') else { continue };
+            if !src.is_file() {
+                continue;
+            }
+            let dst = safe_join(&self.root, rel)?;
+            if let Some(dir) = dst.parent() {
+                fs::create_dir_all(dir).map_err(err)?;
+            }
+            let dst = if dst.exists() { unique_path(dst.parent().unwrap_or(&self.root), &file_name(rel)) } else { dst };
+            move_file(&src, &dst)?;
+            n += 1;
+        }
+        self.prune_deleted();
+        if n > 0 {
+            self.scan()?;
+        }
+        Ok(n)
+    }
+
+    /// Gelöschte Dateien endgültig entfernen: sie gehen in den Papierkorb des Macs
+    pub fn remove_deleted(&self, files: &[String]) -> Result<usize> {
+        let base = self.deleted_dir();
+        let mut n = 0;
+        for f in files {
+            let p = PathBuf::from(f);
+            if p.starts_with(&base) && p != base && p.exists() {
+                trash::delete(&p).map_err(err)?;
+                n += 1;
+            }
+        }
+        self.prune_deleted();
+        Ok(n)
+    }
+
+    /// Löschvorgänge, die älter als `days` Tage sind, wandern in den Papierkorb des Macs
+    pub fn purge_deleted(&self, days: i64) -> usize {
+        let limit = now_ms() - days * 24 * 3600 * 1000;
+        let mut n = 0;
+        let Ok(rd) = fs::read_dir(self.deleted_dir()) else { return 0 };
+        for stamp in rd.filter_map(|e| e.ok()).map(|e| e.path()) {
+            let at = stamp.file_name().and_then(|n| n.to_str()).and_then(|n| n.parse::<i64>().ok());
+            if at.map(|t| t < limit).unwrap_or(false) && trash::delete(&stamp).is_ok() {
+                n += 1;
+            }
+        }
+        n
+    }
+
+    /// Leere Löschordner aufräumen
+    fn prune_deleted(&self) {
+        let Ok(rd) = fs::read_dir(self.deleted_dir()) else { return };
+        for stamp in rd.filter_map(|e| e.ok()).map(|e| e.path()).filter(|p| p.is_dir()) {
+            prune_empty(&stamp);
+        }
     }
 
     // ---- Import ----
@@ -1543,6 +1951,44 @@ impl Library {
         )
         .map_err(err)?;
         Ok(true)
+    }
+
+    /// Gesicherte Webseite zu einer Linkkarte (0.30.1): .archiver/web/<hash>.mhtml
+    pub fn web_archive(&self, hash: &str) -> Option<PathBuf> {
+        if hash.is_empty() || !hash.chars().all(|c| c.is_ascii_alphanumeric()) {
+            return None;
+        }
+        let p = self.root.join(".archiver").join("web").join(format!("{hash}.mhtml"));
+        p.is_file().then_some(p)
+    }
+
+    /// Legt die von der Extension gesicherte Seite (MHTML) zur Karte mit `hash`.
+    pub fn attach_web_archive(&self, hash: &str, src: &Path) -> Result<()> {
+        if !src.is_file() || hash.is_empty() || !hash.chars().all(|c| c.is_ascii_alphanumeric()) {
+            return Ok(());
+        }
+        let dir = self.root.join(".archiver").join("web");
+        fs::create_dir_all(&dir).map_err(err)?;
+        let dst = dir.join(format!("{hash}.mhtml"));
+        if fs::rename(src, &dst).is_err() {
+            fs::copy(src, &dst).map_err(err)?;
+            let _ = fs::remove_file(src);
+        }
+        Ok(())
+    }
+
+    /// Text einer Textkarte ändern (0.30.1, in der Lightbox editierbar).
+    /// Das PNG bleibt, wie es gesichert wurde; die App zeigt den Text.
+    pub fn set_quote(&self, hash: &str, quote: &str) -> Result<()> {
+        let quote: String = quote.trim().chars().take(20_000).collect();
+        if quote.is_empty() {
+            return Ok(());
+        }
+        {
+            let conn = self.conn.lock().unwrap();
+            conn.execute("UPDATE source SET quote = ?2 WHERE hash = ?1", params![hash, quote]).map_err(err)?;
+        }
+        self.write_metadata()
     }
 
     /// Kopiert eine Datei in eine Zone. Bereits vorhandene Bilder (gleicher Hash)
@@ -1618,15 +2064,207 @@ impl Library {
     }
 
     /// Einzelne Dateien (z. B. aus dem Finder hereingezogen) in eine Zone kopieren.
+    /// Dateien und ganze Ordner (0.27) übernehmen. Ein Ordner wird mit seinen
+    /// Unterordnern zum Unterordner der Zone, ohne Zone (`""`) zur neuen Zone.
+    /// Lose Dateien ohne Zone landen in der Standard-Zone.
     pub fn import_files(&self, files: &[PathBuf], zone: &str) -> Result<ImportReport> {
         let mut report = ImportReport::default();
-        for f in files.iter().filter(|f| is_media(f)) {
-            self.import_one(f, zone, None, &mut report)?;
+        let loose = if zone.is_empty() { self.default_zone() } else { zone.to_string() };
+        for f in files {
+            if f.is_dir() {
+                self.import_tree(f, zone, &mut report)?;
+            } else if is_media(f) {
+                self.import_one(f, &loose, None, &mut report)?;
+            }
         }
         if report.imported > 0 && self.user.lock().unwrap().is_some() {
             self.write_metadata()?;
         }
         Ok(report)
+    }
+
+    /// Ordner aus dem Finder: Struktur bleibt erhalten, Name wird bereinigt.
+    fn import_tree(&self, dir: &Path, zone: &str, report: &mut ImportReport) -> Result<()> {
+        let name = clean_segment(dir.file_name().and_then(|n| n.to_str()).unwrap_or("Ordner"));
+        if name.is_empty() {
+            return Ok(());
+        }
+        let dest = if zone.is_empty() { name } else { format!("{zone}/{name}") };
+        fs::create_dir_all(safe_join(&self.root, &dest)?).map_err(err)?;
+        let st = self.structure();
+        let walker = WalkDir::new(dir)
+            .min_depth(1)
+            .into_iter()
+            .filter_entry(|e| !is_hidden(e.file_name()) && !(e.file_type().is_dir() && st.skips(&e.file_name().to_string_lossy())));
+        for entry in walker.filter_map(|e| e.ok()) {
+            if !entry.file_type().is_file() || !is_media(entry.path()) {
+                continue;
+            }
+            let sub = parent_rel(&rel_path(dir, entry.path()));
+            let target = if sub.is_empty() { dest.clone() } else { format!("{dest}/{}", sub.split('/').map(clean_segment).collect::<Vec<_>>().join("/")) };
+            self.import_one(entry.path(), &target, None, report)?;
+        }
+        Ok(())
+    }
+
+    /// Neuer Unterordner in einer Zone (bzw. in einem ihrer Ordner)
+    pub fn create_folder(&self, parent: &str, name: &str) -> Result<String> {
+        let name = clean_segment(name);
+        if parent.is_empty() || name.is_empty() {
+            return Err("Leerer Name".into());
+        }
+        let base = safe_join(&self.root, parent)?;
+        if !base.is_dir() {
+            return Err(format!("Zone nicht gefunden: {parent}"));
+        }
+        let dir = unique_path(&base, &name);
+        fs::create_dir(&dir).map_err(err)?;
+        Ok(rel_path(&self.root, &dir))
+    }
+
+    // ---- Notiz-Objekte (0.29): eigene Texte als .md in der Zone ----
+
+    /// Neue Notiz in einer Zone (bzw. einem ihrer Ordner). Gibt den relativen Pfad zurück.
+    pub fn create_note(&self, dir: &str, title: &str) -> Result<String> {
+        let base = safe_join(&self.root, dir)?;
+        if !base.is_dir() {
+            return Err(format!("Zone nicht gefunden: {dir}"));
+        }
+        let title = title.trim();
+        let name = match clean_segment(title) {
+            n if n.is_empty() => "Notiz".to_string(),
+            n => n,
+        };
+        let path = unique_path(&base, &format!("{name}.md"));
+        fs::write(&path, format!("# {}\n", if title.is_empty() { &name } else { title })).map_err(err)?;
+        let rel = rel_path(&self.root, &path);
+        let hash = self.record_note(&rel, &path)?;
+        self.mark_added_by(&hash)?;
+        Ok(rel)
+    }
+
+    /// Ganzer Text einer Notiz (ohne die Kürzung der Kartenvorschau)
+    pub fn read_note(&self, rel: &str) -> Result<String> {
+        let abs = safe_join(&self.root, rel)?;
+        if !is_note(&abs) {
+            return Err("Keine Notiz".into());
+        }
+        fs::read_to_string(abs).map_err(err)
+    }
+
+    /// Text einer Notiz speichern. Mit `rename` bekommt die Datei den Titel
+    /// (erste Zeile) als Namen. Der Inhalt ändert den Hash: Farbe, Verknüpfungen
+    /// und Reihenfolge wandern zum neuen Hash mit. Gibt (Pfad, Hash) zurück.
+    pub fn write_note(&self, rel: &str, text: &str, rename: bool) -> Result<(String, String)> {
+        let abs = safe_join(&self.root, rel)?;
+        if !is_note(&abs) || !abs.is_file() {
+            return Err("Keine Notiz".into());
+        }
+        let old: Option<String> = {
+            let conn = self.conn.lock().unwrap();
+            conn.query_row("SELECT hash FROM item WHERE path = ?1", params![rel], |r| r.get(0)).optional().map_err(err)?
+        };
+        let body = text.trim_end();
+        fs::write(&abs, if body.trim().is_empty() { String::new() } else { format!("{body}\n") }).map_err(err)?;
+        let mut target = abs.clone();
+        let name = clean_segment(&note_title(text));
+        let stem = abs.file_stem().and_then(|s| s.to_str()).unwrap_or("").to_string();
+        // „Titel 2“ bleibt, wenn „Titel“ schon vergeben war
+        let same = stem == name || stem.strip_prefix(&format!("{name} ")).map(|n| n.parse::<u32>().is_ok()).unwrap_or(false);
+        if rename && !name.is_empty() && !same {
+            let dir = abs.parent().unwrap_or(&self.root);
+            let file = format!("{name}.md");
+            // Nur Groß-/Kleinschreibung anders: direkt umbenennen (macOS sieht dieselbe Datei)
+            target = if stem.to_lowercase() == name.to_lowercase() { dir.join(&file) } else { unique_path(dir, &file) };
+            fs::rename(&abs, &target).map_err(err)?;
+        }
+        let new_rel = rel_path(&self.root, &target);
+        let hash = self.record_note_at(rel, &new_rel, &target)?;
+        if let Some(old) = old.filter(|o| *o != hash) {
+            self.move_note_hash(&old, &hash)?;
+        }
+        Ok((new_rel, hash))
+    }
+
+    fn record_note(&self, rel: &str, abs: &Path) -> Result<String> {
+        self.record_note_at(rel, rel, abs)
+    }
+
+    /// Eintrag einer Notiz nachführen (wie der Scan, aber ohne auf ihn zu warten)
+    fn record_note_at(&self, old_rel: &str, rel: &str, abs: &Path) -> Result<String> {
+        let meta = fs::metadata(abs).map_err(err)?;
+        let hash = hash_file(abs)?;
+        let mtime = time_ms(meta.modified()).unwrap_or(0);
+        let updated = {
+            let conn = self.conn.lock().unwrap();
+            conn.execute(
+                "UPDATE item SET path = ?1, hash = ?2, bytes = ?3, mtime = ?4 WHERE path = ?5",
+                params![rel, hash, meta.len() as i64, mtime, old_rel],
+            )
+            .map_err(err)?
+        };
+        if updated == 0 {
+            self.upsert_item(rel, &hash, meta.len() as i64, mtime, now_ms(), abs)?;
+        }
+        Ok(hash)
+    }
+
+    /// Angaben einer Notiz vom alten zum neuen Hash: Notizzeile, Verweise aus
+    /// anderen Notizen und die eigene Reihenfolge. Teilt sich ein anderes
+    /// Objekt den alten Hash noch, wird nur kopiert.
+    fn move_note_hash(&self, old: &str, new: &str) -> Result<()> {
+        let still_used = {
+            let conn = self.conn.lock().unwrap();
+            let n: i64 = conn.query_row("SELECT COUNT(*) FROM item WHERE hash = ?1", params![old], |r| r.get(0)).map_err(err)?;
+            conn.execute(
+                "INSERT OR IGNORE INTO note (hash, note, credit, license, internal, added_by, updated_at, tone, caption, links)
+                 SELECT ?2, note, credit, license, internal, added_by, ?3, tone, caption, links FROM note WHERE hash = ?1",
+                params![old, new, now_ms()],
+            )
+            .map_err(err)?;
+            if n == 0 {
+                conn.execute("DELETE FROM note WHERE hash = ?1", params![old]).map_err(err)?;
+                // Verweise anderer Notizen umschreiben
+                let mut stmt = conn.prepare("SELECT hash, links FROM note WHERE links LIKE ?1").map_err(err)?;
+                let rows: Vec<(String, Option<String>)> = stmt
+                    .query_map(params![format!("%{old}%")], |r| Ok((r.get(0)?, r.get(1)?)))
+                    .map_err(err)?
+                    .collect::<std::result::Result<_, _>>()
+                    .map_err(err)?;
+                for (h, links) in rows {
+                    let list: Vec<String> = crate::studio::links_of(links)
+                        .unwrap_or_default()
+                        .into_iter()
+                        .map(|l| if l == old { new.to_string() } else { l })
+                        .collect();
+                    conn.execute(
+                        "UPDATE note SET links = ?2, updated_at = MAX(updated_at + 1, ?3) WHERE hash = ?1",
+                        params![h, crate::studio::links_json(&Some(list)), now_ms()],
+                    )
+                    .map_err(err)?;
+                }
+            }
+            n > 0
+        };
+        if !still_used {
+            self.replace_in_order(old, new)?;
+        }
+        self.write_metadata()
+    }
+
+    /// Alle Ordner unterhalb der Zonen (auch leere), für Ordnerkarten und Chips
+    pub fn folders(&self) -> Vec<String> {
+        let st = self.structure();
+        let root = self.root.clone();
+        WalkDir::new(&self.root)
+            .min_depth(st.zone_depth() + 1)
+            .max_depth(st.zone_depth() + 4)
+            .into_iter()
+            .filter_entry(|e| !is_hidden(e.file_name()) && !(e.file_type().is_dir() && st.skips(&rel_path(&root, e.path()))))
+            .filter_map(|e| e.ok())
+            .filter(|e| e.file_type().is_dir())
+            .map(|e| rel_path(&self.root, e.path()))
+            .collect()
     }
 
     /// Einen ganzen Ordner übernehmen: Unterordner werden zu Zonen, lose Bilder landen in der Inbox.
@@ -1736,6 +2374,65 @@ mod tests {
     fn write_png(path: &Path, w: u32, h: u32, shade: u8) {
         fs::create_dir_all(path.parent().unwrap()).unwrap();
         image::RgbImage::from_pixel(w, h, image::Rgb([shade, 0, 0])).save(path).unwrap();
+    }
+
+    #[test]
+    fn deleted_restore_purge_and_folders() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path().join("Bib");
+        write_png(&root.join("Typo/a.png"), 4, 4, 10);
+        write_png(&root.join("Typo/Serif/b.png"), 4, 4, 20);
+        let lib = Library::open(&root).unwrap();
+        lib.scan().unwrap();
+        // Ordner, auch leere
+        lib.create_folder("Typo", "Grotesk").unwrap();
+        let folders = lib.folders();
+        assert!(folders.contains(&"Typo/Serif".to_string()) && folders.contains(&"Typo/Grotesk".to_string()));
+        // in einen Unterordner verschieben und genau zurück (⌘Z)
+        assert_eq!(lib.move_items_to(&["Typo/a.png".into()], "Typo/Grotesk", true).unwrap(), vec!["Typo/Grotesk/a.png".to_string()]);
+        assert!(lib.move_items(&["Typo/Grotesk/a.png".into()], "Typo").unwrap().is_empty(), "in der Zone bleibt es");
+        assert_eq!(lib.move_items_to(&["Typo/Grotesk/a.png".into()], "Typo", true).unwrap(), vec!["Typo/a.png".to_string()]);
+        // Löschen: unter „Zuletzt gelöscht“, nicht mehr in der Bibliothek
+        let done = lib.trash_items(&["Typo/Serif/b.png".into()]).unwrap();
+        assert_eq!(done.len(), 1);
+        assert!(!root.join("Typo/Serif/b.png").exists());
+        assert_eq!(lib.items().unwrap().len(), 1);
+        let del = lib.deleted_items().unwrap();
+        assert_eq!(del.len(), 1);
+        assert_eq!(del[0].path, "Typo/Serif/b.png");
+        assert!(!del[0].hash.is_empty());
+        assert_eq!(lib.deleted_count(), 1);
+        // Wiederherstellen
+        assert_eq!(lib.restore_deleted(&[del[0].abs.clone()]).unwrap(), 1);
+        assert!(root.join("Typo/Serif/b.png").is_file());
+        assert_eq!(lib.deleted_count(), 0);
+        assert_eq!(fs::read_dir(lib.deleted_dir()).unwrap().count(), 0, "leere Löschordner sind weg");
+        // Zone löschen und ⌘Z über restore_items
+        let done = lib.trash_items(&["Typo/a.png".into()]).unwrap();
+        lib.restore_items(&done).unwrap();
+        assert!(root.join("Typo/a.png").is_file());
+        lib.trash_zone("Typo").unwrap();
+        assert!(!root.join("Typo").exists());
+        assert_eq!(lib.deleted_items().unwrap().len(), 2);
+        // Alt genug: wandert aus „Zuletzt gelöscht“ (in den Papierkorb des Macs)
+        let stamp = fs::read_dir(lib.deleted_dir()).unwrap().next().unwrap().unwrap().path();
+        fs::rename(&stamp, lib.deleted_dir().join("1000")).unwrap();
+        let _ = lib.purge_deleted(DELETED_DAYS);
+        // Ordner aus dem Finder: wird zur Zone bzw. zum Unterordner
+        let ext = tmp.path().join("Extern/Projekt X");
+        write_png(&ext.join("c.png"), 4, 4, 30);
+        write_png(&ext.join("Sub/d.png"), 4, 4, 40);
+        let r = lib.import_files(&[ext.clone()], "").unwrap();
+        assert_eq!(r.imported, 2);
+        assert!(root.join("Projekt X/Sub/d.png").is_file());
+        write_png(&ext.join("e.png"), 4, 4, 50);
+        lib.import_files(&[ext], "Unsorted").unwrap();
+        assert!(root.join("Unsorted/Projekt X/e.png").is_file());
+        // Unterordner in einen anderen Ordner ziehen (0.28)
+        assert_eq!(lib.move_folder("Projekt X/Sub", "Unsorted/Projekt X").unwrap(), "Unsorted/Projekt X/Sub");
+        assert!(root.join("Unsorted/Projekt X/Sub/d.png").is_file());
+        assert!(lib.items().unwrap().iter().any(|i| i.path == "Unsorted/Projekt X/Sub/d.png"));
+        assert!(lib.move_folder("Unsorted/Projekt X", "Unsorted/Projekt X/Sub").is_err(), "nicht in sich selbst");
     }
 
     #[test]

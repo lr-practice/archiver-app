@@ -226,7 +226,8 @@ async function appBridge() {
   if (Date.now() - bridgeCache.at < BRIDGE_CACHE_MS) return bridgeCache.info;
   let info = null;
   try {
-    const r = await hostCall("hello");
+    // ext: eigene Version, damit die App einen Hinweis zeigen kann, wenn sie veraltet ist
+    const r = await hostCall("hello", { ext: chrome.runtime.getManifest().version });
     if (r.library) info = { library: r.library, name: r.name || "Archiver", version: r.version, libraries: Array.isArray(r.libraries) ? r.libraries : [] };
   } catch {}
   bridgeCache = { at: Date.now(), info };
@@ -275,6 +276,10 @@ async function getZones() {
       const alpha = typeof r.alpha === "number" ? r.alpha : null;
       const { appZoneAlpha } = await storageGet({ appZoneAlpha: null });
       if (appZoneAlpha !== alpha) await storageSet({ appZoneAlpha: alpha });
+      // Ecken aus der App (square, soft, round, xl), gelten in Overlay und Galerie
+      const radius = typeof r.radius === "string" ? r.radius : null;
+      const { appRadius } = await storageGet({ appRadius: null });
+      if (appRadius !== radius) await storageSet({ appRadius: radius });
       return { app: true, library: info.name, zones, hot };
     } catch {}
   }
@@ -285,6 +290,29 @@ async function getZones() {
 async function publishAppZones(zones) {
   const { appZones } = await storageGet({ appZones: null });
   if (JSON.stringify(appZones) !== JSON.stringify(zones)) await storageSet({ appZones: zones });
+}
+
+// Ganze Seite als eine Datei (MHTML, offline lesbar), über den Transfer-Ordner
+// an die App. Scheitert es (chrome://, Store-Seiten), bleibt es bei der Karte.
+async function archiveTab(tabId) {
+  try {
+    const blob = await chrome.pageCapture.saveAsMHTML({ tabId });
+    if (!blob || !blob.size) return null;
+    const bytes = new Uint8Array(await blob.arrayBuffer());
+    let bin = "";
+    for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+    const url = "data:multipart/related;base64," + btoa(bin);
+    const id = await startDownload({ url, filename: `${TRANSFER_DIR}/page-${Date.now()}.mhtml`, saveAs: false, conflictAction: "uniquify" });
+    const { state, item } = await waitForDownload(id);
+    if (state !== "complete" || !item) {
+      await eraseDownload(id);
+      return null;
+    }
+    return { id, filename: item.filename };
+  } catch (err) {
+    console.warn("[Archiver] Seite nicht gesichert:", err.message);
+    return null;
+  }
 }
 
 async function saveToApp(message, sender) {
@@ -308,8 +336,11 @@ async function saveToApp(message, sender) {
     sendFeedback(tabId, frameId, t("downloadFailed"), false);
     return { ok: false };
   }
+  // Linkkarte der offenen Seite: die ganze Seite als MHTML mitgeben
+  const archive = message.archivePage && tabId != null ? await archiveTab(tabId) : null;
   try {
     const r = await hostCall("save", {
+      archive: archive && archive.filename,
       file: item.filename,
       name: filename.split("/").pop(),
       zone,
@@ -318,11 +349,13 @@ async function saveToApp(message, sender) {
       pageTitle: message.pageTitle ? String(message.pageTitle).slice(0, 300) : null,
       quote: message.quote ? String(message.quote).slice(0, 20000) : null,
       tone: message.tone || null,
+      caption: message.caption ? String(message.caption).slice(0, 2000) : null,
       capturedAt: Date.now(),
       library: message.library || null,
     });
     if (!message.library) rememberRecent(zone || bridgeDefaultZone);
-    await eraseDownload(id); // Datei liegt jetzt in der Bibliothek, Eintrag im Verlauf wäre tot
+    await eraseDownload(id);
+    if (archive) await eraseDownload(archive.id); // Datei liegt jetzt in der Bibliothek, Eintrag im Verlauf wäre tot
     // Gleiches Bild schon in der Bibliothek: nicht doppelt ablegen, sagen wo es liegt
     const where = String(r.path || "").split("/").slice(0, -1).pop() || "Unsorted";
     if (r.duplicate) sendFeedback(tabId, frameId, t("duplicateIn", [where]), true);
@@ -498,6 +531,9 @@ function buildMenus() {
 
 chrome.runtime.onInstalled.addListener(buildMenus);
 chrome.runtime.onStartup.addListener(buildMenus);
+// Gleich beim Laden bei der App melden (Hinweis „Extension fehlt“ verschwindet)
+chrome.runtime.onInstalled.addListener(() => appBridge());
+chrome.runtime.onStartup.addListener(() => appBridge());
 chrome.storage.onChanged.addListener((changes, area) => {
   if ((area === "sync" && changes.zones) || (area === "local" && (changes.appZones || changes.appZoneOrder))) buildMenus();
 });

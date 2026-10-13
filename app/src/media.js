@@ -13,13 +13,14 @@
     return m ? m[1].toLowerCase() : String(name || "").toLowerCase();
   }
 
-  // "pdf" | "video" | "audio" | "image" — aus Dateiname, Pfad oder Format
+  // "pdf" | "video" | "audio" | "text" | "note" | "image" — aus Dateiname, Pfad oder Format
   function kind(nameOrFormat) {
     const ext = extOf(nameOrFormat);
     if (PDF_EXTS.includes(ext)) return "pdf";
     if (VIDEO_EXTS.includes(ext)) return "video";
     if (AUDIO_EXTS.includes(ext)) return "audio";
     if (ext === "txt") return "text";
+    if (ext === "md") return "note";
     return "image";
   }
 
@@ -601,14 +602,25 @@
     return true;
   }
 
-  // Einstellungen › Darstellung: Video bzw. Audio beim Öffnen abspielen (App und
+  // Einstellungen › Ansicht: Video und Audio beim Öffnen abspielen (App und
   // Betrachter lesen denselben Eintrag). Blockt das System Ton, startet Video stumm.
+  // 0.30: ein Schalter "autoplay"; bis er gesetzt ist, gelten die alten getrennten.
+  function autoplayOn(kind) {
+    const read = (key) => {
+      try {
+        return JSON.parse(localStorage.getItem(key));
+      } catch {
+        return null;
+      }
+    };
+    const one = read("archiver.autoplay");
+    if (typeof one === "boolean") return one;
+    if (kind) return read(kind === "video" ? "archiver.autoplayVideo" : "archiver.autoplayAudio") === true;
+    return read("archiver.autoplayVideo") === true || read("archiver.autoplayAudio") === true;
+  }
+
   function autoplay(media, kind) {
-    let on = false;
-    try {
-      on = JSON.parse(localStorage.getItem(kind === "video" ? "archiver.autoplayVideo" : "archiver.autoplayAudio")) === true;
-    } catch {}
-    if (!media || !on) return;
+    if (!media || !autoplayOn(kind)) return;
     const p = media.play();
     if (p && p.catch)
       p.catch(() => {
@@ -618,5 +630,5 @@
       });
   }
 
-  global.ArchiverMedia = { kind, duration, placeholder, PdfView, videoEl, audioEl, audioPlaceholder, audioFormat, togglePlay, player, zoomable, loadPdfjs, autoplay };
+  global.ArchiverMedia = { kind, duration, placeholder, PdfView, videoEl, audioEl, audioPlaceholder, audioFormat, togglePlay, player, zoomable, loadPdfjs, autoplay, autoplayOn };
 })(window);
