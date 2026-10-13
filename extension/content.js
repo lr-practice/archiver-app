@@ -318,6 +318,28 @@
     return text ? text.slice(0, 2000) : null;
   }
 
+  // Bilder in der Markierung (0.29.1): wer Bild und Text zusammen markiert,
+  // sichert das Bild mit dem Text als Bildtext, nicht nur eine Textkarte.
+  function selectedImages() {
+    const sel = window.getSelection && window.getSelection();
+    if (!sel || sel.isCollapsed || !sel.rangeCount) return [];
+    const range = sel.getRangeAt(0);
+    const c = range.commonAncestorContainer;
+    const root = c.nodeType === 1 ? c : c.parentElement;
+    if (!root) return [];
+    const imgs = [root, ...root.querySelectorAll("img")].filter((n) => n.tagName === "IMG" && range.intersectsNode(n));
+    return imgs.filter((i) => Math.max(i.naturalWidth || 0, i.width || 0) >= 80).slice(0, 12);
+  }
+
+  function saveSelectedImages(imgs, folder) {
+    const caption = captionNear();
+    const source = currentPageSource();
+    for (const img of imgs) {
+      const url = findBestImageUrl(img) || img.currentSrc || img.src;
+      if (url) sendSave({ type: "download-image", url: resolveUrl(url), folder, caption, ...source });
+    }
+  }
+
   function saveMediaFile(url, folder, source) {
     sendSave({ type: "download-image", url: resolveUrl(url), folder, ...source });
   }
@@ -358,6 +380,8 @@
       const best = ctx && ctx.target && ctx.target.tagName === "IMG" ? findBestImageUrl(ctx.target) : null;
       const caption = captionNear();
       sendSave({ type: "download-image", url: resolveUrl(best || msg.srcUrl), folder, caption, ...source });
+    } else if (selection && selectedImages().length) {
+      saveSelectedImages(selectedImages(), folder);
     } else if (selection) {
       saveCard(textCard(selection, source), folder, { ...source, quote: selection });
     } else if (msg.linkUrl) {
@@ -1035,7 +1059,7 @@
       ensureOverlay().then(() => {
         if (textDrag !== d) return;
         // in der Überlagerung, damit die Karte über den Zonen liegt
-        d.ghost = cardGhost(d.text);
+        d.ghost = d.images.length ? imageGhost(d.images[0], d.text) : cardGhost(d.text);
         rootEl.appendChild(d.ghost);
         moveGhost(d, d.lastX ?? e.clientX, d.lastY ?? e.clientY);
       });
@@ -1062,6 +1086,17 @@
     return g;
   }
 
+  // Bild mit Bildtext: am Zeiger das Bild, darunter der Anfang des Textes
+  function imageGhost(img, text) {
+    const g = UI.el("div", "text-ghost card");
+    const pic = document.createElement("img");
+    pic.src = img.currentSrc || img.src;
+    pic.style.cssText = "display:block;width:100%;max-height:180px;object-fit:cover;margin-bottom:8px";
+    g.appendChild(pic);
+    g.appendChild(UI.el("div", "text-ghost-text", text.length > 120 ? text.slice(0, 120).trim() + " …" : text));
+    return g;
+  }
+
   function moveGhost(d, x, y) {
     if (!d.ghost) return;
     // am rechten und unteren Rand auf die andere Seite des Zeigers
@@ -1084,8 +1119,12 @@
       if (idx !== -1) {
         const name = barZones[idx];
         landZones(idx);
-        const source = currentPageSource();
-        saveCard(textCard(d.text, source), isRootZoneName(name) ? null : name, { ...source, quote: d.text });
+        const folder = isRootZoneName(name) ? null : name;
+        if (d.images.length) saveSelectedImages(d.images, folder);
+        else {
+          const source = currentPageSource();
+          saveCard(textCard(d.text, source), folder, { ...source, quote: d.text });
+        }
       }
     }
     endTextDrag();
@@ -1105,7 +1144,7 @@
       if (!text || !insideSelection(e.clientX, e.clientY)) return;
       // Kein neues Markieren und kein natives Ziehen: Archiver zieht selbst.
       e.preventDefault();
-      textDrag = { x: e.clientX, y: e.clientY, text, moving: false, ghost: null, rect: spotRect ? { ...spotRect } : null };
+      textDrag = { x: e.clientX, y: e.clientY, text, images: selectedImages(), moving: false, ghost: null, rect: spotRect ? { ...spotRect } : null };
       document.addEventListener("mousemove", onTextDragMove, true);
       document.addEventListener("mouseup", onTextDragUp, true);
       document.addEventListener("keydown", onTextDragKey, true);
@@ -1613,6 +1652,18 @@
         e.preventDefault();
         e.stopPropagation();
         dropHiddenVideo(folder);
+        return;
+      }
+
+      // Markierung mit Bild: Bild sichern, Text wird Bildtext
+      const marked = selectedImages();
+      const fromMark = !fallbackImageUrl || marked.some((i) => findBestImageUrl(i) === fallbackImageUrl);
+      if (marked.length && fromMark && e.dataTransfer.getData("text/plain").trim()) {
+        e.preventDefault();
+        e.stopPropagation();
+        saveSelectedImages(marked, folder);
+        removeZones();
+        fallbackImageUrl = null;
         return;
       }
 

@@ -1,5 +1,9 @@
 # Changelog
 
+## Extension 3.21.0 (in Arbeit, erscheint mit der nächsten App)
+
+- Bild und Text zusammen markiert und gesichert (Ziehen oder Rechtsklick): Gesichert wird das Bild, der markierte Text wird sein Bildtext. Bisher entstand nur eine Textkarte.
+
 ## App 0.29.0 (13.10.2026)
 
 Bildtext:
