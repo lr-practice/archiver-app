@@ -294,8 +294,11 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
   stehen in der Leiste. Schwarzes Blatt bekommt eine feine helle Kante.
 - **Verknüpfungen:** Spalte 40 px links neben dem Blatt, oben bündig, 150 px
   breit: Mono-Kennung „Verknüpft (n)“, Kacheln 72 px in zwei Reihen, „+“ als
-  Rahmenkachel. „+“ öffnet eine Auswahl (Menüfläche, Suchfeld, Raster 5 × 56 px,
-  gewählte gestrichelt). Klick auf eine Kachel öffnet das Objekt; die Lightbox
+  Rahmenkachel. „+“ öffnet eine Auswahl (Menüfläche 430 px, Suchfeld). Erst
+  stehen die Zonen als kleine Tray-Karten da (drei Spalten, Cover 58 px mit
+  einem großen und zwei kleinen Bildern, Name 12 px, Anzahl in Mono). Klick
+  öffnet die Zone: Raster mit sechs Spalten, gewählte gestrichelt, „‹ Zonen“
+  bzw. Esc führt zurück. Suchen durchsucht die ganze Bibliothek (0.29.1). Klick auf eine Kachel öffnet das Objekt; die Lightbox
   blättert dann durch Notiz und Verknüpfte. Fenster schmaler als 1080 px: die
   Kacheln (48 px) stehen auf dem Blatt über dem Fuß.
 

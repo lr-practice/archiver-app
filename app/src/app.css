@@ -6121,18 +6121,19 @@ html.light {
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.25);
 }
 
-/* Auswahl zum Verknüpfen: Suchfeld, Raster mit 56 px, gewählte mit Rahmen */
+/* Auswahl zum Verknüpfen (Variante A): Suchfeld, Zonen als kleine Tray-Karten,
+   in der Zone ein Raster mit sechs Spalten, gewählte gestrichelt */
 .zone-menu.p-ctx-menu.note-chooser {
-  width: 340px;
+  width: 430px;
   min-width: 0;
-  padding: 8px;
+  padding: 10px;
   box-sizing: border-box;
 }
 .nc-search {
   width: 100%;
   box-sizing: border-box;
-  margin-bottom: 8px;
-  padding: 7px 9px;
+  height: 32px;
+  padding: 0 10px;
   border: none;
   border-radius: var(--r-sm, 4px);
   outline: none;
@@ -6141,13 +6142,115 @@ html.light {
   font: inherit;
   font-size: 13px;
 }
-.nc-grid {
-  display: grid;
-  grid-template-columns: repeat(5, 1fr);
-  gap: 4px;
-  max-height: 260px;
+.nc-head,
+.nc-foot {
+  display: flex;
+  align-items: baseline;
+  font-family: "Geist Mono", ui-monospace, monospace;
+  font-size: 10px;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--p-dim);
+}
+.nc-head {
+  margin: 12px 2px 6px;
+}
+.nc-back {
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  color: var(--p-text);
+  cursor: default;
+}
+.nc-crumb {
+  margin-left: 0.6em;
+}
+.nc-back:hover {
+  text-decoration: underline;
+}
+.nc-foot {
+  justify-content: space-between;
+  margin: 10px 2px 0;
+  color: var(--p-faint);
+}
+.nc-body {
+  max-height: 300px;
   overflow-y: auto;
   scrollbar-width: none;
+}
+.nc-zones {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+}
+.nc-zone {
+  padding: 0;
+  border: none;
+  border-radius: var(--r-sm, 4px);
+  overflow: hidden;
+  background: rgba(var(--ink-rgb), 0.06);
+  color: var(--p-text);
+  text-align: left;
+  font: inherit;
+  cursor: default;
+  transition: background 0.12s ease;
+}
+.nc-zone:hover {
+  background: rgba(var(--ink-rgb), 0.1);
+}
+.nc-cover {
+  position: relative;
+  display: grid;
+  height: 58px;
+  gap: 2px;
+}
+.nc-cover.trio {
+  grid-template-columns: 2fr 1fr;
+  grid-template-rows: 1fr 1fr;
+}
+.nc-cover.trio > :first-child {
+  grid-row: span 2;
+}
+.nc-cover > img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  object-fit: cover;
+}
+.nc-cover > .text-sheet.mini {
+  min-height: 0;
+  overflow: hidden;
+}
+.nc-cover.empty {
+  background: rgba(var(--ink-rgb), 0.04);
+}
+.nc-zone-name {
+  display: flex;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 6px 8px 7px;
+  font-size: 12px;
+  font-weight: 500;
+}
+.nc-zone-name > :first-child {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.nc-count {
+  font-family: "Geist Mono", ui-monospace, monospace;
+  font-size: 10px;
+  font-weight: 400;
+  color: var(--p-dim);
+}
+.nc-grid {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 4px;
 }
 .nc-tile {
   width: 100%;

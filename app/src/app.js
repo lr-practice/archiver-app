@@ -4241,7 +4241,8 @@
     noteChooser = null;
   }
 
-  // Auswahl: Objekte der Zone zuerst, Suchfeld durchsucht die ganze Bibliothek
+  // Auswahl (0.29.1, Variante A): erst die Zonen als kleine Karten wie im Tray,
+  // Klick öffnet die Zone mit ihren Objekten. Das Suchfeld durchsucht alles.
   function openNoteChooser(item, anchor, onChange) {
     closeNoteChooser();
     const pop = el("div", "note-chooser zone-menu p-ctx-menu");
@@ -4250,36 +4251,90 @@
     pop.addEventListener("pointerdown", (e) => e.stopPropagation());
     const input = el("input", "nc-search");
     input.placeholder = t("noteLinkSearch");
-    const grid = el("div", "nc-grid");
-    const fill = () => {
-      const q = input.value.trim().toLowerCase();
-      const words = q.split(/\s+/).filter(Boolean);
-      const linked = new Set(item.links || []);
-      let pool = state.items.filter((i) => i !== item && i.hash !== item.hash);
-      pool = words.length ? pool.filter((i) => matches(i, words)) : pool.filter((i) => i.zone === item.zone);
-      const tiles = pool.slice(0, 60).map((it) => {
-        const b = el("button", "nc-tile" + (linked.has(it.hash) ? " on" : ""));
-        b.type = "button";
-        b.title = it.filename;
-        b.appendChild(quoteOf(it) ? (isNote(it) ? noteSheet(it, "text-sheet mini") : textSheet(it, "text-sheet mini")) : Object.assign(el("img"), { src: thumbSrc(it), alt: "", loading: "lazy" }));
-        b.addEventListener("click", () => {
-          const now = new Set(item.links || []);
-          if (now.has(it.hash)) now.delete(it.hash);
-          else now.add(it.hash);
-          setNoteLinks(item, [...now]);
-          b.classList.toggle("on", now.has(it.hash));
-          onChange();
-        });
-        return b;
+    const head = el("div", "nc-head");
+    const body = el("div", "nc-body");
+    const foot = el("div", "nc-foot");
+    let zone = null;
+    const tile = (it, linked) => {
+      const b = el("button", "nc-tile" + (linked.has(it.hash) ? " on" : ""));
+      b.type = "button";
+      b.title = it.filename;
+      b.appendChild(quoteOf(it) ? textSheet(it, "text-sheet mini") : Object.assign(el("img"), { src: thumbSrc(it), alt: "", loading: "lazy" }));
+      b.addEventListener("click", () => {
+        const now = new Set(item.links || []);
+        if (now.has(it.hash)) now.delete(it.hash);
+        else now.add(it.hash);
+        setNoteLinks(item, [...now]);
+        b.classList.toggle("on", now.has(it.hash));
+        onChange();
+        footer();
       });
-      grid.replaceChildren(...(tiles.length ? tiles : [el("div", "nc-empty", t("noteLinkEmpty"))]));
+      return b;
+    };
+    const zoneCard = (z) => {
+      const list = orderedItems(z.path).filter((i) => i !== item);
+      const c = el("button", "nc-zone");
+      c.type = "button";
+      const cover = el("div", "nc-cover" + (list.length >= 3 ? " trio" : "") + (list.length ? "" : " empty"));
+      for (const it of list.slice(0, list.length >= 3 ? 3 : 1)) cover.appendChild(quoteOf(it) ? textSheet(it, "text-sheet mini") : Object.assign(el("img"), { src: thumbSrc(it), alt: "", loading: "lazy" }));
+      const name = el("div", "nc-zone-name");
+      name.append(el("span", null, lastSegment(z.path) || z.name), el("span", "nc-count", String(list.length)));
+      c.append(cover, name);
+      c.title = zoneLabel(z.path);
+      c.addEventListener("click", () => {
+        zone = z.path;
+        fill();
+      });
+      return c;
+    };
+    const footer = () => {
+      const n = (item.links || []).length;
+      foot.replaceChildren(el("span", null, zone || input.value.trim() ? t("noteLinkHintPick") : t("noteLinkHintZone")), el("span", null, n ? t("noteObjects", { n }) : ""));
+    };
+    const fill = () => {
+      const words = input.value.trim().toLowerCase().split(/\s+/).filter(Boolean);
+      const linked = new Set(item.links || []);
+      const pool = state.items.filter((i) => i !== item && i.hash !== item.hash);
+      let tiles = null;
+      if (words.length) {
+        head.replaceChildren(el("span", null, t("noteLinkFound")));
+        tiles = pool.filter((i) => matches(i, words));
+      } else if (zone != null) {
+        const back = el("button", "nc-back", "‹ " + t("noteLinkZones"));
+        back.type = "button";
+        back.addEventListener("click", () => {
+          zone = null;
+          fill();
+        });
+        const list = orderedItems(zone).filter((i) => i !== item && i.hash !== item.hash);
+        head.replaceChildren(back, el("span", "nc-crumb", "/ " + zoneLabel(zone) + " (" + list.length + ")"));
+        tiles = list;
+      } else {
+        head.replaceChildren(el("span", null, t("noteLinkZones") + " (" + state.zones.length + ")"));
+        body.className = "nc-body nc-zones";
+        body.replaceChildren(...state.zones.map(zoneCard));
+      }
+      if (tiles) {
+        body.className = "nc-body nc-grid";
+        const shown = tiles.slice(0, 120).map((it) => tile(it, linked));
+        body.replaceChildren(...(shown.length ? shown : [el("div", "nc-empty", t("noteLinkEmpty"))]));
+      }
+      footer();
     };
     input.addEventListener("input", debounce(fill, 120));
     input.addEventListener("keydown", (e) => {
       e.stopPropagation();
-      if (e.key === "Escape") closeNoteChooser();
+      if (e.key === "Escape") {
+        if (input.value) {
+          input.value = "";
+          fill();
+        } else if (zone != null) {
+          zone = null;
+          fill();
+        } else closeNoteChooser();
+      }
     });
-    pop.append(input, grid);
+    pop.append(input, head, body, foot);
     document.body.appendChild(pop);
     fill();
     const r = anchor.getBoundingClientRect();

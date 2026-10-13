@@ -6,6 +6,9 @@ Zuletzt gelöscht:
 - Doppelklick, Leertaste oder Enter öffnen die Lightbox. Dort gibt es „Wiederherstellen“ und „Sofort löschen“.
 - ⌫ fragt nach, bevor etwas endgültig in den Papierkorb des Macs geht. Das gilt auch für den Chip und das Menü.
 
+Notizen:
+- „+“ bei den Verknüpfungen zeigt zuerst alle Zonen als kleine Karten wie im Tray. Klick öffnet die Zone, „‹ Zonen“ führt zurück.
+
 Extension:
 
 - Bild und Text zusammen markiert und gesichert (Ziehen oder Rechtsklick): Gesichert wird das Bild, der markierte Text wird sein Bildtext. Bisher entstand nur eine Textkarte.
