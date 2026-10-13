@@ -39,7 +39,6 @@
     cyan: ["#00b0f0", "#003d54", 0.7],
     yellow: ["#ffff00", "#5c5c00", 0.75],
     white: ["#ffffff", "#141414", 0.5],
-    grey: ["#c4c4c4", "#141414", 0.55],
     black: ["#141414", "#ededed", 0.5],
   };
   const RANDOM_TONES = ["red", "green", "violet", "cyan", "yellow"];

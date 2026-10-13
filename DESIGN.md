@@ -24,8 +24,8 @@ gewinnt das obere.
 3. **Eine Entscheidung statt einer Einstellung.** Neue Gestaltungsfragen werden
    entschieden und nicht an die Nutzenden weitergereicht. Bestehende Optionen
    wie Rundung oder Outline wachsen nicht weiter. Seit 0.30 fest: Navigation
-   oben links, Ordner als Karten, Neu laden ohne Welle. Fenster und
-   Zonenkarten haben einen gemeinsamen Glas-Regler statt zweier.
+   oben links, Ordner als Karten, Neu laden ohne Welle. Regler laufen
+   immer in 5-%-Schritten.
 4. **Eine Sprache für App und Extension.** Was in beiden Oberflächen vorkommt,
    sieht in beiden gleich aus. Beispiele sind die Glasleiste beim Ziehen, die
    Zonenkarten, Geist als Schrift und die Hell- und Dunkel-Werte.
@@ -60,7 +60,7 @@ Bei neuen Regeln gilt:
 | Token | Dunkel | Hell (0.25.0) | Zweck |
 |---|---|---|---|
 | `--bg-solid` | `#1c1c1c` | `#f4f4f4` | Grundfarbe des Fensters, gleich dem Tray (0.28) |
-| `--win-alpha` | 0.72 | 0.78 | Deckkraft über dem Mac-Glas, Standard wie im Tray. Seit 0.30 ein Glas-Regler (Einstellungen › Aussehen, 40–100 %, `archiver.glass`, i18n.js `applyGlass`) für App, Tray, Zonenleiste und Observer |
+| `--win-alpha` | 0.72 | 0.78 | Deckkraft über dem Mac-Glas, Standard wie im Tray. Regler „Glas“ (Einstellungen › Aussehen, 40–100 % in 5er-Schritten, `archiver.glass`, i18n.js `applyGlass`) für App, Tray und Observer |
 | `--bg` | aus `--bg-solid` × `--win-alpha` | dito | Fenster über dem Mac-Glas |
 | `--ink` / `--ink-rgb` | `#ffffff` / `255,255,255` | `#111111` / `17,17,17` | Text und Basis aller Alpha-Flächen |
 | `--ink-inverse` | `#0f0f0f` | `#f4f4f4` | Text auf `--ink`-Flächen (Primärknopf) |
@@ -131,7 +131,7 @@ Ebenen vor: Navigation, Active-Zones-Leiste, Menüs und Ladeplatzhalter.
 | Unschärfe | `blur(24px) saturate(1.4)` | `blur(28px) saturate(0)` |
 | Schatten | `0 14px 44px rgba(0,0,0,.5)` | `0 14px 44px rgba(0,0,0,.16)` |
 | Kante | `inset 0 0 0 1px` ink × 0.07 | `inset 0 0 0 1px` weiß × 0.7 + schwarz × 0.08 auf 0.5 px |
-| Deckkraft | `--zone-alpha` = Glas + 0.25, höchstens 1 (Standard 0.97). App, Zonenleiste und Extension (über `zones.json` „alpha“) | dito |
+| Deckkraft | `--zone-alpha`, eigener Regler „Zonen beim Ziehen“ (30–100 % in 5er-Schritten, `archiver.zoneGlass`, Standard 0.97). App, Zonenleiste und Extension (über `zones.json` „alpha“) | dito |
 
 ### 2.5 Bewegung
 
@@ -297,9 +297,9 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
   Zone · Datum (Mono 11 px), Titel 30 px/600, Text 17 px/1,45, Fuß mit Wörtern
   und „Gesichert“. Geschrieben wird direkt auf dem Blatt, gesichert nach 0,6 s
   Pause und beim Verlassen. Die Farbpunkte stehen in der Leiste: eine Reihe
-  für Notizen und Textkarten (0.30), Weiß `#ffffff`, Grau `#c4c4c4`, Gelb, Rot,
-  Cyan, Schwarz. Die Extension wählt beim Markieren zufällig aus Gelb, Rot und
-  Cyan; Grün und Violett bleiben nur für ältere Karten. Schwarzes Blatt bekommt eine feine helle Kante.
+  für Notizen und Textkarten (0.30) aus den bestehenden Farben Rot, Grün,
+  Violett, Cyan, Gelb, Weiß (`#ffffff`, kein Papierton mehr) und Schwarz. Die
+  Extension wählt beim Markieren zufällig aus den fünf Buntfarben. Schwarzes Blatt bekommt eine feine helle Kante.
 - **Verknüpfungen:** Spalte 40 px links neben dem Blatt, oben bündig, 150 px
   breit: Mono-Kennung „Verknüpft (n)“, Kacheln 72 px in zwei Reihen, „+“ als
   Rahmenkachel. „+“ öffnet eine Auswahl (Menüfläche 430 px, Suchfeld). Erst

@@ -275,13 +275,10 @@
     cyan: ["#00b0f0", "#003d54", 0.7],
     yellow: ["#ffff00", "#5c5c00", 0.75],
     white: ["#ffffff", "#141414", 0.5],
-    grey: ["#c4c4c4", "#141414", 0.55],
     black: ["#141414", "#ededed", 0.5],
   };
-  // 0.30: eine Farbreihe für Textkarten und Notizen. Grün und Violett bleiben nur
-  // für ältere Karten lesbar; RANDOM_TONES leitet Karten ohne eigene Farbe ab
-  // (unverändert, damit bestehende Karten ihre Farbe behalten).
-  const TONES = ["white", "grey", "yellow", "red", "cyan", "black"];
+  // 0.30: eine Farbreihe für Textkarten und Notizen, aus den bestehenden Farben
+  const TONES = ["red", "green", "violet", "cyan", "yellow", "white", "black"];
   const RANDOM_TONES = ["red", "green", "violet", "cyan", "yellow"];
   // Eigene Farbe (beim Markieren im Web bestimmt oder in den Details gewählt),
   // sonst fest aus dem Inhalt abgeleitet
@@ -2663,40 +2660,46 @@
   }
 
   // Zonen beim Ziehen: Deckkraft, gilt in der App und (über die Bibliothek) in der Extension
-  // Glas: ein Regler für Fenster und Zonenkarten überall (i18n.js glass)
-  function renderGlassSettings() {
-    const I = window.ArchiverI18n;
-    const b = block(t("setGlass"));
-    b.appendChild(blockRow(el("div", "p-block-text", t("setGlassText"))));
+  // Glas: Fenster und Zonen beim Ziehen, je ein Regler in 5-%-Schritten (i18n.js)
+  function glassSlider(title, text, min, get, set, standard, onLive) {
+    const b = block(t(title));
+    b.appendChild(blockRow(el("div", "p-block-text", t(text))));
     const value = mono("", "p-alpha-value");
     const slider = el("input", "p-volume p-alpha");
     slider.type = "range";
-    slider.min = "40";
+    slider.min = String(min);
     slider.max = "100";
-    slider.step = "1";
-    const standard = () => (document.documentElement.classList.contains("light") ? 0.78 : 0.72);
-    const show = (v) => {
+    slider.step = "5";
+    const show = () => {
+      const v = get() ?? standard();
       slider.value = String(Math.round(v * 100));
       value.textContent = Math.round(v * 100) + " %";
     };
-    show(I.glass() ?? standard());
-    const tell = () => invoke("set_look", { radius: pref("radius", "round"), alpha: I.glass() == null ? null : I.glassZone(I.glass()) }).catch(() => {});
+    show();
     slider.addEventListener("input", () => {
-      I.setGlass(Number(slider.value) / 100);
-      show(I.glass());
-      previewDropbar(true);
+      set(Number(slider.value) / 100);
+      show();
+      if (onLive) onLive(true);
     });
     slider.addEventListener("change", () => {
-      tell();
-      setTimeout(() => previewDropbar(false), 900);
+      lookToLibrary();
+      if (onLive) setTimeout(() => onLive(false), 900);
     });
     const reset = button("p-link", t("setGlassReset"), () => {
-      I.setGlass(null);
-      show(standard());
-      tell();
+      set(null);
+      show();
+      lookToLibrary();
     });
     b.appendChild(blockRow(t("setDragAlpha"), [slider, value, reset]));
     return b;
+  }
+
+  function renderGlassSettings() {
+    const I = window.ArchiverI18n;
+    const frag = document.createDocumentFragment();
+    frag.appendChild(glassSlider("setGlass", "setGlassText", 40, I.glass, I.setGlass, () => (document.documentElement.classList.contains("light") ? 0.78 : 0.72)));
+    frag.appendChild(glassSlider("setZoneGlass", "setZoneGlassText", 30, I.zoneGlass, I.setZoneGlass, () => 0.97, previewDropbar));
+    return frag;
   }
 
   // Ganz unten: Freischalt-Code eingeben, danach nur noch ein ruhiges „Freigeschaltet“
@@ -2759,6 +2762,7 @@
     slider.type = "range";
     slider.min = "0";
     slider.max = "100";
+    slider.step = "5";
     slider.value = String(Math.round(pref("startSoundVolume", 0.35) * 100));
     slider.addEventListener("change", () => {
       setPref("startSoundVolume", Number(slider.value) / 100);
@@ -6799,8 +6803,7 @@
   // Ecken und Glas an die Bibliothek melden: Die Extension zeigt dieselben Werte
   function lookToLibrary() {
     const I = window.ArchiverI18n;
-    const g = I.glass();
-    invoke("set_look", { radius: pref("radius", "round"), alpha: g == null ? null : I.glassZone(g) }).catch(() => {});
+    invoke("set_look", { radius: pref("radius", "round"), alpha: I.zoneGlass() }).catch(() => {});
   }
 
   function showApp() {
