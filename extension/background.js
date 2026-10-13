@@ -292,6 +292,29 @@ async function publishAppZones(zones) {
   if (JSON.stringify(appZones) !== JSON.stringify(zones)) await storageSet({ appZones: zones });
 }
 
+// Ganze Seite als eine Datei (MHTML, offline lesbar), über den Transfer-Ordner
+// an die App. Scheitert es (chrome://, Store-Seiten), bleibt es bei der Karte.
+async function archiveTab(tabId) {
+  try {
+    const blob = await chrome.pageCapture.saveAsMHTML({ tabId });
+    if (!blob || !blob.size) return null;
+    const bytes = new Uint8Array(await blob.arrayBuffer());
+    let bin = "";
+    for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+    const url = "data:multipart/related;base64," + btoa(bin);
+    const id = await startDownload({ url, filename: `${TRANSFER_DIR}/page-${Date.now()}.mhtml`, saveAs: false, conflictAction: "uniquify" });
+    const { state, item } = await waitForDownload(id);
+    if (state !== "complete" || !item) {
+      await eraseDownload(id);
+      return null;
+    }
+    return { id, filename: item.filename };
+  } catch (err) {
+    console.warn("[Archiver] Seite nicht gesichert:", err.message);
+    return null;
+  }
+}
+
 async function saveToApp(message, sender) {
   const tabId = sender.tab && sender.tab.id;
   const frameId = sender.frameId;
@@ -313,8 +336,11 @@ async function saveToApp(message, sender) {
     sendFeedback(tabId, frameId, t("downloadFailed"), false);
     return { ok: false };
   }
+  // Linkkarte der offenen Seite: die ganze Seite als MHTML mitgeben
+  const archive = message.archivePage && tabId != null ? await archiveTab(tabId) : null;
   try {
     const r = await hostCall("save", {
+      archive: archive && archive.filename,
       file: item.filename,
       name: filename.split("/").pop(),
       zone,
@@ -328,7 +354,8 @@ async function saveToApp(message, sender) {
       library: message.library || null,
     });
     if (!message.library) rememberRecent(zone || bridgeDefaultZone);
-    await eraseDownload(id); // Datei liegt jetzt in der Bibliothek, Eintrag im Verlauf wäre tot
+    await eraseDownload(id);
+    if (archive) await eraseDownload(archive.id); // Datei liegt jetzt in der Bibliothek, Eintrag im Verlauf wäre tot
     // Gleiches Bild schon in der Bibliothek: nicht doppelt ablegen, sagen wo es liegt
     const where = String(r.path || "").split("/").slice(0, -1).pop() || "Unsorted";
     if (r.duplicate) sendFeedback(tabId, frameId, t("duplicateIn", [where]), true);

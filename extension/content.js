@@ -359,12 +359,13 @@
     else saveCard(linkCard(title, link), folder, { pageUrl: link, pageTitle: title || link });
   }
 
-  // Die geöffnete Seite selbst: PDF als Datei, Video als Karte, sonst Bildschirmfoto
+  // Die geöffnete Seite selbst: PDF als Datei, Video als Karte, sonst Linkkarte
+  // mit der ganzen Seite als MHTML dahinter (3.23.0, background.js archiveTab)
   function savePage(folder, source) {
     const video = videoPageUrl(location.href);
     if (isPdfPage()) saveMediaFile(location.href, folder, { pageUrl: location.href, pageTitle: document.title || null });
     else if (video) saveVideoCard(video, folder, document.title.replace(/ - YouTube$/, ""));
-    else sendSave({ type: "capture-visible", folder, ...source });
+    else saveCard(linkCard(document.title.trim(), location.href), folder, { ...source, pageUrl: location.href, pageTitle: document.title || null, archivePage: true });
   }
 
   function contextSave(msg) {

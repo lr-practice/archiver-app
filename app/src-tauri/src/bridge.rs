@@ -383,6 +383,14 @@ fn handle(msg: &Value, slot: &mut Vec<(PathBuf, Library)>) -> Result<Value, Stri
                     let _ = lib.set_note(&[hash], &patch);
                 }
             }
+            // Linkkarte der offenen Seite: die ganze Seite als MHTML dahinter (0.30.1)
+            if let Some(archive) = str_arg(msg, "archive") {
+                let archive = PathBuf::from(archive);
+                if let Ok((_, hash)) = lib.locate(&path) {
+                    let _ = lib.attach_web_archive(&hash, &archive);
+                }
+                remove_if_empty(archive.parent());
+            }
             Ok(json!({ "path": path, "duplicate": duplicate }))
         }
         "list" => {

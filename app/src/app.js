@@ -4569,6 +4569,12 @@
     // Quelle nur, wenn es eine gibt; der blaue Knopf zeigt die Zone
     $("lbSourceBtn").hidden = !item.pageUrl;
     $("lbSourceBtn").title = item.pageUrl || "";
+    // 0.30.1: Linkkarte mit gesicherter Seite (Extension, aus der Adressleiste gezogen)
+    $("lbOfflineBtn").hidden = true;
+    if (item.pageUrl && item.hash)
+      invoke("web_archive", { hash: item.hash })
+        .then((p) => lightboxItem() === item && ($("lbOfflineBtn").hidden = !p))
+        .catch(() => {});
     const zoneName = $("lbAction").querySelector(".lb-action-zone");
     if (zoneName) zoneName.textContent = zoneLabel(item.zone);
     $("lbBrowse").hidden = list.length < 2;
@@ -5034,6 +5040,12 @@
     $("lbSourceBtn").addEventListener("click", () => {
       const item = lightboxItem();
       if (item && item.pageUrl) invoke("open_url", { url: sourceUrl(item) }).catch(fail);
+    });
+    $("lbOfflineBtn").textContent = t("offlinePage");
+    $("lbOfflineBtn").title = t("offlinePageTitle");
+    $("lbOfflineBtn").addEventListener("click", () => {
+      const item = lightboxItem();
+      if (item) invoke("open_web_archive", { hash: item.hash }).catch(fail);
     });
     const action = $("lbAction");
     action.replaceChildren(el("span", "lb-dot"), el("span", "lb-action-zone", "Archiver"));

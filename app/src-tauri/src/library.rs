@@ -1873,6 +1873,30 @@ impl Library {
         Ok(true)
     }
 
+    /// Gesicherte Webseite zu einer Linkkarte (0.30.1): .archiver/web/<hash>.mhtml
+    pub fn web_archive(&self, hash: &str) -> Option<PathBuf> {
+        if hash.is_empty() || !hash.chars().all(|c| c.is_ascii_alphanumeric()) {
+            return None;
+        }
+        let p = self.root.join(".archiver").join("web").join(format!("{hash}.mhtml"));
+        p.is_file().then_some(p)
+    }
+
+    /// Legt die von der Extension gesicherte Seite (MHTML) zur Karte mit `hash`.
+    pub fn attach_web_archive(&self, hash: &str, src: &Path) -> Result<()> {
+        if !src.is_file() || hash.is_empty() || !hash.chars().all(|c| c.is_ascii_alphanumeric()) {
+            return Ok(());
+        }
+        let dir = self.root.join(".archiver").join("web");
+        fs::create_dir_all(&dir).map_err(err)?;
+        let dst = dir.join(format!("{hash}.mhtml"));
+        if fs::rename(src, &dst).is_err() {
+            fs::copy(src, &dst).map_err(err)?;
+            let _ = fs::remove_file(src);
+        }
+        Ok(())
+    }
+
     /// Text einer Textkarte ändern (0.30.1, in der Lightbox editierbar).
     /// Das PNG bleibt, wie es gesichert wurde; die App zeigt den Text.
     pub fn set_quote(&self, hash: &str, quote: &str) -> Result<()> {

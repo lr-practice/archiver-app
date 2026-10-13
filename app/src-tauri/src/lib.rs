@@ -1032,6 +1032,23 @@ async fn export_pdf(
     Ok(Some(path.to_string_lossy().into_owned()))
 }
 
+/// Gesicherte Webseite einer Linkkarte (0.30.1), sonst None
+#[tauri::command]
+async fn web_archive(state: State<'_, AppState>, hash: String) -> Result<Option<String>, String> {
+    Ok(current(&state)?.web_archive(&hash).map(|p| p.to_string_lossy().into_owned()))
+}
+
+/// MHTML öffnet Chrome; ohne Chrome das Standardprogramm
+#[tauri::command]
+async fn open_web_archive(app: AppHandle, state: State<'_, AppState>, hash: String) -> Result<(), String> {
+    let path = current(&state)?.web_archive(&hash).ok_or("Keine gesicherte Seite")?;
+    let path = path.to_string_lossy().into_owned();
+    if app.opener().open_path(path.clone(), Some("Google Chrome")).is_err() {
+        app.opener().open_path(path, None::<&str>).map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
 #[tauri::command]
 async fn open_file(app: AppHandle, path: String) -> Result<(), String> {
     app.opener().open_path(path, None::<&str>).map_err(|e| e.to_string())
@@ -1292,6 +1309,8 @@ pub fn run() {
             export_package,
             set_note,
             set_quote,
+            web_archive,
+            open_web_archive,
             set_item_order,
             set_sharing,
             copy_images,
