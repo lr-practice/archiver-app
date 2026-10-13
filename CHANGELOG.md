@@ -1,5 +1,32 @@
 # Changelog
 
+## App 0.30.0 · Extension 3.22.0 (13.10.2026)
+
+Handbuch:
+- ≡ › Handbuch zeigt alle Funktionen von App, Extension, Observer und Tray samt Tastenkürzeln, auf Deutsch und Englisch. Dasselbe steht unter archiver-app.com/manual.
+
+Extension-Hinweis:
+- Ist die Extension veraltet, steht oben rechts „Extension 3.22.0 ist da (Laden)“. Hat sich nach zwei Tagen noch keine gemeldet, steht dort „Keine Extension verbunden“.
+- Einstellungen › Extension zeigt die verbundene Version. Der erste Start wartet, bis sich die Extension wirklich meldet.
+
+Verdichtet:
+- Die Navigation steht fest oben links. Ordner in einer Zone erscheinen nur noch als Karten, ⌘R lädt sofort neu.
+- Der Startton ist standardmäßig aus.
+- Video und Audio beim Öffnen abspielen hat einen gemeinsamen Schalter.
+- „Unterordner als Zonen“ entfällt, Unterordner erscheinen als Ordner in der Zone.
+- Das Feld „Notiz“ in den Details ist im Bildtext aufgegangen. Vorhandene Notizen werden an den Bildtext angehängt. Suche, PDF („Mit Bildtext“) und Paket lesen den Bildtext.
+- Textkarten und Notizen haben eine gemeinsame Farbreihe: Rot, Grün, Violett, Cyan, Gelb, Weiß und Schwarz.
+
+Aussehen:
+- Regler „Glas“ für die Fenster von App, Tray und Observer. Der Observer ist jetzt ebenfalls ein Glasfenster.
+- Regler „Zonen beim Ziehen“ für die Karten in App, Zonenleiste und Extension. Alle Regler laufen in 5-%-Schritten.
+- Die Ecken aus Einstellungen › Aussehen gelten auch in der Zonenleiste und in der Extension.
+
+Extension 3.22.0:
+- Meldet der App ihre Version.
+- Hell mit den Werten der App, Ecken und Zonen-Deckkraft wie in der App.
+- Enthält 3.21.1: Bilder mit Kommas in der Adresse (Substack, Cloudinary) laden in voller Größe.
+
 ## Extension 3.21.1 (13.10.2026, lokal, erscheint mit der nächsten App)
 
 - Bilder mit Kommas in der Adresse (Substack, Cloudinary) laden wieder in voller Größe. Bisher brach die Bildadresse am Komma ab und der Download schlug fehl, etwa beim Sichern von Bild und markiertem Text.
