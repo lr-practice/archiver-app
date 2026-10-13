@@ -413,33 +413,116 @@ pub struct DeletedItem {
     pub deleted_at: i64,
 }
 
+/// Schreibt über eine eigene Temp-Datei und benennt dann um. App und Brücke
+/// (eigener Prozess) können gleichzeitig schreiben, darum ist der Name je
+/// Prozess und Aufruf eindeutig (0.31.0).
+pub(crate) fn write_atomic(target: &Path, body: &[u8]) -> Result<()> {
+    static SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let n = SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let name = target.file_name().and_then(|n| n.to_str()).unwrap_or("datei");
+    let tmp = target.with_file_name(format!(".{name}.{}-{n}.tmp", std::process::id()));
+    if let Err(e) = fs::write(&tmp, body).and_then(|_| fs::rename(&tmp, target)) {
+        let _ = fs::remove_file(&tmp);
+        return Err(format!("{}: {e}", target.display()));
+    }
+    Ok(())
+}
+
+/// Dieselbe Datei auf der Platte (gleiches Gerät und gleicher Inode)
+fn same_file(a: &Path, b: &Path) -> bool {
+    match (a.canonicalize(), b.canonicalize()) {
+        (Ok(a), Ok(b)) => a == b,
+        _ => false,
+    }
+}
+
 /// Verknüpfung (Symlink), ohne ihr zu folgen
 fn is_link(p: &Path) -> bool {
     fs::symlink_metadata(p).map(|m| m.file_type().is_symlink()).unwrap_or(false)
 }
 
 /// Verschieben, notfalls über Volumegrenzen (kopieren, dann löschen)
-fn move_file(src: &Path, dst: &Path) -> Result<()> {
-    if fs::rename(src, dst).is_ok() {
-        return Ok(());
+/// Verschiebt eine Datei oder einen Ordner nach `dst` (das es noch nicht gibt).
+/// Nur über Laufwerksgrenzen (EXDEV, etwa externe Zonen) wird kopiert und erst
+/// danach gelöscht. Dabei gilt: Was nicht vollständig kopiert ist, bleibt am
+/// alten Ort, und es wird nur gelöscht, was kopiert wurde (0.31.0). Andere
+/// Fehler (Rechte, schreibgeschützt) werden gemeldet, nicht umgangen.
+pub(crate) fn move_file(src: &Path, dst: &Path) -> Result<()> {
+    match fs::rename(src, dst) {
+        Ok(()) => return Ok(()),
+        Err(e) if e.kind() == std::io::ErrorKind::CrossesDevices => {}
+        Err(e) => return Err(format!("{}: {e}", src.display())),
     }
-    if src.is_dir() {
-        for entry in WalkDir::new(src).min_depth(1).into_iter().filter_map(|e| e.ok()) {
+    if fs::symlink_metadata(src).map_err(err)?.is_dir() {
+        copy_dir_then_remove(src, dst)
+    } else {
+        copy_file(src, dst)?;
+        if let Err(e) = fs::remove_file(src) {
+            // Original lässt sich nicht entfernen (schreibgeschützt): Kopie zurücknehmen
+            let _ = fs::remove_file(dst);
+            return Err(format!("{}: {e}", src.display()));
+        }
+        Ok(())
+    }
+}
+
+/// Kopiert über eine versteckte Teildatei und benennt erst um, wenn alles da ist.
+fn copy_file(src: &Path, dst: &Path) -> Result<()> {
+    let name = dst.file_name().and_then(|n| n.to_str()).unwrap_or("datei");
+    let part = dst.with_file_name(format!(".{name}.archiver-part"));
+    let done = fs::copy(src, &part).map_err(err).and_then(|n| {
+        let want = fs::metadata(src).map_err(err)?.len();
+        if n == want {
+            Ok(())
+        } else {
+            Err(format!("{}: unvollständig kopiert ({n} von {want} Byte)", src.display()))
+        }
+    });
+    if let Err(e) = done.and_then(|_| fs::rename(&part, dst).map_err(err)) {
+        let _ = fs::remove_file(&part);
+        return Err(e);
+    }
+    Ok(())
+}
+
+fn copy_dir_then_remove(src: &Path, dst: &Path) -> Result<()> {
+    let mut copied = Vec::new();
+    let mut dirs = Vec::new();
+    let result = (|| -> Result<()> {
+        fs::create_dir_all(dst).map_err(err)?;
+        for entry in WalkDir::new(src).min_depth(1) {
+            let entry = entry.map_err(err)?;
             let to = dst.join(entry.path().strip_prefix(src).map_err(err)?);
-            if entry.file_type().is_dir() {
+            let kind = entry.file_type();
+            if kind.is_dir() {
                 fs::create_dir_all(&to).map_err(err)?;
+                dirs.push(entry.path().to_path_buf());
+            } else if kind.is_symlink() {
+                #[cfg(unix)]
+                std::os::unix::fs::symlink(fs::read_link(entry.path()).map_err(err)?, &to).map_err(err)?;
+                copied.push(entry.path().to_path_buf());
             } else {
-                if let Some(d) = to.parent() {
-                    fs::create_dir_all(d).map_err(err)?;
-                }
-                fs::copy(entry.path(), &to).map_err(err)?;
+                copy_file(entry.path(), &to)?;
+                copied.push(entry.path().to_path_buf());
             }
         }
-        fs::remove_dir_all(src).map_err(err)
-    } else {
-        fs::copy(src, dst).map_err(err)?;
-        fs::remove_file(src).map_err(err)
+        Ok(())
+    })();
+    if let Err(e) = result {
+        // Nichts halb verschoben: die neue Kopie verwerfen, das Original bleibt
+        let _ = fs::remove_dir_all(dst);
+        return Err(e);
     }
+    // Nur löschen, was kopiert wurde. Was währenddessen neu hinzukam, bleibt liegen.
+    for f in &copied {
+        let _ = fs::remove_file(f);
+    }
+    dirs.sort_by_key(|d| std::cmp::Reverse(d.components().count()));
+    for d in dirs {
+        let _ = fs::remove_dir(d);
+    }
+    let _ = fs::remove_dir(src);
+    Ok(())
 }
 
 fn write_deleted_hashes(stamp: &Path, hashes: &HashMap<String, String>) -> Result<()> {
@@ -904,7 +987,7 @@ impl Library {
 
     pub(crate) fn write_zone_file(&self, v: &serde_json::Value) -> Result<()> {
         let body = serde_json::to_vec_pretty(v).map_err(err)?;
-        fs::write(self.zone_order_path(), body).map_err(err)
+        write_atomic(&self.zone_order_path(), &body)
     }
 
     fn thumbs_dir(&self) -> PathBuf {
@@ -976,9 +1059,7 @@ impl Library {
         if let Some(dir) = target.parent() {
             fs::create_dir_all(dir).map_err(err)?;
         }
-        let tmp = target.with_extension("json.tmp");
-        fs::write(&tmp, serde_json::to_vec_pretty(&doc).map_err(err)?).map_err(err)?;
-        fs::rename(tmp, target).map_err(err)?;
+        write_atomic(target, &serde_json::to_vec_pretty(&doc).map_err(err)?)?;
         if self.shared {
             *self.people_sig.lock().unwrap() = self.people_signature();
         }
@@ -1589,20 +1670,31 @@ impl Library {
         let stamp = self.deleted_stamp()?;
         let mut done = Vec::new();
         let mut hashes = HashMap::new();
+        let mut failed: Option<String> = None;
         for rel in paths {
             let abs = safe_join(&self.root, rel)?;
             if !abs.is_file() {
                 continue;
             }
             let dst = stamp.join(rel);
-            if let Some(dir) = dst.parent() {
-                fs::create_dir_all(dir).map_err(err)?;
+            // Scheitert eine Datei (schreibgeschützt), gehen die übrigen trotzdem,
+            // und für alle Erledigten werden Hashes und ⌘Z-Liste geschrieben
+            let moved = dst.parent().map_or(Ok(()), |d| fs::create_dir_all(d).map_err(err)).and_then(|_| move_file(&abs, &dst));
+            if let Err(e) = moved {
+                failed.get_or_insert(e);
+                continue;
             }
-            move_file(&abs, &dst)?;
             if let Some(h) = self.hash_of(rel) {
                 hashes.insert(rel.clone(), h);
             }
             done.push((rel.clone(), dst.to_string_lossy().into_owned()));
+        }
+        if done.is_empty() {
+            prune_empty(&stamp);
+            return match failed {
+                Some(e) => Err(e),
+                None => Ok(done),
+            };
         }
         write_deleted_hashes(&stamp, &hashes)?;
         let conn = self.conn.lock().unwrap();
@@ -1618,7 +1710,8 @@ impl Library {
     pub fn restore_items(&self, items: &[(String, String)]) -> Result<usize> {
         let mut n = 0;
         for (rel, from) in items {
-            let src = PathBuf::from(from);
+            // Nur aus „Zuletzt gelöscht“ zurückholen, nie einen beliebigen Pfad
+            let Some(src) = self.inside_deleted(from) else { continue };
             let dst = safe_join(&self.root, rel)?;
             if !src.is_file() {
                 continue;
@@ -1627,10 +1720,7 @@ impl Library {
                 fs::create_dir_all(dir).map_err(err)?;
             }
             let dst = if dst.exists() { unique_path(dst.parent().unwrap_or(&self.root), &file_name(rel)) } else { dst };
-            if fs::rename(&src, &dst).is_err() {
-                fs::copy(&src, &dst).map_err(err)?;
-                let _ = fs::remove_file(&src);
-            }
+            move_file(&src, &dst)?;
             n += 1;
         }
         if n > 0 {
@@ -1660,15 +1750,18 @@ impl Library {
         }
         let src = safe_join(&self.root, zone)?;
         let parent = src.parent().unwrap_or(&self.root).to_path_buf();
-        if src.file_name().and_then(|n| n.to_str()) == Some(name.as_str()) {
+        let current = src.file_name().and_then(|n| n.to_str()).unwrap_or("").to_string();
+        if current == name {
             return Ok(zone.to_string());
         }
-        let dst = unique_path(&parent, &name);
+        // Nur Groß-/Kleinschreibung anders: macOS sieht denselben Ordner, also
+        // direkt umbenennen statt „Fotos 2“ (0.31.0)
+        let dst = if current.to_lowercase() == name.to_lowercase() { parent.join(&name) } else { unique_path(&parent, &name) };
         fs::rename(&src, &dst).map_err(err)?;
         let new_zone = rel_path(&self.root, &dst);
         let conn = self.conn.lock().unwrap();
         conn.execute(
-            "UPDATE item SET path = ?2 || substr(path, length(?1) + 1) WHERE path LIKE ?1 || '/%'",
+            "UPDATE item SET path = ?2 || substr(path, length(?1) + 1) WHERE substr(path, 1, length(?1) + 1) = ?1 || '/'",
             params![zone, new_zone],
         )
         .map_err(err)?;
@@ -1700,7 +1793,7 @@ impl Library {
         let new_path = rel_path(&self.root, &dst);
         let conn = self.conn.lock().unwrap();
         conn.execute(
-            "UPDATE item SET path = ?2 || substr(path, length(?1) + 1) WHERE path LIKE ?1 || '/%'",
+            "UPDATE item SET path = ?2 || substr(path, length(?1) + 1) WHERE substr(path, 1, length(?1) + 1) = ?1 || '/'",
             params![from, new_path],
         )
         .map_err(err)?;
@@ -1794,7 +1887,7 @@ impl Library {
         }
         fs::remove_file(&link).map_err(err)?;
         let conn = self.conn.lock().unwrap();
-        conn.execute("DELETE FROM item WHERE path LIKE ?1 || '/%'", params![zone]).map_err(err)?;
+        conn.execute("DELETE FROM item WHERE substr(path, 1, length(?1) + 1) = ?1 || '/'", params![zone]).map_err(err)?;
         Ok(())
     }
 
@@ -1814,7 +1907,7 @@ impl Library {
         let stamp = self.deleted_stamp()?;
         let hashes: HashMap<String, String> = {
             let conn = self.conn.lock().unwrap();
-            let mut stmt = conn.prepare("SELECT path, hash FROM item WHERE path LIKE ?1 || '/%'").map_err(err)?;
+            let mut stmt = conn.prepare("SELECT path, hash FROM item WHERE substr(path, 1, length(?1) + 1) = ?1 || '/'").map_err(err)?;
             let rows = stmt.query_map(params![zone], |r| Ok((r.get(0)?, r.get(1)?))).map_err(err)?;
             rows.filter_map(|r| r.ok()).collect()
         };
@@ -1825,7 +1918,7 @@ impl Library {
         move_file(&dir, &dst)?;
         write_deleted_hashes(&stamp, &hashes)?;
         let conn = self.conn.lock().unwrap();
-        conn.execute("DELETE FROM item WHERE path LIKE ?1 || '/%'", params![zone]).map_err(err)?;
+        conn.execute("DELETE FROM item WHERE substr(path, 1, length(?1) + 1) = ?1 || '/'", params![zone]).map_err(err)?;
         Ok(())
     }
 
@@ -1928,7 +2021,7 @@ impl Library {
         let base = self.deleted_dir();
         let mut n = 0;
         for f in files {
-            let src = PathBuf::from(f);
+            let Some(src) = self.inside_deleted(f) else { continue };
             let Ok(inside) = src.strip_prefix(&base) else { continue };
             let rel = rel_path(Path::new(""), inside);
             let Some((_, rel)) = rel.split_once('/') else { continue };
@@ -1950,13 +2043,30 @@ impl Library {
         Ok(n)
     }
 
+    /// Pfad aus der Oberfläche, der wirklich unter .archiver/deleted liegt.
+    /// `Path::starts_with` allein ließe `deleted/../../x` durch.
+    fn inside_deleted(&self, f: &str) -> Option<PathBuf> {
+        let p = PathBuf::from(f);
+        if p.components().any(|c| matches!(c, std::path::Component::ParentDir)) {
+            return None;
+        }
+        let base = self.deleted_dir();
+        let real = p.canonicalize().ok()?;
+        let real_base = base.canonicalize().ok()?;
+        if !real.starts_with(&real_base) {
+            return None;
+        }
+        // mit dem Pfad weiterarbeiten, wie ihn die Bibliothek kennt
+        Some(base.join(real.strip_prefix(&real_base).ok()?))
+    }
+
     /// Gelöschte Dateien endgültig entfernen: sie gehen in den Papierkorb des Macs
     pub fn remove_deleted(&self, files: &[String]) -> Result<usize> {
         let base = self.deleted_dir();
         let mut n = 0;
         for f in files {
-            let p = PathBuf::from(f);
-            if p.starts_with(&base) && p != base && p.exists() {
+            let Some(p) = self.inside_deleted(f) else { continue };
+            if p != base && p.exists() {
                 trash::delete(&p).map_err(err)?;
                 n += 1;
             }
@@ -2051,11 +2161,8 @@ impl Library {
         let dir = self.root.join(".archiver").join("web");
         fs::create_dir_all(&dir).map_err(err)?;
         let dst = dir.join(format!("{hash}.mhtml"));
-        if fs::rename(src, &dst).is_err() {
-            fs::copy(src, &dst).map_err(err)?;
-            let _ = fs::remove_file(src);
-        }
-        Ok(())
+        let _ = fs::remove_file(&dst); // ältere Fassung derselben Seite
+        move_file(src, &dst)
     }
 
     /// Text einer Textkarte ändern (0.30.1, in der Lightbox editierbar).
@@ -2066,8 +2173,14 @@ impl Library {
             return Ok(());
         }
         {
+            // Auch ohne Quelle (Textkarte aus dem Finder, Sicherung ohne URL):
+            // sonst verpuffte die Änderung still (0.31.0)
             let conn = self.conn.lock().unwrap();
-            conn.execute("UPDATE source SET quote = ?2 WHERE hash = ?1", params![hash, quote]).map_err(err)?;
+            conn.execute(
+                "INSERT INTO source (hash, quote) VALUES (?1, ?2) ON CONFLICT(hash) DO UPDATE SET quote = ?2",
+                params![hash, quote],
+            )
+            .map_err(err)?;
         }
         self.write_metadata()
     }
@@ -2119,7 +2232,10 @@ impl Library {
                 .map_err(err)?
         };
         if let Some(path) = existing {
-            if self.root.join(&path).is_file() {
+            let known = self.root.join(&path);
+            // Ist `src` selbst die bekannte Datei (Transfer-Ordner liegt in einer
+            // Zone), darf sie nicht als Duplikat gelöscht werden (0.31.0)
+            if known.is_file() && !same_file(&known, src) {
                 let _ = fs::remove_file(src);
                 self.write_metadata()?;
                 return Ok((path, true));
@@ -2129,11 +2245,7 @@ impl Library {
         fs::create_dir_all(&dir).map_err(err)?;
         let name = image_file_name(src, name);
         let dst = unique_path(&dir, &name);
-        if fs::rename(src, &dst).is_err() {
-            // anderes Volume: kopieren, dann Original entfernen
-            fs::copy(src, &dst).map_err(err)?;
-            let _ = fs::remove_file(src);
-        }
+        move_file(src, &dst)?; // anderes Volume: kopieren, dann Original entfernen
         let meta = fs::metadata(&dst).map_err(err)?;
         let mtime = time_ms(meta.modified()).unwrap_or(0);
         let added = source.captured_at.unwrap_or_else(now_ms);
@@ -2543,6 +2655,88 @@ mod tests {
         assert!(lib.scan().is_err());
         fs::rename(&parked, &root).unwrap();
         assert_eq!(lib.items().unwrap().len(), 2);
+    }
+
+    #[test]
+    fn copy_keeps_original_until_complete() {
+        let tmp = tempfile::tempdir().unwrap();
+        let src = tmp.path().join("Zone");
+        write_png(&src.join("a.png"), 4, 4, 10);
+        write_png(&src.join("Sub/b.png"), 4, 4, 20);
+        #[cfg(unix)]
+        std::os::unix::fs::symlink("/nirgends", src.join("link")).unwrap();
+        let dst = tmp.path().join("Ziel");
+        copy_dir_then_remove(&src, &dst).unwrap();
+        assert!(dst.join("a.png").is_file() && dst.join("Sub/b.png").is_file());
+        #[cfg(unix)]
+        assert!(is_link(&dst.join("link")), "Verknüpfung bleibt Verknüpfung");
+        assert!(!src.exists());
+        // Ziel nicht beschreibbar (existiert als Datei): nichts gelöscht, keine Reste
+        let src2 = tmp.path().join("Zwei");
+        write_png(&src2.join("c.png"), 4, 4, 30);
+        let blocked = tmp.path().join("Blockiert");
+        fs::write(&blocked, b"x").unwrap();
+        assert!(copy_dir_then_remove(&src2, &blocked.join("Ziel")).is_err());
+        assert!(src2.join("c.png").is_file(), "Original bleibt");
+        // Einzeldatei: keine Teildatei bleibt liegen
+        let f = tmp.path().join("d.png");
+        write_png(&f, 4, 4, 40);
+        copy_file(&f, &tmp.path().join("Ziel/d.png")).unwrap();
+        assert!(fs::read_dir(tmp.path().join("Ziel")).unwrap().all(|e| !e.unwrap().file_name().to_string_lossy().ends_with(".archiver-part")));
+    }
+
+    #[test]
+    fn prefix_match_is_literal() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path().join("Bib");
+        write_png(&root.join("A_1/x.png"), 4, 4, 10);
+        write_png(&root.join("A 1/y.png"), 4, 4, 20);
+        write_png(&root.join("a_1b/z.png"), 4, 4, 30);
+        let lib = Library::open(&root).unwrap();
+        lib.scan().unwrap();
+        let new = lib.rename_zone("A_1", "Neu").unwrap();
+        let mut paths: Vec<String> = lib.items().unwrap().into_iter().map(|i| i.path).collect();
+        paths.sort();
+        assert_eq!(paths, ["A 1/y.png", "Neu/x.png", "a_1b/z.png"], "nur die umbenannte Zone ändert sich");
+        lib.trash_zone(&new).unwrap();
+        assert_eq!(lib.items().unwrap().len(), 2);
+    }
+
+    #[test]
+    fn quote_without_source_and_adopt_of_known_file() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path().join("Bib");
+        write_png(&root.join("Typo/a.png"), 4, 4, 10);
+        let lib = Library::open(&root).unwrap();
+        lib.scan().unwrap();
+        let (_, hash) = lib.locate("Typo/a.png").unwrap();
+        lib.set_quote(&hash, "Neuer Text").unwrap();
+        let item = lib.items().unwrap().into_iter().next().unwrap();
+        assert_eq!(item.quote.as_deref(), Some("Neuer Text"), "ohne Quelle nicht verpufft");
+
+        // Transfer-Ordner liegt in einer Zone und ist schon indiziert: nicht löschen
+        let transfer = root.join("Typo").join(TRANSFER_DIR);
+        write_png(&transfer.join("b.png"), 4, 4, 50);
+        lib.scan().unwrap();
+        let (path, duplicate) = lib.adopt_file(&transfer.join("b.png"), None, "Typo", &Source::default()).unwrap();
+        assert!(root.join(&path).is_file(), "einzige Kopie bleibt erhalten: {path} {duplicate}");
+    }
+
+    #[test]
+    fn deleted_paths_stay_inside() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path().join("Bib");
+        write_png(&root.join("Typo/a.png"), 4, 4, 10);
+        let outside = tmp.path().join("privat.png");
+        write_png(&outside, 4, 4, 99);
+        let lib = Library::open(&root).unwrap();
+        lib.scan().unwrap();
+        lib.trash_items(&["Typo/a.png".into()]).unwrap();
+        let sneaky = format!("{}/../../../privat.png", lib.deleted_dir().display());
+        assert_eq!(lib.remove_deleted(&[sneaky.clone()]).unwrap(), 0);
+        assert_eq!(lib.restore_deleted(&[sneaky.clone()]).unwrap(), 0);
+        assert_eq!(lib.restore_items(&[("Typo/p.png".into(), outside.to_string_lossy().into_owned())]).unwrap(), 0);
+        assert!(outside.is_file(), "Datei außerhalb unberührt");
     }
 
     #[test]

@@ -650,10 +650,7 @@ async fn close_demo(app: AppHandle, keep: bool) -> Result<usize, String> {
             }
             let name = e.file_name().to_string_lossy().into_owned();
             let dest = library::unique_path(&inbox, &name);
-            if std::fs::rename(e.path(), &dest).is_err() {
-                std::fs::copy(e.path(), &dest).map_err(|e| e.to_string())?;
-                let _ = std::fs::remove_file(e.path());
-            }
+            library::move_file(e.path(), &dest)?;
             moved += 1;
         }
     }
@@ -673,7 +670,7 @@ async fn close_demo(app: AppHandle, keep: bool) -> Result<usize, String> {
 async fn demo_collect(file: String, zone: String) -> Result<(), String> {
     let root = demo_root();
     let src = PathBuf::from(&file);
-    if !src.starts_with(root.join(".web")) || file.contains("..") || zone.contains("..") || zone.starts_with('.') {
+    if !src.starts_with(root.join(".web")) || file.contains("..") || library::check_rel(&zone).is_err() {
         return Err("Ungültiger Pfad".into());
     }
     let name = src.file_name().ok_or("Ungültiger Name")?.to_string_lossy().into_owned();
@@ -958,6 +955,7 @@ async fn trash_zone(app: AppHandle, state: State<'_, AppState>, zone: String) ->
 #[tauri::command]
 async fn reveal_zone(app: AppHandle, state: State<'_, AppState>, zone: String) -> Result<(), String> {
     let lib = current(&state)?;
+    library::check_rel(&zone)?;
     let dir = if zone.is_empty() { lib.root.clone() } else { lib.root.join(&zone) };
     app.opener().open_path(dir.to_string_lossy(), None::<&str>).map_err(|e| e.to_string())
 }
@@ -1107,8 +1105,18 @@ async fn open_web_archive(app: AppHandle, state: State<'_, AppState>, hash: Stri
 }
 
 #[tauri::command]
-async fn open_file(app: AppHandle, path: String) -> Result<(), String> {
-    app.opener().open_path(path, None::<&str>).map_err(|e| e.to_string())
+async fn open_file(app: AppHandle, state: State<'_, AppState>, path: String) -> Result<(), String> {
+    // Nur Objekte der Bibliothek öffnen, nie einen beliebigen Pfad oder ein Programm (0.31.0)
+    let lib = current(&state)?;
+    let rel = PathBuf::from(&path)
+        .strip_prefix(&lib.root)
+        .map(|r| r.to_string_lossy().replace('\\', "/"))
+        .map_err(|_| format!("Nicht in der Bibliothek: {path}"))?;
+    let (abs, _) = lib.locate(&rel)?;
+    if !library::is_media(&abs) || !abs.is_file() {
+        return Err(format!("Kein Objekt: {path}"));
+    }
+    app.opener().open_path(abs.to_string_lossy(), None::<&str>).map_err(|e| e.to_string())
 }
 
 // ---- Updates ----
