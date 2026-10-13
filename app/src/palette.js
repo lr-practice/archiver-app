@@ -38,13 +38,14 @@
     violet: ["#7030a0", "#e2c8f5", 0.75],
     cyan: ["#00b0f0", "#003d54", 0.7],
     yellow: ["#ffff00", "#5c5c00", 0.75],
-    white: ["#f4f3ef", "#141414", 0.5],
+    white: ["#ffffff", "#141414", 0.5],
+    grey: ["#c4c4c4", "#141414", 0.55],
     black: ["#141414", "#ededed", 0.5],
   };
   const RANDOM_TONES = ["red", "green", "violet", "cyan", "yellow"];
   function quoteTone(item) {
     if (QUOTE_TONES[item.tone]) return QUOTE_TONES[item.tone];
-    if (item.format === "md") return QUOTE_TONES.white; // Notiz: Papier
+    if (item.format === "md") return QUOTE_TONES.white; // Notiz: Weiß
     const key = String(item.hash || item.path || "");
     let h = 0;
     for (let i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) >>> 0;

@@ -23,7 +23,7 @@
   --p-faint: #5e5e5e;
   --p-rule: rgba(var(--ink-rgb), 0.1);
   --thumb-bg: #262626;
-  --pal-bg: rgba(28, 28, 28, 0.72);
+  --pal-bg: color-mix(in srgb, rgb(28, 28, 28) calc(var(--win-alpha, 0.72) * 100%), transparent);
   --pal-field: rgba(var(--ink-rgb), 0.07);
   --card: rgba(var(--ink-rgb), 0.055);
   --card-hover: rgba(var(--ink-rgb), 0.08);
@@ -50,7 +50,7 @@ html.light {
   --p-faint: #8f8f8f;
   --p-rule: rgba(0, 0, 0, 0.1);
   --thumb-bg: #e8e8e8;
-  --pal-bg: rgba(244, 244, 244, 0.78);
+  --pal-bg: color-mix(in srgb, rgb(244, 244, 244) calc(var(--win-alpha, 0.78) * 100%), transparent);
   --pal-field: rgba(255, 255, 255, 0.78);
   --card: rgba(0, 0, 0, 0.045);
   --card-hover: rgba(0, 0, 0, 0.07);

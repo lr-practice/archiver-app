@@ -415,7 +415,7 @@ impl Library {
                     source: i.page_url.as_deref().map(domain).filter(|d| !d.is_empty()),
                     quote: i.quote.clone(),
                     label: i.format.to_uppercase(),
-                    note: i.note.clone(),
+                    note: i.caption.clone().or_else(|| i.note.clone()),
                 })
                 .collect();
             let layout = crate::pdf::Layout::auto(sheet_items.len());
@@ -466,7 +466,7 @@ fn csv_cell(s: &str) -> String {
 
 pub fn sources_csv(items: &[Item], files: &[String]) -> String {
     let mut out = String::from(
-        "Datei,Seitentitel,Seite,Bild-URL,Gesichert,Urheber,Lizenz,Nur intern,Notiz,Abgelegt von\n",
+        "Datei,Seitentitel,Seite,Bild-URL,Gesichert,Urheber,Lizenz,Nur intern,Bildtext,Abgelegt von\n",
     );
     for (i, f) in items.iter().zip(files) {
         let row = [
@@ -478,7 +478,7 @@ pub fn sources_csv(items: &[Item], files: &[String]) -> String {
             i.credit.clone().unwrap_or_default(),
             i.license.clone().unwrap_or_default(),
             if i.internal { "ja".into() } else { String::new() },
-            i.note.clone().unwrap_or_default(),
+            i.caption.clone().or_else(|| i.note.clone()).unwrap_or_default(),
             i.added_by.clone().unwrap_or_default(),
         ];
         out.push_str(&row.iter().map(|c| csv_cell(c)).collect::<Vec<_>>().join(","));
@@ -509,7 +509,8 @@ pub fn sources_md(title: &str, meta: &str, items: &[Item], files: &[String]) -> 
         line("Lizenz", i.license.clone());
         line("Nur intern", i.internal.then(|| "ja".to_string()));
         line("Abgelegt von", i.added_by.clone());
-        if let Some(n) = i.note.as_ref().filter(|n| !n.is_empty()) {
+        // 0.30: Bildtext (das frühere Feld „Notiz“ ist darin aufgegangen)
+        if let Some(n) = i.caption.as_ref().or(i.note.as_ref()).filter(|n| !n.is_empty()) {
             out.push_str(&format!("\n> {}\n", n.replace('\n', "\n> ")));
         }
         out.push('\n');

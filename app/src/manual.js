@@ -28,9 +28,9 @@ const MANUAL = {
           { t: "Zone", d: "Raster (quadratisch) oder Original (Seitenverhältnis). Rechts oben die Ordnerkarten, darunter Chips zum Filtern. Mosaik oder Abschnitte je Ordner.", k: ["+", "−"] },
           { t: "Ordner", d: "Rechtsklick: „Neuer Unterordner“ oder „Neuer Unterordner mit Auswahl“. Objekte auf Ordnerkarten ziehen, Ordner in Ordner ziehen. Finder-Ordner ins Fenster ziehen wird Zone oder Unterordner.", k: ["esc", "⌘↑"] },
           { t: "Sortieren", d: "Objekte per Ziehen umsortieren oder in andere Zonen ablegen, per Rechtsklick „Ablegen in“ oder mit den Zifferntasten. Alles lässt sich mehrfach zurücknehmen.", k: ["1–4", "⌘Z"] },
-          { t: "Finden", d: "Sucht in Name, Zone, Quelle und Notiz sowie in erkannten Motiven, Text im Bild und Farben, auch auf Deutsch („Plakat“, „Blau“). Filter nach Art, Farbe, Format, Zeitraum, Doppelten und Notizen.", k: ["⌘F", "/"] },
+          { t: "Finden", d: "Sucht in Name, Zone, Quelle und Bildtext sowie in erkannten Motiven, Text im Bild und Farben, auch auf Deutsch („Plakat“, „Blau“). Filter nach Art, Farbe, Format, Zeitraum, Doppelten und Notizen.", k: ["⌘F", "/"] },
           { t: "Lightbox", d: "Objekt groß, mit Zoom, Player für Audio und Video und PDF seitenweise. Unten Zähler, Zoom, Info, Quelle und „Ablegen in“. Klick neben das Objekt schließt.", k: ["Space", "←", "→", "Z", "T"] },
-          { t: "Details", d: "Seitenblatt mit Name, Maßen, Format, Quelle, Zone, Bildtext, Notiz und Rechten.", k: ["⌘D", "I"] },
+          { t: "Details", d: "Seitenblatt mit Name, Maßen, Format, Quelle, Zone, Bildtext und Rechten.", k: ["⌘D", "I"] },
           { t: "Zuletzt gelöscht", d: "Gelöschtes bleibt 7 Tage in der Bibliothek und lässt sich wiederherstellen. Danach geht es in den Papierkorb des Macs. Letzte Zeile im Index und im ≡-Menü.", k: ["⌫"] },
           { t: "PDF", d: "Auswahl, Zone oder Suche als Kontaktbogen, Plakat oder Moodboard. 1 bis 16 pro Seite, A4 quer oder hoch.", k: ["⌘P"] },
           { t: "Kopieren und ziehen", d: "`⌘C` legt Bilddaten in die Zwischenablage, bei Textkarten Text und Bild. Objekte lassen sich aus Raster und Lightbox in jedes Programm ziehen.", k: ["⌘C"] },
@@ -81,9 +81,9 @@ const MANUAL = {
         id: "text",
         title: "Text und Notizen",
         rows: [
-          { t: "Textkarten", d: "Zitate aus dem Web als farbige Karte. Farbe in den Details änderbar. Liegen als .txt im Zonenordner." },
+          { t: "Textkarten", d: "Zitate aus dem Web als farbige Karte. Farbe in den Details änderbar: Weiß, Grau, Gelb, Rot, Cyan oder Schwarz, dieselbe Reihe wie bei Notizen. Liegen als .txt im Zonenordner." },
           { t: "Notizen", d: "Rechtsklick in eine Zone. In der Lightbox schreibst du direkt auf das Blatt, gesichert wird von selbst. Liegen als .md im Zonenordner. Links neben dem Blatt stehen verknüpfte Objekte.", k: ["⌘⇧N"] },
-          { t: "Bildtext", d: "Beim Sichern markierter Text wird zum Bildtext. In den Details editierbar, `⌘V` mit Text auf ein Bild setzt ihn. In der Lightbox blendet `T` ihn aus.", k: ["⌘V", "T"] },
+          { t: "Bildtext", d: "Beim Sichern markierter Text wird zum Bildtext. Er ist durchsuchbar und wahlweise im PDF. In den Details editierbar, `⌘V` mit Text auf ein Bild setzt ihn. In der Lightbox blendet `T` ihn aus.", k: ["⌘V", "T"] },
         ],
       },
       {
@@ -91,7 +91,6 @@ const MANUAL = {
         title: "Studio",
         lead: "Für Projekte und Teams, unter Einstellungen › Studio.",
         rows: [
-          { t: "Notiz", d: "Feld „Warum diese Referenz?“ in den Details, durchsuchbar und optional im PDF." },
           { t: "Rechte", d: "Urheber, Lizenz und „nur intern“ mit rotem Punkt." },
           { t: "Zone als Paket", d: "Ordner mit Dateien, Quellenliste und Kontaktbogen, über ⋯ › „Als Paket exportieren“." },
           { t: "Geteilte Bibliothek", d: "Auf Server, NAS oder Dropbox. Objekte anderer zeigen ihr Kürzel und einen Punkt bis zum ersten Ansehen." },
@@ -147,9 +146,9 @@ const MANUAL = {
           { t: "Zone", d: "Grid (square) or Original (aspect ratio). Folder cards top right, chips below to filter. Mosaic or sections per folder.", k: ["+", "−"] },
           { t: "Folders", d: "Right-click: “New subfolder” or “New subfolder with selection”. Drag objects onto folder cards, folders into folders. A Finder folder dropped on the window becomes a zone or subfolder.", k: ["esc", "⌘↑"] },
           { t: "Sorting", d: "Drag objects to reorder or into other zones, right-click “Move to”, or use the number keys. Everything can be undone, step by step.", k: ["1–4", "⌘Z"] },
-          { t: "Find", d: "Searches names, zones, sources and notes as well as recognised subjects, text in images and colours. Filters for kind, colour, format, period, duplicates and notes.", k: ["⌘F", "/"] },
+          { t: "Find", d: "Searches names, zones, sources and captions as well as recognised subjects, text in images and colours. Filters for kind, colour, format, period, duplicates and notes.", k: ["⌘F", "/"] },
           { t: "Lightbox", d: "The object large, with zoom, a player for audio and video and PDFs page by page. Below: counter, zoom, info, source and “Move to”. Click beside the object to close.", k: ["Space", "←", "→", "Z", "T"] },
-          { t: "Details", d: "Side sheet with name, size, format, source, zone, caption, note and rights.", k: ["⌘D", "I"] },
+          { t: "Details", d: "Side sheet with name, size, format, source, zone, caption and rights.", k: ["⌘D", "I"] },
           { t: "Recently deleted", d: "Deleted items stay in the library for 7 days and can be restored. After that they go to the Mac’s Trash. Last row of the index and in the ≡ menu.", k: ["⌫"] },
           { t: "PDF", d: "Selection, zone or search as contact sheet, poster or moodboard. 1 to 16 per page, A4 landscape or portrait.", k: ["⌘P"] },
           { t: "Copy and drag", d: "`⌘C` puts image data on the clipboard, for text cards text and image. Drag objects from the grid or the lightbox into any program.", k: ["⌘C"] },
@@ -200,9 +199,9 @@ const MANUAL = {
         id: "text",
         title: "Text and notes",
         rows: [
-          { t: "Text cards", d: "Quotes from the web as coloured cards. Change the colour in the details. Stored as .txt in the zone folder." },
+          { t: "Text cards", d: "Quotes from the web as coloured cards. Change the colour in the details: white, grey, yellow, red, cyan or black, the same row as for notes. Stored as .txt in the zone folder." },
           { t: "Notes", d: "Right-click in a zone. In the lightbox you write straight on the sheet, it saves by itself. Stored as .md in the zone folder. Linked objects sit to the left of the sheet.", k: ["⌘⇧N"] },
-          { t: "Caption", d: "Text selected while saving becomes the caption. Edit it in the details, `⌘V` with text on an image sets it. `T` hides it in the lightbox.", k: ["⌘V", "T"] },
+          { t: "Caption", d: "Text selected while saving becomes the caption. It is searchable and optional in the PDF. Edit it in the details, `⌘V` with text on an image sets it. `T` hides it in the lightbox.", k: ["⌘V", "T"] },
         ],
       },
       {
@@ -210,7 +209,6 @@ const MANUAL = {
         title: "Studio",
         lead: "For projects and teams, under Settings › Studio.",
         rows: [
-          { t: "Note", d: "Field “Why this reference?” in the details, searchable and optional in the PDF." },
           { t: "Rights", d: "Author, licence and “internal only” with a red dot." },
           { t: "Zone as package", d: "Folder with files, source list and contact sheet, via ⋯ › “Export as package”." },
           { t: "Shared library", d: "On a server, NAS or Dropbox. Objects from others show their initials and a dot until first viewed." },

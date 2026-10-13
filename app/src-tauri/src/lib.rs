@@ -908,8 +908,8 @@ async fn move_folder(app: AppHandle, state: State<'_, AppState>, from: String, i
 
 /// Deckkraft der Zonen beim Ziehen (App und Extension)
 #[tauri::command]
-async fn set_radius(state: State<'_, AppState>, radius: String) -> Result<(), String> {
-    current(&state)?.set_look_radius(&radius)
+async fn set_look(state: State<'_, AppState>, radius: String, alpha: Option<f64>) -> Result<(), String> {
+    current(&state)?.set_look(&radius, alpha)
 }
 
 /// Reihenfolge der Zonen und die vier Hot Zones (für die Extension)
@@ -1066,7 +1066,7 @@ fn set_appearance(window: tauri::WebviewWindow, light: bool, radius: Option<f64>
     if let Some(r) = radius.filter(|_| window.label() == system::PALETTE) {
         TRAY_RADIUS.store(r.clamp(0.0, 24.0) as u32, std::sync::atomic::Ordering::Relaxed);
     }
-    if window.label() == "main" || window.label() == system::PALETTE {
+    if window.label() == "main" || window.label() == system::PALETTE || window.label() == viewer::LABEL {
         use tauri::window::{Effect, EffectState, EffectsBuilder};
         let effect = if light { Effect::Sidebar } else { Effect::HudWindow };
         let radius = if window.label() == system::PALETTE { TRAY_RADIUS.load(std::sync::atomic::Ordering::Relaxed) as f64 } else { 0.0 };
@@ -1269,7 +1269,7 @@ pub fn run() {
             set_zone_order,
             set_default_zone,
             set_structure,
-            set_radius,
+            set_look,
             trash_zone,
             reveal_zone,
             import_extension_export,

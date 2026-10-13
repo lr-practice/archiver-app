@@ -36,10 +36,20 @@ pub fn open(app: &AppHandle, path: PathBuf) {
         .title(file_name(&path))
         .inner_size(1100.0, 780.0)
         .min_inner_size(420.0, 320.0)
-        .background_color(tauri::window::Color(18, 18, 18, 255))
         .theme(Some(tauri::Theme::Dark));
+    // 0.30: Glas wie App und Tray; Deckkraft über --win-alpha (Glas-Regler),
+    // Effekt je Hell/Dunkel setzt set_appearance
     #[cfg(target_os = "macos")]
-    let builder = builder.title_bar_style(tauri::TitleBarStyle::Overlay).hidden_title(true);
+    let builder = {
+        use tauri::window::{Effect, EffectState, EffectsBuilder};
+        builder
+            .title_bar_style(tauri::TitleBarStyle::Overlay)
+            .hidden_title(true)
+            .transparent(true)
+            .effects(EffectsBuilder::new().effect(Effect::HudWindow).state(EffectState::Active).build())
+    };
+    #[cfg(not(target_os = "macos"))]
+    let builder = builder.background_color(tauri::window::Color(18, 18, 18, 255));
     if let Ok(win) = builder.build() {
         let _ = win.set_focus();
     }

@@ -338,6 +338,7 @@ fn handle(msg: &Value, slot: &mut Vec<(PathBuf, Library)>) -> Result<Value, Stri
             Ok(json!({
                 "zones": zones,
                 "hot": hot,
+                "alpha": lib.look_alpha(),
                 "radius": lib.look_radius(),
                 "default": lib.default_zone(),
                 "folders": folders,

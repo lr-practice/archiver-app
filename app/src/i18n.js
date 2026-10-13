@@ -358,6 +358,7 @@
       tone_cyan: "Cyan",
       tone_yellow: "Yellow",
       tone_white: "White",
+      tone_grey: "Grey",
       notePlaceholder: "Why this reference?",
       rights: "Rights",
       credit: "Author",
@@ -373,7 +374,7 @@
       orderReset: "Reset order",
       orderSaved: "Order saved",
       pdfStyleMoodboard: "Moodboard",
-      pdfCaptionsNotes: "With note",
+      pdfCaptionsNotes: "With caption",
       pdfBoardBg: "Background",
       pdfBoardLight: "Light",
       pdfBoardDark: "Dark",
@@ -437,6 +438,9 @@
       setStructure: "Folder structure",
       setSubzones: "Subfolders as zones",
       setAutoplay: "Play video and audio on open",
+      setGlass: "Glass",
+      setGlassText: "How much windows and zone cards let the desktop show through. Applies to the app, Tray, zone bar, Observer and extension.",
+      setGlassReset: "Default",
       setAutoplayVideo: "Play video on open",
       setAutoplayAudio: "Play audio on open",
       setSubzonesOff: "Off",
@@ -910,6 +914,7 @@
       tone_cyan: "Cyan",
       tone_yellow: "Gelb",
       tone_white: "Weiß",
+      tone_grey: "Grau",
       notePlaceholder: "Warum diese Referenz?",
       rights: "Rechte",
       credit: "Urheber",
@@ -925,7 +930,7 @@
       orderReset: "Reihenfolge zurücksetzen",
       orderSaved: "Reihenfolge gesichert",
       pdfStyleMoodboard: "Moodboard",
-      pdfCaptionsNotes: "Mit Notiz",
+      pdfCaptionsNotes: "Mit Bildtext",
       pdfBoardBg: "Hintergrund",
       pdfBoardLight: "Hell",
       pdfBoardDark: "Dunkel",
@@ -989,6 +994,9 @@
       setStructure: "Ordnerstruktur",
       setSubzones: "Unterordner als Zonen",
       setAutoplay: "Video und Audio beim Öffnen abspielen",
+      setGlass: "Glas",
+      setGlassText: "Wie stark Fenster und Zonenkarten durchscheinen. Gilt in App, Tray, Zonenleiste, Observer und Extension.",
+      setGlassReset: "Standard",
       setAutoplayVideo: "Video beim Öffnen abspielen",
       setAutoplayAudio: "Audio beim Öffnen abspielen",
       setSubzonesOff: "Aus",
@@ -1168,5 +1176,41 @@
     if (e.key === "archiver.scheme") applyScheme();
   });
 
-  global.ArchiverI18n = { t, lang, theme, setTheme, applyTheme, scheme, setScheme };
+  // Glas (Einstellungen › Aussehen, 0.30): ein Regler für Fenster und Zonenkarten.
+  // Gilt in App, Tray, Zonenleiste, Observer und über die Bibliothek in der Extension.
+  // null = Standard: Fenster wie der Tray (Dunkel 72 %, Hell 78 %), Zonenkarten 97 %.
+  function glass() {
+    try {
+      const v = JSON.parse(localStorage.getItem("archiver.glass"));
+      if (typeof v === "number") return Math.min(1, Math.max(0.4, v));
+    } catch (e) {}
+    return null;
+  }
+  function glassZone(v) {
+    return v == null ? 0.97 : Math.min(1, Math.round((v + 0.25) * 100) / 100);
+  }
+  function applyGlass() {
+    const v = glass();
+    const style = document.documentElement.style;
+    if (v == null) {
+      style.removeProperty("--win-alpha");
+      style.removeProperty("--zone-alpha");
+    } else {
+      style.setProperty("--win-alpha", String(v));
+      style.setProperty("--zone-alpha", String(glassZone(v)));
+    }
+  }
+  function setGlass(v) {
+    try {
+      if (v == null) localStorage.removeItem("archiver.glass");
+      else localStorage.setItem("archiver.glass", JSON.stringify(v));
+    } catch (e) {}
+    applyGlass();
+  }
+  applyGlass();
+  global.addEventListener("storage", (e) => {
+    if (e.key === "archiver.glass") applyGlass();
+  });
+
+  global.ArchiverI18n = { t, lang, theme, setTheme, applyTheme, scheme, setScheme, glass, glassZone, setGlass };
 })(window);

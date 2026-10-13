@@ -696,6 +696,14 @@ impl Library {
         let _ = conn.execute("ALTER TABLE note ADD COLUMN tone TEXT", []);
         // ab 0.29: Bildtext
         let _ = conn.execute("ALTER TABLE note ADD COLUMN caption TEXT", []);
+        // ab 0.30: Das Feld „Notiz“ geht im Bildtext auf (hängt sich an einen vorhandenen
+        // Bildtext an). Läuft bei jedem Öffnen, betrifft nur noch nicht übernommene Zeilen.
+        let _ = conn.execute(
+            "UPDATE note SET caption = CASE WHEN caption IS NULL OR trim(caption) = '' THEN note \
+             ELSE caption || char(10) || char(10) || note END, note = NULL \
+             WHERE note IS NOT NULL AND trim(note) <> ''",
+            [],
+        );
         // ab 0.29: Verknüpfungen einer Notiz
         let _ = conn.execute("ALTER TABLE note ADD COLUMN links TEXT", []);
         // ab 0.12: Audio-Eckdaten (ältere Datenbanken bekommen die Spalten nachgereicht)
@@ -847,18 +855,25 @@ impl Library {
         Ok(())
     }
 
-    /// Ecken aus Einstellungen › Aussehen (square, soft, round, xl). Die App
-    /// trägt sie hier ein, damit die Extension dieselbe Stufe zeigt.
+    /// Ecken (square, soft, round, xl) und Deckkraft der Zonenkarten (Glas-Regler,
+    /// None = Standard) aus Einstellungen › Aussehen. Die App trägt sie hier ein,
+    /// damit die Extension dieselben Werte zeigt.
     pub fn look_radius(&self) -> Option<String> {
         self.zone_file().get("radius").and_then(|r| r.as_str()).map(String::from)
     }
 
-    pub fn set_look_radius(&self, radius: &str) -> Result<()> {
-        if self.look_radius().as_deref() == Some(radius) {
+    pub fn look_alpha(&self) -> Option<f64> {
+        self.zone_file().get("alpha").and_then(|a| a.as_f64())
+    }
+
+    pub fn set_look(&self, radius: &str, alpha: Option<f64>) -> Result<()> {
+        let alpha = alpha.map(|a| a.clamp(0.3, 1.0));
+        if self.look_radius().as_deref() == Some(radius) && self.look_alpha() == alpha {
             return Ok(());
         }
         let mut v = self.zone_file();
         v["radius"] = serde_json::json!(radius);
+        v["alpha"] = serde_json::json!(alpha);
         self.write_zone_file(&v)
     }
 

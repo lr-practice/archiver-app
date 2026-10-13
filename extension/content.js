@@ -246,11 +246,10 @@
   // Farben der Textkarten, gleiche Werte wie in der App (app.js QUOTE_TONES):
   // Hintergrund, Schrift Ton in Ton, Deckkraft für Kennung und Fuß
   const CARD_TONES = {
-    red: ["#ff0000", "#5c0000", 0.7],
-    green: ["#00b050", "#003d1c", 0.7],
-    violet: ["#7030a0", "#e2c8f5", 0.75],
-    cyan: ["#00b0f0", "#003d54", 0.7],
+    // 0.30: Farbreihe wie in der App (Gelb, Rot, Cyan; Weiß, Grau, Schwarz wählt man dort)
     yellow: ["#ffff00", "#5c5c00", 0.75],
+    red: ["#ff0000", "#5c0000", 0.7],
+    cyan: ["#00b0f0", "#003d54", 0.7],
   };
   // Die Farbe wird zu Beginn jeder Markierung zufällig bestimmt (nie zweimal
   // dieselbe hintereinander) und gilt, bis neu markiert wird

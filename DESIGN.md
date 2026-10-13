@@ -24,8 +24,8 @@ gewinnt das obere.
 3. **Eine Entscheidung statt einer Einstellung.** Neue Gestaltungsfragen werden
    entschieden und nicht an die Nutzenden weitergereicht. Bestehende Optionen
    wie Rundung oder Outline wachsen nicht weiter. Seit 0.30 fest: Navigation
-   oben links, Ordner als Karten, Neu laden ohne Welle, Deckkraft von Fenster
-   und Zonenleiste.
+   oben links, Ordner als Karten, Neu laden ohne Welle. Fenster und
+   Zonenkarten haben einen gemeinsamen Glas-Regler statt zweier.
 4. **Eine Sprache für App und Extension.** Was in beiden Oberflächen vorkommt,
    sieht in beiden gleich aus. Beispiele sind die Glasleiste beim Ziehen, die
    Zonenkarten, Geist als Schrift und die Hell- und Dunkel-Werte.
@@ -60,7 +60,7 @@ Bei neuen Regeln gilt:
 | Token | Dunkel | Hell (0.25.0) | Zweck |
 |---|---|---|---|
 | `--bg-solid` | `#1c1c1c` | `#f4f4f4` | Grundfarbe des Fensters, gleich dem Tray (0.28) |
-| `--win-alpha` | 0.72 | 0.78 | Deckkraft über dem Mac-Glas, fest wie im Tray (Regler seit 0.30 entfallen) |
+| `--win-alpha` | 0.72 | 0.78 | Deckkraft über dem Mac-Glas, Standard wie im Tray. Seit 0.30 ein Glas-Regler (Einstellungen › Aussehen, 40–100 %, `archiver.glass`, i18n.js `applyGlass`) für App, Tray, Zonenleiste und Observer |
 | `--bg` | aus `--bg-solid` × `--win-alpha` | dito | Fenster über dem Mac-Glas |
 | `--ink` / `--ink-rgb` | `#ffffff` / `255,255,255` | `#111111` / `17,17,17` | Text und Basis aller Alpha-Flächen |
 | `--ink-inverse` | `#0f0f0f` | `#f4f4f4` | Text auf `--ink`-Flächen (Primärknopf) |
@@ -131,7 +131,7 @@ Ebenen vor: Navigation, Active-Zones-Leiste, Menüs und Ladeplatzhalter.
 | Unschärfe | `blur(24px) saturate(1.4)` | `blur(28px) saturate(0)` |
 | Schatten | `0 14px 44px rgba(0,0,0,.5)` | `0 14px 44px rgba(0,0,0,.16)` |
 | Kante | `inset 0 0 0 1px` ink × 0.07 | `inset 0 0 0 1px` weiß × 0.7 + schwarz × 0.08 auf 0.5 px |
-| Deckkraft | `--zone-alpha` fest 0.97 (Regler seit 0.30 entfallen), App, Zonenleiste und Extension | dito |
+| Deckkraft | `--zone-alpha` = Glas + 0.25, höchstens 1 (Standard 0.97). App, Zonenleiste und Extension (über `zones.json` „alpha“) | dito |
 
 ### 2.5 Bewegung
 
@@ -153,6 +153,9 @@ Für die Bewegung gilt:
 ---
 
 ## 3. Oberflächen
+
+**Observer** (`viewer.*`): seit 0.30 ebenfalls macOS-Glas, Grund
+`#1c1c1c`/`#f4f4f4` × `--win-alpha`.
 
 **App** (`app/src`): Fenster mit macOS-Glas, Navigation oben in der Titelzeile
 auf Höhe der Fensterknöpfe, Bibliotheks-Reiter oben rechts. Startseite mit den
@@ -269,10 +272,11 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
 - **Zweck:** Credits oder Unterschrift zu einem Bild, wie unter einem Bild im
   Magazin. Kommt nur aus Text, den man beim Sichern auf der Seite markiert hat,
   aus dem Feld „Bildtext“ in der Info oder per ⌘V auf ein gewähltes Bild.
+  Seit 0.30 ist das frühere Studio-Feld „Notiz“ darin aufgegangen (wird beim
+  Öffnen der Bibliothek angehängt). Durchsuchbar, im PDF „Mit Bildtext“.
 - **Form:** Drei Zeilen: Kennung in Geist Mono 10/11 px, Versalien, `--p-dim`
   (Zone—Nummer Position/Anzahl, etwa TYPO—02 3/7), Text in Geist 13 px (Raster,
-  zwei Zeilen) bzw. 17 px (Lightbox), Notiz 11/13 px fett mit „Notiz:“ in
-  `--p-dim`.
+  zwei Zeilen) bzw. 17 px (Lightbox).
 - **Raster:** Nur in „Original“ mit dem Chip „(+ Text)“, unter dem Bild in
   derselben Spalte. Bilder ohne Text bleiben stumm.
 - **Lightbox:** Links neben dem Bild, Unterkante bündig, rechte Kante 40 px vor
@@ -287,13 +291,15 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
   ⌘⇧N; sie öffnet sich gleich in der Lightbox, der Titel ist markiert.
 - **Raster:** Ein Blatt wie die Textkarte (4.6): Kennung NOTIZ · Datum in Mono,
   Titel fett (6,4 cqw, höchstens drei Zeilen), Text darunter normal, Fuß mit
-  „n verknüpft“. Grundton Papier (`white`), keine Zufallsfarbe. In „Original“
+  „n verknüpft“. Grundton Weiß (`white`), keine Zufallsfarbe. In „Original“
   steht das Blatt hochkant 3 : 4.
 - **Lightbox:** Papier max. 620 × 760 px, Innenrand 48/52 px. Kennung NOTIZ ·
   Zone · Datum (Mono 11 px), Titel 30 px/600, Text 17 px/1,45, Fuß mit Wörtern
   und „Gesichert“. Geschrieben wird direkt auf dem Blatt, gesichert nach 0,6 s
-  Pause und beim Verlassen. Die Farbpunkte (Papier, Gelb, Rot, Cyan, Schwarz)
-  stehen in der Leiste. Schwarzes Blatt bekommt eine feine helle Kante.
+  Pause und beim Verlassen. Die Farbpunkte stehen in der Leiste: eine Reihe
+  für Notizen und Textkarten (0.30), Weiß `#ffffff`, Grau `#c4c4c4`, Gelb, Rot,
+  Cyan, Schwarz. Die Extension wählt beim Markieren zufällig aus Gelb, Rot und
+  Cyan; Grün und Violett bleiben nur für ältere Karten. Schwarzes Blatt bekommt eine feine helle Kante.
 - **Verknüpfungen:** Spalte 40 px links neben dem Blatt, oben bündig, 150 px
   breit: Mono-Kennung „Verknüpft (n)“, Kacheln 72 px in zwei Reihen, „+“ als
   Rahmenkachel. „+“ öffnet eine Auswahl (Menüfläche 430 px, Suchfeld). Erst
@@ -309,8 +315,8 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
 - **Zweck:** Per Kürzel (Standard ⌥ Space, Einstellungen › Tray) über
   jedem Programm Zonen und Objekte holen, etwa in einen InDesign-Rahmen.
 - **Form:** 860 × 620 px, macOS-Glas, Suchfeld 17 px oben. Grund `--pal-bg`
-  (Dunkel rgb 28 × 0.72, Hell rgb 244 × 0.78) ist seit 0.28 auch der Standard
-  des App-Fensters (2.1). Hell/Dunkel und Ecken folgen Einstellungen › Aussehen;
+  (Dunkel rgb 28 × `--win-alpha` 0.72, Hell rgb 244 × 0.78) ist seit 0.28 auch
+  der Standard des App-Fensters und folgt seit 0.30 dem Glas-Regler (2.1). Hell/Dunkel und Ecken folgen Einstellungen › Aussehen;
   die Fensterecke ist eckig 0, klein 6, mittel 12 (Standard), groß 18 px.
   Start: Active Zones als Zonenkarten (4.4) mit 01–04 und „Active Zone“,
   darunter der Index als flachere Karten (8:3). Zone: Active Zones als Reiter,

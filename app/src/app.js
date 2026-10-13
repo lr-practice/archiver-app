@@ -68,13 +68,10 @@
   }
 
   // Auswahl: ruhige gestrichelte Outline oder eine, die langsam um das Objekt läuft
-  // Fensterhintergrund (Mac): wie stark die Farbe die macOS-Unschärfe deckt, getrennt von den Zonen
-  // 0.28: Standard ist das Glas des Trays (Dunkel 72 %, Hell 78 %), immer aktiv
-  function applyWinAlpha(v) {
-    const root = document.documentElement;
-    root.dataset.winalpha = "on";
-    if (typeof v !== "number") root.style.removeProperty("--win-alpha");
-    else root.style.setProperty("--win-alpha", String(v));
+  // Fensterhintergrund (Mac): --win-alpha deckt die macOS-Unschärfe. Den Wert setzt
+  // seit 0.30 der Glas-Regler (i18n.js applyGlass), Standard wie der Tray.
+  function applyWinAlpha() {
+    document.documentElement.dataset.winalpha = "on";
   }
 
   function applyFocusAnim(on) {
@@ -100,7 +97,7 @@
   // Studio-Funktionen (Einstellungen › Studio): jede einzeln abschaltbar, Standard an.
   // Die geteilte Bibliothek ist kein Schalter hier, sie hängt an der Bibliothek selbst.
   // Schaltbare Studio-Werkzeuge. Moodboard und eigene Reihenfolge sind seit 0.24.6 immer an.
-  const FEATURES = ["notes", "rights", "package"];
+  const FEATURES = ["rights", "package"]; // „notes“ (Feld Notiz) ist seit 0.30 Teil des Bildtexts
   function feat(id) {
     if (!FEATURES.includes(id)) return true;
     return pref("feat." + id, true) !== false;
@@ -149,7 +146,7 @@
   applyRadius(pref("radius", "round"));
   applyTopFade(pref("topFade", "fade"));
   applyFocusAnim(pref("focusAnim", false));
-  applyWinAlpha(null);
+  applyWinAlpha();
 
   const state = {
     root: "",
@@ -277,15 +274,20 @@
     violet: ["#7030a0", "#e2c8f5", 0.75],
     cyan: ["#00b0f0", "#003d54", 0.7],
     yellow: ["#ffff00", "#5c5c00", 0.75],
-    white: ["#f4f3ef", "#141414", 0.5],
+    white: ["#ffffff", "#141414", 0.5],
+    grey: ["#c4c4c4", "#141414", 0.55],
     black: ["#141414", "#ededed", 0.5],
   };
+  // 0.30: eine Farbreihe für Textkarten und Notizen. Grün und Violett bleiben nur
+  // für ältere Karten lesbar; RANDOM_TONES leitet Karten ohne eigene Farbe ab
+  // (unverändert, damit bestehende Karten ihre Farbe behalten).
+  const TONES = ["white", "grey", "yellow", "red", "cyan", "black"];
   const RANDOM_TONES = ["red", "green", "violet", "cyan", "yellow"];
   // Eigene Farbe (beim Markieren im Web bestimmt oder in den Details gewählt),
   // sonst fest aus dem Inhalt abgeleitet
   function quoteTone(item) {
     if (QUOTE_TONES[item.tone]) return QUOTE_TONES[item.tone];
-    if (isNote(item)) return QUOTE_TONES.white; // Notizen: Papier, bis eine Farbe gewählt ist
+    if (isNote(item)) return QUOTE_TONES.white; // Notizen: Weiß, bis eine Farbe gewählt ist
     const key = String(item.hash || item.path || "");
     let h = 0;
     for (let i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) >>> 0;
@@ -540,7 +542,7 @@
       zone: tokens(item.zone),
       site: tokens(domainOf(item.pageUrl) + " " + domainOf(item.imageUrl)),
       labels: String(item.labels || "").toLowerCase().split(",").map((l) => l.trim()).filter(Boolean),
-      text: tokens([item.text, item.quote, feat("notes") ? item.note : "", feat("rights") ? item.credit : "", item.addedBy].join(" ")),
+      text: tokens([item.text, item.quote, item.caption, feat("rights") ? item.credit : "", item.addedBy].join(" ")),
       colors,
     };
     return item._idx;
@@ -2457,7 +2459,7 @@
             (id) => {
               setPref("radius", id);
               applyRadius(id);
-              invoke("set_radius", { radius: id }).catch(() => {});
+              lookToLibrary();
               rerender();
             }
           )
@@ -2484,6 +2486,7 @@
         )
       );
       wrap.appendChild(look);
+      wrap.appendChild(renderGlassSettings());
     }
 
     // Start: Öffnung und Startton gehören zum selben Moment
@@ -2597,7 +2600,6 @@
     wrap.appendChild(el("p", "p-block-hint p-studio-lead", t("setStudioText")));
     const tools = block(t("featTools"));
     for (const [id, title, text] of [
-      ["notes", "featNotes", "featNotesText"],
       ["rights", "featRights", "featRightsText"],
       ["package", "featPackage", "featPackageText"],
     ]) {
@@ -2661,6 +2663,42 @@
   }
 
   // Zonen beim Ziehen: Deckkraft, gilt in der App und (über die Bibliothek) in der Extension
+  // Glas: ein Regler für Fenster und Zonenkarten überall (i18n.js glass)
+  function renderGlassSettings() {
+    const I = window.ArchiverI18n;
+    const b = block(t("setGlass"));
+    b.appendChild(blockRow(el("div", "p-block-text", t("setGlassText"))));
+    const value = mono("", "p-alpha-value");
+    const slider = el("input", "p-volume p-alpha");
+    slider.type = "range";
+    slider.min = "40";
+    slider.max = "100";
+    slider.step = "1";
+    const standard = () => (document.documentElement.classList.contains("light") ? 0.78 : 0.72);
+    const show = (v) => {
+      slider.value = String(Math.round(v * 100));
+      value.textContent = Math.round(v * 100) + " %";
+    };
+    show(I.glass() ?? standard());
+    const tell = () => invoke("set_look", { radius: pref("radius", "round"), alpha: I.glass() == null ? null : I.glassZone(I.glass()) }).catch(() => {});
+    slider.addEventListener("input", () => {
+      I.setGlass(Number(slider.value) / 100);
+      show(I.glass());
+      previewDropbar(true);
+    });
+    slider.addEventListener("change", () => {
+      tell();
+      setTimeout(() => previewDropbar(false), 900);
+    });
+    const reset = button("p-link", t("setGlassReset"), () => {
+      I.setGlass(null);
+      show(standard());
+      tell();
+    });
+    b.appendChild(blockRow(t("setDragAlpha"), [slider, value, reset]));
+    return b;
+  }
+
   // Ganz unten: Freischalt-Code eingeben, danach nur noch ein ruhiges „Freigeschaltet“
   function renderUnlock() {
     const b = block(t("unlockTitle"));
@@ -3286,7 +3324,7 @@
     return pref("captions", true) !== false;
   }
   function hasCaption(item) {
-    return !!(item && (item.caption || (feat("notes") && item.note)));
+    return !!(item && item.caption);
   }
 
   // Kennung wie im Magazin: Zone—Nummer Position/Anzahl, etwa TYPO—02 3/7
@@ -3299,11 +3337,6 @@
     const box = el("div", cls);
     box.appendChild(el("div", "cap-id", captionId(item, i, total)));
     if (item.caption) box.appendChild(el("div", "cap-text", item.caption));
-    if (feat("notes") && item.note) {
-      const note = el("div", "cap-note");
-      note.append(el("span", "cap-note-label", t("note") + ": "), document.createTextNode(item.note));
-      box.appendChild(note);
-    }
     return box;
   }
 
@@ -3905,7 +3938,7 @@
   // ---- Notiz-Objekte (0.29): ein Blatt im Raster, geschrieben wird in der Lightbox ----
   // Der Text liegt als .md in der Zone. Erste Zeile = Titel (beim Verlassen auch
   // Dateiname), Verknüpfungen stehen links neben dem Blatt.
-  const NOTE_TONES = ["white", "yellow", "red", "cyan", "black"];
+  const NOTE_TONES = TONES;
   function isNote(item) {
     return !!item && kindOf(item) === "note";
   }
@@ -4572,7 +4605,6 @@
     if (isNote(item)) inner.appendChild(lbBlock(t("noteLabelTitle"), [lbRow(t("noteLinks"), String(linkedItems(item).length)), lbRow(t("toneLabel"), tonePicker(item))]));
     else if (quoteOf(item)) inner.appendChild(lbBlock(t("quote"), [quoteBox(item, "lb-quote"), lbRow(t("toneLabel"), tonePicker(item))]));
     if (!quoteOf(item)) inner.appendChild(lbBlock(t("captionTitle"), [noteField(item, "caption", t("captionPlaceholder"), true)]));
-    if (feat("notes")) inner.appendChild(lbBlock(t("note"), [noteField(item, "note", t("notePlaceholder"), true)]));
 
     let source = null;
     if (item.pageUrl) {
@@ -4680,7 +4712,7 @@
   function tonePicker(item) {
     const row = el("div", "tone-picker");
     const current = toneKey(item);
-    for (const key of isNote(item) ? NOTE_TONES : [...RANDOM_TONES, "white"]) {
+    for (const key of TONES) {
       const b = el("button", "tone-dot" + (key === current ? " active" : ""));
       b.type = "button";
       b.title = t("tone_" + key);
@@ -5349,7 +5381,7 @@
       source: i.quote ? i.pageTitle || null : [i.artist, i.album].filter(Boolean).join(" · ") || domainOf(i.pageUrl) || null,
       quote: i.quote || null,
       label: String(i.format || "").toUpperCase(),
-      note: feat("notes") ? i.note || null : null,
+      note: i.caption || null, // PDF „Mit Bildtext“
     };
   }
 
@@ -5450,7 +5482,7 @@
       captions: pref("pdfCaptions", true),
       poster: pref("pdfPoster", false),
       board: feat("moodboard") && pref("pdfBoard", false),
-      notes: feat("notes") && pref("pdfNotes", false),
+      notes: pref("pdfNotes", false),
       dark: pref("pdfBoardDark", false),
     };
     if (preset && preset.poster) opts.board = false;
@@ -5599,7 +5631,7 @@
       const capChips = [];
       if (!opts.board) capChips.push(chip("(" + t("setOn") + ")", capMode === "on", () => setCaps(true, false)));
       capChips.push(chip("(" + t("setOff") + ")", capMode === "off", () => setCaps(false, false)));
-      if (feat("notes") && !opts.poster) capChips.push(chip("(" + t("pdfCaptionsNotes") + ")", capMode === "note", () => setCaps(true, true)));
+      if (!opts.poster) capChips.push(chip("(" + t("pdfCaptionsNotes") + ")", capMode === "note", () => setCaps(true, true)));
       captionRow.replaceChildren(...capChips);
       const { cols, rows } = grid();
       const pages = opts.board ? 1 : Math.max(1, Math.ceil(items.length / (cols * rows)));
@@ -6764,6 +6796,13 @@
     }, 600);
   }
 
+  // Ecken und Glas an die Bibliothek melden: Die Extension zeigt dieselben Werte
+  function lookToLibrary() {
+    const I = window.ArchiverI18n;
+    const g = I.glass();
+    invoke("set_look", { radius: pref("radius", "round"), alpha: g == null ? null : I.glassZone(g) }).catch(() => {});
+  }
+
   function showApp() {
     $("welcome").hidden = true;
     $("app").hidden = false;
@@ -6778,7 +6817,7 @@
         if (reopen.includes(":")) openSettingsSection(reopen.split(":")[1]);
       }
       // Ecken an die Bibliothek melden, die Extension zeigt dieselbe Stufe
-      invoke("set_radius", { radius: pref("radius", "round") }).catch(() => {});
+      lookToLibrary();
       // 0.30: „Unterordner als Zonen“ gibt es nicht mehr, Unterordner sind Ordner in der Zone
       if (state.structure && state.structure.subzones)
         invoke("set_structure", { structure: { ...state.structure, subzones: false } })
