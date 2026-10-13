@@ -908,13 +908,8 @@ async fn move_folder(app: AppHandle, state: State<'_, AppState>, from: String, i
 
 /// Deckkraft der Zonen beim Ziehen (App und Extension)
 #[tauri::command]
-async fn set_drag_alpha(state: State<'_, AppState>, alpha: f64) -> Result<(), String> {
-    current(&state)?.set_drag_alpha(alpha)
-}
-
-#[tauri::command]
-async fn get_drag_alpha(state: State<'_, AppState>) -> Result<Option<f64>, String> {
-    Ok(current(&state)?.drag_alpha())
+async fn set_radius(state: State<'_, AppState>, radius: String) -> Result<(), String> {
+    current(&state)?.set_look_radius(&radius)
 }
 
 /// Reihenfolge der Zonen und die vier Hot Zones (für die Extension)
@@ -1274,8 +1269,7 @@ pub fn run() {
             set_zone_order,
             set_default_zone,
             set_structure,
-            set_drag_alpha,
-            get_drag_alpha,
+            set_radius,
             trash_zone,
             reveal_zone,
             import_extension_export,

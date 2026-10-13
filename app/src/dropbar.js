@@ -46,6 +46,10 @@
   }
 
   async function load() {
+    // Ecken wie in der App (Einstellungen › Aussehen), Werte aus palette.css
+    const radius = pref("radius", "round");
+    if (radius && radius !== "round") document.documentElement.dataset.radius = radius;
+    else delete document.documentElement.dataset.radius;
     if (!state.dirty && state.snap) return;
     try {
       state.snap = await invoke("snapshot");
@@ -57,8 +61,6 @@
   }
 
   function render() {
-    const alpha = pref("zoneAlpha", null);
-    if (typeof alpha === "number") document.documentElement.style.setProperty("--zone-alpha", String(alpha));
     const bar = $("bar");
     bar.classList.remove("leaving");
     bar.replaceChildren(

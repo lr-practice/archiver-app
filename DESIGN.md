@@ -1,6 +1,6 @@
 # Archiver – Design-System
 
-Stand: App 0.29.1 · Extension 3.22.0
+Stand: App 0.29.1 (+ 0.30 im Bau) · Extension 3.22.0
 
 Diese Datei hält fest, wie Archiver aussieht und warum. Sie gilt für die Mac-App
 (`app/src`) und die Chrome-Extension (`extension/`). Wer an der Oberfläche
@@ -23,7 +23,9 @@ gewinnt das obere.
    weniger als eine mehr.
 3. **Eine Entscheidung statt einer Einstellung.** Neue Gestaltungsfragen werden
    entschieden und nicht an die Nutzenden weitergereicht. Bestehende Optionen
-   wie Rundung, Outline oder Navigation-Position wachsen nicht weiter.
+   wie Rundung oder Outline wachsen nicht weiter. Seit 0.30 fest: Navigation
+   oben links, Ordner als Karten, Neu laden ohne Welle, Deckkraft von Fenster
+   und Zonenleiste.
 4. **Eine Sprache für App und Extension.** Was in beiden Oberflächen vorkommt,
    sieht in beiden gleich aus. Beispiele sind die Glasleiste beim Ziehen, die
    Zonenkarten, Geist als Schrift und die Hell- und Dunkel-Werte.
@@ -58,7 +60,7 @@ Bei neuen Regeln gilt:
 | Token | Dunkel | Hell (0.25.0) | Zweck |
 |---|---|---|---|
 | `--bg-solid` | `#1c1c1c` | `#f4f4f4` | Grundfarbe des Fensters, gleich dem Tray (0.28) |
-| `--win-alpha` | 0.72 | 0.78 | Deckkraft über dem Mac-Glas, Standard wie im Tray; Regler in Einstellungen › Aussehen |
+| `--win-alpha` | 0.72 | 0.78 | Deckkraft über dem Mac-Glas, fest wie im Tray (Regler seit 0.30 entfallen) |
 | `--bg` | aus `--bg-solid` × `--win-alpha` | dito | Fenster über dem Mac-Glas |
 | `--ink` / `--ink-rgb` | `#ffffff` / `255,255,255` | `#111111` / `17,17,17` | Text und Basis aller Alpha-Flächen |
 | `--ink-inverse` | `#0f0f0f` | `#f4f4f4` | Text auf `--ink`-Flächen (Primärknopf) |
@@ -109,7 +111,7 @@ Für die Typografie gilt:
 | Token | Wert | Zweck |
 |---|---|---|
 | `--r-lg` / `--r-md` / `--r-sm` | 8 / 6 / 5 px | Karten, Menüs, kleine Flächen |
-| Rundung „Eckig“ / „Weich“ / „Rund“ | 0 / 4 / 14 px (`data-radius`) | Einstellung, keine weiteren Stufen |
+| Rundung „Eckig“ / „Weich“ / „Rund“ / „Sehr rund“ | `--r-lg` 0 / 4 / 8 / 14 px (`data-radius`) | Einstellung, keine weiteren Stufen. Gilt seit 0.30 auch in Tray, Zonenleiste und Extension (über die Bibliothek gemeldet) |
 | Pille | 999 px | Navigation, Pillen |
 | Objekt (Bild) | 0 | Bilder bleiben rechteckig, wie das Original |
 | `--p-pad` | 40 px | Seitenrand |
@@ -129,7 +131,7 @@ Ebenen vor: Navigation, Active-Zones-Leiste, Menüs und Ladeplatzhalter.
 | Unschärfe | `blur(24px) saturate(1.4)` | `blur(28px) saturate(0)` |
 | Schatten | `0 14px 44px rgba(0,0,0,.5)` | `0 14px 44px rgba(0,0,0,.16)` |
 | Kante | `inset 0 0 0 1px` ink × 0.07 | `inset 0 0 0 1px` weiß × 0.7 + schwarz × 0.08 auf 0.5 px |
-| Deckkraft | Regler `--zone-alpha` (Standard 0.97) | dito |
+| Deckkraft | `--zone-alpha` fest 0.97 (Regler seit 0.30 entfallen), App, Zonenleiste und Extension | dito |
 
 ### 2.5 Bewegung
 
@@ -210,8 +212,8 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
 - **Nicht:** Keine Rahmenlinie. Die Karte setzt sich nur über die Fläche ab.
 
 ### 4.5 Ordnerkarte (`.p-folder-card`)
-- **Zweck:** Unterordner neben dem Zonen-Titel, als Karten (3/6) oder als
-  Liste (2/6). Klick betritt den Ordner (Titel wird zum Pfad), die Chips
+- **Zweck:** Unterordner neben dem Zonen-Titel als Karten (3/6, die Liste
+  entfällt seit 0.30). Klick betritt den Ordner (Titel wird zum Pfad), die Chips
   links filtern nur und lassen Titel und Karten stehen.
 - **Form:** Wie die Zonenkarte, ein Sechstel breit. Aktiv zeigt sie den Ring.
   Auch leere Ordner haben eine Karte (0 Objekte).
@@ -384,13 +386,16 @@ Diese Punkte stehen hier, damit niemand sie für Absicht hält. Behoben werden
 sie nur auf ausdrückliches Go.
 
 - **Die Extension hat ihre Farben fest im Code und nutzt keine Tokens.**
-  Folgende Werte weichen von der App ab:
-  - Hellgrund der Extension `#f5f5f5` statt `#f4f4f4`
-  - Sekundärtext hell `#707070` (`gallery.css`, `:host(.light)`) statt `#5c5c5c`
-  - Akzentlinie `#7c86ff` statt `--glow-rgb` (`#5b7cff`)
-
-  Ziel: Die Tabellen in Abschnitt 2 werden als Variablen in `overlay.css` und
-  `gallery.css` auf `:host` gespiegelt.
+  Seit 3.22.0 stimmen die Werte mit der App überein (Hellgrund `#f4f4f4`,
+  Sekundärtext `#5c5c5c`, Tertiär `#8f8f8f`, Karte schwarz × 0.045/0.07,
+  Navigation weißes Glas, Menü `rgba(250,250,250,.97)`, Akzent `#5b7cff`).
+  Ecken laufen über `--r-lg/--r-md/--r-sm` mit `data-radius` wie in der App.
+  Ziel bleibt: Die Tabellen in Abschnitt 2 werden als Variablen in
+  `overlay.css` und `gallery.css` auf `:host` gespiegelt.
+- **Tote Regeln nach 0.30:** In `app.css` stehen noch Regeln für
+  `data-nav` (Navigation-Positionen), `.p-head-row.is-list` (Ordner als
+  Liste) und die Welle beim Neu laden. Sie greifen nicht mehr und können beim
+  nächsten Aufräumen weg.
 - **`app.css` ist nach Versionen geschichtet.** Komponenten wie `.p-nav` oder
   `.p-dropbar` sind mehrfach definiert, und weiter unten überschreibt. Bei
   Änderungen gilt deshalb immer der letzte Block. Abschnitte sind mit

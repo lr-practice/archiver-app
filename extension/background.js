@@ -276,6 +276,10 @@ async function getZones() {
       const alpha = typeof r.alpha === "number" ? r.alpha : null;
       const { appZoneAlpha } = await storageGet({ appZoneAlpha: null });
       if (appZoneAlpha !== alpha) await storageSet({ appZoneAlpha: alpha });
+      // Ecken aus der App (square, soft, round, xl), gelten in Overlay und Galerie
+      const radius = typeof r.radius === "string" ? r.radius : null;
+      const { appRadius } = await storageGet({ appRadius: null });
+      if (appRadius !== radius) await storageSet({ appRadius: radius });
       return { app: true, library: info.name, zones, hot };
     } catch {}
   }

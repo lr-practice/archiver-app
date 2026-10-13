@@ -847,14 +847,18 @@ impl Library {
         Ok(())
     }
 
-    /// Deckkraft der Zonen beim Ziehen (0.3–1.0), gilt in App und Extension.
-    pub fn drag_alpha(&self) -> Option<f64> {
-        self.zone_file().get("alpha").and_then(|a| a.as_f64())
+    /// Ecken aus Einstellungen › Aussehen (square, soft, round, xl). Die App
+    /// trägt sie hier ein, damit die Extension dieselbe Stufe zeigt.
+    pub fn look_radius(&self) -> Option<String> {
+        self.zone_file().get("radius").and_then(|r| r.as_str()).map(String::from)
     }
 
-    pub fn set_drag_alpha(&self, alpha: f64) -> Result<()> {
+    pub fn set_look_radius(&self, radius: &str) -> Result<()> {
+        if self.look_radius().as_deref() == Some(radius) {
+            return Ok(());
+        }
         let mut v = self.zone_file();
-        v["alpha"] = serde_json::json!(alpha.clamp(0.3, 1.0));
+        v["radius"] = serde_json::json!(radius);
         self.write_zone_file(&v)
     }
 

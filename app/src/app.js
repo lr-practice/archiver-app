@@ -82,13 +82,6 @@
     else delete document.documentElement.dataset.focusanim;
   }
 
-  // Position der Navigation: oben/unten, jeweils links, Mitte, rechts
-  const NAV_POS = ["tl", "tc", "tr", "bl", "bc", "br"];
-  function applyNavPos(id) {
-    if (id && id !== "tl" && NAV_POS.includes(id)) document.documentElement.dataset.nav = id;
-    else delete document.documentElement.dataset.nav;
-  }
-
   function pref(key, fallback) {
     try {
       const v = localStorage.getItem("archiver." + key);
@@ -156,8 +149,7 @@
   applyRadius(pref("radius", "round"));
   applyTopFade(pref("topFade", "fade"));
   applyFocusAnim(pref("focusAnim", false));
-  applyWinAlpha(pref("winGlass", null));
-  applyNavPos(pref("navPos", "tl"));
+  applyWinAlpha(null);
 
   const state = {
     root: "",
@@ -443,31 +435,9 @@
 
   let pendingRender = false;
 
-  // ⌘R: Bibliothek neu einlesen. Mit „Welle“ blenden die sichtbaren Objekte
-  // diagonal von oben links nach unten rechts ein, schnell und ohne Einzelauftritt.
+  // ⌘R: Bibliothek neu einlesen
   async function reloadObjects() {
     await refresh();
-    if (pref("reloadAnim", "plain") === "wave") reloadWave(document.getElementById("zones") || document.body);
-  }
-
-  function reloadWave(root) {
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-    const vw = window.innerWidth;
-    const vh = window.innerHeight;
-    const nodes = root.querySelectorAll(".card, .p-card, .p-row:not(.p-row-head), .p-block-row");
-    for (const n of nodes) {
-      const r = n.getBoundingClientRect();
-      if (r.bottom < 0 || r.top > vh || r.width === 0) continue;
-      const d = Math.round((Math.max(0, r.top) / vh) * 160 + (Math.max(0, r.left) / vw) * 120);
-      n.classList.remove("p-wave");
-      void n.offsetWidth;
-      n.style.animationDelay = d + "ms";
-      n.classList.add("p-wave");
-      setTimeout(() => {
-        n.classList.remove("p-wave");
-        n.style.animationDelay = "";
-      }, d + 400);
-    }
   }
 
   function applyThumbs(list) {
@@ -2058,23 +2028,6 @@
     return wrap;
   }
 
-  // 3 × 2 Punkte wie eine Ausrichtungs-Wahl: oben und unten, je links, Mitte, rechts
-  function navPosPicker(rerender) {
-    const cur = pref("navPos", "tl");
-    const wrap = el("span", "p-navpos");
-    for (const id of NAV_POS) {
-      const b = button("p-navpos-dot" + (cur === id ? " on" : ""), "", () => {
-        setPref("navPos", id);
-        applyNavPos(id);
-        rerender();
-      });
-      b.title = t("navPos_" + id);
-      b.setAttribute("aria-label", t("navPos_" + id));
-      wrap.appendChild(b);
-    }
-    return wrap;
-  }
-
   function shortPath(path) {
     return String(path || "").replace(/^\/(Users|home)\/[^/]+/, "~");
   }
@@ -2113,11 +2066,6 @@
       }
       renderPage(true);
     };
-    // Aus: eine Zone pro Ordner der obersten Ebene, Unterordner als Ordner darin
-    const levels = [["off", t("setSubzonesOff")], ["2", t("setLevel", { n: 2 })], ["3", t("setLevel", { n: 3 })]];
-    b.appendChild(
-      blockRow(t("setSubzones"), choice(levels, st.subzones ? String(st.depth) : "off", (id) => save(id === "off" ? { subzones: false } : { subzones: true, depth: Number(id) })))
-    );
     const input = el("input", "p-skip-input");
     input.value = st.skip.join(", ");
     input.spellcheck = false;
@@ -2342,9 +2290,9 @@
       return on + " / " + FEATURES.length + (state.shared ? " · " + t("featSharedOn") : "");
     }
     if (id === "view")
-      return t(state.view === "original" ? "viewOriginal" : "viewGrid") + " · " + t(pref("folderStyle", "cards") === "list" ? "setFolderList" : "setFolderCards");
+      return t(state.view === "original" ? "viewOriginal" : "viewGrid");
     if (id === "start")
-      return t(pref("revealForm", "wave") === "lid" ? "revealLid" : "revealWave") + " · " + t("setSound") + " " + (pref("startSound", true) ? t("setOn") : t("setOff")).toLowerCase();
+      return t(pref("revealForm", "wave") === "lid" ? "revealLid" : "revealWave") + " · " + t("setSound") + " " + (pref("startSound", false) ? t("setOn") : t("setOff")).toLowerCase();
     return lang === "de" ? "Deutsch" : "English";
   }
 
@@ -2463,25 +2411,16 @@
           })
         )
       );
+      // 0.30: ein Schalter für Video und Audio (media.js liest "autoplay")
       view.appendChild(
         blockRow(
-          t("setFolderStyle"),
-          choice([["cards", t("setFolderCards")], ["list", t("setFolderList")]], pref("folderStyle", "cards"), (id) => {
-            setPref("folderStyle", id);
+          t("setAutoplay"),
+          choice([["on", t("setOn")], ["off", t("setOff")]], Media.autoplayOn() ? "on" : "off", (id) => {
+            setPref("autoplay", id === "on");
             rerender();
           })
         )
       );
-      for (const [key, label] of [["autoplayVideo", "setAutoplayVideo"], ["autoplayAudio", "setAutoplayAudio"]])
-        view.appendChild(
-          blockRow(
-            t(label),
-            choice([["on", t("setOn")], ["off", t("setOff")]], pref(key, false) ? "on" : "off", (id) => {
-              setPref(key, id === "on");
-              rerender();
-            })
-          )
-        );
       view.appendChild(
         blockRow(
           t("setInfoPanel"),
@@ -2518,12 +2457,12 @@
             (id) => {
               setPref("radius", id);
               applyRadius(id);
+              invoke("set_radius", { radius: id }).catch(() => {});
               rerender();
             }
           )
         )
       );
-      look.appendChild(blockRow(t("setNavPos"), navPosPicker(rerender)));
       look.appendChild(
         blockRow(
           t("setTopFade"),
@@ -2544,36 +2483,7 @@
           })
         )
       );
-      if (isMac) {
-        const value = mono("", "p-alpha-value");
-        const slider = el("input", "p-volume p-alpha");
-        slider.type = "range";
-        slider.min = "0";
-        slider.max = "100";
-        slider.step = "1";
-        const show = (pct) => (value.textContent = pct + " %");
-        const glass = pref("winGlass", null);
-        const start = Math.round((typeof glass === "number" ? glass : document.documentElement.classList.contains("light") ? 0.78 : 0.72) * 100);
-        slider.value = String(start);
-        show(start);
-        slider.addEventListener("input", () => {
-          show(slider.value);
-          applyWinAlpha(Number(slider.value) / 100);
-        });
-        slider.addEventListener("change", () => setPref("winGlass", Number(slider.value) / 100));
-        look.appendChild(blockRow(t("setWinAlpha"), [slider, value]));
-      }
-      look.appendChild(
-        blockRow(
-          t("setReloadAnim"),
-          choice([["plain", t("setReloadPlain")], ["wave", t("setReloadWave")]], pref("reloadAnim", "plain"), (id) => {
-            setPref("reloadAnim", id);
-            if (id === "wave") reloadWave(document.getElementById("zones") || document.body);
-          })
-        )
-      );
       wrap.appendChild(look);
-      wrap.appendChild(renderDragSettings());
     }
 
     // Start: Öffnung und Startton gehören zum selben Moment
@@ -2751,45 +2661,6 @@
   }
 
   // Zonen beim Ziehen: Deckkraft, gilt in der App und (über die Bibliothek) in der Extension
-  function dragAlpha() {
-    const v = pref("zoneAlpha", null);
-    return typeof v === "number" ? v : null;
-  }
-
-  function applyDragAlpha() {
-    const v = dragAlpha();
-    if (v == null) document.documentElement.style.removeProperty("--zone-alpha");
-    else document.documentElement.style.setProperty("--zone-alpha", String(v));
-  }
-
-  function renderDragSettings() {
-    const b = block(t("setDragZones"));
-    b.appendChild(blockRow(el("div", "p-block-text", t("setDragZonesText"))));
-    const value = mono("", "p-alpha-value");
-    const slider = el("input", "p-volume p-alpha");
-    slider.type = "range";
-    slider.min = "30";
-    slider.max = "100";
-    slider.step = "5";
-    const show = (pct) => (value.textContent = pct + " %");
-    const start = Math.round((dragAlpha() ?? 0.9) * 100);
-    slider.value = String(start);
-    show(start);
-    slider.addEventListener("input", () => {
-      show(slider.value);
-      document.documentElement.style.setProperty("--zone-alpha", String(Number(slider.value) / 100));
-      previewDropbar(true);
-    });
-    slider.addEventListener("change", () => {
-      const v = Number(slider.value) / 100;
-      setPref("zoneAlpha", v);
-      invoke("set_drag_alpha", { alpha: v }).catch(() => {});
-      setTimeout(() => previewDropbar(false), 900);
-    });
-    b.appendChild(blockRow(t("setDragAlpha"), [slider, value]));
-    return b;
-  }
-
   // Ganz unten: Freischalt-Code eingeben, danach nur noch ein ruhiges „Freigeschaltet“
   function renderUnlock() {
     const b = block(t("unlockTitle"));
@@ -2840,7 +2711,7 @@
     b.appendChild(
       blockRow(
         t("setSoundPlay"),
-        choice([["on", t("setOn")], ["off", t("setOff")]], pref("startSound", true) ? "on" : "off", (id) => {
+        choice([["on", t("setOn")], ["off", t("setOff")]], pref("startSound", false) ? "on" : "off", (id) => {
           setPref("startSound", id === "on");
           renderPage(true);
         })
@@ -2886,7 +2757,7 @@
   }
 
   function playStartSound(force) {
-    if (!force && !pref("startSound", true)) return;
+    if (!force && !pref("startSound", false)) return;
     invoke("play_startup_sound", { volume: pref("startSoundVolume", 0.35) }).catch(() => {});
   }
 
@@ -3016,8 +2887,8 @@
         });
       }
       if (hasFolders) {
-        // Kopfzeile am Bildraster: Titel links, Ordner rechts als Karten (3/6) oder Liste (2/6)
-        const row = el("div", "p-head-row " + (pref("folderStyle", "cards") === "list" ? "is-list" : "is-cards"));
+        // Kopfzeile am Bildraster: Titel links, Ordner rechts als Karten (3/6)
+        const row = el("div", "p-head-row is-cards");
         row.append(h, folderCards(zone, folders, here));
         wrap.appendChild(row);
       } else wrap.appendChild(h);
@@ -6897,7 +6768,6 @@
     $("welcome").hidden = true;
     $("app").hidden = false;
     applyLock();
-    applyDragAlpha();
     loadLibraries();
     return refresh().then(() => {
       // Nach dem Sprachwechsel wieder in den Einstellungen landen
@@ -6907,12 +6777,13 @@
         togglePage("settings");
         if (reopen.includes(":")) openSettingsSection(reopen.split(":")[1]);
       }
-      invoke("get_drag_alpha")
-        .then((a) => {
-          if (typeof a === "number") setPref("zoneAlpha", a);
-          applyDragAlpha();
-        })
-        .catch(() => {});
+      // Ecken an die Bibliothek melden, die Extension zeigt dieselbe Stufe
+      invoke("set_radius", { radius: pref("radius", "round") }).catch(() => {});
+      // 0.30: „Unterordner als Zonen“ gibt es nicht mehr, Unterordner sind Ordner in der Zone
+      if (state.structure && state.structure.subzones)
+        invoke("set_structure", { structure: { ...state.structure, subzones: false } })
+          .then(refresh)
+          .catch(() => {});
     });
   }
 

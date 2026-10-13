@@ -112,20 +112,20 @@ body {
 }
 
 /* ---- Hell (erzeugt) ---- */
-/* Hell: Papierweiß, fast schwarze Schrift. Abgeleitet aus den Regeln oben. */
+/* Hell: Werte wie das Hell der App (DESIGN.md 2.1, seit 3.22.0). */
 
 html.light {
-  background: #f5f5f5;
+  background: #f4f4f4;
 }
 
 html.light body {
   color: #111111;
-  background: #f5f5f5;
+  background: #f4f4f4;
 }
 
 html.light .icon-btn,
 :host(.light) .icon-btn {
-  color: #707070;
+  color: #5c5c5c;
 }
 
 html.light .icon-btn:hover,
