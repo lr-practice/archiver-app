@@ -3411,9 +3411,15 @@
     }
   }
 
-  // Zone, die sich nach 7 Tagen leert (ab Werk Unsorted, Einstellungen › Bibliothek, 0.33.1)
+  // Zone, die sich nach 7 Tagen leert (Einstellungen › Bibliothek, 0.33.1): seit 0.35.1
+  // jeder Ordner namens Unsorted, auch selbst angelegt (library.rs is_unsorted)
+  function isUnsortedPath(zonePath) {
+    return String(zonePath || "")
+      .split("/")
+      .some((seg) => seg.trim().replace(/^[\d_.\- ]+/, "").toLowerCase() === "unsorted");
+  }
   function isInbox(zonePath) {
-    return !!state.expireZone && zonePath === state.expireZone && !state.shared;
+    return !!state.expireZone && isUnsortedPath(zonePath) && !state.shared;
   }
   // Resttage eines Objekts in Unsorted, gezählt ab dem ersten Sehen (library.rs inbox_seen)
   function inboxDaysLeft(item) {
@@ -6809,7 +6815,7 @@
       togglePage("settings");
     } else if (mod && (e.key === "z" || e.key === "Z") && !e.shiftKey) {
       undo();
-    } else if (mod && !e.shiftKey && !e.altKey && /^[1-3]$/.test(e.key)) {
+    } else if (mod && !e.shiftKey && !e.altKey && /^[1-4]$/.test(e.key)) {
       switchLibrary(Number(e.key) - 1);
     } else if (mod && (e.key === "p" || e.key === "P")) {
       exportPdf();
@@ -6917,7 +6923,7 @@
   // Fehler des Ordner-Schutzes (lib.rs: check_library) verständlich machen
   function libraryFail(e) {
     const msg = String(e && e.message ? e.message : e);
-    const key = { "library-system": "libSystem", "library-large": "libLarge", "library-slow": "libSlow", "library-active": "libActive", "library-missing": "libMissing" }[msg];
+    const key = { "library-system": "libSystem", "library-large": "libLarge", "library-slow": "libSlow", "library-active": "libActive", "library-missing": "libMissing", "library-file": "libFile" }[msg];
     if (key) toast(t(key), false, 5200);
     else fail(e);
   }
@@ -6953,7 +6959,7 @@
 
   function renderLibrarySlots() {
     const b = block(t("setLibraries"));
-    const slots = state.libraries && state.libraries.length ? state.libraries : [{}, {}, {}];
+    const slots = state.libraries && state.libraries.length ? state.libraries : [{}, {}, {}, {}];
     slots.forEach((slot, i) => {
       const name = el("div", "p-lib-name" + (slot.path ? "" : " empty"), libraryName(slot, i));
       name.title = t("libRename");
@@ -6994,6 +7000,27 @@
           renderPage(true);
         })
       );
+      // Leerer Platz: ganz neue Bibliothek, Ort und Name im Finder (0.35.1)
+      if (!slot.path) {
+        side.push(
+          button("p-link", t("libCreate"), async () => {
+            try {
+              const path = await invoke("create_library", { index: i, name: t("libNewName") });
+              if (!path) return;
+              document.body.classList.add("lib-loading");
+              await invoke("open_library", { path });
+              if (state.page) closePage();
+              await afterLibrarySwitch();
+              await loadLibraries();
+              toast(t("libCreated"));
+            } catch (e) {
+              libraryFail(e);
+            } finally {
+              document.body.classList.remove("lib-loading");
+            }
+          })
+        );
+      }
       if (slot.path && !slot.active) {
         side.push(
           button("p-link p-lib-clear", "✕", async () => {

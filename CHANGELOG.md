@@ -1,5 +1,17 @@
 # Changelog
 
+## App 0.35.1 · Extension 3.28.2
+
+- Extension: Rechtsklick › „Ablegen in …“ sichert wieder. Chrome beendet die
+  Extension im Hintergrund nach kurzer Ruhe, danach fand der Klick sein Ziel
+  nicht mehr. Das Ziel steht jetzt im Menüeintrag selbst.
+- Unsorted leert sich nach 7 Tagen in jedem Ordner namens Unsorted, auch wenn
+  er selbst angelegt, klein geschrieben, nummeriert (00_Unsorted) oder eine
+  Unterzone ist. Bisher zählte nur die genaue Schreibweise „Unsorted“.
+- Vier statt drei Bibliotheken, ⌘4 schaltet auf die vierte.
+- Einstellungen › Bibliothek › „Neue Bibliothek…“: Ort und Name im Finder
+  wählen, Archiver legt den Ordner an und öffnet ihn.
+
 ## Extension 3.28.1 (14.10.2026)
 
 - Mehrfachmarkierung: Wer nach dem Markieren mit ⌘ die zuletzt markierte

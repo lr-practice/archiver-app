@@ -1,6 +1,6 @@
 # Archiver – Design-System
 
-Stand: App 0.35.0 · Extension 3.28.1
+Stand: App 0.35.1 · Extension 3.28.2
 
 Diese Datei hält fest, wie Archiver aussieht und warum. Sie gilt für die Mac-App
 (`app/src`) und die Chrome-Extension (`extension/`). Wer an der Oberfläche
@@ -219,6 +219,9 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
 - **Form:** 2:1, `--r-lg`, Fläche ink × 0.055, beim Hover × 0.08.
   Umsortieren hebt die Karte an (Schatten, 85 %).
 - **Nicht:** Keine Rahmenlinie. Die Karte setzt sich nur über die Fläche ab.
+- **Bibliotheken (0.35.1):** vier Plätze in Einstellungen › Bibliothek, ⌘1–4.
+  Ein leerer Platz bietet „Ordner wählen…“ und „Neue Bibliothek…“ (Ort und Name
+  im Sichern-Dialog des Finders, der Ordner wird angelegt und gleich geöffnet).
 - **Externe Zone (0.30.1):** Ordner außerhalb der Bibliothek, angelegt nur in
   Einstellungen › Bibliothek (Verknüpfung im Bibliotheksordner). Sieht aus wie
   jede Zone; ✕ löst nur die Verknüpfung. Seit 0.31.0 gelten dieselben Schranken
@@ -259,7 +262,9 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
   Dieselben Worte stehen im Index hinter dem Namen (dim) und auf der Zonenkarte
   hinter der Anzahl statt des Datums (0.33.1). Es ist immer Unsorted (0.35, vorher
   wählbar); Einstellungen › Bibliothek „Unsorted nach 7 Tagen gelöscht“ schaltet
-  nur an (ab Werk) oder aus. Unsorted lässt sich nicht umbenennen. Unsorted entsteht mit jeder eigenen Bibliothek, auch in einem
+  nur an (ab Werk) oder aus. Seit 0.35.1 zählt jeder Ordner namens Unsorted, auch
+  selbst angelegt, klein geschrieben, mit Nummer davor oder als Unterzone
+  (`library.rs is_unsorted`). Unsorted lässt sich nicht umbenennen. Unsorted entsteht mit jeder eigenen Bibliothek, auch in einem
   bestehenden Ordnersystem, und steht vorn als erste Active Zone; in einer
   Bibliothek mit eigener Reihenfolge, sobald sie neu dazukommt (0.33.2). Wer sie
   danach verschiebt, behält seinen Platz. Geteilte
@@ -398,7 +403,7 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
   (`.pal-preview` ersetzt den Inhalt, Suchfeld und Fußzeile bleiben). ←→
   blättern, Leertaste oder esc schließen. Im Suchfeld mit Text tippt die
   Leertaste weiter.
-- **⌘1–3:** wechselt die Bibliothek wie in der App.
+- **⌘1–4:** wechselt die Bibliothek wie in der App.
 - **⌘C, ⌘V (0.32):** ⌘C kopiert das gewählte Objekt, ⌘V legt die
   Zwischenablage in die offene Zone. Steht etwas im Suchfeld, gehören beide
   dem Suchfeld.

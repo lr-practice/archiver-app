@@ -336,6 +336,17 @@ fn parent_rel(rel: &str) -> String {
 
 /// Zone eines Ordners: nur die ersten `depth` Ebenen. Tiefere Unterordner
 /// gehören zu ihrer Zone (bestehende Projektordner werden nicht zerfasert).
+/// Zone, die sich nach 7 Tagen leert (0.35.1): jeder Ordner namens Unsorted,
+/// auch selbst angelegt, klein geschrieben, mit Nummer davor (00_Unsorted) oder
+/// als Unterzone (Projekt/Unsorted), dazu alles darin.
+pub fn is_unsorted(zone: &str) -> bool {
+    zone.split('/').any(|seg| {
+        seg.trim()
+            .trim_start_matches(|c: char| c.is_ascii_digit() || matches!(c, '_' | '-' | '.' | ' '))
+            .eq_ignore_ascii_case(INBOX)
+    })
+}
+
 fn zone_at(dir: &str, depth: usize) -> String {
     if dir.is_empty() {
         return String::new();
@@ -997,11 +1008,12 @@ impl Library {
     /// Zone, die sich nach 7 Tagen selbst leert: immer Unsorted (0.35, vorher
     /// wählbar und an die Standard-Zone gebunden). "" heißt aus (Einstellungen ›
     /// Bibliothek); jede frühere Wahl einer anderen Zone gilt als Unsorted.
+    /// Welche Ordner als Unsorted zählen, sagt is_unsorted (0.35.1).
     pub fn expire_zone(&self) -> Option<String> {
         if self.zone_file().get("expire").and_then(|z| z.as_str()) == Some("") {
             return None;
         }
-        self.root.join(INBOX).is_dir().then(|| INBOX.to_string())
+        Some(INBOX.to_string())
     }
 
     pub fn set_expire_zone(&self, zone: &str) -> Result<()> {
@@ -2214,14 +2226,16 @@ impl Library {
         if self.shared {
             return Ok(0);
         }
-        let Some(zone) = self.expire_zone() else { return Ok(0) };
+        if self.expire_zone().is_none() {
+            return Ok(0);
+        }
         let seen_path = self.root.join(META_DIR).join(INBOX_SEEN);
         let seen: HashMap<String, i64> = fs::read(&seen_path).ok().and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or_default();
         let now = now_ms();
         let limit = days * 24 * 3600 * 1000;
         let mut keep = HashMap::new();
         let mut old = Vec::new();
-        for item in self.items()?.into_iter().filter(|i| i.zone == zone) {
+        for item in self.items()?.into_iter().filter(|i| is_unsorted(&i.zone)) {
             let since = seen.get(&item.hash).copied().unwrap_or(now);
             if now - since > limit {
                 old.push(item.path);
@@ -3086,6 +3100,38 @@ mod tests {
         assert!(root.join("Unsorted/neu.png").is_file());
         assert!(root.join("Typo/zone.png").is_file());
         // unter „Zuletzt gelöscht“, also wiederherstellbar
+        assert_eq!(lib.deleted_items().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn unsorted_by_name() {
+        for yes in ["Unsorted", "unsorted", "UNSORTED", "00_Unsorted", "01 unsorted", "Projekt/Unsorted", "Unsorted/Sub"] {
+            assert!(is_unsorted(yes), "{yes}");
+        }
+        for no in ["", "Typo", "Unsortiert", "Unsorted Projekte", "Projekt/Typo"] {
+            assert!(!is_unsorted(no), "{no}");
+        }
+    }
+
+    #[test]
+    fn self_made_unsorted_empties_too() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path().join("Bib");
+        let lib = Library::open(&root).unwrap();
+        let src = tmp.path().join("src");
+        write_png(&src.join("a.png"), 4, 4, 11);
+        write_png(&src.join("b.png"), 4, 4, 12);
+        lib.import_files(&[src.join("a.png")], "unsorted").unwrap();
+        lib.import_files(&[src.join("b.png")], "Typo").unwrap();
+        assert_eq!(lib.expire_inbox(DELETED_DAYS).unwrap(), 0);
+        let seen_path = root.join(META_DIR).join(INBOX_SEEN);
+        let mut seen: HashMap<String, i64> = serde_json::from_slice(&fs::read(&seen_path).unwrap()).unwrap();
+        assert_eq!(seen.len(), 1, "selbst angelegtes unsorted zählt");
+        let a = lib.hash_of("unsorted/a.png").unwrap();
+        seen.insert(a, now_ms() - 8 * 24 * 3600 * 1000);
+        fs::write(&seen_path, serde_json::to_vec(&seen).unwrap()).unwrap();
+        assert_eq!(lib.expire_inbox(DELETED_DAYS).unwrap(), 1);
+        assert!(root.join("Typo/b.png").is_file());
         assert_eq!(lib.deleted_items().unwrap().len(), 1);
     }
 

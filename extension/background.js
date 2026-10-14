@@ -536,7 +536,6 @@ chrome.commands.onCommand.addListener((command, tab) => {
 // Text oder ein Link als Karte, sonst ein Bildschirmfoto der Seite.
 
 const MENU_CONTEXTS = ["page", "image", "selection", "link", "frame", "video", "audio"];
-let menuZones = [];
 let menuBuild = Promise.resolve();
 
 async function menuZoneList() {
@@ -554,13 +553,13 @@ function lastName(path) {
 function buildMenus() {
   // Ein Fehler (App weg, Menü-ID doppelt) darf die Kette nicht für immer blockieren
   menuBuild = menuBuild.catch(() => {}).then(async () => {
-    menuZones = await menuZoneList();
+    const zones = await menuZoneList();
     await new Promise((r) => chrome.contextMenus.removeAll(r));
     chrome.contextMenus.create({ id: "archiver", title: t("menuDropIn"), contexts: MENU_CONTEXTS });
-    // Ziele als flache Liste; die Menü-IDs zeigen auf ihren Index
-    const zones = menuZones;
-    menuZones = [];
-    const target = (entry) => menuZones.push(entry) - 1;
+    // Das Ziel steht in der Menü-ID selbst (zone:<Nr>:<Ordner>). Chrome beendet den
+    // Service Worker nach kurzer Ruhe, eine Liste im Speicher wäre beim Klick leer (3.28.2)
+    let n = 0;
+    const target = (entry) => n++ + ":" + (entry.folder == null ? "\u0000" : entry.folder);
     const pretty = (path) => String(path).split("/").join(" / ");
     // Oben die drei zuletzt genutzten Zonen bzw. Ordner
     const { recentZones } = await storageGet({ recentZones: [] });
@@ -622,9 +621,9 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
     chrome.tabs.sendMessage(tab.id, { type: "capture-start" }, { frameId: 0 }).catch(() => {});
     return;
   }
-  const m = String(info.menuItemId).match(/^zone:(\d+)$/);
-  const zone = m && menuZones[Number(m[1])];
-  if (!zone) return;
+  const m = String(info.menuItemId).match(/^zone:\d+:([\s\S]*)$/);
+  if (!m) return;
+  const zone = { folder: m[1] === "\u0000" ? null : m[1] };
   // Geöffnetes PDF: Chromes PDF-Ansicht hat kein Content-Script, die Datei direkt sichern
   if (!info.srcUrl && !info.linkUrl && !info.selectionText && isPdfUrl(tab.url)) {
     handleDownload({ url: tab.url, folder: zone.folder, pageUrl: tab.url, pageTitle: tab.title }, { tab, frameId: 0 });

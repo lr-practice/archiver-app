@@ -42,7 +42,7 @@ struct Settings {
     /// Name oder Kürzel für „abgelegt von“ und die geteilte Bibliothek
     #[serde(default, skip_serializing_if = "Option::is_none")]
     user: Option<String>,
-    /// Drei feste Plätze für Bibliotheken, zwischen denen man umschaltet
+    /// Vier feste Plätze für Bibliotheken (bis 0.35 drei), zwischen denen man umschaltet
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     libraries: Vec<LibrarySlot>,
     /// Palette per Kürzel und Zonenleiste beim Ziehen am ganzen Mac
@@ -58,13 +58,13 @@ struct LibrarySlot {
     path: Option<String>,
 }
 
-const LIBRARY_SLOTS: usize = 3;
+const LIBRARY_SLOTS: usize = 4;
 
 fn folder_name(path: &str) -> String {
     Path::new(path).file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default()
 }
 
-/// Immer drei Plätze. Ältere Einstellungen: die bisherige Bibliothek wird Platz 1.
+/// Immer vier Plätze. Ältere Einstellungen: die bisherige Bibliothek wird Platz 1.
 fn library_slots(s: &Settings) -> Vec<LibrarySlot> {
     let mut slots = s.libraries.clone();
     slots.resize(LIBRARY_SLOTS, LibrarySlot::default());
@@ -542,6 +542,27 @@ async fn set_library_slot(app: AppHandle, index: usize, name: Option<String>, pa
         settings.libraries = slots;
         Ok(())
     })?
+}
+
+/// Neue, leere Bibliothek (0.35.1): Ort und Name im Finder wählen, Ordner anlegen,
+/// auf den Platz legen. Öffnen übernimmt danach open_library (legt Unsorted an).
+#[tauri::command]
+async fn create_library(app: AppHandle, index: usize, name: String) -> Result<Option<String>, String> {
+    if index >= LIBRARY_SLOTS {
+        return Err("Unbekannter Platz".into());
+    }
+    let mut dialog = app.dialog().file().set_file_name(name.trim());
+    if let Some(dir) = dirs::home_dir() {
+        dialog = dialog.set_directory(dir);
+    }
+    let Some(path) = dialog.blocking_save_file().and_then(|p| p.into_path().ok()) else { return Ok(None) };
+    if path.exists() && !path.is_dir() {
+        return Err("library-file".into());
+    }
+    std::fs::create_dir_all(&path).map_err(|e| e.to_string())?;
+    let p = path.to_string_lossy().into_owned();
+    set_library_slot(app, index, None, Some(p.clone()), None).await?;
+    Ok(Some(p))
 }
 
 // ---- Demo-Bibliothek für die Einstiegstour ----
@@ -1472,6 +1493,7 @@ pub fn run() {
             open_library,
             libraries,
             set_library_slot,
+            create_library,
             open_demo,
             close_demo,
             demo_collect,

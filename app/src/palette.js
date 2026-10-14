@@ -639,7 +639,7 @@
         return pasteHere();
       }
     }
-    if (e.metaKey && !e.altKey && !e.shiftKey && /^[1-3]$/.test(e.key)) {
+    if (e.metaKey && !e.altKey && !e.shiftKey && /^[1-4]$/.test(e.key)) {
       e.preventDefault();
       return switchLibrary(Number(e.key) - 1);
     }
