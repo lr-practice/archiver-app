@@ -1,6 +1,8 @@
 # Changelog
 
-## Nächste Version
+## App 0.32.1 · Extension 3.25.3 (14.10.2026)
+
+Leiste wie in der App, Ziehen überall.
 
 - Zonenleiste am ganzen Mac ist ab Werk aus; einschalten unter
   Einstellungen › Tray. Auch bei bisherigen Installationen aus, bis man sie
