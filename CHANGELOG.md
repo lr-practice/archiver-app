@@ -15,7 +15,6 @@
   Leiste steht beim ersten Ziehen sofort (lädt nicht erst nach) und kommt
   früher auf langsamen Seiten. Nach einem Update zeigt ein noch offener Tab
   keine alte Leiste mehr.
-
 - Extension 3.25.3: Ziehen klappt auch auf Seiten, die Maus- und
   Ziehen-Ereignisse selbst abfangen (Archiver hört jetzt als Erstes zu, am
   Fenster statt am Dokument). Instagram-Stories: gesichert wird die
