@@ -16,6 +16,11 @@
   früher auf langsamen Seiten. Nach einem Update zeigt ein noch offener Tab
   keine alte Leiste mehr.
 
+- Extension 3.25.3: Ziehen klappt auch auf Seiten, die Maus- und
+  Ziehen-Ereignisse selbst abfangen (Archiver hört jetzt als Erstes zu, am
+  Fenster statt am Dokument). Instagram-Stories: gesichert wird die
+  Originaldatei (Foto oder Video) aus den Mediendaten statt eines Standbilds.
+
 ## App 0.32.0 · Extension 3.25.0 (14.10.2026)
 
 Ablegen, ohne dass etwas im Weg ist.

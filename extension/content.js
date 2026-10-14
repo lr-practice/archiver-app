@@ -1049,7 +1049,7 @@
 
   // Erst nach dem Loslassen der Maus einblenden, nicht während des Markierens
   let selecting = false;
-  document.addEventListener("mousedown", (e) => {
+  window.addEventListener("mousedown", (e) => {
     if (!e.isTrusted) return; // nur echte Eingaben, keine von der Seite erzeugten Events
     if (e.button === 0 && spotRect && insideBlock(e.clientX, e.clientY)) return; // Ziehen des Blocks
     selecting = true;
@@ -1061,7 +1061,7 @@
     }
   }, true);
   showTone();
-  document.addEventListener("mouseup", () => {
+  window.addEventListener("mouseup", () => {
     selecting = false;
     setTimeout(scheduleSpotlight, 0);
   }, true);
@@ -1090,9 +1090,9 @@
   function endTextDrag() {
     if (!textDrag) return;
     if (textDrag.ghost) textDrag.ghost.remove();
-    document.removeEventListener("mousemove", onTextDragMove, true);
-    document.removeEventListener("mouseup", onTextDragUp, true);
-    document.removeEventListener("keydown", onTextDragKey, true);
+    window.removeEventListener("mousemove", onTextDragMove, true);
+    window.removeEventListener("mouseup", onTextDragUp, true);
+    window.removeEventListener("keydown", onTextDragKey, true);
     if (textDrag.moving) removeZones();
     textDrag = null;
     scheduleSpotlight();
@@ -1187,7 +1187,7 @@
     endTextDrag();
   }
 
-  document.addEventListener(
+  window.addEventListener(
     "mousedown",
     (e) => {
       if (!e.isTrusted) return; // nur echte Eingaben, keine von der Seite erzeugten Events
@@ -1197,14 +1197,14 @@
       // Kein neues Markieren und kein natives Ziehen: Archiver zieht selbst.
       e.preventDefault();
       textDrag = { x: e.clientX, y: e.clientY, text, images: selectedImages(), moving: false, ghost: null, rect: spotRect ? { ...spotRect } : null };
-      document.addEventListener("mousemove", onTextDragMove, true);
-      document.addEventListener("mouseup", onTextDragUp, true);
-      document.addEventListener("keydown", onTextDragKey, true);
+      window.addEventListener("mousemove", onTextDragMove, true);
+      window.addEventListener("mouseup", onTextDragUp, true);
+      window.addEventListener("keydown", onTextDragKey, true);
     },
     true
   );
 
-  document.addEventListener(
+  window.addEventListener(
     "dragstart",
     (e) => {
       if (!e.isTrusted) return; // nur echte Eingaben, keine von der Seite erzeugten Events
@@ -1268,8 +1268,8 @@
     },
     true
   );
-  document.addEventListener("mouseup", () => setTimeout(clearHiddenDrag, 0), true);
-  document.addEventListener(
+  window.addEventListener("mouseup", () => setTimeout(clearHiddenDrag, 0), true);
+  window.addEventListener(
     "dragend",
     () =>
       setTimeout(() => {
@@ -1279,7 +1279,7 @@
     true
   );
 
-  document.addEventListener(
+  window.addEventListener(
     "dragstart",
     (e) => {
       if (!e.isTrusted) return; // nur echte Eingaben, keine von der Seite erzeugten Events
@@ -1454,11 +1454,19 @@
     return id.toString();
   }
 
-  async function igItem(code) {
-    if (!igCache.has(code)) {
+  // Story: /stories/<name>/<Medien-ID>/ trägt die ID schon in der Adresse
+  function storyOfPage() {
+    const m = location.pathname.match(/\/stories\/([\w.]+)\/(\d+)/);
+    return m && m[1] !== "highlights" ? { user: m[1], id: m[2] } : null;
+  }
+
+  const igItem = (code) => igItemById(mediaIdOf(code));
+
+  async function igItemById(id) {
+    if (!igCache.has(id)) {
       igCache.set(
-        code,
-        fetch(`/api/v1/media/${mediaIdOf(code)}/info/`, {
+        id,
+        fetch(`/api/v1/media/${id}/info/`, {
           credentials: "include",
           headers: { "X-IG-App-ID": "936619743392459", "X-Requested-With": "XMLHttpRequest" },
         })
@@ -1467,7 +1475,7 @@
           .catch(() => null)
       );
     }
-    return igCache.get(code);
+    return igCache.get(id);
   }
 
   const fileNameOf = (url) => {
@@ -1486,7 +1494,10 @@
       const vids = list.filter(vid);
       const match = vids.find((m) => m.video_duration && isFinite(video.duration) && Math.abs(m.video_duration - video.duration) < 0.6);
       const m = match || (vids.length === 1 ? vids[0] : null);
-      return m ? { url: vid(m), ext: "mp4" } : null;
+      if (m) return { url: vid(m), ext: "mp4" };
+      // Foto-Story mit einem vorgeladenen Video daneben: das Foto nehmen
+      if (vids.length || list.length !== 1 || !img(list[0])) return null;
+      return { url: img(list[0]), ext: "jpg" };
     }
     const name = fileNameOf(imageUrl || "");
     const m =
@@ -1509,12 +1520,18 @@
     clearHiddenDrag();
     removeZones();
     fallbackImageUrl = null;
-    const code = el ? postCodeNear(el) : null;
-    const item = code ? await igItem(code) : null;
-    const source = code ? igSource(code, item) : currentPageSource();
+    // Stories: Original aus den Mediendaten statt eines Standbilds (3.25.3)
+    const story = storyOfPage();
+    const code = story ? null : el ? postCodeNear(el) : null;
+    const item = story ? await igItemById(story.id) : code ? await igItem(code) : null;
+    const source = story
+      ? { pageUrl: `https://www.instagram.com/stories/${story.user}/${story.id}/`, pageTitle: `@${story.user} · Instagram` }
+      : code
+        ? igSource(code, item)
+        : currentPageSource();
     const hit = item ? igPick(item, video, imageUrl) : null;
     if (hit) {
-      sendSave({ type: "download-image", url: hit.url, suggestedName: `instagram-${code}-${fileNameOf(hit.url).slice(0, 40)}`.replace(/\.(jpe?g|mp4|webp|heic)$/i, "") + "." + hit.ext, folder, toDownloads: shiftDrop, ...source });
+      sendSave({ type: "download-image", url: hit.url, suggestedName: `instagram-${story ? story.id : code}-${fileNameOf(hit.url).slice(0, 40)}`.replace(/\.(jpe?g|mp4|webp|heic)$/i, "") + "." + hit.ext, folder, toDownloads: shiftDrop, ...source });
     } else if (video) {
       photographVideo(video, folder);
     } else if (imageUrl) {
@@ -1637,7 +1654,7 @@
     });
   }
 
-  document.addEventListener(
+  window.addEventListener(
     "dragenter",
     (e) => {
       if (!e.isTrusted) return; // nur echte Eingaben, keine von der Seite erzeugten Events
@@ -1650,7 +1667,7 @@
     true
   );
 
-  document.addEventListener(
+  window.addEventListener(
     "dragover",
     (e) => {
       if (!e.isTrusted) return; // nur echte Eingaben, keine von der Seite erzeugten Events
@@ -1678,7 +1695,7 @@
     true
   );
 
-  document.addEventListener(
+  window.addEventListener(
     "dragleave",
     () => {
       if (manualOpen) return;
@@ -1688,7 +1705,7 @@
     true
   );
 
-  document.addEventListener(
+  window.addEventListener(
     "drop",
     (e) => {
       if (!e.isTrusted) return; // nur echte Eingaben, keine von der Seite erzeugten Events
@@ -1786,7 +1803,7 @@
     true
   );
 
-  document.addEventListener(
+  window.addEventListener(
     "dragend",
     () => {
       fallbackImageUrl = null;
