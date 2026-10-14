@@ -383,6 +383,9 @@
     const rank = (z) => {
       let i = order.indexOf(z.path);
       if (i < 0 && z.path) i = order.findIndex((p) => p.startsWith(z.path + "/"));
+      // 0.33.2: neu hinzugekommene Standard-Zone (Unsorted) steht vorn, als erste
+      // Active Zone, bis man sie selbst verschiebt
+      if (i < 0 && z.path === state.defaultZone) return -1;
       return i < 0 ? order.length : i;
     };
     return zones.map((z, i) => [z, i]).sort((a, b) => rank(a[0]) - rank(b[0]) || a[1] - b[1]).map(([z]) => z);
@@ -430,14 +433,15 @@
     }
     state.root = snap.root;
     state.name = snap.name;
+    state.defaultZone = snap.defaultZone || "Unsorted";
     state.zones = orderZones(displayZones(snap.zones));
     syncZoneOrder();
     state.items = snap.items;
     state.byPath = new Map(snap.items.map((i) => [i.path, i]));
     state.order = snap.order || {};
     state.shared = !!snap.shared;
-    state.defaultZone = snap.defaultZone || "Unsorted";
     state.inboxSeen = snap.inboxSeen || {};
+    state.expireZone = snap.expireZone === undefined ? state.defaultZone : snap.expireZone;
     state.structure = snap.structure || { depth: 2, skip: [], subzones: false };
     state.user = snap.user || "";
     state.folders = snap.folders || [];
@@ -1869,7 +1873,9 @@
     const latest = lastSaved(zone.path);
     const folders = zoneFolders(zoneItems(zone.path)).filter(([f]) => f).length;
     const inside = folders ? " · " + t(folders === 1 ? "folderCount1" : "folderCount", { n: folders }) : "";
-    return zone.count ? countText(zone.count) + inside + (latest ? " · " + recentDate(latest) : "") : t("emptyShort");
+    const meta = zone.count ? countText(zone.count) + inside + (latest ? " · " + recentDate(latest) : "") : t("emptyShort");
+    // 0.33.1: auch auf der Zonenkarte, nicht nur in der Index-Zeile
+    return isInbox(zone.path) ? (zone.count ? countText(zone.count) + inside : t("emptyShort")) + " · " + t("inboxNote") : meta;
   }
 
   function zoneCardTile(zone) {
@@ -2077,6 +2083,26 @@
     });
     b.appendChild(blockRow(t("setDefaultZoneLabel"), select));
     b.appendChild(el("p", "p-block-hint", t("setDefaultZoneHint")));
+    if (state.shared) return b;
+    // 0.33.1: welche Zone sich nach 7 Tagen leert, oder keine
+    const expire = el("select", "p-select");
+    for (const [value, label] of [["", t("setExpireOff")], ...state.zones.filter((z) => z.path !== "").map((z) => [z.path, zoneLabel(z.path)])]) {
+      const opt = el("option", null, label);
+      opt.value = value;
+      if (value === (state.expireZone || "")) opt.selected = true;
+      expire.appendChild(opt);
+    }
+    expire.addEventListener("change", async () => {
+      try {
+        await invoke("set_expire_zone", { zone: expire.value });
+        await refresh();
+        renderPage(true);
+      } catch (e) {
+        fail(e);
+      }
+    });
+    b.appendChild(blockRow(t("setExpireLabel"), expire));
+    b.appendChild(el("p", "p-block-hint", t("setExpireHint")));
     return b;
   }
 
@@ -3493,9 +3519,9 @@
     }
   }
 
-  // Unsorted (Standardzone) einer eigenen Bibliothek räumt sich nach 7 Tagen auf
+  // Zone, die sich nach 7 Tagen leert (ab Werk Unsorted, Einstellungen › Bibliothek, 0.33.1)
   function isInbox(zonePath) {
-    return zonePath === state.defaultZone && !state.shared;
+    return !!state.expireZone && zonePath === state.expireZone && !state.shared;
   }
   // Resttage eines Objekts in Unsorted, gezählt ab dem ersten Sehen (library.rs inbox_seen)
   function inboxDaysLeft(item) {
@@ -3534,7 +3560,7 @@
       card.appendChild(el("div", "card-media"));
       card.appendChild(el("span", "card-fresh"));
       card.appendChild(el("div", "card-days"));
-      card.appendChild(el("span", "card-ear"));
+      card.appendChild(el("span", "card-dot"));
       // Liste: Dateiname und Angaben neben bzw. unter dem Bild
       const info = el("div", "card-info");
       info.appendChild(el("span", "card-name"));
@@ -3595,10 +3621,10 @@
     info.querySelector(".card-m-bytes").textContent = item.bytes ? formatBytes(item.bytes) : "–";
     info.querySelector(".card-m-src").textContent = domainOf(item.pageUrl);
     info.querySelector(".card-m-date").textContent = shortDate(item.capturedAt || item.addedAt);
-    // 0.33: Bild mit Bildtext trägt ein Eselsohr in der Farbe seiner Textkarte
-    const ear = card.querySelector(".card-ear");
-    ear.hidden = !hasCaption(item) || !!quote || isNote(item);
-    if (!ear.hidden) ear.style.setProperty("--ts-bg", quoteTone(item)[0]);
+    // 0.33.1: Bild mit Bildtext trägt einen Punkt in der Farbe seiner Textkarte
+    const dot = card.querySelector(".card-dot");
+    dot.hidden = !hasCaption(item) || !!quote || isNote(item);
+    if (!dot.hidden) dot.style.setProperty("--ts-bg", quoteTone(item)[0]);
     // 0.33: In Unsorted die letzten zwei Tage vor „Zuletzt gelöscht“ zeigen
     const days = card.querySelector(".card-days");
     const left = inboxDaysLeft(item);

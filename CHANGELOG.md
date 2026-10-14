@@ -1,5 +1,21 @@
 # Changelog
 
+## App 0.33.2 (14.10.2026)
+
+- Unsorted steht auch in Bibliotheken mit eigener Reihenfolge vorn als erste
+  Active Zone, wenn es neu dazukommt. Wer es danach verschiebt, behält seinen
+  Platz.
+
+## App 0.33.1 (14.10.2026)
+
+- Unsorted: kurz „Nach 7 Tagen gelöscht“, in der Kopfzeile, im Index und
+  jetzt auch auf der Zonenkarte in der Übersicht.
+- Einstellungen › Bibliothek: wählbar, welche Zone sich nach 7 Tagen leert
+  (ab Werk Unsorted, oder „Aus“).
+- Unsorted entsteht mit jeder Bibliothek, auch in einem bestehenden
+  Ordnersystem, und steht als erste Zone vorn.
+- Bild mit Text: farbiger Punkt unten rechts statt Eselsohr.
+
 ## App 0.33.0 (14.10.2026)
 
 Unsorted zeigt seine Frist, Bildtext ruhiger im Raster.

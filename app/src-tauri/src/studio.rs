@@ -380,9 +380,11 @@ impl Library {
                 }
             }
         }
-        if let Some(to) = v.get("default").and_then(|d| d.as_str()).and_then(renamed) {
-            v["default"] = serde_json::json!(to);
-            changed = true;
+        for key in ["default", "expire"] {
+            if let Some(to) = v.get(key).and_then(|d| d.as_str()).and_then(renamed) {
+                v[key] = serde_json::json!(to);
+                changed = true;
+            }
         }
         for key in ["order", "hot"] {
             if let Some(list) = v.get_mut(key).and_then(|a| a.as_array_mut()) {

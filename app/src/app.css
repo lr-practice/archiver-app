@@ -5841,19 +5841,22 @@ html.light {
   bottom: 134px;
 }
 
-/* ---- 0.33: Bild mit Bildtext im Raster ----
-   Kein Textauszug mehr unter dem Bild. Ein Eselsohr unten rechts in der Farbe
-   der Textkarte zeigt die Rückseite an, wie .lb-ear in der Lightbox. */
-.card-ear {
+/* ---- 0.33.1: Bild mit Bildtext im Raster ----
+   Kein Textauszug mehr unter dem Bild. Ein Punkt 10 px unten rechts in der
+   Farbe der Textkarte zeigt an, dass das Bild Text hat. Die feine Kante hält
+   ihn auf Flächen in derselben Farbe sichtbar. */
+.card-dot {
   position: absolute;
-  right: 0;
-  bottom: 0;
-  width: 16px;
-  height: 16px;
-  background: linear-gradient(135deg, transparent 50%, var(--ts-bg) 50%);
+  right: 6px;
+  bottom: 6px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--ts-bg);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.18), 0 1px 3px rgba(0, 0, 0, 0.25);
   pointer-events: none;
 }
-.card-ear[hidden],
+.card-dot[hidden],
 .card-days[hidden] {
   display: none;
 }
@@ -5872,10 +5875,10 @@ html.light {
   letter-spacing: 0.02em;
   pointer-events: none;
 }
-/* Original: Karte hat 3 px Innenrand, Ohr und Marke sitzen am Bild */
-.original .card-ear {
-  right: 3px;
-  bottom: 3px;
+/* Original: Karte hat 3 px Innenrand, Punkt und Marke sitzen am Bild */
+.original .card-dot {
+  right: 9px;
+  bottom: 9px;
 }
 .original .card-days {
   top: 7px;
@@ -6428,7 +6431,7 @@ html.light {
 }
 .listview:is([data-lv="a"], [data-lv="f"]) .card-media,
 .listview:is([data-lv="a"], [data-lv="f"]) .card-days,
-.listview:is([data-lv="a"], [data-lv="f"]) .card-ear,
+.listview:is([data-lv="a"], [data-lv="f"]) .card-dot,
 .listview[data-lv="c"] .card-media {
   display: none;
 }

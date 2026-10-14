@@ -787,6 +787,8 @@ struct Snapshot {
     zone_order: Vec<String>,
     /// Seit wann ein Objekt in Unsorted liegt (Hash → ms), 0.33
     inbox_seen: std::collections::HashMap<String, i64>,
+    /// Zone, die sich nach 7 Tagen leert; None = aus (0.33.1)
+    expire_zone: Option<String>,
 }
 
 #[tauri::command]
@@ -801,6 +803,13 @@ async fn set_structure(app: AppHandle, state: State<'_, AppState>, structure: li
 #[tauri::command]
 async fn set_default_zone(app: AppHandle, state: State<'_, AppState>, zone: String) -> Result<(), String> {
     current(&state)?.set_default_zone(&zone)?;
+    let _ = app.emit("library-changed", ());
+    Ok(())
+}
+
+#[tauri::command]
+async fn set_expire_zone(app: AppHandle, state: State<'_, AppState>, zone: String) -> Result<(), String> {
+    current(&state)?.set_expire_zone(&zone)?;
     let _ = app.emit("library-changed", ());
     Ok(())
 }
@@ -825,6 +834,7 @@ async fn snapshot(state: State<'_, AppState>) -> Result<Snapshot, String> {
             deleted: lib.deleted_count(),
             zone_order: lib.zone_order().0,
             inbox_seen: lib.inbox_seen(),
+            expire_zone: if lib.shared { None } else { lib.expire_zone() },
         })
     })
     .await
@@ -1482,6 +1492,7 @@ pub fn run() {
             move_folder,
             set_zone_order,
             set_default_zone,
+            set_expire_zone,
             set_structure,
             set_look,
             trash_zone,
