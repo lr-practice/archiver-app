@@ -1,6 +1,6 @@
 # Archiver – Design-System
 
-Stand: App 0.31.1 · Extension 3.24.0
+Stand: App 0.31.2 · Extension 3.24.0
 
 Diese Datei hält fest, wie Archiver aussieht und warum. Sie gilt für die Mac-App
 (`app/src`) und die Chrome-Extension (`extension/`). Wer an der Oberfläche
@@ -249,6 +249,9 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
 - **Zweck:** Filter und Ansichtswahl.
 - **Form:** Geist Mono, 11 px, Versalien, ohne Fläche. Die Zustände laufen nur
   über die Textfarbe: faint → dim (Hover) → text (aktiv).
+- **Hinweis in der Filterzeile (0.31.2):** Solange die Bilderkennung läuft,
+  steht am Ende der Filterzeile „(Bilderkennung: noch n von m)“ als Mono-Text in
+  dim, ohne Klick. Er zählt mit und verschwindet, wenn alles erkannt ist.
 
 ### 4.8 Knopf (`.btn`)
 - **Zweck:** Handlungen in Dialogen und Einstellungen.

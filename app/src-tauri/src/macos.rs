@@ -86,6 +86,23 @@ unsafe fn rust_string(ns: *mut AnyObject) -> String {
     std::ffi::CStr::from_ptr(ptr).to_string_lossy().into_owned()
 }
 
+/// Sicherheit und Höhe (Anteil am Bild) aller Treffer einer Erkennung
+unsafe fn observations(request: *mut AnyObject) -> Vec<(f32, f64)> {
+    let results: *mut AnyObject = msg_send![request, results];
+    if results.is_null() {
+        return Vec::new();
+    }
+    let n: usize = msg_send![results, count];
+    (0..n)
+        .map(|i| {
+            let obs: *mut AnyObject = msg_send![results, objectAtIndex: i];
+            let c: f32 = msg_send![obs, confidence];
+            let r: objc2_foundation::NSRect = msg_send![obs, boundingBox];
+            (c, r.size.height)
+        })
+        .collect()
+}
+
 /// Erkennt, was auf einem Bild ist (englische Begriffe von Vision) und welcher
 /// Text darin steht. Leere Ergebnisse, wenn Vision nichts liefert.
 pub fn analyze_image(path: &std::path::Path) -> (Vec<String>, String) {
@@ -103,6 +120,12 @@ pub fn analyze_image(path: &std::path::Path) -> (Vec<String>, String) {
         let classify: *mut AnyObject = msg_send![classify, init];
         let ocr: *mut AnyObject = msg_send![class!(VNRecognizeTextRequest), alloc];
         let ocr: *mut AnyObject = msg_send![ocr, init];
+        // Gesichter und Personen eigens (0.31.2): die Klassifikation erkennt
+        // Menschen auf Plakaten, in Grafiken und Ausschnitten oft gar nicht.
+        let faces: *mut AnyObject = msg_send![class!(VNDetectFaceRectanglesRequest), alloc];
+        let faces: *mut AnyObject = msg_send![faces, init];
+        let humans: *mut AnyObject = msg_send![class!(VNDetectHumanRectanglesRequest), alloc];
+        let humans: *mut AnyObject = msg_send![humans, init];
         // VNRequestTextRecognitionLevelAccurate
         let _: () = msg_send![ocr, setRecognitionLevel: 0isize];
         let _: () = msg_send![ocr, setUsesLanguageCorrection: true];
@@ -116,6 +139,8 @@ pub fn analyze_image(path: &std::path::Path) -> (Vec<String>, String) {
         let requests: *mut AnyObject = msg_send![class!(NSMutableArray), array];
         let _: () = msg_send![requests, addObject: classify];
         let _: () = msg_send![requests, addObject: ocr];
+        let _: () = msg_send![requests, addObject: faces];
+        let _: () = msg_send![requests, addObject: humans];
         let ok: bool = msg_send![handler, performRequests: requests, error: std::ptr::null_mut::<*mut AnyObject>()];
 
         let mut labels = Vec::new();
@@ -148,9 +173,42 @@ pub fn analyze_image(path: &std::path::Path) -> (Vec<String>, String) {
                 }
             }
         }
+        // Ein winziges Gesicht im Hintergrund zählt nicht, ein großes macht ein Porträt
+        let mut face = 0f32;
+        let mut face_h = 0f64;
+        let mut person = 0f32;
+        if ok {
+            for (c, h) in observations(faces) {
+                if h >= 0.04 {
+                    face = face.max(c);
+                    face_h = face_h.max(h);
+                }
+            }
+            for (c, h) in observations(humans) {
+                if h >= 0.15 {
+                    person = person.max(c);
+                }
+            }
+        }
+        let mut add = |name: &str, c: f32| {
+            if c < 0.3 {
+                return;
+            }
+            match labels.iter_mut().find(|(n, _)| n == name) {
+                Some(l) => l.1 = l.1.max(c),
+                None => labels.push((name.to_string(), c)),
+            }
+        };
+        add("face", face);
+        add("people", face.max(person));
+        if face_h >= 0.3 {
+            add("portrait", face);
+        }
         let _: () = msg_send![handler, release];
         let _: () = msg_send![classify, release];
         let _: () = msg_send![ocr, release];
+        let _: () = msg_send![faces, release];
+        let _: () = msg_send![humans, release];
 
         labels.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
         // Mit Sicherheit („poster:0.92“), damit die Suche unsichere Motive auslassen kann (0.31.1)

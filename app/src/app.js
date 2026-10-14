@@ -624,6 +624,11 @@
         bar.appendChild(chip("(" + t("filterFresh") + " " + fresh + ")", f.fresh, () => setFilter("fresh", true)));
       }
     }
+    // Bilderkennung läuft im Hintergrund; bis sie durch ist, finden Motive weniger (0.31.2)
+    if (analysisLeft()) {
+      bar.appendChild(el("span", "p-filter-gap"));
+      bar.appendChild(mono(analysisText(), "dim p-analysis"));
+    }
     if (filtersActive()) {
       bar.appendChild(el("span", "p-flex"));
       bar.appendChild(
@@ -684,6 +689,23 @@
     return wrap;
   }
 
+  // Bilder ohne Analyse (Farben fehlen noch); Vorschau und Analyse laufen nacheinander
+  function analysisLeft() {
+    let left = 0;
+    let total = 0;
+    for (const item of state.items) {
+      if (kindOf(item) !== "image") continue;
+      total++;
+      if (item.colors == null) left++;
+    }
+    return left ? { left, total } : null;
+  }
+
+  function analysisText() {
+    const a = analysisLeft();
+    return a ? "(" + t("analysisLeft", { n: a.left, total: a.total }) + ")" : "";
+  }
+
   // Analyse-Ergebnisse (Inhalt, Text, Farben) kommen nach und nach
   function applyAnalysis(list) {
     const byHash = new Map(list.map((a) => [a.hash, a]));
@@ -694,6 +716,12 @@
       item.text = a.text;
       item.colors = a.colors;
       item._idx = null;
+    }
+    const note = document.querySelector(".p-analysis");
+    if (note) {
+      const text = analysisText();
+      if (text) note.textContent = text;
+      else note.remove();
     }
     if (state.query.trim() || filtersActive()) rerenderSearch();
   }

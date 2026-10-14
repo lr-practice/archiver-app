@@ -851,6 +851,12 @@ impl Library {
             let _ = conn.execute("DELETE FROM analysis WHERE labels <> '' AND labels NOT LIKE '%:%'", []);
             let _ = conn.execute_batch("PRAGMA user_version = 3;");
         }
+        // ab 0.31.2: Gesichter und Personen eigens erkannt. Alle Bilder laufen
+        // einmal neu durch die Analyse (Hintergrund, Farben gleich mit).
+        if version < 4 {
+            let _ = conn.execute("DELETE FROM analysis", []);
+            let _ = conn.execute_batch("PRAGMA user_version = 4;");
+        }
         let lib = Library {
             root: root.to_path_buf(),
             conn: Mutex::new(conn),
@@ -2877,7 +2883,7 @@ mod tests {
     }
 
     #[test]
-    fn old_labels_without_confidence_are_analysed_again() {
+    fn older_analyses_run_again_once() {
         let tmp = tempfile::tempdir().unwrap();
         let root = tmp.path().join("Bib");
         {
@@ -2892,7 +2898,16 @@ mod tests {
         let conn = lib.conn.lock().unwrap();
         let mut stmt = conn.prepare("SELECT hash FROM analysis ORDER BY hash").unwrap();
         let left: Vec<String> = stmt.query_map([], |r| r.get(0)).unwrap().map(|r| r.unwrap()).collect();
-        assert_eq!(left, ["leer", "neu"], "nur die Analyse ohne Sicherheit läuft neu");
+        assert!(left.is_empty(), "vor 0.31.2 ohne Gesichter und Personen: alles neu, {left:?}");
+        drop(stmt);
+        drop(conn);
+        // danach bleibt eine neue Analyse beim Öffnen stehen
+        let a = Analysis { hash: "x".into(), labels: "people:0.91".into(), text: String::new(), colors: String::new() };
+        lib.save_analysis(&a).unwrap();
+        drop(lib);
+        let lib = Library::open(&root).unwrap();
+        let n: i64 = lib.conn.lock().unwrap().query_row("SELECT COUNT(*) FROM analysis", [], |r| r.get(0)).unwrap();
+        assert_eq!(n, 1);
     }
 
     #[test]

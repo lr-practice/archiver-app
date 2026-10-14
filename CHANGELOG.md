@@ -1,5 +1,13 @@
 # Changelog
 
+## App 0.31.2 (14.10.2026)
+
+Menschen finden.
+
+- Gesichter und Personen erkennt die App jetzt mit einer eigenen Erkennung. Bisher kamen sie nur aus der allgemeinen Bilderkennung, die Menschen auf Plakaten, in Grafiken und Ausschnitten oft gar nicht meldet. Ein großes Gesicht gilt zusätzlich als Porträt.
+- „Frau“, „Mann“ und „Kind“ finden Bilder mit Personen. Ein Geschlecht erkennt macOS nicht, daher findet „Frau“ alle Personen. „Kopf“ und „Gesicht“ finden Gesichter.
+- Alle Bilder laufen dafür einmal neu durch die Erkennung. Bis sie durch ist, steht in der Filterzeile „Bilderkennung: noch n von m“.
+
 ## App 0.31.1 (14.10.2026)
 
 Genauere Suche. App und Tray suchen jetzt gleich.

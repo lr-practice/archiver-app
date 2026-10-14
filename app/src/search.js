@@ -11,7 +11,8 @@
     rot: "red", orange: "orange", gelb: "yellow", grün: "green", gruen: "green", türkis: "teal", blau: "blue",
     lila: "purple", violett: "purple", rosa: "pink", pink: "pink", braun: "brown", schwarz: "black", grau: "gray",
     weiß: "white", weiss: "white", mensch: "people", menschen: "people", person: "people", personen: "people",
-    frau: "woman", mann: "man", kind: "child", gesicht: "face", porträt: "portrait", portrait: "portrait",
+    frau: "woman|people", frauen: "woman|people", mann: "man|people", männer: "man|people", kind: "child|people",
+    kinder: "child|people", gesicht: "face", gesichter: "face", kopf: "face|head", köpfe: "face|head", porträt: "portrait|face", portrait: "portrait|face",
     tier: "animal", hund: "dog", katze: "cat", vogel: "bird", pferd: "horse", fisch: "fish",
     pflanze: "plant", blume: "flower", blumen: "flower", baum: "tree", wald: "forest", gras: "grass",
     himmel: "sky", wolke: "cloud", wolken: "cloud", wasser: "water", meer: "ocean", see: "lake", strand: "beach",
@@ -99,15 +100,20 @@
   }
 
   const DICT = {};
-  for (const [de, en] of Object.entries(SEARCH_DE)) DICT[fold(de)] = en;
+  // Mehrere Motive mit „|“: „frau“ sucht woman, sonst people (Vision kennt
+  // kein Geschlecht, die Personenerkennung liefert nur „people“)
+  for (const [de, en] of Object.entries(SEARCH_DE)) DICT[fold(de)] = en.split("|");
 
   // Rückweg Englisch → Deutsch für die Motiv-Chips (erster deutscher Begriff gewinnt)
   const LABEL_DE = {};
-  for (const [de, en] of Object.entries(SEARCH_DE)) if (!LABEL_DE[en]) LABEL_DE[en] = de;
+  for (const [de, en] of Object.entries(SEARCH_DE)) {
+    const first = en.split("|")[0];
+    if (!LABEL_DE[first]) LABEL_DE[first] = de;
+  }
   Object.assign(LABEL_DE, { "interior room": "innenraum", adult: "erwachsene", people: "menschen", outdoor: "draußen", indoor: "drinnen" });
 
   function translate(w) {
-    return DICT[w] || DICT[stem(w)] || null;
+    return DICT[w] || DICT[stem(w)] || [];
   }
 
   // „poster:0.92, art:0.55“ (ab 0.31.1) oder „poster, art“ (älter, ohne Sicherheit)
@@ -188,7 +194,7 @@
   }
 
   function wordScore(idx, w, typing) {
-    const en = translate(w);
+    const ens = translate(w);
     let best = Math.max(
       inList(idx.name, w, typing, 6, 5, 3),
       inList(idx.zone, w, typing, 4, 3.5, 2.5),
@@ -200,11 +206,11 @@
     // Motive: sicher erkannte zählen nach ihrer Sicherheit
     for (const label of idx.labels) {
       const parts = label.name.split(" ");
-      const hit = label.name === en || (en && parts.includes(en)) || parts.some((p) => same(p, w));
+      const hit = ens.includes(label.name) || ens.some((en) => parts.includes(en)) || parts.some((p) => same(p, w));
       if (hit) best = Math.max(best, 2 + 3 * label.conf);
       else if (typing && w.length >= 4 && parts.some((p) => p.startsWith(w))) best = Math.max(best, 1 + 2 * label.conf);
     }
-    const color = en && COLOR_NAMES.has(en) ? en : COLOR_NAMES.has(w) ? w : null;
+    const color = ens.find((c) => COLOR_NAMES.has(c)) || (COLOR_NAMES.has(w) ? w : null);
     const share = color ? idx.colors.get(color) || 0 : 0;
     if (share >= COLOR_SHARE) best = Math.max(best, 2 + share * 4);
     return best;

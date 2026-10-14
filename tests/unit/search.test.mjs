@@ -97,3 +97,9 @@ test("Bildtext, Zitat und Notiz sind durchsuchbar", () => {
   assert.deepEqual(find([a, n], "basel "), ["a.jpg"]);
   assert.deepEqual(find([a, n], "kreise "), ["Briefing.md"]);
 });
+
+test("Menschen: frau, mann und mensch finden Personen, kopf und gesicht Gesichter", () => {
+  const p = item({ filename: "p.jpg", labels: "people:0.93, face:0.88" });
+  const x = item({ filename: "x.jpg", labels: "poster:0.9" });
+  for (const q of ["frau ", "frauen ", "mann ", "mensch ", "kopf ", "köpfe ", "gesicht "]) assert.deepEqual(find([p, x], q), ["p.jpg"], q);
+});
