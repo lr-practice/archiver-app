@@ -1,6 +1,6 @@
 # Changelog
 
-## Vorabstand 0.36.1 (nicht veröffentlicht)
+## App 0.36.1 · Extension 3.28.2
 
 - Geteilte Bibliotheken: Einstellungen › Bibliothek zeigt „Unsorted nach 7 Tagen
   gelöscht“ jetzt auch dort. Ab Werk aus; bei „An“ gelten Hinweise und
