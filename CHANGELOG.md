@@ -1,5 +1,15 @@
 # Changelog
 
+## Vorabstand 0.36.2 (nicht veröffentlicht)
+
+- Namensvorschlag gründlicher: Absender und Titel der Seite (Instagram: Name
+  und erste Wörter der Unterschrift), die größten Wörter im Bild, bis zu zwei
+  Motive statt einem, Hauptfarbe. Zu Allgemeines (Struktur, Material, Text)
+  fällt weg, höchstens 64 Zeichen. Neu analysierte Bilder liefern den Text mit
+  den größten Zeilen zuerst.
+- ⌘C mit mehreren Objekten legt auch die Dateien in die Zwischenablage, ⌘V fügt
+  alle ein (vorher nur das erste Bild). Vorhandenes wird nicht neu kopiert.
+
 ## App 0.36.1 · Extension 3.28.2
 
 - Geteilte Bibliotheken: Einstellungen › Bibliothek zeigt „Unsorted nach 7 Tagen

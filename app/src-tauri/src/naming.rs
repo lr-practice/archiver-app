@@ -113,26 +113,86 @@ pub fn render(n: &Naming, c: &Ctx) -> Option<String> {
     (!name.is_empty()).then_some(name)
 }
 
-/// Namensvorschlag aus dem Inhalt (F11): Seitentitel, Motiv, Farbe, etwa
-/// „form-und-farbe_plakat_rot“. None, wenn nichts davon da ist.
+/// Namensvorschlag aus dem Inhalt (F11, 0.36.2 gründlicher): Absender und
+/// Titel der Seite, die größten Wörter im Bild (OCR), bis zu zwei Motive,
+/// Hauptfarbe, etwa „bauhaus-ausstellung_plakat_typografie_rot“. Passt der Name
+/// nicht in 64 Zeichen, fallen zuerst Farbe und zweites Motiv weg. None, wenn
+/// nichts davon da ist.
 pub fn suggest(item: &Item, lang: &str) -> Option<String> {
-    let mut parts = Vec::new();
-    if let Some(t) = item.page_title.as_deref().map(title_words).filter(|t| !t.is_empty()) {
+    let mut parts: Vec<String> = Vec::new();
+    let title = item.page_title.as_deref().unwrap_or("");
+    let (author, caption) = social_title(title);
+    if let Some(a) = author {
+        parts.push(slug(&a, true));
+        if let Some(c) = caption {
+            parts.push(slug(&c, true));
+        }
+    } else if let Some(t) = Some(title_words(title)).filter(|t| !t.is_empty()) {
         parts.push(slug(&t, true));
     } else if let Some(q) = item.quote.as_deref().or(item.title.as_deref()) {
         let words: Vec<&str> = q.split_whitespace().take(4).collect();
         parts.push(slug(&words.join(" "), true));
     }
-    if let Some(l) = item.labels.as_deref().and_then(|l| top_label(l, lang)) {
-        if !parts.iter().any(|p| p.contains(&l)) {
-            parts.push(l);
+    parts.retain(|p| !p.is_empty());
+    if let Some(t) = item.text.as_deref() {
+        let w = ocr_words(t, &parts.join(" "));
+        if !w.is_empty() {
+            parts.push(w);
+        }
+    }
+    if parts.is_empty() {
+        if let Some(d) = item.page_url.as_deref().map(domain_word).filter(|d| !d.is_empty()) {
+            parts.push(slug(&d, true));
+        }
+    }
+    if let Some(l) = item.labels.as_deref() {
+        for l in top_labels(l, lang, 2) {
+            if !parts.iter().any(|p| p.contains(&l)) {
+                parts.push(l);
+            }
         }
     }
     if let Some(c) = item.colors.as_deref().and_then(|c| top_color(c, lang)) {
         parts.push(c.to_string());
     }
     parts.retain(|p| !p.is_empty());
+    while parts.len() > 1 && parts.join("_").chars().count() > 64 {
+        parts.pop();
+    }
     (!parts.is_empty()).then(|| parts.join("_"))
+}
+
+/// „Name on Instagram: „Text““ → Absender und die ersten Wörter des Texts
+fn social_title(t: &str) -> (Option<String>, Option<String>) {
+    let Some((who, rest)) = t.split_once(" on Instagram") else { return (None, None) };
+    let who = who.split_whitespace().take(3).collect::<Vec<_>>().join(" ");
+    if who.is_empty() {
+        return (None, None);
+    }
+    let cap = rest.trim_start_matches(|c: char| c == ':' || c.is_whitespace() || "\"“”„‚‘’'".contains(c));
+    let cap = cap.split_whitespace().take(3).collect::<Vec<_>>().join(" ");
+    (Some(who), Some(cap).filter(|c| !c.is_empty()))
+}
+
+/// Die ersten zwei sinnvollen Wörter des Bildtextes. Vision liefert die größten
+/// Zeilen zuerst (macos.rs analyze_image), Oberflächentexte und Füllwörter fallen weg.
+fn ocr_words(text: &str, skip: &str) -> String {
+    const STOP: &[&str] = &[
+        "und", "der", "die", "das", "den", "dem", "ein", "eine", "mit", "von", "fuer", "für", "auf", "aus", "bei", "nach", "ist", "sind", "nicht", "oder", "wird", "the", "and", "for", "with", "from", "this", "that", "are", "was", "you", "your", "our", "have", "has", "not", "all", "more", "http", "https", "www", "com", "html", "like", "likes", "comment", "comments", "share", "follow", "followers", "following", "reply", "views", "send", "message", "search", "home", "reels", "instagram", "youtube", "pinterest", "save", "gefällt", "folgen", "antworten", "teilen",
+    ];
+    let mut out: Vec<String> = Vec::new();
+    for raw in text.split(|c: char| !c.is_alphanumeric()) {
+        let w = raw.to_lowercase();
+        let letters = w.chars().filter(|c| c.is_alphabetic()).count();
+        if letters < 4 || letters * 2 < w.chars().count() || STOP.contains(&w.as_str()) || out.contains(&w) || skip.contains(&w) {
+            continue;
+        }
+        out.push(w);
+        if out.len() == 2 {
+            break;
+        }
+    }
+    slug(&out.join(" "), true)
 }
 
 /// Uneinheitlicher Name: Kamera- und Systemnamen, Kopien, Zufallsketten.
@@ -251,20 +311,34 @@ fn kind_word(item: &Item, lang: &str) -> &'static str {
     }
 }
 
-/// Sicherstes Motiv ab 0,5 (wie Suche und Motiv-Filter), auf Deutsch, wo bekannt
-fn top_label(labels: &str, lang: &str) -> Option<String> {
-    let mut best: Option<(&str, f32)> = None;
+/// Bis zu n sichere Motive ab 0,45, das sicherste zuerst, auf Deutsch, wo bekannt.
+/// Zu allgemeine Begriffe (Struktur, Material, Text, Schrift) und doppelte
+/// Bedeutungen (Mensch, Erwachsener) zählen nicht.
+fn top_labels(labels: &str, lang: &str, n: usize) -> Vec<String> {
+    let mut found: Vec<(String, f32)> = Vec::new();
     for part in labels.split([',', ' ']).map(str::trim).filter(|p| !p.is_empty()) {
-        let (name, conf) = match part.rsplit_once(':') {
-            Some((n, c)) => (n, c.parse::<f32>().unwrap_or(0.0)),
-            None => continue,
-        };
-        if conf >= 0.5 && best.is_none_or(|(_, b)| conf > b) {
-            best = Some((name, conf));
+        let Some((name, conf)) = part.rsplit_once(':') else { continue };
+        let conf = conf.parse::<f32>().unwrap_or(0.0);
+        if conf >= 0.45 {
+            found.push((name.replace('_', " "), conf));
         }
     }
-    let (name, _) = best?;
-    let name = name.replace('_', " ");
+    found.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+    let mut out: Vec<String> = Vec::new();
+    for (name, _) in found {
+        let word = label_word(&name, lang);
+        if matches!(name.as_str(), "structure" | "material" | "text" | "font" | "document" | "outdoor" | "indoor") || word.is_empty() || out.contains(&word) {
+            continue;
+        }
+        out.push(word);
+        if out.len() == n {
+            break;
+        }
+    }
+    out
+}
+
+fn label_word(name: &str, lang: &str) -> String {
     let de = [
         ("poster", "plakat"),
         ("typography", "typografie"),
@@ -274,6 +348,11 @@ fn top_label(labels: &str, lang: &str) -> Option<String> {
         ("magazine", "magazin"),
         ("people", "menschen"),
         ("adult", "menschen"),
+        ("face", "menschen"),
+        ("graphic design", "grafik"),
+        ("fashion", "mode"),
+        ("map", "karte"),
+        ("website", "website"),
         ("portrait", "portraet"),
         ("architecture", "architektur"),
         ("building", "gebaeude"),
@@ -301,8 +380,9 @@ fn top_label(labels: &str, lang: &str) -> Option<String> {
         ("structure", "struktur"),
         ("pattern", "muster"),
     ];
-    let word = if lang == "en" { name } else { de.iter().find(|(e, _)| *e == name).map(|(_, d)| d.to_string()).unwrap_or(name) };
-    Some(slug(&word, true))
+    let name = if lang == "en" && matches!(name, "adult" | "face") { "people" } else { name };
+    let word = if lang == "en" { name.to_string() } else { de.iter().find(|(e, _)| *e == name).map(|(_, d)| d.to_string()).unwrap_or_else(|| name.to_string()) };
+    slug(&word, true)
 }
 
 /// Größter Farbanteil ab 25 %, außer Weiß und Grau (Papier, Hintergrund)
@@ -415,7 +495,7 @@ mod tests {
         n.preset = "date-source-nr".into();
         assert_eq!(render(&n, &ctx).as_deref(), Some("2026-10-14_museum-digital_001"));
         n.preset = "zone-content".into();
-        assert_eq!(render(&n, &ctx).as_deref(), Some("typo_form-und-farbe_plakat_rot"));
+        assert_eq!(render(&n, &ctx).as_deref(), Some("typo_form-und-farbe_plakat_typografie_rot"));
         n.preset = "custom".into();
         n.prefix = "AR".into();
         assert_eq!(render(&n, &ctx).as_deref(), Some("ar-typo-261014-001"));
@@ -426,10 +506,39 @@ mod tests {
     }
 
     #[test]
+    fn suggestion_reads_the_image() {
+        // ohne Seite: größte Wörter im Bild, zwei Motive, Farbe
+        let mut it = item("Typo", "IMG_1.png");
+        it.page_title = None;
+        it.page_url = None;
+        it.text = Some("Bauhaus Ausstellung Weimar Eintritt frei 1923 www.bauhaus.de".into());
+        it.labels = Some("poster:0.90, structure:0.80, adult:0.60, people:0.55, text:0.5".into());
+        assert_eq!(suggest(&it, "de").as_deref(), Some("bauhaus-ausstellung_plakat_menschen_rot"));
+        // Instagram: Absender und erste Wörter der Unterschrift
+        it.page_title = Some("Studio Nord on Instagram: \"Neue Schrift für das Museum, jetzt online\"".into());
+        it.text = None;
+        it.labels = Some("typography:0.8".into());
+        assert_eq!(suggest(&it, "de").as_deref(), Some("studio-nord_neue-schrift-fuer_typografie_rot"));
+        // nur Quelle
+        it.page_title = None;
+        it.page_url = Some("https://www.museum-digital.de/x".into());
+        it.labels = None;
+        it.colors = None;
+        assert_eq!(suggest(&it, "de").as_deref(), Some("museum-digital"));
+        // lang genug: Farbe und zweites Motiv fallen zuerst weg
+        it.text = Some("Internationale Typografie Ausstellungsplakat Gestaltung Rudolph Schweiz Plakatkunst".into());
+        it.labels = Some("poster:0.9, illustration:0.8".into());
+        it.colors = Some("red:0.5".into());
+        let s = suggest(&it, "de").unwrap();
+        assert!(s.chars().count() <= 64, "{s}");
+        assert!(s.starts_with("internationale-typografie_plakat"), "{s}");
+    }
+
+    #[test]
     fn suggestion_and_messy() {
         let it = item("Typo", "IMG_4821.png");
-        assert_eq!(suggest(&it, "de").as_deref(), Some("form-und-farbe_plakat_rot"));
-        assert_eq!(suggest(&it, "en").as_deref(), Some("form-und-farbe_poster_red"));
+        assert_eq!(suggest(&it, "de").as_deref(), Some("form-und-farbe_plakat_typografie_rot"));
+        assert_eq!(suggest(&it, "en").as_deref(), Some("form-und-farbe_poster_typography_red"));
         for m in ["IMG_4821.png", "Bild (3).png", "Screenshot 2026-10-12 um 14.03.11.png", "DSC0012.jpg", "3f9a8c7d6e5b4a3f2e1d0c9b.jpg", "plakat Kopie.png"] {
             assert!(messy(m), "{m}");
         }

@@ -206,7 +206,7 @@ pub fn analyze_image(path: &std::path::Path) -> (Vec<String>, String) {
         let ok: bool = msg_send![handler, performRequests: requests, error: std::ptr::null_mut::<*mut AnyObject>()];
 
         let mut labels = Vec::new();
-        let mut text = Vec::new();
+        let mut text: Vec<(f64, String)> = Vec::new();
         if ok {
             let results: *mut AnyObject = msg_send![classify, results];
             if !results.is_null() {
@@ -230,7 +230,8 @@ pub fn analyze_image(path: &std::path::Path) -> (Vec<String>, String) {
                     if count > 0 {
                         let cand: *mut AnyObject = msg_send![top, objectAtIndex: 0usize];
                         let s: *mut AnyObject = msg_send![cand, string];
-                        text.push(rust_string(s));
+                        let r: objc2_foundation::NSRect = msg_send![obs, boundingBox];
+                        text.push((r.size.height, rust_string(s)));
                     }
                 }
             }
@@ -275,7 +276,9 @@ pub fn analyze_image(path: &std::path::Path) -> (Vec<String>, String) {
         labels.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
         // Mit Sicherheit („poster:0.92“), damit die Suche unsichere Motive auslassen kann (0.31.1)
         let labels = labels.into_iter().take(16).map(|(l, c)| format!("{}:{c:.2}", l.replace('_', " "))).collect();
-        (labels, text.join(" "))
+        // Größte Zeilen zuerst (0.36.2): Titel vor Kleingedrucktem, für Namensvorschläge
+        text.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
+        (labels, text.into_iter().map(|(_, t)| t).collect::<Vec<_>>().join(" "))
     })
 }
 
