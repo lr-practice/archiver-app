@@ -1546,8 +1546,25 @@
   // es ein normaler Klick.
   let mediaDrag = null;
 
+  // Instagram legt im Feed einen Link (mit „Ton stummgeschaltet“) über das
+  // Video. Chrome würde sonst diesen Link ziehen statt des Videos: solange
+  // Archiver zieht, sind Link und gedrücktes Element nicht nativ ziehbar.
+  function blockNativeDrag(el) {
+    const els = [el, el.closest && el.closest("a[href]")].filter((n, i, a) => n && a.indexOf(n) === i);
+    return els.map((n) => ({ n, prev: n.getAttribute("draggable") })).map((x) => (x.n.setAttribute("draggable", "false"), x));
+  }
+
+  function restoreNativeDrag(list) {
+    for (const { n, prev } of list || []) prev == null ? n.removeAttribute("draggable") : n.setAttribute("draggable", prev);
+  }
+
+  function stopNativeDrag(e) {
+    if (mediaDrag) e.preventDefault();
+  }
+
   function startMediaDrag(e, el, url, video) {
-    mediaDrag = { x: e.clientX, y: e.clientY, el, url, video, moving: false, ghost: null };
+    mediaDrag = { x: e.clientX, y: e.clientY, el, url, video, moving: false, ghost: null, blocked: blockNativeDrag(el) };
+    window.addEventListener("dragstart", stopNativeDrag, true);
     window.addEventListener("pointermove", onMediaDragMove, true);
     window.addEventListener("pointerup", onMediaDragUp, true);
     window.addEventListener("keydown", onMediaDragKey, true);
@@ -1556,6 +1573,8 @@
   function endMediaDrag() {
     if (!mediaDrag) return;
     if (mediaDrag.ghost) mediaDrag.ghost.remove();
+    restoreNativeDrag(mediaDrag.blocked);
+    window.removeEventListener("dragstart", stopNativeDrag, true);
     window.removeEventListener("pointermove", onMediaDragMove, true);
     window.removeEventListener("pointerup", onMediaDragUp, true);
     window.removeEventListener("keydown", onMediaDragKey, true);
@@ -1705,6 +1724,7 @@
         igRemember(item.pk, item);
       }
     });
+    document.dispatchEvent(new CustomEvent("archiver:ig-hello"));
   }
 
   function postCodeNear(el) {

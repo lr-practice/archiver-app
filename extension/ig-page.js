@@ -55,8 +55,17 @@
         } catch {}
       }
     }
-    if (out.length) document.dispatchEvent(new CustomEvent("archiver:ig-media", { detail: JSON.stringify(out) }));
+    if (!out.length) return;
+    sent.push(...out);
+    if (sent.length > 600) sent.splice(0, sent.length - 600);
+    send(out);
   }
+
+  // Was vor content.js gefunden wurde, geht nicht verloren: content.js fragt
+  // beim Start einmal nach („archiver:ig-hello“) und bekommt alles nochmal.
+  const sent = [];
+  const send = (list) => document.dispatchEvent(new CustomEvent("archiver:ig-media", { detail: JSON.stringify(list) }));
+  document.addEventListener("archiver:ig-hello", () => sent.length && send(sent));
 
   // Abrufe der Seite: Antwort kopieren und mitlesen, die Seite bekommt das Original
   const pageFetch = window.fetch;
@@ -102,7 +111,10 @@
     }
   }
   document.addEventListener("DOMContentLoaded", () => scanScripts(document));
+  // Während die Seite noch geladen wird, sind eingebettete Skripte beim
+  // Einfügen oft leer; die liest DOMContentLoaded. Danach der Beobachter.
   new MutationObserver((records) => {
+    if (document.readyState === "loading") return;
     for (const r of records)
       for (const n of r.addedNodes) {
         if (n.nodeType !== 1) continue;

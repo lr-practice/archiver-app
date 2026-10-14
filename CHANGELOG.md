@@ -1,5 +1,13 @@
 # Changelog
 
+## Extension 3.27.1 (14.10.2026)
+
+- Instagram-Feed: Beim Ziehen eines Videos hängt sofort das Video am Zeiger,
+  nicht mehr der Link „Ton stummgeschaltet“. Gesichert wird die MP4 mit
+  Beitrag und Account als Quelle.
+- Instagram: Beitragsdaten, die beim Laden der Seite schon da sind, gehen
+  nicht mehr verloren, wenn die Extension etwas später startet.
+
 ## Extension 3.27.0 (14.10.2026)
 
 - Mehrere Stellen markieren: Mit gedrückter ⌘-Taste weiteren Text markieren
