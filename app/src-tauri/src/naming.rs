@@ -113,12 +113,28 @@ pub fn render(n: &Naming, c: &Ctx) -> Option<String> {
     (!name.is_empty()).then_some(name)
 }
 
-/// Namensvorschlag aus dem Inhalt (F11, 0.36.2 gründlicher): Absender und
-/// Titel der Seite, die größten Wörter im Bild (OCR), bis zu zwei Motive,
-/// Hauptfarbe, etwa „bauhaus-ausstellung_plakat_typografie_rot“. Passt der Name
-/// nicht in 64 Zeichen, fallen zuerst Farbe und zweites Motiv weg. None, wenn
-/// nichts davon da ist.
+/// Namensvorschlag aus dem Inhalt (F11, 0.36.3 inhaltlich): Absender und Titel
+/// der Seite, Wörter aus Bild- und Seitenadresse, die größten Wörter im Bild
+/// (OCR) samt Jahreszahl, bis zu drei Motive, Besonderes (Gruppe, Tier,
+/// Schwarzweiß, Screenshot) und bis zu zwei Farben, etwa
+/// „bauhaus-ausstellung_1923_plakat_typografie_rot-schwarz“. Alles rechnet lokal.
+/// Passt der Name nicht in 80 Zeichen, fallen zuerst Farben und letzte Motive
+/// weg. None, wenn nichts davon da ist.
 pub fn suggest(item: &Item, lang: &str) -> Option<String> {
+    // (Motive, Bildtextwörter, Farben): zu lang, dann zuerst Farben und Motive kürzen
+    let mut best = None;
+    for (motifs, words, colours) in [(3, 3, 2), (3, 3, 1), (2, 3, 1), (2, 2, 1), (1, 2, 0), (1, 1, 0)] {
+        let s = build_suggestion(item, lang, motifs, words, colours)?;
+        let fits = s.chars().count() <= 80;
+        best = Some(s);
+        if fits {
+            break;
+        }
+    }
+    best
+}
+
+fn build_suggestion(item: &Item, lang: &str, motifs: usize, words: usize, colours: usize) -> Option<String> {
     let mut parts: Vec<String> = Vec::new();
     let title = item.page_title.as_deref().unwrap_or("");
     let (author, caption) = social_title(title);
@@ -134,10 +150,20 @@ pub fn suggest(item: &Item, lang: &str) -> Option<String> {
         parts.push(slug(&words.join(" "), true));
     }
     parts.retain(|p| !p.is_empty());
+    // Adresse des Bildes und der Seite: „nike-air-max-90_front.jpg“ sagt oft am meisten
+    let u = url_words(item, &parts.join(" "));
+    if !u.is_empty() {
+        parts.push(u);
+    }
     if let Some(t) = item.text.as_deref() {
-        let w = ocr_words(t, &parts.join(" "));
+        let w = ocr_words(t, &parts.join(" "), words);
         if !w.is_empty() {
             parts.push(w);
+        }
+        if let Some(y) = year_in(t) {
+            if !parts.iter().any(|p| p.contains(&y)) {
+                parts.push(y);
+            }
         }
     }
     if parts.is_empty() {
@@ -145,21 +171,69 @@ pub fn suggest(item: &Item, lang: &str) -> Option<String> {
             parts.push(slug(&d, true));
         }
     }
+    let low = item.filename.to_lowercase();
+    if ["screenshot", "bildschirmfoto", "bildschirmaufnahme"].iter().any(|s| low.starts_with(s)) {
+        parts.push("screenshot".into());
+    }
     if let Some(l) = item.labels.as_deref() {
-        for l in top_labels(l, lang, 2) {
+        for l in top_labels(l, lang, motifs) {
             if !parts.iter().any(|p| p.contains(&l)) {
                 parts.push(l);
             }
         }
     }
-    if let Some(c) = item.colors.as_deref().and_then(|c| top_color(c, lang)) {
-        parts.push(c.to_string());
+    if let Some(c) = item.colors.as_deref() {
+        let mut cw = colour_words(c, lang);
+        if colours == 1 {
+            cw = cw.into_iter().map(|w| if w.starts_with("schwarzweiss") || w.starts_with("black-and") { w } else { w.split('-').next().unwrap_or("").to_string() }).collect();
+        }
+        if colours > 0 {
+            parts.extend(cw);
+        }
     }
     parts.retain(|p| !p.is_empty());
-    while parts.len() > 1 && parts.join("_").chars().count() > 64 {
-        parts.pop();
-    }
     (!parts.is_empty()).then(|| parts.join("_"))
+}
+
+/// Wörter aus Bild- und Seitenadresse, bis zu drei, Bilddatei zuerst.
+fn url_words(item: &Item, skip: &str) -> String {
+    const STOP: &[&str] = &[
+        "images", "image", "img", "media", "static", "cdn", "assets", "asset", "files", "file", "upload", "uploads", "photo", "photos", "pictures", "picture", "product", "products", "www", "html", "htm", "jpg", "jpeg", "png", "webp", "gif", "avif", "large", "small", "medium", "thumb", "thumbnail", "original", "default", "main", "front", "back", "index", "post", "posts", "status", "reel", "reels", "watch", "view", "pin", "pins", "item", "items", "content", "article", "articles", "news", "blog", "page", "pages", "wiki", "object", "objekt", "detail", "details", "id", "file", "download", "resized", "scaled", "full", "crop", "square", "lang", "http", "https", "com", "org", "net",
+    ];
+    let mut out: Vec<String> = Vec::new();
+    let mut take = |url: &str, last: usize| {
+        let path = url.split("://").nth(1).unwrap_or(url);
+        let path = path.split(['?', '#']).next().unwrap_or("");
+        let segs: Vec<&str> = path.split('/').skip(1).filter(|s| !s.is_empty()).collect();
+        let segs = &segs[segs.len().saturating_sub(last)..];
+        for seg in segs {
+            let seg = seg.rsplit_once('.').filter(|(_, e)| e.len() <= 4).map(|(s, _)| s).unwrap_or(seg);
+            for raw in seg.split(|c: char| !c.is_alphanumeric()) {
+                let w = raw.to_lowercase();
+                let letters = w.chars().filter(|c| c.is_alphabetic()).count();
+                let odd_case = raw.chars().skip(1).any(|c| c.is_uppercase()) && raw.chars().any(|c| c.is_lowercase());
+                if letters < 3 || letters != w.chars().count() || w.chars().count() > 20 || odd_case || STOP.contains(&w.as_str()) || out.contains(&w) || skip.contains(&w) {
+                    continue;
+                }
+                out.push(w);
+            }
+        }
+    };
+    if let Some(u) = item.image_url.as_deref() {
+        take(u, 1);
+    }
+    if let Some(u) = item.page_url.as_deref() {
+        take(u, 2);
+    }
+    out.truncate(3);
+    slug(&out.join(" "), true)
+}
+
+/// Erste Jahreszahl 1400 bis 2100 im Bildtext, als eigenes Wort.
+fn year_in(text: &str) -> Option<String> {
+    text.split(|c: char| !c.is_ascii_digit())
+        .find(|t| t.len() == 4 && t.parse::<u32>().is_ok_and(|y| (1400..=2100).contains(&y)))
+        .map(str::to_string)
 }
 
 /// „Name on Instagram: „Text““ → Absender und die ersten Wörter des Texts
@@ -174,9 +248,9 @@ fn social_title(t: &str) -> (Option<String>, Option<String>) {
     (Some(who), Some(cap).filter(|c| !c.is_empty()))
 }
 
-/// Die ersten zwei sinnvollen Wörter des Bildtextes. Vision liefert die größten
+/// Die ersten drei sinnvollen Wörter des Bildtextes. Vision liefert die größten
 /// Zeilen zuerst (macos.rs analyze_image), Oberflächentexte und Füllwörter fallen weg.
-fn ocr_words(text: &str, skip: &str) -> String {
+fn ocr_words(text: &str, skip: &str, max: usize) -> String {
     const STOP: &[&str] = &[
         "und", "der", "die", "das", "den", "dem", "ein", "eine", "mit", "von", "fuer", "für", "auf", "aus", "bei", "nach", "ist", "sind", "nicht", "oder", "wird", "the", "and", "for", "with", "from", "this", "that", "are", "was", "you", "your", "our", "have", "has", "not", "all", "more", "http", "https", "www", "com", "html", "like", "likes", "comment", "comments", "share", "follow", "followers", "following", "reply", "views", "send", "message", "search", "home", "reels", "instagram", "youtube", "pinterest", "save", "gefällt", "folgen", "antworten", "teilen",
     ];
@@ -188,7 +262,7 @@ fn ocr_words(text: &str, skip: &str) -> String {
             continue;
         }
         out.push(w);
-        if out.len() == 2 {
+        if out.len() == max {
             break;
         }
     }
@@ -350,6 +424,56 @@ fn label_word(name: &str, lang: &str) -> String {
         ("adult", "menschen"),
         ("face", "menschen"),
         ("graphic design", "grafik"),
+        ("group", "gruppe"),
+        ("cat", "katze"),
+        ("dog", "hund"),
+        ("bird", "vogel"),
+        ("horse", "pferd"),
+        ("sculpture", "skulptur"),
+        ("statue", "statue"),
+        ("photograph", "foto"),
+        ("jewelry", "schmuck"),
+        ("watch", "uhr"),
+        ("bottle", "flasche"),
+        ("vase", "vase"),
+        ("lamp", "lampe"),
+        ("table", "tisch"),
+        ("sofa", "sofa"),
+        ("bed", "bett"),
+        ("kitchen", "kueche"),
+        ("street", "strasse"),
+        ("city", "stadt"),
+        ("skyscraper", "hochhaus"),
+        ("bridge", "bruecke"),
+        ("vehicle", "fahrzeug"),
+        ("bicycle", "fahrrad"),
+        ("airplane", "flugzeug"),
+        ("boat", "boot"),
+        ("mountain", "berg"),
+        ("beach", "strand"),
+        ("forest", "wald"),
+        ("tree", "baum"),
+        ("snow", "schnee"),
+        ("cloud", "wolken"),
+        ("sunset", "sonnenuntergang"),
+        ("night", "nacht"),
+        ("drink", "getraenk"),
+        ("coffee", "kaffee"),
+        ("cake", "kuchen"),
+        ("fruit", "obst"),
+        ("vegetable", "gemuese"),
+        ("computer", "computer"),
+        ("chart", "diagramm"),
+        ("diagram", "diagramm"),
+        ("menu", "menue"),
+        ("sketch", "skizze"),
+        ("cartoon", "cartoon"),
+        ("comic", "comic"),
+        ("abstract", "abstrakt"),
+        ("texture", "textur"),
+        ("sunglasses", "sonnenbrille"),
+        ("hat", "hut"),
+        ("bag", "tasche"),
         ("fashion", "mode"),
         ("map", "karte"),
         ("website", "website"),
@@ -385,16 +509,26 @@ fn label_word(name: &str, lang: &str) -> String {
     slug(&word, true)
 }
 
-/// Größter Farbanteil ab 25 %, außer Weiß und Grau (Papier, Hintergrund)
-fn top_color(colors: &str, lang: &str) -> Option<&'static str> {
+/// Farbwörter („rot“, „schwarz“): die größte Farbe ab 25 %, eine zweite ab
+/// 15 %, ohne Weiß und Grau (Papier, Hintergrund). Fast ohne Farbe: „schwarzweiss“.
+fn colour_words(colors: &str, lang: &str) -> Vec<String> {
+    let mut shares: Vec<(&str, f32)> = Vec::new();
     for part in colors.split_whitespace() {
-        let (name, share) = part.rsplit_once(':')?;
-        let share: f32 = share.parse().unwrap_or(0.0);
-        if share < 0.25 {
-            return None;
-        }
+        let Some((name, share)) = part.rsplit_once(':') else { continue };
+        shares.push((name, share.parse().unwrap_or(0.0)));
+    }
+    let neutral: f32 = shares.iter().filter(|(n, _)| matches!(*n, "white" | "gray" | "black")).map(|(_, s)| *s).sum();
+    if neutral >= 0.92 && shares.iter().any(|(n, s)| *n == "black" && *s >= 0.1) {
+        return vec![if lang == "en" { "black-and-white" } else { "schwarzweiss" }.into()];
+    }
+    let mut out: Vec<String> = Vec::new();
+    for (name, share) in shares {
         if matches!(name, "white" | "gray") {
             continue;
+        }
+        let min = if out.is_empty() { 0.25 } else { 0.15 };
+        if share < min {
+            break;
         }
         let (en, de) = match name {
             "red" => ("red", "rot"),
@@ -412,9 +546,16 @@ fn top_color(colors: &str, lang: &str) -> Option<&'static str> {
             "black" => ("black", "schwarz"),
             _ => continue,
         };
-        return Some(if lang == "en" { en } else { de });
+        out.push(if lang == "en" { en } else { de }.to_string());
+        if out.len() == 2 {
+            break;
+        }
     }
-    None
+    if out.len() == 2 {
+        vec![out.join("-")]
+    } else {
+        out
+    }
 }
 
 /// Datum am Mac-Kalender: 2026-10-14 oder 261014
@@ -495,7 +636,7 @@ mod tests {
         n.preset = "date-source-nr".into();
         assert_eq!(render(&n, &ctx).as_deref(), Some("2026-10-14_museum-digital_001"));
         n.preset = "zone-content".into();
-        assert_eq!(render(&n, &ctx).as_deref(), Some("typo_form-und-farbe_plakat_typografie_rot"));
+        assert_eq!(render(&n, &ctx).as_deref(), Some("typo_form-und-farbe_plakat_typografie_rot-schwarz"));
         n.preset = "custom".into();
         n.prefix = "AR".into();
         assert_eq!(render(&n, &ctx).as_deref(), Some("ar-typo-261014-001"));
@@ -513,32 +654,43 @@ mod tests {
         it.page_url = None;
         it.text = Some("Bauhaus Ausstellung Weimar Eintritt frei 1923 www.bauhaus.de".into());
         it.labels = Some("poster:0.90, structure:0.80, adult:0.60, people:0.55, text:0.5".into());
-        assert_eq!(suggest(&it, "de").as_deref(), Some("bauhaus-ausstellung_plakat_menschen_rot"));
+        assert_eq!(suggest(&it, "de").as_deref(), Some("bauhaus-ausstellung-weimar_1923_plakat_menschen_rot-schwarz"));
         // Instagram: Absender und erste Wörter der Unterschrift
         it.page_title = Some("Studio Nord on Instagram: \"Neue Schrift für das Museum, jetzt online\"".into());
         it.text = None;
         it.labels = Some("typography:0.8".into());
-        assert_eq!(suggest(&it, "de").as_deref(), Some("studio-nord_neue-schrift-fuer_typografie_rot"));
+        assert_eq!(suggest(&it, "de").as_deref(), Some("studio-nord_neue-schrift-fuer_typografie_rot-schwarz"));
         // nur Quelle
         it.page_title = None;
         it.page_url = Some("https://www.museum-digital.de/x".into());
         it.labels = None;
         it.colors = None;
         assert_eq!(suggest(&it, "de").as_deref(), Some("museum-digital"));
-        // lang genug: Farbe und zweites Motiv fallen zuerst weg
-        it.text = Some("Internationale Typografie Ausstellungsplakat Gestaltung Rudolph Schweiz Plakatkunst".into());
-        it.labels = Some("poster:0.9, illustration:0.8".into());
-        it.colors = Some("red:0.5".into());
+        // Adresse des Bildes: Wörter aus dem Dateinamen
+        it.page_url = None;
+        it.image_url = Some("https://cdn.shop.com/images/nike-air-max-90_front.jpg?w=800".into());
+        it.text = None;
+        it.labels = Some("shoes:0.9".into());
+        it.colors = None;
+        assert_eq!(suggest(&it, "de").as_deref(), Some("nike-air-max_schuhe"));
+        // schwarzweiß statt Farben
+        it.colors = Some("black:0.55 white:0.40 gray:0.05".into());
+        assert_eq!(suggest(&it, "de").as_deref(), Some("nike-air-max_schuhe_schwarzweiss"));
+        // zu lang: höchstens 80 Zeichen, vorn bleibt der Inhalt
+        it.page_title = Some("Ein sehr langer Titel mit vielen Wörtern drin".into());
+        it.text = Some("Internationale Typografie Ausstellungsplakat Gestaltung Rudolph Schweiz Plakatkunst 1951".into());
+        it.labels = Some("poster:0.9, illustration:0.8, typography:0.7".into());
+        it.colors = Some("red:0.5 black:0.3".into());
         let s = suggest(&it, "de").unwrap();
-        assert!(s.chars().count() <= 64, "{s}");
-        assert!(s.starts_with("internationale-typografie_plakat"), "{s}");
+        assert!(s.chars().count() <= 80, "{s}");
+        assert!(s.starts_with("ein-sehr-langer-titel-mit_nike-air-max_internationale-typografie"), "{s}");
     }
 
     #[test]
     fn suggestion_and_messy() {
         let it = item("Typo", "IMG_4821.png");
-        assert_eq!(suggest(&it, "de").as_deref(), Some("form-und-farbe_plakat_typografie_rot"));
-        assert_eq!(suggest(&it, "en").as_deref(), Some("form-und-farbe_poster_typography_red"));
+        assert_eq!(suggest(&it, "de").as_deref(), Some("form-und-farbe_plakat_typografie_rot-schwarz"));
+        assert_eq!(suggest(&it, "en").as_deref(), Some("form-und-farbe_poster_typography_red-black"));
         for m in ["IMG_4821.png", "Bild (3).png", "Screenshot 2026-10-12 um 14.03.11.png", "DSC0012.jpg", "3f9a8c7d6e5b4a3f2e1d0c9b.jpg", "plakat Kopie.png"] {
             assert!(messy(m), "{m}");
         }

@@ -299,7 +299,7 @@ fn start_analysis_worker(app: AppHandle, lib: Arc<Library>) -> mpsc::Sender<()> 
             for (hash, thumb) in todo {
                 let colors = library::color_shares(&thumb).unwrap_or_default();
                 #[cfg(target_os = "macos")]
-                let (labels, text) = macos::analyze_image(&thumb);
+                let (labels, text) = macos::analyze_image(&lib.original_for_hash(&hash).unwrap_or_else(|| thumb.clone()));
                 #[cfg(not(target_os = "macos"))]
                 let (labels, text): (Vec<String>, String) = (Vec::new(), String::new());
                 let a = library::Analysis { hash, labels: labels.join(", "), text, colors };

@@ -188,11 +188,14 @@ pub fn analyze_image(path: &std::path::Path) -> (Vec<String>, String) {
         let faces: *mut AnyObject = msg_send![faces, init];
         let humans: *mut AnyObject = msg_send![class!(VNDetectHumanRectanglesRequest), alloc];
         let humans: *mut AnyObject = msg_send![humans, init];
+        // Tiere (Katze, Hund, Vogel, Pferd …): die Klassifikation nennt sie oft nur allgemein
+        let animals: *mut AnyObject = msg_send![class!(VNRecognizeAnimalsRequest), alloc];
+        let animals: *mut AnyObject = msg_send![animals, init];
         // VNRequestTextRecognitionLevelAccurate
         let _: () = msg_send![ocr, setRecognitionLevel: 0isize];
         let _: () = msg_send![ocr, setUsesLanguageCorrection: true];
         let langs: *mut AnyObject = msg_send![class!(NSMutableArray), array];
-        for l in ["de-DE", "en-US"] {
+        for l in ["de-DE", "en-US", "fr-FR", "it-IT", "es-ES"] {
             let s = NSString::from_str(l);
             let _: () = msg_send![langs, addObject: &*s];
         }
@@ -203,6 +206,7 @@ pub fn analyze_image(path: &std::path::Path) -> (Vec<String>, String) {
         let _: () = msg_send![requests, addObject: ocr];
         let _: () = msg_send![requests, addObject: faces];
         let _: () = msg_send![requests, addObject: humans];
+        let _: () = msg_send![requests, addObject: animals];
         let ok: bool = msg_send![handler, performRequests: requests, error: std::ptr::null_mut::<*mut AnyObject>()];
 
         let mut labels = Vec::new();
@@ -239,12 +243,14 @@ pub fn analyze_image(path: &std::path::Path) -> (Vec<String>, String) {
         // Ein winziges Gesicht im Hintergrund zählt nicht, ein großes macht ein Porträt
         let mut face = 0f32;
         let mut face_h = 0f64;
+        let mut faces_n = 0usize;
         let mut person = 0f32;
         if ok {
             for (c, h) in observations(faces) {
                 if h >= 0.04 {
                     face = face.max(c);
                     face_h = face_h.max(h);
+                    faces_n += 1;
                 }
             }
             for (c, h) in observations(humans) {
@@ -267,15 +273,37 @@ pub fn analyze_image(path: &std::path::Path) -> (Vec<String>, String) {
         if face_h >= 0.3 {
             add("portrait", face);
         }
+        // Drei und mehr Gesichter: eine Gruppe
+        if faces_n >= 3 {
+            add("group", face);
+        }
+        if ok {
+            let results: *mut AnyObject = msg_send![animals, results];
+            if !results.is_null() {
+                let n: usize = msg_send![results, count];
+                for i in 0..n {
+                    let obs: *mut AnyObject = msg_send![results, objectAtIndex: i];
+                    let found: *mut AnyObject = msg_send![obs, labels];
+                    let count: usize = if found.is_null() { 0 } else { msg_send![found, count] };
+                    if count > 0 {
+                        let top: *mut AnyObject = msg_send![found, objectAtIndex: 0usize];
+                        let c: f32 = msg_send![top, confidence];
+                        let id: *mut AnyObject = msg_send![top, identifier];
+                        add(&rust_string(id).to_lowercase(), c);
+                    }
+                }
+            }
+        }
         let _: () = msg_send![handler, release];
         let _: () = msg_send![classify, release];
         let _: () = msg_send![ocr, release];
         let _: () = msg_send![faces, release];
         let _: () = msg_send![humans, release];
+        let _: () = msg_send![animals, release];
 
         labels.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
         // Mit Sicherheit („poster:0.92“), damit die Suche unsichere Motive auslassen kann (0.31.1)
-        let labels = labels.into_iter().take(16).map(|(l, c)| format!("{}:{c:.2}", l.replace('_', " "))).collect();
+        let labels = labels.into_iter().take(24).map(|(l, c)| format!("{}:{c:.2}", l.replace('_', " "))).collect();
         // Größte Zeilen zuerst (0.36.2): Titel vor Kleingedrucktem, für Namensvorschläge
         text.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
         (labels, text.into_iter().map(|(_, t)| t).collect::<Vec<_>>().join(" "))

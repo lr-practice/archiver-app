@@ -915,6 +915,12 @@ impl Library {
             let _ = conn.execute("DELETE FROM analysis", []);
             let _ = conn.execute_batch("PRAGMA user_version = 4;");
         }
+        // ab 0.36.3: Analyse am Original statt an der Vorschau, dazu Tiere, Gruppen und
+        // mehr Sprachen im Bildtext. Alles läuft einmal neu (Hintergrund).
+        if version < 5 {
+            let _ = conn.execute("DELETE FROM analysis", []);
+            let _ = conn.execute_batch("PRAGMA user_version = 5;");
+        }
         let lib = Library {
             root: root.to_path_buf(),
             conn: Mutex::new(conn),
@@ -1642,6 +1648,18 @@ impl Library {
             .query_map([], |r| Ok((r.get::<_, String>(0)?, thumbs.join(r.get::<_, String>(1)?))))
             .map_err(err)?;
         rows.collect::<std::result::Result<_, _>>().map_err(err)
+    }
+
+    /// Die Bilddatei selbst, wenn sie ein Bild ist und in der Bibliothek liegt: Vision
+    /// liest daran kleine Schrift und Details, die in der Vorschau fehlen (0.36.3).
+    pub fn original_for_hash(&self, hash: &str) -> Option<PathBuf> {
+        let rel: String = {
+            let conn = self.conn.lock().unwrap();
+            conn.query_row("SELECT path FROM item WHERE hash = ?1 ORDER BY path LIMIT 1", params![hash], |r| r.get(0)).optional().ok()??
+        };
+        let abs = safe_join(&self.root, &rel).ok()?;
+        let small_enough = fs::metadata(&abs).map(|m| m.len() <= 60 * 1024 * 1024).unwrap_or(false);
+        (is_image(&abs) && THUMB_EXTS.contains(&ext_of(&abs).as_str()) && small_enough).then_some(abs)
     }
 
     pub fn save_analysis(&self, a: &Analysis) -> Result<()> {

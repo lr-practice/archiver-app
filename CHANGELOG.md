@@ -1,5 +1,16 @@
 # Changelog
 
+## Vorabstand 0.36.3 (nicht veröffentlicht)
+
+- Namensvorschlag inhaltlicher, alles lokal: Absender und Titel der Seite,
+  Wörter aus Bild- und Seitenadresse, bis zu drei Wörter und die Jahreszahl aus
+  dem Bild, bis zu drei Motive, Besonderes (Gruppe, Tier, Schwarzweiß,
+  Screenshot) und bis zu zwei Farben, höchstens 80 Zeichen.
+- Bildanalyse (Apple Vision) liest das Original statt der Vorschau, erkennt
+  zusätzlich Tiere und Gruppen und liest Bildtext auch auf Französisch,
+  Italienisch und Spanisch. Alle Bilder laufen einmal neu durch die Analyse (im
+  Hintergrund).
+
 ## App 0.36.2 · Extension 3.28.2
 
 - Namensvorschlag gründlicher: Absender und Titel der Seite (Instagram: Name
