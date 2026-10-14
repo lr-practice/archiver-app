@@ -1,5 +1,11 @@
 # Changelog
 
+## Nächste Version
+
+- Zonenleiste am ganzen Mac ist ab Werk aus; einschalten unter
+  Einstellungen › Tray. Auch bei bisherigen Installationen aus, bis man sie
+  selbst wieder einschaltet.
+
 ## App 0.32.0 · Extension 3.25.0 (14.10.2026)
 
 Ablegen, ohne dass etwas im Weg ist.

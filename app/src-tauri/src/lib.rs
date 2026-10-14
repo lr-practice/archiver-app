@@ -158,8 +158,11 @@ static SETTINGS_LOCK: Mutex<()> = Mutex::new(());
 fn load_settings(app: &AppHandle) -> Settings {
     let Some(p) = settings_path(app) else { return Settings::default() };
     let Ok(text) = std::fs::read_to_string(&p) else { return Settings::default() };
-    match serde_json::from_str(&text) {
-        Ok(s) => s,
+    match serde_json::from_str::<Settings>(&text) {
+        Ok(mut s) => {
+            s.system.settle();
+            s
+        }
         Err(e) => {
             // Kaputte Datei nicht still überschreiben: beiseitelegen, dann Standard
             log::error("settings", format!("{}: {e}", p.display()));

@@ -75,7 +75,7 @@ const MANUAL = {
           { t: "Herausziehen", d: "Objekt direkt in InDesign, Figma, Mail oder den Finder ziehen. Der Tray wird dabei fast unsichtbar." },
           { t: "Kopieren und zeigen", d: "`↵` kopiert, `⌘↵` zeigt im Finder, die Leertaste zeigt das Objekt groß.", k: ["↵", "⌘↵", "Space"] },
           { t: "InDesign", d: "Rahmen markieren, Tray öffnen, Doppelklick oder `↵` auf ein Bild: Es landet verknüpft im Rahmen, proportional gefüllt und zentriert." },
-          { t: "Zonenleiste", d: "Wer irgendwo auf dem Mac Dateien zieht, sieht unten die Active Zones. Loslassen sichert. Abschaltbar unter Einstellungen › Tray." },
+          { t: "Zonenleiste", d: "Wer irgendwo auf dem Mac Dateien zieht, sieht unten die Active Zones. Loslassen sichert. Ab Werk aus, einschalten unter Einstellungen › Tray." },
         ],
       },
       {
@@ -195,7 +195,7 @@ const MANUAL = {
           { t: "Drag out", d: "Drag an object straight into InDesign, Figma, Mail or the Finder. The Tray almost disappears while you drag." },
           { t: "Copy and show", d: "`↵` copies, `⌘↵` shows in Finder, Space shows the object large.", k: ["↵", "⌘↵", "Space"] },
           { t: "InDesign", d: "Select a frame, open the Tray, double-click or press `↵` on an image: it is placed linked in the frame, filled proportionally and centred." },
-          { t: "Zone bar", d: "Drag files anywhere on your Mac and the Active Zones appear at the bottom. Drop to save. Can be turned off under Settings › Tray." },
+          { t: "Zone bar", d: "Drag files anywhere on your Mac and the Active Zones appear at the bottom. Drop to save. Off by default, turn it on under Settings › Tray." },
         ],
       },
       {

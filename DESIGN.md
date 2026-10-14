@@ -382,6 +382,9 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
   „Gesichert in …“ mit Glühen (`.landed`). Scheitert es, steht „Nicht
   gesichert: …“ in `--danger` (`.failed`, kein Glühen) 2.5 s lang, dann
   blendet die Leiste aus. Die Leiste bleibt so lange stehen (`dropbar_hold`).
+- **Ab Werk aus (0.32.1):** Einschalten unter Einstellungen › Tray. Erst die
+  eigene Wahl zählt (`dropbarChosen`); ein `dropbar: true` aus älteren
+  Versionen ohne Wahl gilt als aus. Im Browser übernimmt die Extension.
 - **Nicht:** Erscheint nicht, wenn Archiver selbst vorne ist, und nicht bei
   Text oder Links ohne Datei. Zeigt nie „Gesichert“, bevor es gesichert ist.
 

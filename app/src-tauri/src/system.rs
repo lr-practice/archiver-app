@@ -30,7 +30,7 @@ pub const DROPBAR: &str = "dropbar";
 pub const DEFAULT_SHORTCUT: &str = "Alt+Space";
 
 /// Zonenleiste beim Ziehen eingeschaltet
-static DROPBAR_ON: AtomicBool = AtomicBool::new(true);
+static DROPBAR_ON: AtomicBool = AtomicBool::new(false);
 /// Gerade wird aus der Palette gezogen: keine Leiste, Palette nicht schließen
 static PALETTE_DRAG: AtomicBool = AtomicBool::new(false);
 /// Zonenleiste nach dem Loslassen stehen lassen bis zu diesem Zeitpunkt (ms):
@@ -51,11 +51,24 @@ pub struct SystemPrefs {
     pub shortcut: String,
     /// Zonenleiste beim Ziehen am ganzen Mac
     pub dropbar: bool,
+    /// Leiste selbst in den Einstellungen gewählt (0.32.1). Ohne Wahl ist sie
+    /// aus, auch wenn eine ältere Version `dropbar: true` gespeichert hat.
+    #[serde(default)]
+    pub dropbar_chosen: bool,
 }
 
 impl Default for SystemPrefs {
     fn default() -> Self {
-        SystemPrefs { shortcut: DEFAULT_SHORTCUT.into(), dropbar: true }
+        SystemPrefs { shortcut: DEFAULT_SHORTCUT.into(), dropbar: false, dropbar_chosen: false }
+    }
+}
+
+impl SystemPrefs {
+    /// Ab Werk aus: nur an, wenn jemand sie in den Einstellungen eingeschaltet hat
+    pub fn settle(&mut self) {
+        if !self.dropbar_chosen {
+            self.dropbar = false;
+        }
     }
 }
 
@@ -415,4 +428,22 @@ fn set_dropbar(app: &AppHandle, show: bool) {
             }
         }
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::SystemPrefs;
+
+    #[test]
+    fn dropbar_is_off_unless_chosen() {
+        // Ältere Versionen haben `dropbar: true` ohne Wahl gespeichert
+        let mut old: SystemPrefs = serde_json::from_str(r#"{"shortcut":"Alt+Space","dropbar":true}"#).unwrap();
+        old.settle();
+        assert!(!old.dropbar);
+        let mut chosen: SystemPrefs =
+            serde_json::from_str(r#"{"shortcut":"Alt+Space","dropbar":true,"dropbarChosen":true}"#).unwrap();
+        chosen.settle();
+        assert!(chosen.dropbar);
+        assert!(!SystemPrefs::default().dropbar);
+    }
 }
