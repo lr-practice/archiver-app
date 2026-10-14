@@ -2875,7 +2875,8 @@
       const sentence = items.length
         ? [t("headZone", { count: countText(items.length), date: recentDate(latest) }).replace(/\.\.$/, "."), hasFolders ? t(named === 1 ? "headFolder1" : "headFolders", { n: named }) : "", topDomains(items)].filter(Boolean).join(" ")
         : t("headZoneEmpty");
-      const h = headline(lastSegment(zone.path), sentence);
+      // 0.32: Unsorted räumt sich nach 7 Tagen selbst auf (library.rs expire_inbox)
+      const h = headline(lastSegment(zone.path), zone.path === state.defaultZone && !state.shared ? sentence + " " + t("headUnsorted") : sentence);
       if (canEdit(zone.path)) {
         const title = h.querySelector(".p-head-title");
         title.classList.add("zone-card-name");
@@ -3719,6 +3720,19 @@
     const quote = items.length === 1 ? quoteOf(items[0]) : null;
     invoke("copy_images", { paths: items.map((i) => i.abs), text: quote || null })
       .then(() => toast(quote ? t("copiedText") : items.length === 1 ? t("copiedOne") : t("copiedMany", { n: items.length })))
+      .catch(fail);
+  }
+
+  // ⌘V (0.32): in die offene Zone bzw. ihren Ordner, auf der Startseite nach Unsorted
+  function pasteIntoZone() {
+    const zone = isZone(state.focus) ? (state.level ? state.focus + "/" + state.level : state.focus) : "";
+    invoke("paste_into", { zone })
+      .then((r) => {
+        if (r.imported) toast(t("pasted", { zone: zoneLabel(zone || state.defaultZone) }));
+        else if (r.duplicates) toast(t("importDone", { imported: 0, duplicates: r.duplicates, sources: 0 }));
+        else toast(t("pasteEmpty"));
+        return refresh();
+      })
       .catch(fail);
   }
 
@@ -6486,13 +6500,19 @@
       state.homeKbd = false;
       applyHomeCursor(false);
     });
-    // 0.29: ⌘V mit Text auf ein gewähltes Bild (oder in der Lightbox) setzt den Bildtext
+    // 0.29: ⌘V mit Text auf ein gewähltes Bild (oder in der Lightbox) setzt den Bildtext.
+    // 0.32: sonst kommt die Zwischenablage in die offene Zone (Dateien, Bild, Text).
     document.addEventListener("paste", (e) => {
       if (e.target.closest && e.target.closest("input, textarea, [contenteditable]")) return;
+      if (!$("modal").hidden) return;
       const text = (e.clipboardData && e.clipboardData.getData("text/plain") || "").trim();
-      if (!text || (e.clipboardData.files && e.clipboardData.files.length)) return;
+      const files = e.clipboardData && e.clipboardData.files && e.clipboardData.files.length;
       const items = state.lightbox ? [lightboxItem()].filter(Boolean) : selectedItems();
-      if (items.length !== 1 || quoteOf(items[0])) return;
+      if (!text || files || items.length !== 1 || quoteOf(items[0])) {
+        if (state.lightbox || state.focus === DELETED) return;
+        e.preventDefault();
+        return pasteIntoZone();
+      }
       e.preventDefault();
       const item = items[0];
       const had = !!item.caption;

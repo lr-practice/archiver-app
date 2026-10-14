@@ -46,7 +46,35 @@ input {
   animation: zones-in 0.14s ease-out;
 }
 
-/* Ruhige Bewegung: nur Ein- und Ausblenden, kein Hochfahren. --zone-in
+/* Streifen (3.25.0): beim Ziehen erst nur 30 px am Rand, darüber bleibt die
+   Seite frei. Zeiger im Streifen: die Leiste fährt auf volle Höhe (content.js). */
+.zones-bar {
+  transition: height 0.22s cubic-bezier(0.16, 1, 0.3, 1), padding 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.zones-bar.strip {
+  height: 30px;
+  padding: 0 14px;
+}
+
+.zones-bar.strip .zone {
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 10px;
+  padding: 0 14px;
+  border-radius: var(--r-lg, 8px) var(--r-lg, 8px) 0 0;
+}
+
+.zones-bar.strip .zone-label {
+  font-size: 13px;
+}
+
+.zones-bar.strip .zone-hint {
+  display: none;
+}
+
+/* Ruhige Bewegung: Ein- und Ausblenden ohne Hochfahren (hoch fährt sie nur aus dem Streifen). --zone-in
    (--archiver-zone-in, registriert in content.js,
    weil @property im Shadow DOM nicht greift) steuert Glas und Inhalt direkt; opacity auf der Leiste würde das Glas
    (backdrop-filter) bis zum Ende der Animation verschlucken. */
@@ -434,4 +462,10 @@ html.light .lib-bar .lib.on,
 
 .zone[hidden] {
   display: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .zones-bar {
+    transition: none;
+  }
 }

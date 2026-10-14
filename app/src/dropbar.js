@@ -133,7 +133,10 @@
   TAURI.event.listen("dropbar-show", async () => {
     await load();
     render();
+    $("bar").classList.add("strip");
   });
+  // 0.32: Zeiger im Streifen → volle Leiste, darüber hinaus → wieder Streifen
+  TAURI.event.listen("dropbar-tall", (e) => $("bar").classList.toggle("strip", !e.payload));
   TAURI.event.listen("dropbar-release", () => {
     if (!document.querySelector(".landed, .busy, .failed")) $("bar").classList.add("leaving");
   });

@@ -156,6 +156,38 @@ pub struct Source {
     pub quote: Option<String>,
 }
 
+/// Zwischenablage für ⌘V (macos.rs read_pasteboard liest sie aus)
+#[derive(Default)]
+pub struct Pasted {
+    pub files: Vec<PathBuf>,
+    pub image: Option<Vec<u8>>,
+    pub text: Option<String>,
+}
+
+/// Name für Eingefügtes: Text nach seinen ersten Wörtern, sonst „Eingefügt“ mit Datum
+fn paste_name(text: &str) -> String {
+    let words: Vec<&str> = text.split_whitespace().take(6).collect();
+    let mut name = clean_segment(&words.join(" "));
+    if name.chars().count() > 48 {
+        name = name.chars().take(48).collect::<String>().trim_end().to_string();
+    }
+    if !name.is_empty() {
+        return name;
+    }
+    let days = now_ms().div_euclid(86_400_000);
+    // Tage seit 1970 → Datum (Howard Hinnant, civil_from_days), UTC
+    let z = days + 719_468;
+    let era = z.div_euclid(146_097);
+    let doe = z - era * 146_097;
+    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = doy - (153 * mp + 2) / 5 + 1;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 };
+    let y = yoe + era * 400 + i64::from(m <= 2);
+    format!("Eingefügt {y}-{m:02}-{d:02}")
+}
+
 #[derive(Serialize, Clone, Debug, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct ImportReport {
@@ -392,6 +424,8 @@ impl Structure {
 
 /// Tage unter „Zuletzt gelöscht“, bevor eine Datei in den Papierkorb des Macs geht
 pub const DELETED_DAYS: i64 = 7;
+/// .archiver/unsorted-seen.json: seit wann ein Objekt in Unsorted liegt (expire_inbox)
+const INBOX_SEEN: &str = "unsorted-seen.json";
 const DELETED_HASHES: &str = ".hashes.json";
 
 /// Eintrag unter „Zuletzt gelöscht“: alter Pfad in der Bibliothek, Ort unter
@@ -2141,6 +2175,37 @@ impl Library {
         n
     }
 
+    /// Unsorted räumt sich selbst auf (0.32): Was länger als `days` Tage in der
+    /// Standardzone liegt, kommt unter „Zuletzt gelöscht“ (dort weitere 7 Tage
+    /// wiederherstellbar). Gezählt wird ab dem Tag, an dem Archiver das Objekt
+    /// dort zuerst gesehen hat (.archiver/unsorted-seen.json), nicht ab Datei-
+    /// oder Importdatum: Wer etwas Altes nach Unsorted zieht, hat 7 Tage Zeit,
+    /// und beim ersten Start mit dieser Version beginnt die Frist für alles neu.
+    /// Geteilte Bibliotheken bleiben unberührt, dort räumt niemand für andere auf.
+    pub fn expire_inbox(&self, days: i64) -> Result<usize> {
+        if self.shared {
+            return Ok(0);
+        }
+        let zone = self.default_zone();
+        let seen_path = self.root.join(META_DIR).join(INBOX_SEEN);
+        let seen: HashMap<String, i64> = fs::read(&seen_path).ok().and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or_default();
+        let now = now_ms();
+        let limit = days * 24 * 3600 * 1000;
+        let mut keep = HashMap::new();
+        let mut old = Vec::new();
+        for item in self.items()?.into_iter().filter(|i| i.zone == zone) {
+            let since = seen.get(&item.hash).copied().unwrap_or(now);
+            if now - since > limit {
+                old.push(item.path);
+            } else {
+                keep.insert(item.hash, since);
+            }
+        }
+        let n = if old.is_empty() { 0 } else { self.trash_items(&old)?.len() };
+        fs::write(&seen_path, serde_json::to_vec(&keep).map_err(err)?).map_err(err)?;
+        Ok(n)
+    }
+
     /// Leere Löschordner aufräumen
     fn prune_deleted(&self) {
         let Ok(rd) = fs::read_dir(self.deleted_dir()) else { return };
@@ -2326,6 +2391,41 @@ impl Library {
             self.write_metadata()?;
         }
         Ok(report)
+    }
+
+    /// ⌘V (0.32): Inhalt der Zwischenablage in eine Zone. Dateien aus dem
+    /// Finder gehen wie beim Hineinziehen; sonst Bilddaten (PNG oder TIFF, als
+    /// PNG gesichert), sonst Text als Textkarte. Bild und Text bekommen einen
+    /// Namen (Text: seine ersten Wörter) und laufen über einen Zwischenordner.
+    pub fn paste_into(&self, zone: &str, pasted: Pasted) -> Result<ImportReport> {
+        if !pasted.files.is_empty() {
+            return self.import_files(&pasted.files, zone);
+        }
+        let tmp = self.root.join(META_DIR).join("paste");
+        fs::create_dir_all(&tmp).map_err(err)?;
+        let file = if let Some(bytes) = pasted.image {
+            let png = if bytes.starts_with(b"\x89PNG") {
+                bytes
+            } else {
+                let img = image::load_from_memory(&bytes).map_err(err)?;
+                let mut out = std::io::Cursor::new(Vec::new());
+                img.write_to(&mut out, image::ImageFormat::Png).map_err(err)?;
+                out.into_inner()
+            };
+            let f = tmp.join(format!("{}.png", paste_name("")));
+            fs::write(&f, png).map_err(err)?;
+            f
+        } else if let Some(text) = pasted.text.filter(|t| !t.trim().is_empty()) {
+            let text: String = text.trim().chars().take(TEXT_MAX_CHARS).collect();
+            let f = tmp.join(format!("{}.txt", paste_name(&text)));
+            fs::write(&f, text).map_err(err)?;
+            f
+        } else {
+            return Ok(ImportReport::default());
+        };
+        let report = self.import_files(&[file.clone()], zone);
+        let _ = fs::remove_file(&file);
+        report
     }
 
     /// Ordner aus dem Finder: Struktur bleibt erhalten, Name wird bereinigt.
@@ -2908,6 +3008,61 @@ mod tests {
         let lib = Library::open(&root).unwrap();
         let n: i64 = lib.conn.lock().unwrap().query_row("SELECT COUNT(*) FROM analysis", [], |r| r.get(0)).unwrap();
         assert_eq!(n, 1);
+    }
+
+    #[test]
+    fn unsorted_empties_itself_after_seven_days() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path().join("Bib");
+        let lib = Library::open(&root).unwrap();
+        let src = tmp.path().join("src");
+        write_png(&src.join("alt.png"), 4, 4, 10);
+        write_png(&src.join("neu.png"), 4, 4, 20);
+        write_png(&src.join("zone.png"), 4, 4, 30);
+        lib.import_files(&[src.join("alt.png"), src.join("neu.png")], "Unsorted").unwrap();
+        lib.import_files(&[src.join("zone.png")], "Typo").unwrap();
+        // erster Lauf: nichts geht, die Frist beginnt
+        assert_eq!(lib.expire_inbox(DELETED_DAYS).unwrap(), 0);
+        let seen_path = root.join(META_DIR).join(INBOX_SEEN);
+        let mut seen: HashMap<String, i64> = serde_json::from_slice(&fs::read(&seen_path).unwrap()).unwrap();
+        assert_eq!(seen.len(), 2, "nur Unsorted zählt");
+        // „alt.png“ liegt seit acht Tagen dort
+        let alt = lib.hash_of("Unsorted/alt.png").unwrap();
+        seen.insert(alt, now_ms() - 8 * 24 * 3600 * 1000);
+        fs::write(&seen_path, serde_json::to_vec(&seen).unwrap()).unwrap();
+        assert_eq!(lib.expire_inbox(DELETED_DAYS).unwrap(), 1);
+        assert!(!root.join("Unsorted/alt.png").exists());
+        assert!(root.join("Unsorted/neu.png").is_file());
+        assert!(root.join("Typo/zone.png").is_file());
+        // unter „Zuletzt gelöscht“, also wiederherstellbar
+        assert_eq!(lib.deleted_items().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn paste_files_image_and_text() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path().join("Bib");
+        let lib = Library::open(&root).unwrap();
+        // Bilddaten (PNG)
+        let src = tmp.path().join("src");
+        write_png(&src.join("a.png"), 4, 4, 10);
+        let png = fs::read(src.join("a.png")).unwrap();
+        let r = lib.paste_into("Typo", Pasted { image: Some(png), ..Default::default() }).unwrap();
+        assert_eq!(r.imported, 1);
+        // Text wird zur Textkarte, benannt nach den ersten Wörtern
+        let r = lib.paste_into("Typo", Pasted { text: Some("  Form folgt Funktion, sagt man  ".into()), ..Default::default() }).unwrap();
+        assert_eq!(r.imported, 1);
+        assert!(root.join("Typo/Form folgt Funktion, sagt man.txt").is_file());
+        // Dateien aus dem Finder gehen vor Bild und Text
+        write_png(&src.join("b.png"), 4, 4, 20);
+        let r = lib
+            .paste_into("Typo", Pasted { files: vec![src.join("b.png")], image: Some(vec![1, 2, 3]), text: Some("b.png".into()) })
+            .unwrap();
+        assert_eq!(r.imported, 1);
+        assert!(root.join("Typo/b.png").is_file());
+        assert_eq!(lib.items().unwrap().iter().filter(|i| i.zone == "Typo").count(), 3);
+        assert!(fs::read_dir(root.join(META_DIR).join("paste")).unwrap().next().is_none(), "Zwischenordner leer");
+        assert!(paste_name("").starts_with("Eingefügt 20"));
     }
 
     #[test]

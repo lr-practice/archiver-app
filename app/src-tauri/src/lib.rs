@@ -327,6 +327,19 @@ fn activate(app: &AppHandle, root: &Path) -> Result<(), String> {
     // „Zuletzt gelöscht“: was älter als 7 Tage ist, geht in den Papierkorb des Macs
     let purge = lib.clone();
     std::thread::spawn(move || purge.purge_deleted(library::DELETED_DAYS));
+    // Unsorted räumt sich nach 7 Tagen selbst auf (0.32): beim Öffnen und dann
+    // stündlich, solange diese Bibliothek offen ist
+    let inbox = Arc::downgrade(&lib);
+    let inbox_app = app.clone();
+    std::thread::spawn(move || {
+        while let Some(lib) = inbox.upgrade() {
+            if lib.expire_inbox(library::DELETED_DAYS).unwrap_or(0) > 0 {
+                let _ = inbox_app.emit("library-changed", ());
+            }
+            drop(lib);
+            std::thread::sleep(std::time::Duration::from_secs(3600));
+        }
+    });
     let state = app.state::<AppState>();
     *state.watcher.lock().unwrap() = None;
 
@@ -1071,6 +1084,29 @@ async fn import_files(app: AppHandle, state: State<'_, AppState>, paths: Vec<Str
     Ok(after_import(&app, report))
 }
 
+/// ⌘V (0.32): Zwischenablage in eine Zone (Dateien, Bilddaten oder Text).
+/// Gelesen wird auf dem Hauptthread (AppKit), importiert im Hintergrund.
+#[tauri::command]
+async fn paste_into(app: AppHandle, state: State<'_, AppState>, zone: String) -> Result<ImportReport, String> {
+    let lib = current(&state)?;
+    #[cfg(target_os = "macos")]
+    let pasted = {
+        let (tx, rx) = mpsc::channel();
+        app.run_on_main_thread(move || {
+            let _ = tx.send(macos::read_pasteboard());
+        })
+        .map_err(|e| e.to_string())?;
+        let (files, image, text) = rx.recv().map_err(|e| e.to_string())?;
+        library::Pasted { files: files.into_iter().map(PathBuf::from).collect(), image, text }
+    };
+    #[cfg(not(target_os = "macos"))]
+    let pasted = library::Pasted::default();
+    let report = tauri::async_runtime::spawn_blocking(move || lib.paste_into(&zone, pasted))
+        .await
+        .map_err(|e| e.to_string())??;
+    Ok(after_import(&app, report))
+}
+
 #[tauri::command]
 async fn drag_icon(state: State<'_, AppState>, hash: String, path: String, color: Option<String>) -> Result<Option<String>, String> {
     let lib = current(&state)?;
@@ -1456,6 +1492,7 @@ pub fn run() {
             export_package,
             set_note,
             set_quote,
+            paste_into,
             web_archive,
             external_zones,
             link_folder,

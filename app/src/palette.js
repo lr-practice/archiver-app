@@ -1,6 +1,7 @@
 // palette.js — Palette am ganzen Mac (system.rs). Drei Zustände:
 //   Start   Active Zones als Karten, darunter der Index (übrige Zonen)
-//   Zone    Objekte einer Zone, oben die Active Zones als Reiter (1–4)
+//   Zone    Objekte einer Zone, oben die Active Zones als Reiter (1–4),
+//           darüber ihre Unterordner als Karten (0.32)
 //   Suche   passende Zonen als Karten, darunter passende Objekte
 // Objekte zieht man heraus, z. B. in einen InDesign-Rahmen; währenddessen ist
 // die Palette fast unsichtbar und durchklickbar. ↵ kopiert, ⌘↵ zeigt im Finder.
@@ -23,6 +24,7 @@
     zones: [], // geordnet wie in der App
     view: "start", // start | zone | search
     zone: null,
+    level: null, // Unterordner in der offenen Zone (0.32), null = ganze Zone
     sel: 0, // Index im aktuellen Fokusbereich
     area: "cards", // cards | objects (welcher Bereich die Pfeiltasten hat)
     cards: [], // sichtbare Karten (Zonen)
@@ -127,6 +129,41 @@
     return list.sort((a, b) => at(a) - at(b));
   }
 
+  // Unterordner wie in der App (app.js subdirOf, zoneFolders): Ordnerpfad des
+  // Objekts innerhalb seiner Zone, "" = direkt in der Zone
+  function subdirOf(item) {
+    const d = item.path.slice(0, Math.max(0, item.path.lastIndexOf("/")));
+    const z = item.zone || "";
+    if (!z) return d;
+    return d === z ? "" : d.startsWith(z + "/") ? d.slice(z.length + 1) : "";
+  }
+
+  function inFolder(item, folder) {
+    if (folder == null) return true;
+    const d = subdirOf(item);
+    return d === folder || d.startsWith(folder + "/");
+  }
+
+  // Ordner direkt unter `base` mit Anzahl (samt Unterordnern), auch leere
+  function foldersOf(zone, items, base) {
+    const pre = base ? base + "/" : "";
+    const counts = new Map();
+    for (const item of items) {
+      const d = subdirOf(item);
+      const rest = d.startsWith(pre) ? d.slice(pre.length) : "";
+      if (!rest) continue; // lose Objekte dieser Ebene oder außerhalb
+      const f = pre + rest.split("/")[0];
+      counts.set(f, (counts.get(f) || 0) + 1);
+    }
+    const root = (zone ? zone + "/" : "") + pre;
+    for (const d of state.snap.folders || []) {
+      if (!d.startsWith(root) || d.length === root.length) continue;
+      const f = pre + d.slice(root.length).split("/")[0];
+      if (!counts.has(f)) counts.set(f, 0);
+    }
+    return [...counts].sort((a, b) => a[0].localeCompare(b[0], undefined, { numeric: true }));
+  }
+
   function kindOf(item) {
     if (item.quote) return "text";
     return Media.kind(item.format || item.filename);
@@ -159,19 +196,23 @@
 
   // ---- Darstellung ----
 
-  function card(zone, i, flat) {
-    const node = el("article", "pal-card" + (flat ? " flat" : ""));
-    const items = itemsOf(zone.path).filter((it) => kindOf(it) !== "text");
+  function cover(items) {
+    items = items.filter((it) => kindOf(it) !== "text");
     const trio = items.length >= 3;
-    const cover = el("div", "pal-cover" + (trio ? " trio" : ""));
+    const node = el("div", "pal-cover" + (trio ? " trio" : ""));
     for (const item of items.slice(0, trio ? 3 : 1)) {
       const img = el("img");
       img.src = thumbSrc(item);
       img.loading = "lazy";
       img.draggable = false;
-      cover.appendChild(img);
+      node.appendChild(img);
     }
-    node.appendChild(cover);
+    return node;
+  }
+
+  function card(zone, i) {
+    const node = el("article", "pal-card");
+    node.appendChild(cover(itemsOf(zone.path)));
     if (i < HOT) {
       const key = el("div", "pal-key");
       key.appendChild(mono(String(i + 1).padStart(2, "0")));
@@ -183,6 +224,18 @@
     body.appendChild(el("div", "pal-card-meta", zone.count ? countText(zone.count) : t("emptyShort")));
     node.appendChild(body);
     node.addEventListener("click", () => openZone(zone.path));
+    return node;
+  }
+
+  // Unterordner als Karte wie in der App (4.5): Cover, Name, Anzahl
+  function folderCard(path, n) {
+    const node = el("article", "pal-card");
+    node.appendChild(cover(itemsOf(state.zone).filter((it) => inFolder(it, path))));
+    const body = el("div", "pal-card-body");
+    body.appendChild(el("div", "pal-card-name", path.split("/").pop()));
+    body.appendChild(el("div", "pal-card-meta", n ? countText(n) : t("emptyShort")));
+    node.appendChild(body);
+    node.addEventListener("click", () => openFolder(path));
     return node;
   }
 
@@ -246,7 +299,7 @@
       if (rest.length) {
         body.appendChild(label(t("indexLabel") + " (" + rest.length + ")"));
         const more = el("div", "pal-cards");
-        rest.forEach((z, i) => more.appendChild(card(z, HOT + i, true)));
+        rest.forEach((z, i) => more.appendChild(card(z, HOT + i)));
         body.appendChild(more);
       }
       state.cards = state.zones.map((z) => z.path);
@@ -257,13 +310,24 @@
 
     if (state.view === "zone") {
       renderCrumb();
-      const items = itemsOf(state.zone);
-      if (!items.length) body.appendChild(el("div", "pal-empty", t("palZoneEmpty")));
+      const all = itemsOf(state.zone);
+      const items = all.filter((it) => inFolder(it, state.level));
+      const folders = foldersOf(state.zone, all, state.level);
+      if (folders.length) {
+        body.appendChild(label("(" + t("palFolders") + ") (" + folders.length + ")"));
+        const row = el("div", "pal-cards");
+        for (const [f, n] of folders) row.appendChild(folderCard(f, n));
+        body.appendChild(row);
+        if (items.length) body.appendChild(label("(" + t("palObjects") + ") (" + items.length + ")"));
+      }
+      if (!items.length && !folders.length) body.appendChild(el("div", "pal-empty", t("palZoneEmpty")));
       const grid = el("div", "pal-grid");
       for (const item of items) grid.appendChild(obj(item));
       body.appendChild(grid);
+      state.cards = folders.map(([f]) => f);
       state.objects = items;
-      state.area = "objects";
+      if (state.area === "objects" && !items.length) state.area = "cards";
+      if (state.area === "cards" && !state.cards.length) state.area = "objects";
       keys([["↵", enterLabel()], ["␣", t("palPreview")], ["⌘↵", t("palFinder")], ["1–4", t("palZone")], ["⌫", t("palBack")]]);
     }
 
@@ -275,7 +339,7 @@
       if (zones.length) {
         body.appendChild(label("(" + t("palZones") + ")"));
         const row = el("div", "pal-cards");
-        for (const z of zones.slice(0, 8)) row.appendChild(card(z, state.zones.indexOf(z), true));
+        for (const z of zones.slice(0, 8)) row.appendChild(card(z, state.zones.indexOf(z)));
         body.appendChild(row);
       }
       if (items.length) {
@@ -301,10 +365,18 @@
     const back = mono("← " + t("palZones"), "pal-crumb-back");
     back.addEventListener("click", goStart);
     head.appendChild(back);
-    head.appendChild(el("span", "pal-crumb-name", zoneName(state.zone)));
+    const name = el("span", "pal-crumb-name", zoneName(state.zone));
+    // im Unterordner: „Zone / Ordner“, der Zonenname führt zurück auf die Zone
+    if (state.level != null) {
+      name.classList.add("pal-crumb-up");
+      name.addEventListener("click", () => openFolder(null));
+      head.appendChild(name);
+      head.appendChild(el("span", "pal-crumb-name", "/ " + state.level.split("/").join(" / ")));
+    } else head.appendChild(name);
     const zone = state.zones.find((z) => z.path === state.zone);
     const i = state.zones.indexOf(zone);
-    let meta = zone ? countText(zone.count) : "";
+    const n = state.level != null ? itemsOf(state.zone).filter((it) => inFolder(it, state.level)).length : zone && zone.count;
+    let meta = zone ? countText(n) : "";
     if (i >= 0 && i < HOT) meta += " · " + t("palActive") + " " + String(i + 1).padStart(2, "0");
     head.appendChild(el("span", "pal-crumb-meta", meta));
     crumb.appendChild(head);
@@ -334,6 +406,7 @@
   function goStart() {
     state.view = "start";
     state.zone = null;
+    state.level = null;
     state.sel = 0;
     $("q").value = "";
     render();
@@ -343,10 +416,27 @@
   function openZone(path) {
     state.view = "zone";
     state.zone = path;
+    state.level = null;
     state.sel = 0;
+    state.area = "objects";
     $("q").value = "";
     render();
     $("q").focus();
+  }
+
+  function openFolder(path) {
+    state.level = path;
+    state.sel = 0;
+    state.area = "objects";
+    render();
+    $("q").focus();
+  }
+
+  // ⌫ im Ordner: eine Ebene hoch, in der Zone: zurück zur Übersicht
+  function goUp() {
+    if (state.level == null) return goStart();
+    const i = state.level.lastIndexOf("/");
+    openFolder(i > 0 ? state.level.slice(0, i) : null);
   }
 
   function onInput() {
@@ -368,8 +458,8 @@
     const total = state.area === "cards" ? state.cards.length : state.objects.length;
     if (!total) return;
     let next = state.sel + dx + dy * columns();
-    if (state.view === "search" && dy) {
-      // ↓ aus den Zonen in die Objekte, ↑ zurück
+    if (state.view !== "start" && dy) {
+      // ↓ aus den Karten (Zonen, Ordner) in die Objekte, ↑ zurück
       if (next >= total && state.area === "cards" && state.objects.length) {
         state.area = "objects";
         state.sel = 0;
@@ -408,6 +498,19 @@
     try {
       await invoke("copy_images", { paths: [item.abs], text: item.quote || null });
       toast(t("palCopied"));
+    } catch (e) {
+      toast(String(e));
+    }
+  }
+
+  async function pasteHere() {
+    const zone = state.level ? state.zone + "/" + state.level : state.zone;
+    try {
+      const r = await invoke("paste_into", { zone });
+      toast(r.imported ? t("pasted", { zone: zoneName(zone) }) : r.duplicates ? t("importDone", { imported: 0, duplicates: r.duplicates, sources: 0 }) : t("pasteEmpty"));
+      state.dirty = true;
+      await load();
+      render();
     } catch (e) {
       toast(String(e));
     }
@@ -523,6 +626,19 @@
   function onKey(e) {
     if (state.preview) return previewKey(e);
     const q = $("q").value;
+    // 0.32: ⌘C kopiert das gewählte Objekt, ⌘V legt die Zwischenablage in die
+    // offene Zone. Steht etwas im Suchfeld, gehören beide dem Suchfeld.
+    if (e.metaKey && !e.altKey && !e.shiftKey && !q && (e.key === "c" || e.key === "v")) {
+      const s = selected();
+      if (e.key === "c" && state.area === "objects" && s.item) {
+        e.preventDefault();
+        return copyItem(s.item);
+      }
+      if (e.key === "v" && state.view === "zone") {
+        e.preventDefault();
+        return pasteHere();
+      }
+    }
     if (e.metaKey && !e.altKey && !e.shiftKey && /^[1-3]$/.test(e.key)) {
       e.preventDefault();
       return switchLibrary(Number(e.key) - 1);
@@ -542,7 +658,7 @@
     }
     if (e.key === "Backspace" && !q && state.view === "zone") {
       e.preventDefault();
-      return goStart();
+      return goUp();
     }
     // 1–4: Active Zone öffnen, solange nichts getippt ist
     if (!q && /^[1-4]$/.test(e.key) && !e.metaKey && !e.altKey) {
@@ -552,7 +668,7 @@
         return openZone(zone.path);
       }
     }
-    if (e.key === "Tab" && state.view === "search") {
+    if (e.key === "Tab" && state.view !== "start") {
       e.preventDefault();
       const other = state.area === "cards" ? "objects" : "cards";
       if ((other === "cards" ? state.cards : state.objects).length) {
@@ -572,7 +688,7 @@
     if (e.key === "Enter") {
       e.preventDefault();
       const s = selected();
-      if (s.zone != null) return openZone(s.zone);
+      if (s.zone != null) return state.view === "zone" ? openFolder(s.zone) : openZone(s.zone);
       if (!s.item) return;
       if (e.metaKey) return invoke("reveal", { path: s.item.abs }).then(hide).catch(() => {});
       return placeItem(s.item);

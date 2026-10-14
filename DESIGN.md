@@ -1,6 +1,6 @@
 # Archiver – Design-System
 
-Stand: App 0.31.2 · Extension 3.24.0
+Stand: App 0.32.0 · Extension 3.25.0
 
 Diese Datei hält fest, wie Archiver aussieht und warum. Sie gilt für die Mac-App
 (`app/src`) und die Chrome-Extension (`extension/`). Wer an der Oberfläche
@@ -341,8 +341,11 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
   der Standard des App-Fensters und folgt seit 0.30 dem Glas-Regler (2.1). Hell/Dunkel und Ecken folgen Einstellungen › Aussehen;
   die Fensterecke ist eckig 0, klein 6, mittel 12 (Standard), groß 18 px.
   Start: Active Zones als Zonenkarten (4.4) mit 01–04 und „Active Zone“,
-  darunter der Index als flachere Karten (8:3). Zone: Active Zones als Reiter,
-  Objekte eckig in sechs Spalten (4.6). Suche: passende Zonen als Karten,
+  darunter der Index; seit 0.32 haben alle Karten dieselbe Höhe (Cover 8:3).
+  Zone: Active Zones als Reiter, darüber ihre Unterordner als Karten
+  („(Ordner)“, Klick oder ↵ öffnet, ⌫ eine Ebene hoch, Kopf „Zone / Ordner“),
+  darunter die Objekte eckig in sechs Spalten (4.6). Der Inhalt hat oben 4 px
+  Luft, damit der Ring (4.1) der ersten Reihe nicht abgeschnitten wird. Suche: passende Zonen als Karten,
   darunter Objekte. Fußzeile: links „Tray“, rechts die Tasten als
   Mono-Etiketten, esc am Ende.
 - **Verhalten:** Aus InDesign geöffnet heißt ↵ „Platzieren“ (markierter
@@ -355,6 +358,9 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
   blättern, Leertaste oder esc schließen. Im Suchfeld mit Text tippt die
   Leertaste weiter.
 - **⌘1–3:** wechselt die Bibliothek wie in der App.
+- **⌘C, ⌘V (0.32):** ⌘C kopiert das gewählte Objekt, ⌘V legt die
+  Zwischenablage in die offene Zone. Steht etwas im Suchfeld, gehören beide
+  dem Suchfeld.
 - **Nicht:** Sie aktiviert Archiver nicht und holt das Hauptfenster nicht nach vorne.
   Liegt Archiver hinten, wird das Hauptfenster beim Öffnen weggelegt und beim
   Schließen hinter alle Fenster zurückgelegt (0.28).
@@ -362,7 +368,14 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
 ### 4.13 Zonenleiste am ganzen Mac (`dropbar.css`)
 - **Zweck:** Wie 4.3, aber beim Ziehen von Dateien in jedem Programm.
 - **Form:** Volle Breite unten auf dem Bildschirm mit dem Zeiger, 280 px hoch,
-  dieselben vier Glaskarten, Ring und Glühen wie 4.3. Die Karten haben keine
+  dieselben vier Glaskarten, Ring und Glühen wie 4.3.
+- **Streifen (0.32):** Beim Ziehen erst nur 30 px hoch (`.strip`): Karten
+  oben gerundet, Nummer und Name in einer Zeile, 13 px, ohne Hinweis. Darüber
+  bleibt alles frei, etwa das Eingabefeld eines Chats. Fährt der Zeiger in den
+  Streifen, wird das Fenster mit macOS-Animation 280 px hoch; steht er mehr
+  als 24 px darüber, wird es wieder Streifen. Gleiches gilt für die Leiste der
+  Extension im Browser (3.25.0, `overlay.css` `.zones-bar.strip`, Höhe mit
+  0.22 s Übergang, ohne bei `prefers-reduced-motion`). Die Karten haben keine
   eigene Unschärfe (das Fenster ist durchsichtig), deshalb gilt `--zone-alpha`.
 - **Ablauf (0.31.0):** Nach dem Loslassen zeigt das Ziel „Wird gesichert …“
   (`.busy`, kein Glühen). Erst wenn Import oder Verschieben fertig ist, kommt

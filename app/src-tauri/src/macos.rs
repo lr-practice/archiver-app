@@ -31,6 +31,55 @@ pub fn copy_images(paths: &[String]) -> bool {
     }
 }
 
+/// ⌘V (0.32): Dateien aus dem Finder (Pfade), sonst Bilddaten (PNG vor TIFF),
+/// sonst Text. Kopiert der Finder Dateien, liegen auch ihr Symbol und ihr Name
+/// in der Zwischenablage; die Dateien gehen deshalb vor (library.rs paste_into).
+pub fn read_pasteboard() -> (Vec<String>, Option<Vec<u8>>, Option<String>) {
+    objc2::rc::autoreleasepool(|_| unsafe {
+        let board: *mut AnyObject = msg_send![class!(NSPasteboard), generalPasteboard];
+        let mut files = Vec::new();
+        let items: *mut AnyObject = msg_send![board, pasteboardItems];
+        if !items.is_null() {
+            let ty = NSString::from_str("public.file-url");
+            let n: usize = msg_send![items, count];
+            for i in 0..n {
+                let item: *mut AnyObject = msg_send![items, objectAtIndex: i];
+                let s: *mut AnyObject = msg_send![item, stringForType: &*ty];
+                if s.is_null() {
+                    continue;
+                }
+                let url: *mut AnyObject = msg_send![class!(NSURL), URLWithString: s];
+                if url.is_null() {
+                    continue;
+                }
+                let path: *mut AnyObject = msg_send![url, path];
+                let path = rust_string(path);
+                if !path.is_empty() {
+                    files.push(path);
+                }
+            }
+        }
+        let mut image = None;
+        for t in ["public.png", "public.tiff"] {
+            let ty = NSString::from_str(t);
+            let data: *mut AnyObject = msg_send![board, dataForType: &*ty];
+            if data.is_null() {
+                continue;
+            }
+            let len: usize = msg_send![data, length];
+            let ptr: *const std::ffi::c_void = msg_send![data, bytes];
+            if !ptr.is_null() && len > 0 {
+                image = Some(std::slice::from_raw_parts(ptr as *const u8, len).to_vec());
+                break;
+            }
+        }
+        let ty = NSString::from_str("public.utf8-plain-text");
+        let s: *mut AnyObject = msg_send![board, stringForType: &*ty];
+        let text = Some(rust_string(s)).filter(|t| !t.trim().is_empty());
+        (files, image, text)
+    })
+}
+
 /// Textkarte: Text und Bild als ein Eintrag. Texteditoren nehmen den Text,
 /// Figma, Photoshop & Co. das Bild.
 pub fn copy_text_image(path: &str, text: &str) -> bool {
@@ -574,10 +623,19 @@ pub unsafe fn panel_center_on_mouse_screen(window: *mut AnyObject) {
 }
 
 /// Zonenleiste: volle Breite unten auf dem Bildschirm mit dem Zeiger.
-pub unsafe fn panel_bottom_of_mouse_screen(window: *mut AnyObject, height: f64) {
+pub unsafe fn panel_bottom_of_mouse_screen(window: *mut AnyObject, height: f64, animate: bool) {
     let Some(vf) = mouse_screen_frame() else { return };
     let rect = NSRect::new(vf.origin, NSSize::new(vf.size.width, height.min(vf.size.height)));
-    let _: () = msg_send![window, setFrame: rect, display: true];
+    let _: () = msg_send![window, setFrame: rect, display: true, animate: animate];
+}
+
+/// Höhe des Zeigers über der Unterkante des sichtbaren Bildschirms (über dem
+/// Dock); negativ, wenn er im Dock steht (Zonenleiste als Streifen, 0.32)
+pub fn mouse_above_bottom() -> Option<f64> {
+    unsafe {
+        let mouse: NSPoint = msg_send![class!(NSEvent), mouseLocation];
+        mouse_screen_frame().map(|vf| mouse.y - vf.origin.y)
+    }
 }
 
 /// Linke Maustaste gedrückt? Und der Zähler der Drag-Zwischenablage.

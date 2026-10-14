@@ -1,8 +1,14 @@
 # Changelog
 
-## Nächste Version
+## App 0.32.0 · Extension 3.25.0 (14.10.2026)
 
-- Neue Unterzeile: „A Visual Library for Creative Thinking“ im Startbild, „A visual library for creative thinking“ und „Eine visuelle Bibliothek für kreatives Denken“ im Info-Text von App und Extension.
+Ablegen, ohne dass etwas im Weg ist.
+
+- Zonenleiste beim Ziehen, am Mac und in der Extension im Browser: Sie erscheint erst als 30 px schmaler Streifen am unteren Rand, Nummer und Name in einer Zeile. Darüber bleibt alles frei, etwa das Eingabefeld eines Chats. Fährt der Zeiger in den Streifen, kommt die volle Leiste; weiter oben wird sie wieder Streifen.
+- ⌘V legt die Zwischenablage in die offene Zone oder ihren Ordner: Dateien aus dem Finder, kopierte Bilder und Screenshots, Text als Textkarte (benannt nach seinen ersten Wörtern). Auf der Startseite landet es in Unsorted. Im Tray mit ⌘V in der offenen Zone, ⌘C kopiert dort das gewählte Objekt.
+- Unsorted räumt sich selbst auf: Was 7 Tage dort liegt, kommt unter „Zuletzt gelöscht“ und lässt sich von dort noch 7 Tage wiederherstellen. Die Frist zählt ab dem Tag, an dem es in Unsorted auftaucht, für alles Vorhandene also ab dem ersten Start mit 0.32. Geteilte Bibliotheken bleiben unberührt. Der Kopf von Unsorted sagt es dazu.
+- Tray: Unterordner einer Zone stehen als Karten über den Objekten, ↵ oder Klick öffnet, ⌫ geht eine Ebene hoch. Der gestrichelte Ring der ersten Reihe wird oben nicht mehr abgeschnitten. Active Zones sind so hoch wie die Karten im Index.
+- Neue Unterzeile: „A Visual Library for Creative Research“ im Startbild, „A visual library for creative research“ bzw. „Eine visuelle Bibliothek für kreative Recherche“ im Info-Text von App und Extension.
 
 ## App 0.31.2 (14.10.2026)
 

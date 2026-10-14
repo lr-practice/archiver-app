@@ -324,6 +324,7 @@ fn watch_drags(app: AppHandle) {
     std::thread::spawn(move || {
         let mut base: Option<isize> = None;
         let mut showing = false;
+        let mut tall = false;
         let mut released: Option<Instant> = None;
         loop {
             std::thread::sleep(Duration::from_millis(50));
@@ -346,6 +347,18 @@ fn watch_drags(app: AppHandle) {
                 continue;
             }
             released = None;
+            // 0.32: erst nur ein Streifen am Rand, damit darüber alles frei bleibt
+            // (z. B. das Eingabefeld eines Chats). Fährt der Zeiger hinein, kommt
+            // die volle Leiste, verlässt er sie nach oben, wird sie wieder Streifen.
+            if showing {
+                if let Some(y) = crate::macos::mouse_above_bottom() {
+                    let want = if tall { y < DROPBAR_TALL + 24.0 } else { y < DROPBAR_STRIP };
+                    if want != tall {
+                        tall = want;
+                        resize_dropbar(&app, tall);
+                    }
+                }
+            }
             let Some(b) = base else {
                 base = Some(count);
                 continue;
@@ -362,8 +375,26 @@ fn watch_drags(app: AppHandle) {
                 continue;
             }
             showing = true;
+            tall = false;
             set_dropbar(&app, true);
         }
+    });
+}
+
+/// Zonenleiste (DESIGN.md 4.13): Streifen beim Ziehen, volle Höhe unter dem Zeiger
+#[cfg(target_os = "macos")]
+const DROPBAR_STRIP: f64 = 30.0;
+#[cfg(target_os = "macos")]
+const DROPBAR_TALL: f64 = 280.0;
+
+#[cfg(target_os = "macos")]
+fn resize_dropbar(app: &AppHandle, tall: bool) {
+    let Some(win) = app.get_webview_window(DROPBAR) else { return };
+    let app2 = app.clone();
+    let _ = app.run_on_main_thread(move || {
+        let Ok(ns) = win.ns_window() else { return };
+        unsafe { crate::macos::panel_bottom_of_mouse_screen(ns.cast(), if tall { DROPBAR_TALL } else { DROPBAR_STRIP }, tall) };
+        let _ = app2.emit_to(DROPBAR, "dropbar-tall", tall);
     });
 }
 
@@ -376,7 +407,7 @@ fn set_dropbar(app: &AppHandle, show: bool) {
         let ns = ns.cast();
         unsafe {
             if show {
-                crate::macos::panel_bottom_of_mouse_screen(ns, 280.0);
+                crate::macos::panel_bottom_of_mouse_screen(ns, DROPBAR_STRIP, false);
                 crate::macos::panel_show(ns, false);
                 let _ = app2.emit_to(DROPBAR, "dropbar-show", ());
             } else {

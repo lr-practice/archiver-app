@@ -13,7 +13,11 @@
 // gegenseitig beeinflussen.
 
 (function () {
-  const ZONE_HEIGHT_VH = 32; // muss zu .zones-bar in overlay.css passen
+  // Leiste beim Ziehen (0.32 der App, 3.25.0): erst ein Streifen von STRIP_PX am
+  // unteren Rand, damit darüber alles frei bleibt (Eingabefeld eines Chats).
+  // Fährt der Zeiger hinein, kommt die volle Höhe (overlay.css .zones-bar).
+  const STRIP_PX = 30;
+  const barHeight = () => Math.min(window.innerHeight * 0.3, 260);
   const { DEFAULT_ZONES, DEFAULT_SHORTCUT, isRootZoneName, loadZones, debugLog, currentPageSource, extractDroppedImage, t } =
     ArchiverShared;
   const UI = ArchiverUI;
@@ -762,7 +766,7 @@
     ensureOverlay().then(() => {
       if (zonesBarEl || manualOpen || dragCounter <= 0) return; // schon da, Overlay offen oder Drag vorbei
 
-      zonesBarEl = UI.el("div", "zones-bar");
+      zonesBarEl = UI.el("div", "zones-bar strip");
       if (zoneAlpha != null) zonesBarEl.style.setProperty("--zone-alpha", String(zoneAlpha));
       zoneEls = barZones.map((name, i) => {
         const zone = UI.el("div", "zone" + (isRootZoneName(name) ? " root" : ""));
@@ -829,9 +833,8 @@
 
   // Liefert den Zonen-Index unter x/y, oder -1 wenn außerhalb aller Zonen
   function getZoneIndex(x, y) {
-    if (!barZones.length) return -1;
-    const zoneHeight = (window.innerHeight * ZONE_HEIGHT_VH) / 100;
-    if (y < window.innerHeight - zoneHeight) return -1;
+    if (!barZones.length || !zonesBarEl) return -1;
+    if (y < zonesBarEl.getBoundingClientRect().top) return -1;
     const zoneWidth = window.innerWidth / barZones.length;
     const idx = Math.floor(x / zoneWidth);
     return Math.min(Math.max(idx, 0), barZones.length - 1);
@@ -1647,6 +1650,12 @@
         zonesBarEl.classList.toggle("to-downloads", e.shiftKey);
         const hint = t(e.shiftKey ? "dropDownloads" : "dropRelease");
         zoneEls.forEach((el) => (el.querySelector(".zone-hint").textContent = hint));
+      }
+      if (zonesBarEl) {
+        const fromBottom = window.innerHeight - e.clientY;
+        const strip = zonesBarEl.classList.contains("strip");
+        if (strip && fromBottom < STRIP_PX) zonesBarEl.classList.remove("strip");
+        else if (!strip && fromBottom > barHeight() + 24) zonesBarEl.classList.add("strip");
       }
       if (zoneEls.length) {
         const activeIdx = getZoneIndex(e.clientX, e.clientY);
