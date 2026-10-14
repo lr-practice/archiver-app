@@ -785,6 +785,8 @@ struct Snapshot {
     deleted: usize,
     /// Reihenfolge der Zonen dieser Bibliothek (.archiver/zones.json), 0.31.0
     zone_order: Vec<String>,
+    /// Seit wann ein Objekt in Unsorted liegt (Hash → ms), 0.33
+    inbox_seen: std::collections::HashMap<String, i64>,
 }
 
 #[tauri::command]
@@ -822,6 +824,7 @@ async fn snapshot(state: State<'_, AppState>) -> Result<Snapshot, String> {
             folders: lib.folders(),
             deleted: lib.deleted_count(),
             zone_order: lib.zone_order().0,
+            inbox_seen: lib.inbox_seen(),
         })
     })
     .await

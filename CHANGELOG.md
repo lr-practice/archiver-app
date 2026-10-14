@@ -1,5 +1,18 @@
 # Changelog
 
+## App 0.33.0 (14.10.2026)
+
+Unsorted zeigt seine Frist, Bildtext ruhiger im Raster.
+
+- Unsorted: Die Kopfzeile sagt nur noch, dass hier nach 7 Tagen aufgeräumt
+  wird. Im Index steht „Leert sich nach 7 Tagen“ hinter dem Namen. Die letzten
+  zwei Tage zeigt jedes Objekt oben links „noch n T.“ in Rot.
+- Bild mit Text: kein Textauszug mehr unter dem Bild, stattdessen ein
+  Eselsohr unten rechts in der Farbe der Textkarte. Der Chip „(+ Text)“
+  entfällt.
+- ⌘D: Unter „Bildtext“ lässt sich die Farbe der Textkarte wählen, wie bei
+  Textkarten und Notizen.
+
 ## App 0.32.1 · Extension 3.25.3 (14.10.2026)
 
 Leiste wie in der App, Ziehen überall.

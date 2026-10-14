@@ -2182,6 +2182,14 @@ impl Library {
     /// oder Importdatum: Wer etwas Altes nach Unsorted zieht, hat 7 Tage Zeit,
     /// und beim ersten Start mit dieser Version beginnt die Frist für alles neu.
     /// Geteilte Bibliotheken bleiben unberührt, dort räumt niemand für andere auf.
+    /// Seit wann jedes Objekt in Unsorted liegt (Hash → ms), für „noch n T.“ im Raster (0.33)
+    pub fn inbox_seen(&self) -> HashMap<String, i64> {
+        if self.shared {
+            return HashMap::new();
+        }
+        fs::read(self.root.join(META_DIR).join(INBOX_SEEN)).ok().and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or_default()
+    }
+
     pub fn expire_inbox(&self, days: i64) -> Result<usize> {
         if self.shared {
             return Ok(0);
@@ -3026,6 +3034,7 @@ mod tests {
         let seen_path = root.join(META_DIR).join(INBOX_SEEN);
         let mut seen: HashMap<String, i64> = serde_json::from_slice(&fs::read(&seen_path).unwrap()).unwrap();
         assert_eq!(seen.len(), 2, "nur Unsorted zählt");
+        assert_eq!(lib.inbox_seen(), seen, "Snapshot liefert dieselben Zeiten");
         // „alt.png“ liegt seit acht Tagen dort
         let alt = lib.hash_of("Unsorted/alt.png").unwrap();
         seen.insert(alt, now_ms() - 8 * 24 * 3600 * 1000);

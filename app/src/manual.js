@@ -31,7 +31,7 @@ const MANUAL = {
           { t: "Finden", d: "Sucht in Name, Zone, Quelle und Bildtext sowie in erkannten Motiven, Text im Bild und Farben, auch auf Deutsch („Plakat“, „Blau“). Ganze Wörter und ihre Formen zählen („Kreise“ findet Kreis), Wortteile nur im Namen („Entwurf“ in „Plakatentwurf“). Motive nur, wenn sie sicher erkannt sind. Tray und App finden dasselbe. Filter nach Art, Farbe, Format, Zeitraum, Doppelten und Notizen.", k: ["⌘F", "/"] },
           { t: "Lightbox", d: "Objekt groß, mit Zoom, Player für Audio und Video und PDF seitenweise. Unten Zähler, Zoom, Info, Quelle und „Ablegen in“. Klick neben das Objekt schließt.", k: ["Space", "←", "→", "Z", "T"] },
           { t: "Details", d: "Seitenblatt mit Name, Maßen, Format, Quelle, Zone, Bildtext und Rechten.", k: ["⌘D", "I"] },
-          { t: "Zuletzt gelöscht", d: "Gelöschtes bleibt 7 Tage in der Bibliothek und lässt sich wiederherstellen. Auch was 7 Tage in Unsorted liegt, kommt hierher. Danach geht es in den Papierkorb des Macs. Letzte Zeile im Index und im ≡-Menü.", k: ["⌫"] },
+          { t: "Zuletzt gelöscht", d: "Gelöschtes bleibt 7 Tage in der Bibliothek und lässt sich wiederherstellen. Auch was 7 Tage in Unsorted liegt, kommt hierher; die letzten zwei Tage zeigt das Objekt „noch n T.“. Danach geht es in den Papierkorb des Macs. Letzte Zeile im Index und im ≡-Menü.", k: ["⌫"] },
           { t: "PDF", d: "Auswahl, Zone oder Suche als Kontaktbogen, Plakat oder Moodboard. 1 bis 16 pro Seite, A4 quer oder hoch.", k: ["⌘P"] },
           { t: "Kopieren und ziehen", d: "`⌘C` legt Bilddaten in die Zwischenablage, bei Textkarten Text und Bild. Objekte lassen sich aus Raster und Lightbox in jedes Programm ziehen.", k: ["⌘C"] },
           { t: "Einfügen", d: "`⌘V` legt die Zwischenablage in die offene Zone: Dateien aus dem Finder, kopierte Bilder und Screenshots, Text als Textkarte. Auf der Startseite landet es in Unsorted. Geht auch im Tray, wenn eine Zone offen ist.", k: ["⌘V"] },
@@ -84,7 +84,7 @@ const MANUAL = {
         rows: [
           { t: "Textkarten", d: "Zitate aus dem Web als farbige Karte. Farbe in den Details änderbar: Rot, Grün, Violett, Cyan, Gelb, Weiß oder Schwarz, dieselbe Reihe wie bei Notizen. Liegen als .txt im Zonenordner." },
           { t: "Notizen", d: "Rechtsklick in eine Zone. In der Lightbox schreibst du direkt auf das Blatt, gesichert wird von selbst. Liegen als .md im Zonenordner. Links neben dem Blatt stehen verknüpfte Objekte.", k: ["⌘⇧N"] },
-          { t: "Bildtext", d: "Beim Sichern markierter Text wird zum Bildtext. Er ist durchsuchbar und wahlweise im PDF. In der Lightbox steht er auf einer farbigen Karte: als Rückseite, die `T` oder das Eselsohr unten rechts aufdeckt, oder als Doppelseite neben dem Bild (Einstellungen › Aussehen). Auf der Karte direkt editierbar, ebenso Textkarten. `⌘V` mit Text auf ein Bild setzt ihn.", k: ["⌘V", "T"] },
+          { t: "Bildtext", d: "Beim Sichern markierter Text wird zum Bildtext. Er ist durchsuchbar und wahlweise im PDF. Im Raster zeigt ein Eselsohr unten rechts in der Kartenfarbe an, dass ein Bild Text hat; die Farbe ist in den Details (`⌘D`) wählbar. In der Lightbox steht er auf einer farbigen Karte: als Rückseite, die `T` oder das Eselsohr unten rechts aufdeckt, oder als Doppelseite neben dem Bild (Einstellungen › Aussehen). Auf der Karte direkt editierbar, ebenso Textkarten. `⌘V` mit Text auf ein Bild setzt ihn.", k: ["⌘V", "T"] },
         ],
       },
       {
@@ -151,7 +151,7 @@ const MANUAL = {
           { t: "Find", d: "Searches names, zones, sources and captions as well as recognised subjects, text in images and colours. Whole words and their forms count, word parts only in names; subjects only when recognised with confidence. Tray and app find the same. Filters for kind, colour, format, period, duplicates and notes.", k: ["⌘F", "/"] },
           { t: "Lightbox", d: "The object large, with zoom, a player for audio and video and PDFs page by page. Below: counter, zoom, info, source and “Move to”. Click beside the object to close.", k: ["Space", "←", "→", "Z", "T"] },
           { t: "Details", d: "Side sheet with name, size, format, source, zone, caption and rights.", k: ["⌘D", "I"] },
-          { t: "Recently deleted", d: "Deleted items stay in the library for 7 days and can be restored. Anything left in Unsorted for 7 days ends up here too. After that they go to the Mac’s Trash. Last row of the index and in the ≡ menu.", k: ["⌫"] },
+          { t: "Recently deleted", d: "Deleted items stay in the library for 7 days and can be restored. Anything left in Unsorted for 7 days ends up here too; for the last two days the item shows “n d left”. After that they go to the Mac’s Trash. Last row of the index and in the ≡ menu.", k: ["⌫"] },
           { t: "PDF", d: "Selection, zone or search as contact sheet, poster or moodboard. 1 to 16 per page, A4 landscape or portrait.", k: ["⌘P"] },
           { t: "Copy and drag", d: "`⌘C` puts image data on the clipboard, for text cards text and image. Drag objects from the grid or the lightbox into any program.", k: ["⌘C"] },
           { t: "Paste", d: "`⌘V` puts the clipboard into the open zone: files from the Finder, copied images and screenshots, text as a text card. On the start page it goes to Unsorted. Works in the Tray too while a zone is open.", k: ["⌘V"] },
@@ -204,7 +204,7 @@ const MANUAL = {
         rows: [
           { t: "Text cards", d: "Quotes from the web as coloured cards. Change the colour in the details: red, green, violet, cyan, yellow, white or black, the same row as for notes. Stored as .txt in the zone folder." },
           { t: "Notes", d: "Right-click in a zone. In the lightbox you write straight on the sheet, it saves by itself. Stored as .md in the zone folder. Linked objects sit to the left of the sheet.", k: ["⌘⇧N"] },
-          { t: "Caption", d: "Text selected while saving becomes the caption. It is searchable and optional in the PDF. In the lightbox it sits on a coloured card: as the back, turned over with `T` or the corner at the bottom right, or as a spread next to the image (Settings › Appearance). Edit it right on the card, text cards too. `⌘V` with text on an image sets it.", k: ["⌘V", "T"] },
+          { t: "Caption", d: "Text selected while saving becomes the caption. It is searchable and optional in the PDF. In the grid a corner at the bottom right, in the card’s colour, shows that an image has text; pick the colour in Details (`⌘D`). In the lightbox it sits on a coloured card: as the back, turned over with `T` or the corner at the bottom right, or as a spread next to the image (Settings › Appearance). Edit it right on the card, text cards too. `⌘V` with text on an image sets it.", k: ["⌘V", "T"] },
         ],
       },
       {

@@ -430,6 +430,7 @@
     state.order = snap.order || {};
     state.shared = !!snap.shared;
     state.defaultZone = snap.defaultZone || "Unsorted";
+    state.inboxSeen = snap.inboxSeen || {};
     state.structure = snap.structure || { depth: 2, skip: [], subzones: false };
     state.user = snap.user || "";
     state.folders = snap.folders || [];
@@ -1442,6 +1443,7 @@
       if (index < HOT_ZONES) no.title = t("keyHint", { n: index + 1 });
       row.appendChild(no);
       const name = zoneNameEl(zone);
+      if (isInbox(zone.path)) name.appendChild(el("span", "p-zone-note", " " + t("inboxNote")));
       row.appendChild(name);
       row.appendChild(el("span", "p-num", String(zone.count)));
       if (!compact) {
@@ -2875,8 +2877,9 @@
       const sentence = items.length
         ? [t("headZone", { count: countText(items.length), date: recentDate(latest) }).replace(/\.\.$/, "."), hasFolders ? t(named === 1 ? "headFolder1" : "headFolders", { n: named }) : "", topDomains(items)].filter(Boolean).join(" ")
         : t("headZoneEmpty");
-      // 0.32: Unsorted räumt sich nach 7 Tagen selbst auf (library.rs expire_inbox)
-      const h = headline(lastSegment(zone.path), zone.path === state.defaultZone && !state.shared ? sentence + " " + t("headUnsorted") : sentence);
+      // 0.32: Unsorted räumt sich nach 7 Tagen selbst auf (library.rs expire_inbox).
+      // 0.33: dort steht nur dieser Satz, ohne Anzahl, Datum und Quellen
+      const h = headline(lastSegment(zone.path), isInbox(zone.path) ? t("headUnsorted") : sentence);
       if (canEdit(zone.path)) {
         const title = h.querySelector(".p-head-title");
         title.classList.add("zone-card-name");
@@ -2947,16 +2950,6 @@
         render();
       });
       c.title = t(v === "grid" ? "viewGridTitle" : "viewOriginalTitle");
-      bar.appendChild(c);
-    }
-    // 0.29: Bildtext unter den Bildern (nur in „Original“)
-    if (state.view === "original") {
-      const c = chip("(+ " + t("captionChip") + ")", captionsOn(), () => {
-        setPref("captions", !captionsOn());
-        renderToolbar();
-        renderZones();
-      });
-      c.title = t("captionChipTitle");
       bar.appendChild(c);
     }
     bar.appendChild(sizeChips(Math.max(0, SIZES.indexOf(state.size)), SIZES.length, (step) => {
@@ -3297,16 +3290,24 @@
       const cols = Array.from({ length: count }, () => el("div", "p-masonry-col"));
       list.forEach((item, i) => {
         cols[i % count].appendChild(itemCard(item));
-        if (captionsOn() && hasCaption(item)) cols[i % count].appendChild(captionBlock(item, i, list.length, "card-cap"));
       });
       node.replaceChildren(...cols);
     }
   }
 
-  // ---- Bildtext (0.29): Kennung, Text, Notiz – unter dem Bild und in der Lightbox ----
-  function captionsOn() {
-    return pref("captions", true) !== false;
+  // Unsorted (Standardzone) einer eigenen Bibliothek räumt sich nach 7 Tagen auf
+  function isInbox(zonePath) {
+    return zonePath === state.defaultZone && !state.shared;
   }
+  // Resttage eines Objekts in Unsorted, gezählt ab dem ersten Sehen (library.rs inbox_seen)
+  function inboxDaysLeft(item) {
+    if (!isInbox(item.zone)) return Infinity;
+    const since = (state.inboxSeen || {})[item.hash];
+    if (!since) return DELETED_DAYS;
+    return Math.max(1, Math.ceil(DELETED_DAYS - (Date.now() - since) / 86400000));
+  }
+
+  // ---- Bildtext (0.29): Kennung, Text, Notiz – in der Lightbox ----
   function hasCaption(item) {
     return !!(item && item.caption);
   }
@@ -3315,13 +3316,6 @@
   function captionId(item, i, total) {
     const n = state.zones.findIndex((z) => z.path === item.zone);
     return zoneLabel(item.zone) + "—" + String(n + 1).padStart(2, "0") + (total ? " " + (i + 1) + "/" + total : "");
-  }
-
-  function captionBlock(item, i, total, cls) {
-    const box = el("div", cls);
-    box.appendChild(el("div", "cap-id", captionId(item, i, total)));
-    if (item.caption) box.appendChild(el("div", "cap-text", item.caption));
-    return box;
   }
 
   function itemCard(item) {
@@ -3341,6 +3335,8 @@
       card.appendChild(el("div", "card-badge"));
       card.appendChild(el("div", "card-media"));
       card.appendChild(el("span", "card-fresh"));
+      card.appendChild(el("div", "card-days"));
+      card.appendChild(el("span", "card-ear"));
       cardCache.set(item.path, card);
     }
     const label = mediaLabel(item);
@@ -3383,6 +3379,15 @@
     else card.style.removeProperty("--ar");
     card.classList.toggle("selected", state.selection.has(item.path));
     card.classList.toggle("fresh", isFresh(item));
+    // 0.33: Bild mit Bildtext trägt ein Eselsohr in der Farbe seiner Textkarte
+    const ear = card.querySelector(".card-ear");
+    ear.hidden = !hasCaption(item) || !!quote || isNote(item);
+    if (!ear.hidden) ear.style.setProperty("--ts-bg", quoteTone(item)[0]);
+    // 0.33: In Unsorted die letzten zwei Tage vor „Zuletzt gelöscht“ zeigen
+    const days = card.querySelector(".card-days");
+    const left = inboxDaysLeft(item);
+    days.hidden = !(left <= 2);
+    days.textContent = days.hidden ? "" : t("deletedDays", { n: left });
     return card;
   }
 
@@ -4753,7 +4758,12 @@
     inner.appendChild(head);
     if (isNote(item)) inner.appendChild(lbBlock(t("noteLabelTitle"), [lbRow(t("noteLinks"), String(linkedItems(item).length)), lbRow(t("toneLabel"), tonePicker(item))]));
     else if (quoteOf(item)) inner.appendChild(lbBlock(t("quote"), [quoteBox(item, "lb-quote"), lbRow(t("toneLabel"), tonePicker(item))]));
-    if (!quoteOf(item)) inner.appendChild(lbBlock(t("captionTitle"), [noteField(item, "caption", t("captionPlaceholder"), true)]));
+    // 0.33: Farbe der Bildtext-Karte wählbar wie bei Textkarten und Notizen
+    if (!quoteOf(item)) {
+      const rows = [noteField(item, "caption", t("captionPlaceholder"), true)];
+      if (!isNote(item)) rows.push(lbRow(t("toneLabel"), tonePicker(item)));
+      inner.appendChild(lbBlock(t("captionTitle"), rows));
+    }
 
     let source = null;
     if (item.pageUrl) {

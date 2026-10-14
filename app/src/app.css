@@ -5841,44 +5841,48 @@ html.light {
   bottom: 134px;
 }
 
-/* ---- 0.29: Bildtext (Kennung, Text, Notiz) ----
-   Unter dem Bild in „Original“ mit (+ Text) und in der Lightbox links neben
-   dem Bild, unten bündig; das Bild verrückt dafür nicht. Mono-Kennung wie ein Etikett, Text in Geist, Notiz fett. */
-.card-cap {
-  padding: 7px 3px 16px;
-  color: var(--p-text);
+/* ---- 0.33: Bild mit Bildtext im Raster ----
+   Kein Textauszug mehr unter dem Bild. Ein Eselsohr unten rechts in der Farbe
+   der Textkarte zeigt die Rückseite an, wie .lb-ear in der Lightbox. */
+.card-ear {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 16px;
+  height: 16px;
+  background: linear-gradient(135deg, transparent 50%, var(--ts-bg) 50%);
+  pointer-events: none;
 }
-.card-cap .cap-id,
-.lb-caption .cap-id {
+.card-ear[hidden],
+.card-days[hidden] {
+  display: none;
+}
+/* 0.33: Unsorted, die letzten zwei Tage vor „Zuletzt gelöscht“: oben links,
+   gleiche Marke wie .card-media, Schrift in --danger */
+.card-days {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  padding: 2px 5px;
+  border-radius: min(3px, var(--r-sm));
+  background: rgba(0, 0, 0, 0.65);
+  color: var(--danger);
   font-family: "Geist Mono", ui-monospace, monospace;
   font-size: 10px;
   letter-spacing: 0.02em;
-  text-transform: uppercase;
+  pointer-events: none;
+}
+/* Original: Karte hat 3 px Innenrand, Ohr und Marke sitzen am Bild */
+.original .card-ear {
+  right: 3px;
+  bottom: 3px;
+}
+.original .card-days {
+  top: 7px;
+  left: 7px;
+}
+.p-zone-note {
   color: var(--p-dim);
-}
-.card-cap .cap-text {
-  margin-top: 4px;
-  font-size: 13px;
-  line-height: 1.35;
-  letter-spacing: -0.005em;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
-.card-cap .cap-note {
-  margin-top: 4px;
-  font-size: 11px;
-  font-weight: 600;
-  line-height: 1.35;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
-.cap-note-label {
-  color: var(--p-dim);
-  font-weight: 500;
 }
 /* 0.30.1: Bildtext in der Lightbox als Karte im Ton des Bildes (wie die
    Textkarten). Lage setzt app.js lbPlaceText: Rückseite deckt das Bild,
