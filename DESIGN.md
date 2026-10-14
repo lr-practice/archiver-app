@@ -375,7 +375,9 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
   Streifen, wird das Fenster mit macOS-Animation 280 px hoch; steht er mehr
   als 24 px darüber, wird es wieder Streifen. Gleiches gilt für die Leiste der
   Extension im Browser (3.25.0, `overlay.css` `.zones-bar.strip`, Höhe mit
-  0.22 s Übergang, ohne bei `prefers-reduced-motion`). Die Karten haben keine
+  0.22 s Übergang, ohne bei `prefers-reduced-motion`). Die Leiste der Extension nimmt
+  den Zeiger an (3.25.1), damit Chrome am unteren Rand die Seite nicht
+  darunter wegscrollt; Text- und Instagram-Ziehen nutzen denselben Streifen. Die Karten haben keine
   eigene Unschärfe (das Fenster ist durchsichtig), deshalb gilt `--zone-alpha`.
 - **Ablauf (0.31.0):** Nach dem Loslassen zeigt das Ziel „Wird gesichert …“
   (`.busy`, kein Glühen). Erst wenn Import oder Verschieben fertig ist, kommt

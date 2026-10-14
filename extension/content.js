@@ -831,6 +831,18 @@
     setTimeout(() => bar.remove(), 520);
   }
 
+  // Zeiger während eines Ziehens (Browser-Ziehen, Text, Instagram): Streifen
+  // oder volle Höhe, Zielkarte markieren
+  function trackZones(x, y) {
+    if (!zonesBarEl) return;
+    const fromBottom = window.innerHeight - y;
+    const strip = zonesBarEl.classList.contains("strip");
+    if (strip && fromBottom < STRIP_PX) zonesBarEl.classList.remove("strip");
+    else if (!strip && fromBottom > barHeight() + 24) zonesBarEl.classList.add("strip");
+    const active = getZoneIndex(x, y);
+    zoneEls.forEach((el, i) => el.classList.toggle("active", i === active));
+  }
+
   // Liefert den Zonen-Index unter x/y, oder -1 wenn außerhalb aller Zonen
   function getZoneIndex(x, y) {
     if (!barZones.length || !zonesBarEl) return -1;
@@ -1096,8 +1108,7 @@
     d.lastX = e.clientX;
     d.lastY = e.clientY;
     moveGhost(d, e.clientX, e.clientY);
-    const active = getZoneIndex(e.clientX, e.clientY);
-    zoneEls.forEach((el, i) => el.classList.toggle("active", i === active));
+    trackZones(e.clientX, e.clientY);
   }
 
   // Am Zeiger hängt schon die spätere Textkarte: Farbe der Markierung,
@@ -1351,8 +1362,7 @@
     e.preventDefault();
     e.stopImmediatePropagation();
     d.ghost.style.transform = `translate(${e.clientX + 12}px, ${e.clientY + 12}px)`;
-    const active = getZoneIndex(e.clientX, e.clientY);
-    zoneEls.forEach((z, i) => z.classList.toggle("active", i === active));
+    trackZones(e.clientX, e.clientY);
   }
 
   function onMediaDragUp(e) {
@@ -1651,16 +1661,7 @@
         const hint = t(e.shiftKey ? "dropDownloads" : "dropRelease");
         zoneEls.forEach((el) => (el.querySelector(".zone-hint").textContent = hint));
       }
-      if (zonesBarEl) {
-        const fromBottom = window.innerHeight - e.clientY;
-        const strip = zonesBarEl.classList.contains("strip");
-        if (strip && fromBottom < STRIP_PX) zonesBarEl.classList.remove("strip");
-        else if (!strip && fromBottom > barHeight() + 24) zonesBarEl.classList.add("strip");
-      }
-      if (zoneEls.length) {
-        const activeIdx = getZoneIndex(e.clientX, e.clientY);
-        zoneEls.forEach((el, i) => el.classList.toggle("active", i === activeIdx));
-      }
+      trackZones(e.clientX, e.clientY);
     },
     true
   );

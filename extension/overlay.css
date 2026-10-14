@@ -40,7 +40,10 @@ input {
   display: flex;
   gap: 10px;
   padding: 0 14px 14px;
-  pointer-events: none;
+  /* Nimmt den Zeiger an (3.25.1): sonst scrollt Chrome die Seite darunter,
+     sobald man beim Ziehen an den unteren Rand kommt, und Ablagen der Seite
+     unter der Leiste (Chat-Felder) greifen mit. */
+  pointer-events: auto;
   font-family: "Geist", -apple-system, BlinkMacSystemFont, sans-serif;
   -webkit-font-smoothing: antialiased;
   animation: zones-in 0.14s ease-out;
@@ -113,6 +116,7 @@ input {
 /* Abgelegt: kein Glühen, die Leiste blendet nur ruhig aus */
 .zones-bar.leaving {
   animation: zones-out 0.2s ease 0.3s forwards;
+  pointer-events: none;
 }
 
 @keyframes zones-out {

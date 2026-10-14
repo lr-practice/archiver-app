@@ -5,6 +5,10 @@
 - Zonenleiste am ganzen Mac ist ab Werk aus; einschalten unter
   Einstellungen › Tray. Auch bei bisherigen Installationen aus, bis man sie
   selbst wieder einschaltet.
+- Extension 3.25.1: Die Seite scrollt beim Ziehen an den unteren Rand nicht
+  mehr unter der Leiste weg, und Ablagen der Seite darunter greifen nicht mehr
+  mit. Auch beim Ziehen von Text und auf Instagram fährt die Leiste jetzt aus
+  dem Streifen hoch.
 
 ## App 0.32.0 · Extension 3.25.0 (14.10.2026)
 
