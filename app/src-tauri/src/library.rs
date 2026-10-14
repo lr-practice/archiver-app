@@ -1024,7 +1024,12 @@ impl Library {
     /// Bibliothek); jede frühere Wahl einer anderen Zone gilt als Unsorted.
     /// Welche Ordner als Unsorted zählen, sagt is_unsorted (0.36.0).
     pub fn expire_zone(&self) -> Option<String> {
-        if self.zone_file().get("expire").and_then(|z| z.as_str()) == Some("") {
+        let set = self.zone_file().get("expire").and_then(|z| z.as_str()).map(str::to_string);
+        if set.as_deref() == Some("") {
+            return None;
+        }
+        // Geteilte Bibliotheken räumen nur, wenn das dort ausdrücklich angeschaltet wurde
+        if self.shared && set.as_deref() != Some(INBOX) {
             return None;
         }
         Some(INBOX.to_string())
@@ -2343,19 +2348,14 @@ impl Library {
     /// dort zuerst gesehen hat (.archiver/unsorted-seen.json), nicht ab Datei-
     /// oder Importdatum: Wer etwas Altes nach Unsorted zieht, hat 7 Tage Zeit,
     /// und beim ersten Start mit dieser Version beginnt die Frist für alles neu.
-    /// Geteilte Bibliotheken bleiben unberührt, dort räumt niemand für andere auf.
+    /// Geteilte Bibliotheken bleiben unberührt, solange dort nicht ausdrücklich
+    /// „An“ gewählt wurde (0.36.1): sonst räumt niemand für andere auf.
     /// Seit wann jedes Objekt in Unsorted liegt (Hash → ms), für „noch n T.“ im Raster (0.33)
     pub fn inbox_seen(&self) -> HashMap<String, i64> {
-        if self.shared {
-            return HashMap::new();
-        }
         fs::read(self.root.join(META_DIR).join(INBOX_SEEN)).ok().and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or_default()
     }
 
     pub fn expire_inbox(&self, days: i64) -> Result<usize> {
-        if self.shared {
-            return Ok(0);
-        }
         if self.expire_zone().is_none() {
             return Ok(0);
         }
@@ -3282,6 +3282,26 @@ mod tests {
         for no in ["", "Typo", "Unsortiert", "Unsorted Projekte", "Projekt/Typo"] {
             assert!(!is_unsorted(no), "{no}");
         }
+    }
+
+    #[test]
+    fn shared_library_empties_only_when_switched_on() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path().join("Bib");
+        drop(Library::open(&root).unwrap());
+        crate::studio::set_shared(&root, true).unwrap();
+        let lib = Library::open(&root).unwrap();
+        assert!(lib.shared);
+        assert_eq!(lib.expire_zone(), None, "geteilt: ab Werk aus");
+        let src = tmp.path().join("src");
+        write_png(&src.join("a.png"), 4, 4, 41);
+        lib.import_files(&[src.join("a.png")], "Unsorted").unwrap();
+        assert_eq!(lib.expire_inbox(DELETED_DAYS).unwrap(), 0);
+        assert!(lib.inbox_seen().is_empty());
+        lib.set_expire_zone(INBOX).unwrap();
+        assert_eq!(lib.expire_zone().as_deref(), Some(INBOX));
+        assert_eq!(lib.expire_inbox(DELETED_DAYS).unwrap(), 0, "Frist beginnt");
+        assert_eq!(lib.inbox_seen().len(), 1);
     }
 
     #[test]

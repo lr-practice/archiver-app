@@ -2088,8 +2088,8 @@
     });
     b.appendChild(blockRow(t("setDefaultZoneLabel"), select));
     b.appendChild(el("p", "p-block-hint", t("setDefaultZoneHint")));
-    if (state.shared) return b;
-    // 0.35: Unsorted leert sich nach 7 Tagen, an oder aus (keine andere Zone)
+    // 0.35: Unsorted leert sich nach 7 Tagen, an oder aus (keine andere Zone);
+    // 0.36.1: auch in geteilten Bibliotheken, dort ab Werk aus
     const expire = choice([["on", t("setOn")], ["off", t("setOff")]], state.expireZone ? "on" : "off", async (id) => {
       try {
         await invoke("set_expire_zone", { zone: id === "on" ? "Unsorted" : "" });
@@ -3425,7 +3425,7 @@
       .some((seg) => seg.trim().replace(/^[\d_.\- ]+/, "").toLowerCase() === "unsorted");
   }
   function isInbox(zonePath) {
-    return !!state.expireZone && isUnsortedPath(zonePath) && !state.shared;
+    return !!state.expireZone && isUnsortedPath(zonePath);
   }
   // Resttage eines Objekts in Unsorted, gezählt ab dem ersten Sehen (library.rs inbox_seen)
   function inboxDaysLeft(item) {

@@ -900,7 +900,7 @@ async fn snapshot(state: State<'_, AppState>) -> Result<Snapshot, String> {
             deleted: lib.deleted_count(),
             zone_order: lib.zone_order().0,
             inbox_seen: lib.inbox_seen(),
-            expire_zone: if lib.shared { None } else { lib.expire_zone() },
+            expire_zone: lib.expire_zone(),
         })
     })
     .await

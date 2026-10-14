@@ -268,7 +268,9 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
   bestehenden Ordnersystem, und steht vorn als erste Active Zone; in einer
   Bibliothek mit eigener Reihenfolge, sobald sie neu dazukommt (0.33.2). Wer sie
   danach verschiebt, behält seinen Platz. Geteilte
-  Bibliotheken zeigen nichts davon.
+  Bibliotheken räumen ab Werk nicht auf und zeigen nichts davon; wer dort in den
+  Einstellungen „An“ wählt (0.36.1), bekommt dieselben Hinweise und dasselbe
+  Aufräumen wie in einer eigenen Bibliothek.
 - **Liste (0.34):** dritte Ansicht neben Raster und Original, Chip
   „(Liste)“. Zeilen wie im Finder: Bild, Name, Format, Maße, Größe, Quelle,
   Gesichert. Dateiname in Geist 13 px/500 (`--p-text`), Angaben in 12 px

@@ -1,5 +1,11 @@
 # Changelog
 
+## Vorabstand 0.36.1 (nicht veröffentlicht)
+
+- Geteilte Bibliotheken: Einstellungen › Bibliothek zeigt „Unsorted nach 7 Tagen
+  gelöscht“ jetzt auch dort. Ab Werk aus; bei „An“ gelten Hinweise und
+  Aufräumen wie in einer eigenen Bibliothek.
+
 ## App 0.36.0 · Extension 3.28.2
 
 - Einstellungen › Dateinamen: ein Schema für einheitliche Namen. Fünf fertige
