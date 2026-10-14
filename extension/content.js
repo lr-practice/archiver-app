@@ -300,7 +300,9 @@
       (document.head || document.documentElement).appendChild(toneStyle);
     }
     const [bg, fg] = CARD_TONES[toneFor()];
-    toneStyle.textContent = `::selection{background:${bg}!important;color:${fg}!important}`;
+    toneStyle.textContent =
+      `::selection{background:${bg}!important;color:${fg}!important}` +
+      `::highlight(archiver-marks){background-color:${bg};color:${fg}}`;
   }
 
   // ---- PDF, Video und Audio ----
@@ -358,8 +360,7 @@
     return imgs.filter((i) => Math.max(i.naturalWidth || 0, i.width || 0) >= 80).slice(0, 12);
   }
 
-  function saveSelectedImages(imgs, folder) {
-    const caption = captionNear();
+  function saveSelectedImages(imgs, folder, caption = captionNear()) {
     const source = currentPageSource();
     for (const img of imgs) {
       const url = findBestImageUrl(img) || img.currentSrc || img.src;
@@ -978,6 +979,193 @@
     return null;
   }
 
+  // ---- Mehrere Stellen markieren (⌘, 3.27.0) ----
+  // Mit gedrückter ⌘-Taste kommen weitere Stellen dazu: Text wie gewohnt
+  // markieren, Bilder anklicken (nochmal anklicken nimmt sie wieder raus).
+  // Chrome kennt nur eine Markierung, deshalb merkt sich Archiver die früheren
+  // Stücke selbst: Text bleibt in der Farbe der Markierung (CSS Highlight, die
+  // Seite wird nicht verändert), Bilder tragen den gestrichelten Ring.
+  // Ziehen eines Stücks nimmt alle mit:
+  //   nur Text → eine Textkarte, Stücke als Absätze in Markierreihenfolge
+  //   Text und Bild → jedes Bild mit allem Text als Bildtext
+  //   nur Bilder → jedes Bild einzeln
+  // Klick ohne ⌘ daneben oder Esc hebt alles auf.
+
+  const marks = []; // { range, text } | { img }
+  const MIN_MARK_IMG = 80;
+  let markLayer = null;
+  let markFrame = 0;
+  const reduceMotion = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)");
+
+  const hasMarks = () => marks.length > 0;
+
+  function bigImage(img) {
+    return img && img.tagName === "IMG" && Math.max(img.naturalWidth || 0, img.width || 0) >= MIN_MARK_IMG;
+  }
+
+  function imageUnder(x, y) {
+    for (const el of document.elementsFromPoint(x, y)) {
+      if (el === document.documentElement || el === document.body) continue;
+      if (el.tagName === "ARCHIVER-OVERLAY") return null;
+      if (bigImage(el)) return el;
+      // Bilder unter einer Fläche (Instagram u. a.)
+      const img = el.querySelectorAll && [...el.querySelectorAll("img")].find((i) => {
+        const r = i.getBoundingClientRect();
+        return bigImage(i) && x >= r.left && x <= r.right && y >= r.top && y <= r.bottom;
+      });
+      if (img) return img;
+    }
+    return null;
+  }
+
+  function addImageMark(img) {
+    if (!marks.some((m) => m.img === img)) marks.push({ img });
+  }
+
+  // Die laufende Markierung wird ein gemerktes Stück
+  function keepLiveSelection() {
+    const text = selectedText();
+    if (!text) return false;
+    const images = selectedImages();
+    marks.push({ range: window.getSelection().getRangeAt(0).cloneRange(), text: captionNear() || text });
+    images.forEach(addImageMark);
+    return true;
+  }
+
+  function collectPieces() {
+    const texts = [];
+    const images = [];
+    const addImg = (img) => !images.includes(img) && images.push(img);
+    for (const m of marks) {
+      if (m.img) addImg(m.img);
+      else if (m.text) texts.push(m.text);
+    }
+    if (selectedText()) {
+      texts.push(captionNear());
+      selectedImages().forEach(addImg);
+    }
+    const text = texts.join("\n\n");
+    return { text, caption: text ? text.slice(0, 2000) : null, images: images.slice(0, 12) };
+  }
+
+  function insideMarks(x, y) {
+    const hit = (r, pad) => x >= r.left - pad && x <= r.right + pad && y >= r.top - pad && y <= r.bottom + pad;
+    return marks.some((m) => (m.img ? hit(m.img.getBoundingClientRect(), 3) : [...m.range.getClientRects()].some((r) => hit(r, 2))));
+  }
+
+  function clearMarks() {
+    if (!marks.length) return;
+    marks.length = 0;
+    paintMarks();
+  }
+
+  function paintMarks() {
+    if (window.CSS && CSS.highlights && window.Highlight) {
+      const ranges = marks.filter((m) => m.range).map((m) => m.range);
+      if (ranges.length) CSS.highlights.set("archiver-marks", new Highlight(...ranges));
+      else CSS.highlights.delete("archiver-marks");
+    }
+    showTone();
+    scheduleMarkRings();
+  }
+
+  // Ring wie in der App (DESIGN 4.1): 1 px gestrichelt 4/4, 3 px Abstand,
+  // eckig wie das Bild. Weiß mit feinem dunklen Schatten, damit er auf hellen
+  // und dunklen Bildern steht.
+  const MARK_RING =
+    "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Crect x='.5' y='.5' style='width:calc(100%25 - 1px);height:calc(100%25 - 1px)' fill='none' stroke='white' stroke-dasharray='4 4'/%3E%3C/svg%3E\") 0 0 / 100% 100% no-repeat";
+
+  function placeMarkRings() {
+    markFrame = 0;
+    const imgs = marks.filter((m) => m.img).map((m) => m.img);
+    if (!imgs.length && !markLayer) return;
+    if (!markLayer) {
+      markLayer = document.createElement("div");
+      markLayer.setAttribute("data-archiver-marks", "");
+      markLayer.style.cssText = "position:fixed;left:0;top:0;width:0;height:0;z-index:2147483000;pointer-events:none";
+      document.documentElement.appendChild(markLayer);
+    }
+    while (markLayer.children.length > imgs.length) markLayer.lastChild.remove();
+    while (markLayer.children.length < imgs.length) {
+      const ring = document.createElement("div");
+      ring.style.cssText =
+        `position:fixed;left:0;top:0;background:${MARK_RING};filter:drop-shadow(0 0 1px rgba(0,0,0,.7));opacity:0;` +
+        (reduceMotion && reduceMotion.matches ? "" : "transition:opacity .18s ease-out");
+      markLayer.appendChild(ring);
+      requestAnimationFrame(() => (ring.style.opacity = "1"));
+    }
+    imgs.forEach((img, i) => {
+      const r = img.getBoundingClientRect();
+      const ring = markLayer.children[i];
+      ring.style.transform = `translate(${Math.round(r.left - 3)}px, ${Math.round(r.top - 3)}px)`;
+      ring.style.width = Math.round(r.width + 6) + "px";
+      ring.style.height = Math.round(r.height + 6) + "px";
+    });
+  }
+
+  function scheduleMarkRings() {
+    if (!markFrame) markFrame = requestAnimationFrame(placeMarkRings);
+  }
+  window.addEventListener("scroll", () => hasMarks() && scheduleMarkRings(), true);
+  window.addEventListener("resize", () => hasMarks() && scheduleMarkRings());
+
+  // Den Klick nach einer ⌘-Geste schlucken, sonst öffnet ein Link im neuen Tab
+  function swallowNextClick() {
+    const stop = (c) => {
+      c.preventDefault();
+      c.stopImmediatePropagation();
+    };
+    window.addEventListener("click", stop, { capture: true, once: true });
+    setTimeout(() => window.removeEventListener("click", stop, true), 600);
+  }
+
+  let metaMark = null; // { x, y } während einer ⌘-Markierung
+  window.addEventListener(
+    "mousedown",
+    (e) => {
+      if (!e.isTrusted) return; // nur echte Eingaben, keine von der Seite erzeugten Events
+      if (e.button !== 0 || manualOpen || textDrag || gone()) return;
+      const t = e.target;
+      if (t instanceof Element && t.closest("input, textarea, select, [contenteditable=''], [contenteditable='true'], archiver-overlay")) return;
+      if (!e.metaKey) {
+        // Klick daneben hebt alle Stücke auf (Ziehen eines Stücks läuft oben)
+        if (hasMarks() && !insideMarks(e.clientX, e.clientY)) clearMarks();
+        return;
+      }
+      keepLiveSelection();
+      const img = imageUnder(e.clientX, e.clientY);
+      if (img) {
+        // ⌘-Klick auf ein Bild: dazunehmen oder wieder herausnehmen
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        const i = marks.findIndex((m) => m.img === img);
+        if (i === -1) marks.push({ img });
+        else marks.splice(i, 1);
+        window.getSelection().removeAllRanges();
+        swallowNextClick();
+      } else metaMark = { x: e.clientX, y: e.clientY };
+      paintMarks();
+    },
+    true
+  );
+  window.addEventListener(
+    "mouseup",
+    (e) => {
+      if (!e.isTrusted || !metaMark) return;
+      const moved = Math.hypot(e.clientX - metaMark.x, e.clientY - metaMark.y) > TEXT_DRAG_THRESHOLD;
+      metaMark = null;
+      if (moved && selectedText()) swallowNextClick();
+    },
+    true
+  );
+  window.addEventListener(
+    "keydown",
+    (e) => {
+      if (e.isTrusted && e.key === "Escape" && hasMarks() && !textDrag) clearMarks();
+    },
+    true
+  );
+
   // ---- Markierten Text ziehen ----
   // Manche Seiten lassen eine Markierung nicht nativ ziehen (ein neuer Klick
   // markiert neu). Archiver übernimmt deshalb das Ziehen selbst: Drücken auf
@@ -1063,8 +1251,9 @@
     if (e.button === 0 && spotRect && insideBlock(e.clientX, e.clientY)) return; // Ziehen des Blocks
     selecting = true;
     hideSpotlight();
-    // Neue Markierung beginnt: neue Farbe, sofort sichtbar
-    if (e.button === 0) {
+    // Neue Markierung beginnt: neue Farbe, sofort sichtbar. Mit ⌘ oder auf
+    // einem gemerkten Stück bleibt die Farbe, alle Stücke werden eine Karte.
+    if (e.button === 0 && !e.metaKey && !(hasMarks() && insideMarks(e.clientX, e.clientY))) {
       newTone();
       showTone();
     }
@@ -1151,7 +1340,7 @@
     pic.src = img.currentSrc || img.src;
     pic.style.cssText = "display:block;width:100%;max-height:180px;object-fit:cover;margin-bottom:8px";
     g.appendChild(pic);
-    g.appendChild(UI.el("div", "text-ghost-text", text.length > 120 ? text.slice(0, 120).trim() + " …" : text));
+    if (text) g.appendChild(UI.el("div", "text-ghost-text", text.length > 120 ? text.slice(0, 120).trim() + " …" : text));
     return g;
   }
 
@@ -1169,8 +1358,9 @@
     if (!e.isTrusted) return; // nur echte Eingaben, keine von der Seite erzeugten Events
     const d = textDrag;
     if (!d.moving) {
-      // nur geklickt: wie gewohnt Markierung aufheben
+      // nur geklickt: wie gewohnt Markierung aufheben, auch die gemerkten Stücke
       window.getSelection().removeAllRanges();
+      clearMarks();
     } else {
       e.preventDefault();
       e.stopPropagation();
@@ -1179,11 +1369,13 @@
         const name = barZones[idx];
         landZones(idx);
         const folder = isRootZoneName(name) ? null : name;
-        if (d.images.length) saveSelectedImages(d.images, folder);
+        if (d.images.length) saveSelectedImages(d.images, folder, d.caption);
         else {
           const source = currentPageSource();
           saveCard(textCard(d.text, source), folder, { ...source, quote: d.text });
         }
+        clearMarks();
+        window.getSelection().removeAllRanges();
       }
     }
     endTextDrag();
@@ -1200,12 +1392,15 @@
     "mousedown",
     (e) => {
       if (!e.isTrusted) return; // nur echte Eingaben, keine von der Seite erzeugten Events
-      if (e.button !== 0 || manualOpen || textDrag || gone()) return;
+      if (e.button !== 0 || e.metaKey || manualOpen || textDrag || gone()) return;
       const text = selectedText();
-      if (!text || !insideSelection(e.clientX, e.clientY)) return;
+      const onLive = !!text && insideSelection(e.clientX, e.clientY);
+      if (!onLive && !(hasMarks() && insideMarks(e.clientX, e.clientY))) return;
       // Kein neues Markieren und kein natives Ziehen: Archiver zieht selbst.
       e.preventDefault();
-      textDrag = { x: e.clientX, y: e.clientY, text, images: selectedImages(), moving: false, ghost: null, rect: spotRect ? { ...spotRect } : null };
+      e.stopImmediatePropagation();
+      const p = hasMarks() ? collectPieces() : { text, caption: captionNear(), images: selectedImages() };
+      textDrag = { x: e.clientX, y: e.clientY, text: p.text, caption: p.caption, images: p.images, moving: false, ghost: null, rect: spotRect ? { ...spotRect } : null };
       window.addEventListener("mousemove", onTextDragMove, true);
       window.addEventListener("mouseup", onTextDragUp, true);
       window.addEventListener("keydown", onTextDragKey, true);
@@ -1249,12 +1444,22 @@
     return null;
   }
 
+  function bigControl(el) {
+    const r = el.getBoundingClientRect();
+    return r.width >= 160 && r.height >= 160;
+  }
+
   function armHiddenDrag(e) {
     if (!e.isTrusted) return; // nur echte Eingaben, keine von der Seite erzeugten Events
     clearHiddenDrag();
-    if (e.button !== 0 || manualOpen || textDrag || gone()) return;
+    if (e.button !== 0 || e.metaKey || manualOpen || textDrag || gone()) return;
+    if (hasMarks() && insideMarks(e.clientX, e.clientY)) return; // zieht alle Stücke (Mehrfachmarkierung)
     const t = e.target;
-    if (!(t instanceof Element) || t.closest("input, textarea, select, button, [contenteditable=''], [contenteditable='true']")) return;
+    if (!(t instanceof Element)) return;
+    const ctl = t.closest("input, textarea, select, button, [contenteditable=''], [contenteditable='true']");
+    // Instagram-Feed: über dem Video liegt ein großer Knopf („Ton stummschalten“).
+    // Den wie eine Fläche behandeln, kleine Bedienknöpfe bleiben Knöpfe.
+    if (ctl && !(IG && ctl.tagName === "BUTTON" && bigControl(ctl))) return;
     // Echt ziehbare Bilder und Links laufen wie bisher
     if (t.closest("[draggable='true']") || (t.tagName === "IMG" && t.getAttribute("draggable") !== "false")) return;
     if (selectedText() && insideSelection(e.clientX, e.clientY)) return;

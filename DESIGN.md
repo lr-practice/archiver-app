@@ -1,6 +1,6 @@
 # Archiver – Design-System
 
-Stand: App 0.34.2 · Extension 3.25.3
+Stand: App 0.34.2 · Extension 3.27.0
 
 Diese Datei hält fest, wie Archiver aussieht und warum. Sie gilt für die Mac-App
 (`app/src`) und die Chrome-Extension (`extension/`). Wer an der Oberfläche
@@ -464,6 +464,21 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
   kommt der Hinweis erst nach zwei Tagen. × blendet ihn aus, bis sich Zustand
   oder Mindestversion ändern. Einstellungen › Extension zeigt den Stand.
 - **Nicht:** Kein Toast, keine Akzentfarbe, kein Dialog beim Start.
+
+### 4.17 Mehrfachmarkierung (Extension 3.27.0, `content.js`)
+- **Zweck:** Mit ⌘ mehrere Stellen einer Seite sammeln und in einem Zug in
+  eine Zone ziehen. ⌘ + Markieren nimmt Text dazu, ⌘-Klick nimmt ein Bild
+  (ab 80 px) dazu oder wieder heraus. Klick daneben oder Esc hebt alles auf.
+- **Form:** Text behält die Farbe der Markierung, also die Farbe der späteren
+  Textkarte (`::highlight(archiver-marks)`, gleiche Werte wie `::selection`).
+  Alle Stücke einer Runde teilen eine Farbe. Bilder tragen den Ring aus 4.1:
+  1 px gestrichelt 4/4, 3 px Abstand, eckig, weiß mit feinem dunklen Schatten,
+  weil die Extension auf fremden Seiten keinen eigenen Grund hat. Einblenden
+  0.18 s `ease-out`, ohne bei `prefers-reduced-motion`.
+- **Ablegen:** nur Text → eine Textkarte, Stücke als Absätze in
+  Markierreihenfolge. Text und Bild → jedes Bild mit allem Text als Bildtext.
+  Nur Bilder → jedes Bild einzeln.
+- **Nicht:** Kein Zähler, kein zweiter Rahmen um Text, keine Akzentfarbe.
 
 ---
 

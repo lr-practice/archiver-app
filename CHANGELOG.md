@@ -1,5 +1,17 @@
 # Changelog
 
+## Extension 3.27.0 (14.10.2026)
+
+- Mehrere Stellen markieren: Mit gedrückter ⌘-Taste weiteren Text markieren
+  oder Bilder anklicken (nochmal anklicken nimmt sie raus). Ein Zug in eine
+  Zone sichert alles: nur Text wird eine Textkarte, Text und Bild wird Bild
+  mit Bildtext, nur Bilder werden einzeln gesichert. Klick daneben oder Esc
+  hebt die Markierung auf. ⌘-Klick auf ein Bild in einem Link öffnet dabei
+  keinen neuen Tab.
+- Instagram-Feed: Videos lassen sich jetzt auch dort ziehen. Bisher lag ein
+  großer Knopf („Ton stummschalten“) über dem Video und es entstand eine
+  Textkarte mit diesem Text.
+
 ## Extension 3.26.0 (14.10.2026)
 
 Instagram ohne eigene Anfragen an Instagram (zum Testen).
