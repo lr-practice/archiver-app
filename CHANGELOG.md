@@ -1,6 +1,6 @@
 # Changelog
 
-## Vorabstand 0.36.3 (nicht veröffentlicht)
+## App 0.36.3 · Extension 3.28.2
 
 - Namensvorschlag inhaltlicher, alles lokal: Absender und Titel der Seite,
   Wörter aus Bild- und Seitenadresse, bis zu drei Wörter und die Jahreszahl aus
