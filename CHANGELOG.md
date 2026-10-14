@@ -1,5 +1,13 @@
 # Changelog
 
+## App 0.34.1 (14.10.2026)
+
+- „(Stände)“ ist wieder raus: kein Bündeln, keine Stapel, keine Stände-Leiste
+  und kein Vergleich in der Lightbox. Raster, Original und Lightbox sind wie
+  in 0.33.2.
+- Die Ansicht „(Liste)“ bleibt, jetzt auch in „Zuletzt gelöscht“ mit Namen
+  und Angaben.
+
 ## App 0.34.0 (14.10.2026)
 
 - Neue Ansicht „(Liste)“ neben Raster und Original: Zeilen mit Bild,

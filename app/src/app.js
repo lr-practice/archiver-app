@@ -1242,10 +1242,6 @@
     document.body.classList.toggle("at-home", home);
     grid.classList.toggle("original", state.view === "original");
     grid.classList.toggle("listview", state.view === "list");
-    grid.classList.toggle("stands", standsOn());
-    // 0.34: Stände zeigen nur einen Teil der Zone; Tastatur und Lightbox folgen dem
-    state.shown = new Map();
-    state.lbOrder = new Map();
     const key = home ? "home:" + state.home : words.length || filtering ? "search" : "zone:" + state.focus;
     const scroll = key === lastViewKey ? grid.scrollTop : 0;
     lastViewKey = key;
@@ -2991,15 +2987,6 @@
       c.title = t({ grid: "viewGridTitle", original: "viewOriginalTitle", list: "viewListTitle" }[v]);
       bar.appendChild(c);
     }
-    if (state.view !== "original" && !state.found && !(single && shown[0] && hasFolders && zoneLayout(shown[0].path) === "sections")) {
-      bar.appendChild(el("span", "p-filter-gap"));
-      const c = chip("(" + t("versionsChip") + ")", standsOn(), () => {
-        setPref("stands", !standsOn());
-        render();
-      });
-      c.title = t("versionsChipTitle");
-      bar.appendChild(c);
-    }
     bar.appendChild(sizeChips(Math.max(0, SIZES.indexOf(state.size)), SIZES.length, (step) => {
       state.size = SIZES[step];
       setPref("size", state.size);
@@ -3058,170 +3045,6 @@
     renderZones();
   }
 
-  // ---- 0.34: Stände – Versionen einer Datei am Dateinamen erkennen ----
-  // „welle-plakat_final_korr.jpg“ → Stamm „welle-plakat“, Kennung „FINAL KORR“.
-  // Erkannt werden v1/ver2/version 3, final, korr, entwurf, draft, wip, fix,
-  // alt, neu, Kopie/copy, (2), macOS-Kopien „Datei 2“ und Datumsangaben.
-  // Gebündelt wird nur in der Ansicht, die Dateien bleiben, wie sie sind.
-  const VERSION_TAIL = /[\s_\-.]+(v(?:er(?:sion)?)?\s?\d{1,3}|final|endg(?:ue|ü)ltig|korr(?:ektur)?|entwurf|draft|wip|fix|alt|neu|kopie|copy|\(\d{1,2}\)|\d{4}-\d{2}-\d{2}|\d{8}|\d{6}|\d{1,2})$/i;
-  const versionCache = new Map();
-  function versionOf(filename) {
-    let v = versionCache.get(filename);
-    if (v) return v;
-    let stem = filename.replace(/\.[^.]+$/, "");
-    const tags = [];
-    for (let m; (m = VERSION_TAIL.exec(stem)) && m.index > 0; ) {
-      tags.unshift(m[1]);
-      stem = stem.slice(0, m.index);
-    }
-    v = { stem, key: stem.toLowerCase().replace(/[\s_\-.]+/g, "-"), tag: tags.join(" ").toUpperCase() };
-    versionCache.set(filename, v);
-    return v;
-  }
-
-  // Raster und Liste: Schalter „(Stände)“, in Original nicht
-  function standsOn() {
-    return !!pref("stands", false) && state.view !== "original";
-  }
-
-  const itemAge = (item) => item.mtime || item.addedAt || 0;
-
-  // Gruppen in der Reihenfolge der Zone; innerhalb einer Gruppe alt → neu
-  function versionGroups(list) {
-    const by = new Map();
-    for (const item of list) {
-      const k = (item.folder || "") + "/" + versionOf(item.filename).key;
-      if (!by.has(k)) by.set(k, { key: item.zone + "|" + k, stem: versionOf(item.filename).stem, items: [] });
-      by.get(k).items.push(item);
-    }
-    const groups = [...by.values()];
-    for (const g of groups) g.items.sort((a, b) => itemAge(a) - itemAge(b));
-    return groups;
-  }
-
-  // Stände des Objekts in seiner Zone (alt → neu), null ohne Stände
-  function standsOf(item) {
-    if (!item || !standsOn() || !state.lists.has(item.zone)) return null;
-    const key = versionOf(item.filename).key;
-    const g = (state.lists.get(item.zone) || []).filter((i) => (i.folder || "") === (item.folder || "") && versionOf(i.filename).key === key);
-    return g.length > 1 ? g.sort((a, b) => itemAge(a) - itemAge(b)) : null;
-  }
-
-  // Name zerlegt: Stamm zurückgenommen, die Kennung in voller Farbe
-  function splitName(card, item, stem) {
-    const name = card.querySelector(".card-name");
-    name.replaceChildren(el("span", "nm-stem", item.filename.slice(0, stem.length)), el("span", "nm-tag", item.filename.slice(stem.length)));
-    return name;
-  }
-
-  function verTag(item) {
-    return versionOf(item.filename).tag || "–";
-  }
-
-  const openStacks = new Set(pref("openStacks", []));
-  function toggleStack(key) {
-    if (openStacks.has(key)) openStacks.delete(key);
-    else openStacks.add(key);
-    setPref("openStacks", [...openStacks]);
-    renderZones();
-  }
-
-  // Raster mit Ständen: der neueste Stand liegt oben, ältere als Kanten
-  // dahinter; aufgeklappt stehen alle in einem Band unter der Reihe.
-  function stackGrid(zone, list) {
-    const items = el("div", "zone-card-items ver-stacks");
-    const shown = [];
-    const order = [];
-    const at = (g) => list.indexOf(g.items[g.items.length - 1]);
-    for (const g of versionGroups(list).sort((a, b) => at(a) - at(b))) {
-      const top = g.items[g.items.length - 1];
-      const card = itemCard(top);
-      items.appendChild(card);
-      shown.push(top);
-      order.push(...[...g.items].reverse());
-      if (g.items.length < 2) continue;
-      const open = openStacks.has(g.key);
-      card.classList.add("stack");
-      card.classList.toggle("open", open);
-      // Unter dem Stapel: der Stamm als Name, darunter die Kennung des neuesten Stands
-      card.querySelector(".card-name").textContent = g.stem;
-      card.querySelector(".card-tag").textContent = verTag(top);
-      const badge = button("card-stack", String(g.items.length), (e) => {
-        e.stopPropagation();
-        toggleStack(g.key);
-      });
-      badge.title = t("versionsN", { n: g.items.length });
-      card.appendChild(badge);
-      if (!open) continue;
-      const band = el("div", "ver-band");
-      const head = el("div", "ver-band-head");
-      head.appendChild(el("span", "ver-band-stem", g.stem));
-      head.appendChild(mono(t("versionsN", { n: g.items.length }), "dim"));
-      head.appendChild(el("span", "p-flex"));
-      head.appendChild(chip("(" + t("versionsClose") + ")", false, () => toggleStack(g.key)));
-      band.appendChild(head);
-      const strip = el("div", "ver-band-strip");
-      for (const it of g.items.slice(0, -1)) {
-        const c = itemCard(it);
-        c.querySelector(".card-tag").textContent = verTag(it);
-        strip.appendChild(c);
-        shown.push(it);
-      }
-      // Der neueste Stand steht als Bild am Ende, damit die Reihe vollständig ist;
-      // ausgewählt und gezogen wird er oben im Raster
-      const now = card.cloneNode(true);
-      now.classList.remove("stack", "open", "selected");
-      now.classList.add("ver-current");
-      now.querySelector(".card-stack")?.remove();
-      strip.appendChild(now);
-      band.appendChild(strip);
-      items.appendChild(band);
-    }
-    state.shown.set(zone, shown);
-    state.lbOrder.set(zone, order);
-    return items;
-  }
-
-  // Liste mit Ständen: der neueste Stand steht vorne, ältere eingerückt darunter
-  function versionList(zone, list) {
-    const items = el("div", "zone-card-items");
-    const shown = [];
-    const order = [];
-    const rank = (g) => Math.max(...g.items.map(itemAge));
-    for (const g of versionGroups(list).sort((a, b) => rank(b) - rank(a))) {
-      const newest = [...g.items].reverse();
-      const top = itemCard(newest[0]);
-      items.appendChild(top);
-      shown.push(newest[0]);
-      order.push(...newest);
-      if (g.items.length < 2) continue;
-      const name = splitName(top, newest[0], g.stem);
-      const open = openStacks.has(g.key);
-      const more = button("ver-more" + (open ? " open" : ""), "(" + t("versionsOlder", { n: g.items.length - 1 }) + ")", (e) => {
-        e.stopPropagation();
-        toggleStack(g.key);
-      });
-      more.title = t("versionsN", { n: g.items.length });
-      name.appendChild(more);
-      if (!open) continue;
-      for (const it of newest.slice(1)) {
-        const c = itemCard(it);
-        c.classList.add("older");
-        splitName(c, it, g.stem);
-        items.appendChild(c);
-        shown.push(it);
-      }
-    }
-    state.shown.set(zone, shown);
-    state.lbOrder.set(zone, order);
-    return items;
-  }
-
-  // Sichtbare Objekte einer Zone in ihrer Reihenfolge (mit Ständen nur die gezeigten)
-  function shownList(zone) {
-    return (state.shown && state.shown.get(zone)) || state.lists.get(zone) || [];
-  }
-
   // Liste: Spaltenköpfe über den Zeilen
   function listHead() {
     const head = el("div", "p-list-head");
@@ -3245,11 +3068,8 @@
     const body = el("div", "zone-card-grid");
     body.tabIndex = -1;
     if (state.view === "list") body.appendChild(listHead());
-    const stands = standsOn() && !searching;
-    let items = el("div", "zone-card-items");
-    if (stands && state.view === "list") items = versionList(zone.path, list);
-    else if (stands) items = stackGrid(zone.path, list);
-    else if (state.view === "original") {
+    const items = el("div", "zone-card-items");
+    if (state.view === "original") {
       items.classList.add("p-masonry");
       masonryLists.set(items, list);
     } else for (const item of list) items.appendChild(itemCard(item));
@@ -3564,7 +3384,6 @@
       // Liste: Dateiname und Angaben neben bzw. unter dem Bild
       const info = el("div", "card-info");
       info.appendChild(el("span", "card-name"));
-      info.appendChild(el("span", "card-tag"));
       const meta = el("span", "card-meta");
       for (const k of ["kind", "dims", "bytes", "src", "date"]) meta.appendChild(el("span", "card-m card-m-" + k));
       info.appendChild(meta);
@@ -3613,9 +3432,6 @@
     card.classList.toggle("fresh", isFresh(item));
     const info = card.querySelector(".card-info");
     info.querySelector(".card-name").textContent = item.filename;
-    info.querySelector(".card-tag").textContent = "";
-    card.classList.remove("stack", "older", "open");
-    card.querySelector(".card-stack")?.remove();
     info.querySelector(".card-m-kind").textContent = (item.format || item.filename.split(".").pop() || "").toUpperCase();
     info.querySelector(".card-m-dims").textContent = item.width && item.height ? item.width + " × " + item.height : "–";
     info.querySelector(".card-m-bytes").textContent = item.bytes ? formatBytes(item.bytes) : "–";
@@ -3713,7 +3529,7 @@
   function allVisible() {
     if (state.found) return state.found;
     const shown = state.focus != null && state.focus !== ALL && !state.query.trim() ? [state.focus] : state.zones.map((z) => z.path);
-    return shown.flatMap((z) => shownList(z));
+    return shown.flatMap((z) => state.lists.get(z) || []);
   }
 
   function selectedItems() {
@@ -3844,7 +3660,7 @@
       if (next) go(next.dataset.path);
       return;
     }
-    const list = shownList(anchor.zone);
+    const list = state.lists.get(anchor.zone) || [];
     const i = list.findIndex((x) => x.path === anchor.path);
     const step = columnsOf(anchor.zone) * (dir === "down" ? 1 : -1);
     const next = list[Math.max(0, Math.min(list.length - 1, i + step))];
@@ -3905,12 +3721,12 @@
   // (schneller Inbox-Durchgang mit den Tasten 1–4).
   function rememberPosition(items) {
     const first = items[0];
-    const list = shownList(first.zone);
+    const list = state.lists.get(first.zone) || [];
     return { zone: first.zone, index: list.findIndex((i) => i.path === first.path) };
   }
 
   function selectNextAt(pos) {
-    const list = shownList(pos.zone);
+    const list = state.lists.get(pos.zone) || [];
     if (!list.length) return selectOnly(null);
     selectAndShow(list[Math.min(pos.index, list.length - 1)].path);
   }
@@ -4126,7 +3942,6 @@
   // Mit offener Info-Spalte rückt die Fläche nach links.
   const LB_PAD = { top: 48, bottom: 84, side: 32 };
   const lbView = { w: 0, h: 0, scale: 1, x: 0, y: 0, fitted: true };
-  let lbCmp = null; // { other: zweiter Stand, pos: Lage der Linie 0–1 }
   let lbInfoOpen = false;
   // 0.30.1: Bildtext als farbige Karte im Ton des Bildes, wie die Textkarten.
   // „Rückseite“: das Bild wird gewendet, ein Eselsohr unten rechts zeigt, dass
@@ -4690,12 +4505,6 @@
     return { width: window.innerWidth - right, height: window.innerHeight };
   }
 
-  // 0.34: Stände-Leiste über der Navigation nimmt dem Bild Platz weg
-  function lbPadBottom() {
-    const bar = $("lbVersions");
-    return LB_PAD.bottom + (bar.hidden ? 0 : bar.offsetHeight + 8);
-  }
-
   function lbCenter() {
     const a = lbArea();
     return [a.width / 2, a.height / 2];
@@ -4707,7 +4516,7 @@
       left: LB_PAD.side,
       top: LB_PAD.top,
       width: Math.max(1, a.width - LB_PAD.side * 2),
-      height: Math.max(1, a.height - LB_PAD.top - lbPadBottom()),
+      height: Math.max(1, a.height - LB_PAD.top - LB_PAD.bottom),
     };
     // Doppelseite: Karte und Bild gleich hoch, zusammen mittig
     if (lbSpread()) {
@@ -4733,7 +4542,6 @@
     img.style.transform = `translate(${lbView.x}px, ${lbView.y}px) scale(${lbView.scale})`;
     $("lightbox").classList.toggle("zoomed", !lbView.fitted);
     lbPlaceText();
-    if (lbCmp) lbLayoutSplit();
     // PDF, Video und Audio führen ihr eigenes Etikett (Seite bzw. Dauer)
     if (lbMode === "image") $("lightboxZoom").textContent = "(" + (lbView.fitted ? t("viewerFit") : `${Math.round(lbView.scale * 100)} %`) + ")";
   }
@@ -4782,7 +4590,7 @@
   const FOUND = "\u0000found";
   function lbList(lb) {
     if (lb.list) return lb.list; // Notiz und ihre Verknüpfungen
-    return lb.zone === FOUND ? state.found || [] : (state.lbOrder && state.lbOrder.get(lb.zone)) || state.lists.get(lb.zone) || [];
+    return lb.zone === FOUND ? state.found || [] : state.lists.get(lb.zone) || [];
   }
 
   function openLightbox(item) {
@@ -4829,7 +4637,6 @@
     $("lbBrowse").hidden = list.length < 2;
     $("lbCount").textContent = `${lb.index + 1} / ${list.length}`;
     lbCloseZones();
-    lbRenderVersions(item);
     // Zuletzt gelöscht: nur ansehen, zurückholen oder endgültig löschen
     const gone = !!lb.deleted;
     $("lightbox").classList.toggle("is-deleted", gone);
@@ -5208,7 +5015,6 @@
     if (chips.length > HOT_ZONES) chips.splice(HOT_ZONES, 0, el("span", "lb-chip-sep"));
     $("lbZones").replaceChildren(el("span", "lb-mono", t("dropBar")), ...chips);
     $("lbZones").hidden = false;
-    $("lbVersions").hidden = true;
     $("lbAction").classList.add("active");
     lbBalanceZones();
   }
@@ -5229,130 +5035,7 @@
 
   function lbCloseZones() {
     $("lbZones").hidden = true;
-    $("lbVersions").hidden = !$("lightbox").classList.contains("has-versions");
     $("lbAction").classList.remove("active");
-  }
-
-  // ---- 0.34: Stände in der Lightbox ----
-  // Leiste über der Navigation: alle Stände alt → neu mit Kennung, der gezeigte
-  // hinterlegt. „Vergleichen“ legt zwei Stände übereinander, eine Linie zum Ziehen.
-  const isPicture = (item) => kindOf(item) === "image" && !quoteOf(item) && !isNote(item);
-
-  function lbRenderVersions(item) {
-    const bar = $("lbVersions");
-    const group = state.lightbox && !state.lightbox.deleted ? standsOf(item) : null;
-    if (lbCmp && (!group || !isPicture(item) || !group.includes(lbCmp.other) || lbCmp.other === item)) lbEndCompare(false);
-    $("lightbox").classList.toggle("has-versions", !!group);
-    bar.hidden = !group || !$("lbZones").hidden;
-    if (!group) return bar.replaceChildren();
-    const parts = [el("span", "lb-mono", t("versionsLabel"))];
-    for (const it of group) {
-      const b = button("lb-ver" + (it === item ? " on" : "") + (lbCmp && (it === item || it === lbCmp.other) ? " cmp" : ""), null, () => lbPickVersion(it));
-      const img = el("img");
-      img.src = thumbSrc(it);
-      img.alt = "";
-      b.append(img, el("span", null, verTag(it)));
-      b.title = it.filename + " · " + shortDate(itemAge(it));
-      parts.push(b);
-    }
-    if (isPicture(item) && group.filter(isPicture).length > 1) {
-      parts.push(el("span", "lb-sep"));
-      const c = button("lb-btn" + (lbCmp ? " active" : ""), t(lbCmp ? "versionsCompareEnd" : "versionsCompare"), lbToggleCompare);
-      c.title = t(lbCmp ? "versionsCompareEnd" : "versionsCompare") + " (V)";
-      parts.push(c);
-    }
-    bar.replaceChildren(...parts);
-  }
-
-  // Klick auf einen Stand: zeigen; beim Vergleichen wird er der zweite Stand
-  function lbPickVersion(it) {
-    const item = lightboxItem();
-    if (lbCmp) {
-      if (it === item || !isPicture(it)) return;
-      lbCmp.other = it;
-      lbRenderVersions(item);
-      lbLayoutSplit();
-      return;
-    }
-    const lb = state.lightbox;
-    const i = lbList(lb).indexOf(it);
-    if (i < 0 || it === item) return;
-    lb.index = i;
-    showLightboxItem();
-  }
-
-  function lbToggleCompare() {
-    if (lbCmp) return lbEndCompare(true);
-    const item = lightboxItem();
-    const group = standsOf(item);
-    if (!group || !isPicture(item)) return;
-    // Zum Vergleich der Stand davor, beim ältesten der danach
-    const i = group.indexOf(item);
-    const other = group.slice(0, i).reverse().find(isPicture) || group.slice(i + 1).find(isPicture);
-    if (!other) return;
-    lbCmp = { other, pos: 0.5 };
-    $("lightbox").classList.add("comparing");
-    lbRenderVersions(item);
-    lbLayoutSplit();
-  }
-
-  function lbEndCompare(render) {
-    if (!lbCmp) return;
-    lbCmp = null;
-    $("lightbox").classList.remove("comparing");
-    $("lbSplit").hidden = true;
-    $("lbSplit").replaceChildren();
-    if (render && state.lightbox) lbRenderVersions(lightboxItem());
-  }
-
-  // Beide Stände in derselben Fläche: links der ältere, rechts der neuere
-  function lbLayoutSplit() {
-    const item = lightboxItem();
-    if (!lbCmp || !item) return;
-    const [a, b] = [lbCmp.other, item].sort((x, y) => itemAge(x) - itemAge(y));
-    const split = $("lbSplit");
-    let wrap = split.firstChild;
-    if (!wrap || wrap.dataset.key !== a.path + "|" + b.path) {
-      wrap = el("div", "lb-split-wrap");
-      wrap.dataset.key = a.path + "|" + b.path;
-      const under = el("img");
-      under.src = fileSrc(a.abs);
-      under.alt = "";
-      const over = el("img", "lb-split-top");
-      over.src = fileSrc(b.abs);
-      over.alt = "";
-      wrap.append(under, over, el("div", "lb-split-line"), el("div", "lb-split-knob", "‹ ›"));
-      wrap.append(el("span", "lb-split-lab l", verTag(a)), el("span", "lb-split-lab r", verTag(b)));
-      const move = (e) => {
-        const r = wrap.getBoundingClientRect();
-        lbCmp.pos = Math.min(1, Math.max(0, (e.clientX - r.left) / r.width));
-        wrap.style.setProperty("--cut", lbCmp.pos * 100 + "%");
-      };
-      wrap.addEventListener("pointerdown", (e) => {
-        if (e.button !== 0 || !lbCmp) return;
-        wrap.setPointerCapture(e.pointerId);
-        wrap.classList.add("dragging");
-        move(e);
-      });
-      wrap.addEventListener("pointermove", (e) => lbCmp && wrap.hasPointerCapture(e.pointerId) && move(e));
-      wrap.addEventListener("pointerup", () => wrap.classList.remove("dragging"));
-      split.replaceChildren(wrap);
-    }
-    split.hidden = false;
-    // Maße aus den Daten, damit die Fläche vor dem Laden steht; Platz für die Kennungen darunter
-    const box = lbBox();
-    const w = b.width || a.width || 1;
-    const h = b.height || a.height || 1;
-    const scale = Math.min(box.width / w, (box.height - 28) / h, 1);
-    const W = Math.round(w * scale);
-    const H = Math.round(h * scale);
-    Object.assign(wrap.style, {
-      left: box.left + Math.round((box.width - W) / 2) + "px",
-      top: box.top + Math.round((box.height - 28 - H) / 2) + "px",
-      width: W + "px",
-      height: H + "px",
-    });
-    wrap.style.setProperty("--cut", lbCmp.pos * 100 + "%");
   }
 
   function lbMoveTo(zone) {
@@ -5379,8 +5062,6 @@
     $("lbRestoreBtn").hidden = true;
     $("lbRemoveBtn").hidden = true;
     $("lbTones").hidden = true;
-    lbEndCompare(false);
-    $("lightbox").classList.remove("has-versions");
     state.lightbox = null;
     lbCloseZones();
     if (lbPdf) lbPdf.destroy();
@@ -5534,7 +5215,6 @@
 
     window.addEventListener("resize", () => {
       if (!state.lightbox) return;
-      lbLayoutSplit();
       if (lbView.fitted) lbFit(false);
       else {
         lbClamp();
@@ -5573,20 +5253,6 @@
         return true;
       }
       if (/^[1-4]$/.test(e.key) || e.key === "Enter" || e.key === "i" || e.key === "I") return true;
-    }
-    // 0.34: Vergleich – ←/→ schieben die Linie, Esc beendet, V schaltet
-    if (lbCmp && (e.key === "ArrowLeft" || e.key === "ArrowRight") && $("lbZones").hidden) {
-      lbCmp.pos = Math.min(1, Math.max(0, lbCmp.pos + (e.key === "ArrowRight" ? 0.05 : -0.05)));
-      $("lbSplit").firstChild?.style.setProperty("--cut", lbCmp.pos * 100 + "%");
-      return true;
-    }
-    if (lbCmp && e.key === "Escape" && $("lbZones").hidden) {
-      lbEndCompare(true);
-      return true;
-    }
-    if ((e.key === "v" || e.key === "V") && $("lightbox").classList.contains("has-versions")) {
-      lbToggleCompare();
-      return true;
     }
     if (lbMode === "pdf" && lbPdf && (e.key === "ArrowDown" || e.key === "ArrowUp")) lbPdf.step(e.key === "ArrowDown" ? 1 : -1);
     else if (lbMode === "pdf" && lbPdf && e.key === "Escape" && !lbPdf.fitted() && $("lbZones").hidden) lbPdf.setZoom(1);
@@ -5799,7 +5465,6 @@
   function reorderTarget(x, y) {
     if (!feat("order") || !isZone(state.focus) || state.query.trim() || filtersActive()) return null;
     if (state.folder != null || zoneLayout(state.focus) === "sections") return null; // nur im vollen Raster
-    if (standsOn()) return null; // Stände: Reihenfolge ergibt sich aus den Dateien
     if (!dragPaths.length || dragHome !== state.focus) return null;
     const rels = dragPaths.filter(insideLibrary).map((p) => p.slice(state.root.length + 1));
     if (rels.length !== dragPaths.length || rels.some((r) => (state.byPath.get(r) || {}).zone !== state.focus)) return null;
@@ -6599,6 +6264,19 @@
       const media = el("div", "card-media", label);
       media.hidden = !label;
       card.appendChild(media);
+      // Liste: Name und Angaben wie in jeder Zone, als Quelle Zone und Resttage
+      const info = el("div", "card-info");
+      info.appendChild(el("span", "card-name", item.filename));
+      const meta = el("span", "card-meta");
+      meta.append(
+        el("span", "card-m card-m-kind", (item.format || item.filename.split(".").pop() || "").toUpperCase()),
+        el("span", "card-m card-m-dims", item.width && item.height ? item.width + " × " + item.height : "–"),
+        el("span", "card-m card-m-bytes", item.bytes ? formatBytes(item.bytes) : "–"),
+        el("span", "card-m card-m-src", zoneLabel(item.zone) + " · " + t("deletedDays", { n: daysLeft(item) })),
+        el("span", "card-m card-m-date", shortDate(item.capturedAt || item.addedAt))
+      );
+      info.appendChild(meta);
+      card.appendChild(info);
       card.addEventListener("click", (e) => {
         if (!(e.metaKey || e.shiftKey)) sel.clear();
         if (sel.has(item.abs) && (e.metaKey || e.shiftKey)) sel.delete(item.abs);
