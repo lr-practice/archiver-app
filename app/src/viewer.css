@@ -16,7 +16,8 @@
 }
 
 :root {
-  --bg: #121212;
+  /* 0.30: Glas wie App und Tray (Glas-Regler setzt --win-alpha) */
+  --bg: color-mix(in srgb, #1c1c1c calc(var(--win-alpha, 0.72) * 100%), transparent);
   --text: #ededed;
   --dim: #8c8c8c;
   --rule: rgba(var(--ink-rgb), 0.12);
@@ -29,7 +30,7 @@
 
 /* Hell: neutrales Hellgrau wie die App (html.light aus i18n.js) */
 html.light {
-  --bg: #ebebeb;
+  --bg: color-mix(in srgb, #f4f4f4 calc(var(--win-alpha, 0.78) * 100%), transparent);
   --text: #111111;
   --dim: #707070;
   --ink-rgb: 17, 17, 17;

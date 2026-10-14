@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Archiver</title>
+    <link rel="stylesheet" href="palette.css" />
+  </head>
+  <body>
+    <div class="pal">
+      <label class="pal-search">
+        <input id="q" type="text" spellcheck="false" autocomplete="off" />
+        <span id="hits" class="pal-mono pal-dim"></span>
+      </label>
+      <div id="crumb" class="pal-crumb" hidden></div>
+      <main id="body" class="pal-body"></main>
+      <footer id="keys" class="pal-keys"></footer>
+    </div>
+    <div id="toast" class="pal-toast"></div>
+    <script src="i18n.js"></script>
+    <script src="media.js"></script>
+    <script src="search.js"></script>
+    <script src="palette.js"></script>
+  </body>
+</html>
