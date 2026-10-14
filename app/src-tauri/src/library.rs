@@ -994,20 +994,19 @@ impl Library {
         self.write_zone_file(&v)
     }
 
-    /// Zone, die sich nach 7 Tagen selbst leert (0.33.1, Einstellungen ›
-    /// Bibliothek). Ohne Wahl die Standard-Zone (Unsorted), "" heißt aus.
-    /// Gibt es die gewählte Zone nicht mehr, räumt nichts auf.
+    /// Zone, die sich nach 7 Tagen selbst leert: immer Unsorted (0.35, vorher
+    /// wählbar und an die Standard-Zone gebunden). "" heißt aus (Einstellungen ›
+    /// Bibliothek); jede frühere Wahl einer anderen Zone gilt als Unsorted.
     pub fn expire_zone(&self) -> Option<String> {
-        match self.zone_file().get("expire").and_then(|z| z.as_str()) {
-            None => Some(self.default_zone()),
-            Some("") => None,
-            Some(z) => self.root.join(z).is_dir().then(|| z.to_string()),
+        if self.zone_file().get("expire").and_then(|z| z.as_str()) == Some("") {
+            return None;
         }
+        self.root.join(INBOX).is_dir().then(|| INBOX.to_string())
     }
 
     pub fn set_expire_zone(&self, zone: &str) -> Result<()> {
-        if !zone.is_empty() && !safe_join(&self.root, zone)?.is_dir() {
-            return Err(format!("Zone nicht gefunden: {zone}"));
+        if !zone.is_empty() && zone != INBOX {
+            return Err(format!("Nur Unsorted leert sich nach 7 Tagen: {zone}"));
         }
         let mut v = self.zone_file();
         v["expire"] = serde_json::json!(zone);
@@ -3046,11 +3045,15 @@ mod tests {
         let lib = Library::open(&root).unwrap();
         assert_eq!(lib.expire_zone().as_deref(), Some(INBOX), "ab Werk Unsorted");
         std::fs::create_dir_all(root.join("Downloads")).unwrap();
-        lib.set_expire_zone("Downloads").unwrap();
-        assert_eq!(lib.expire_zone().as_deref(), Some("Downloads"));
-        assert_eq!(lib.default_zone(), INBOX, "Standard-Zone bleibt");
-        let neu = lib.rename_zone("Downloads", "Eingang").unwrap();
-        assert_eq!(lib.expire_zone().as_deref(), Some(neu.as_str()), "folgt dem Umbenennen");
+        assert!(lib.set_expire_zone("Downloads").is_err(), "nur Unsorted");
+        lib.set_default_zone("Downloads").unwrap();
+        assert_eq!(lib.expire_zone().as_deref(), Some(INBOX), "auch mit anderer Standard-Zone");
+        let mut v = lib.zone_file();
+        v["expire"] = serde_json::json!("Downloads");
+        lib.write_zone_file(&v).unwrap();
+        assert_eq!(lib.expire_zone().as_deref(), Some(INBOX), "alte Wahl gilt als Unsorted");
+        lib.set_expire_zone(INBOX).unwrap();
+        assert_eq!(lib.expire_zone().as_deref(), Some(INBOX));
         lib.set_expire_zone("").unwrap();
         assert_eq!(lib.expire_zone(), None);
         assert_eq!(lib.expire_inbox(DELETED_DAYS).unwrap(), 0);

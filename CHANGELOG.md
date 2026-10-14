@@ -1,5 +1,23 @@
 # Changelog
 
+## App 0.35.0 (14.10.2026)
+
+- Abschnitte: Objekte lassen sich jetzt von einem Abschnitt in einen anderen
+  ziehen, auch in einem Unterordner. Der Abschnitt der losen Objekte legt
+  direkt in den offenen Ordner.
+- Einstellungen › Ansicht › „Active Zones beim Ziehen“: wahlweise
+  „Angeschnitten“ wie in der Extension. Die Karten ragen erst unten herein und
+  fahren hoch, wenn der Zeiger hineinkommt. Ab Werk bleibt es „Ganz“.
+- Unsorted ist immer die Zone, die nach 7 Tagen unter „Zuletzt gelöscht“
+  wandert. Eine andere Zone lässt sich dafür nicht mehr wählen, nur an oder
+  aus. Unsorted lässt sich nicht umbenennen.
+
+## Extension 3.28.0 (14.10.2026)
+
+- Beim Ziehen hängt das Bild oder Video im eigenen Format am Zeiger, eckig
+  statt als abgerundetes Quadrat. Videos zeigen ihr Vorschaubild statt eines
+  grauen Kastens.
+
 ## Extension 3.27.1 (14.10.2026)
 
 - Instagram-Feed: Beim Ziehen eines Videos hängt sofort das Video am Zeiger,

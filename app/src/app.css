@@ -2771,6 +2771,31 @@ body.lightbox-open .p-top {
   display: none;
 }
 
+/* Streifen (0.35, Einstellungen › Ansicht): erst 90 px angeschnitten wie die
+   Leiste der Extension (DESIGN.md 4.13), Zeiger hinein → volle Höhe */
+.p-dropbar {
+  transition: height 0.22s cubic-bezier(0.16, 1, 0.3, 1), padding 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.p-dropbar.strip {
+  height: 90px;
+  padding: 0 14px;
+}
+
+.p-dropbar.strip .p-hot {
+  border-radius: var(--r-lg) var(--r-lg) 0 0;
+}
+
+.p-dropbar.strip .p-hot-hint {
+  display: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .p-dropbar {
+    transition: none;
+  }
+}
+
 /* Ruhige Bewegung: nur Ein- und Ausblenden, kein Hochfahren */
 @keyframes hot-in {
   from {
@@ -5745,6 +5770,26 @@ html.light .p-dropbar .p-hot {
   --ring-gap: 0px;
 }
 .p-folder-card.drop-active::after {
+  content: "";
+  position: absolute;
+  inset: calc(-1 * var(--ring-gap));
+  z-index: 4;
+  pointer-events: none;
+  background: var(--p-text, var(--ink));
+  -webkit-mask: var(--ring) 0 0 / 100% 100% no-repeat;
+  mask: var(--ring) 0 0 / 100% 100% no-repeat;
+}
+
+/* ---- 0.35: Abschnitt (Sections) als Ablageziel: derselbe Ring, keine Fläche ---- */
+.p-folder-section.drop-active {
+  --ring: var(--ring-lg);
+  --ring-gap: 8px;
+  position: relative;
+  background: transparent !important;
+  outline: none !important;
+  color: inherit !important;
+}
+.p-folder-section.drop-active::after {
   content: "";
   position: absolute;
   inset: calc(-1 * var(--ring-gap));

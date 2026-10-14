@@ -441,7 +441,7 @@
     state.order = snap.order || {};
     state.shared = !!snap.shared;
     state.inboxSeen = snap.inboxSeen || {};
-    state.expireZone = snap.expireZone === undefined ? state.defaultZone : snap.expireZone;
+    state.expireZone = snap.expireZone === undefined ? "Unsorted" : snap.expireZone;
     state.structure = snap.structure || { depth: 2, skip: [], subzones: false };
     state.user = snap.user || "";
     state.folders = snap.folders || [];
@@ -2089,17 +2089,10 @@
     b.appendChild(blockRow(t("setDefaultZoneLabel"), select));
     b.appendChild(el("p", "p-block-hint", t("setDefaultZoneHint")));
     if (state.shared) return b;
-    // 0.33.1: welche Zone sich nach 7 Tagen leert, oder keine
-    const expire = el("select", "p-select");
-    for (const [value, label] of [["", t("setExpireOff")], ...state.zones.filter((z) => z.path !== "").map((z) => [z.path, zoneLabel(z.path)])]) {
-      const opt = el("option", null, label);
-      opt.value = value;
-      if (value === (state.expireZone || "")) opt.selected = true;
-      expire.appendChild(opt);
-    }
-    expire.addEventListener("change", async () => {
+    // 0.35: Unsorted leert sich nach 7 Tagen, an oder aus (keine andere Zone)
+    const expire = choice([["on", t("setOn")], ["off", t("setOff")]], state.expireZone ? "on" : "off", async (id) => {
       try {
-        await invoke("set_expire_zone", { zone: expire.value });
+        await invoke("set_expire_zone", { zone: id === "on" ? "Unsorted" : "" });
         await refresh();
         renderPage(true);
       } catch (e) {
@@ -2430,6 +2423,16 @@
           t("setInfoPanel"),
           choice([["on", t("setOn")], ["off", t("setOff")]], state.infoOpen ? "on" : "off", (id) => {
             if ((id === "on") !== state.infoOpen) toggleInfo();
+            rerender();
+          })
+        )
+      );
+      // 0.35: Leiste beim Ziehen erst angeschnitten wie in der Extension (ab Werk ganz)
+      view.appendChild(
+        blockRow(
+          t("setDropStrip"),
+          choice([["full", t("dropStripFull")], ["strip", t("dropStripPeek")]], pref("dropStrip", false) ? "strip" : "full", (id) => {
+            setPref("dropStrip", id === "strip");
             rerender();
           })
         )
@@ -3136,6 +3139,16 @@
     return card;
   }
 
+  function sectionRel(zonePath, folder, base) {
+    return folder ? zonePath + "/" + folder : base ? zonePath + "/" + base : zonePath;
+  }
+
+  // Abschnitt, in dem ein Objekt gerade steht (nur in „Sections“)
+  function itemSection(item) {
+    const base = state.folder || null;
+    return sectionRel(item.zone, childFolder(item, base), base);
+  }
+
   // „Sections“: je Ordner eine Kopfzeile, darunter sein Raster
   function folderSections(zone) {
     const list = state.lists.get(zone.path) || [];
@@ -3144,7 +3157,9 @@
     for (const [folder, n] of zoneFolders(list, base).concat(base && list.some((i) => childFolder(i, base) === "") ? [["", 0]] : [])) {
       const part = list.filter((i) => childFolder(i, base) === folder);
       const card = el("section", "zone-card p-section p-folder-section");
-      card.dataset.zone = zone.path;
+      // 0.35: Ablageziel ist der Ordner des Abschnitts (lose = die Ebene selbst)
+      card.dataset.zone = sectionRel(zone.path, folder, base);
+      card.dataset.section = "1";
       const head = el("h2", "p-head p-folder-head");
       head.appendChild(el("span", "p-head-title", folder ? lastSegment(folder) : base ? lastSegment(base) : t("folderLoose")));
       head.appendChild(el("span", "p-head-text", " " + countText(part.length)));
@@ -3212,7 +3227,7 @@
   }
 
   function canEdit(path) {
-    return path !== "" && path !== (state.defaultZone || "Unsorted");
+    return path !== "" && path !== "Unsorted" && path !== (state.defaultZone || "Unsorted");
   }
 
   // ---- Zonen-Menü (⋯): Umbenennen, im Finder zeigen, löschen ----
@@ -3811,12 +3826,12 @@
 
   const dirOf = (p) => p.slice(0, Math.max(0, p.lastIndexOf("/")));
 
-  async function moveSelection(zone) {
-    const items = selectedItems().filter((i) => i.zone !== zone && dirOf(i.path) !== zone);
+  async function moveSelection(zone, exact) {
+    const items = selectedItems().filter((i) => (exact ? itemSection(i) !== zone : i.zone !== zone && dirOf(i.path) !== zone));
     if (!items.length) return;
     const pos = rememberPosition(items);
     try {
-      const moved = await invoke("move_items", { paths: items.map((i) => i.path), zone });
+      const moved = await invoke("move_items", { paths: items.map((i) => i.path), zone, exact: !!exact });
       if (Array.isArray(moved) && moved.length === items.length) {
         // zurück in den genauen Ordner (auch Unterordner einer Zone)
         const back = items.map((i, k) => [moved[k], i.path.includes("/") ? i.path.slice(0, i.path.lastIndexOf("/")) : i.zone]);
@@ -5417,6 +5432,9 @@
   // Die Tasten 1–4 legen in genau diese vier.
   // Zone, in der alle gezogenen Objekte schon liegen: wird nicht hervorgehoben
   let dragHome = null;
+  let dragSection = null; // Abschnitt in „Sections“, in dem alle gezogenen Objekte stehen
+  // Ziel, auf dem das Ablegen nichts bewegt: die eigene Zone bzw. der eigene Abschnitt
+  const isHomeTarget = (target) => (target.dataset.section ? target.dataset.zone === dragSection : target.dataset.zone === dragHome);
   function showDropbar() {
     const bar = $("dropbar");
     if (!bar.hidden) return;
@@ -5430,6 +5448,7 @@
       return c;
     });
     bar.replaceChildren(...cards);
+    bar.classList.toggle("strip", !!pref("dropStrip", false));
     bar.hidden = false;
     document.body.classList.add("dragging");
   }
@@ -5442,6 +5461,7 @@
     if (on) {
       if (bar.hidden) {
         showDropbar();
+        bar.classList.remove("strip");
         document.body.classList.remove("dragging");
         bar.classList.add("preview");
       }
@@ -5450,6 +5470,18 @@
       bar.classList.remove("preview");
       hideDropbar();
     }
+  }
+
+  // Streifen (0.35, wie Extension 3.25): Zeiger im Streifen → volle Höhe,
+  // mehr als 24 px über der vollen Leiste → wieder Streifen
+  const DROP_STRIP_PX = 90;
+  function trackDropStrip(y) {
+    const bar = $("dropbar");
+    if (bar.hidden || !pref("dropStrip", false) || y < 0) return;
+    const fromBottom = window.innerHeight - y;
+    const strip = bar.classList.contains("strip");
+    if (strip && fromBottom < DROP_STRIP_PX) bar.classList.remove("strip");
+    else if (!strip && fromBottom > Math.min(window.innerHeight * 0.3, 260) + 24) bar.classList.add("strip");
   }
 
   // Abgelegt: Liegt das Ziel in der Leiste, bleibt sie kurz stehen und
@@ -5471,6 +5503,7 @@
     if (Date.now() < landingUntil) return;
     $("dropbar").classList.remove("leaving");
     dragHome = null;
+    dragSection = null;
     $("dropbar").hidden = true;
     document.body.classList.remove("dragging");
   }
@@ -5485,6 +5518,8 @@
     };
     const zones = new Set(items.map((i) => i.zone));
     dragHome = zones.size === 1 ? [...zones][0] : null;
+    const sections = new Set(items.map(itemSection));
+    dragSection = sections.size === 1 ? [...sections][0] : null;
     if (!document.body.classList.contains("at-home")) showDropbar();
     const first = items[0];
     // kleines Drag-Bild, damit die Zonen beim Ziehen sichtbar bleiben
@@ -5557,11 +5592,12 @@
     let target = zoneCardAt(x, y);
 
     if (p.type === "enter" || p.type === "over") {
+      trackDropStrip(y);
       clearDropUi();
       lastTarget = target;
-      lastReorder = target && target.dataset.zone !== dragHome ? null : reorderTarget(x, y);
+      lastReorder = target && !isHomeTarget(target) ? null : reorderTarget(x, y);
       if (lastReorder) lastReorder.card.classList.add("drop-target");
-      if (target && target.dataset.zone !== dragHome) target.classList.add("drop-active");
+      if (target && !isHomeTarget(target)) target.classList.add("drop-active");
       return;
     }
     // Beim Drop gilt das zuletzt markierte Ziel: ist die Leiste schon weg,
@@ -5571,7 +5607,7 @@
     const reorder = lastReorder;
     lastReorder = null;
 
-    if (p.type === "drop" && reorder && (!target || target.dataset.zone === dragHome)) {
+    if (p.type === "drop" && reorder && (!target || isHomeTarget(target))) {
       clearDropUi();
       hideDropbar();
       dragPaths = [];
@@ -5580,7 +5616,7 @@
 
     if (p.type === "drop") {
       clearDropUi();
-      landOn(target && dragPaths.length && target.dataset.zone !== dragHome ? target : null);
+      landOn(target && dragPaths.length && !isHomeTarget(target) ? target : null);
       const paths = dragPaths;
       dragPaths = [];
       if (!paths.length) return;
@@ -5603,13 +5639,14 @@
       if (lbItem && paths.length === 1 && paths[0] === lbItem.abs) return lbMoveTo(zone);
       const own = paths.filter(insideLibrary).map((path) => path.slice(state.root.length + 1));
       const foreign = paths.filter((path) => !insideLibrary(path));
+      const exact = !!target.dataset.section;
       const toMove = own.filter((rel) => {
         const item = state.byPath.get(rel);
-        return item && item.zone !== zone && dirOf(rel) !== zone;
+        return item && (exact ? itemSection(item) !== zone : item.zone !== zone && dirOf(rel) !== zone);
       });
       if (toMove.length) {
         state.selection = new Set(toMove);
-        moveSelection(zone);
+        moveSelection(zone, exact);
       }
       if (foreign.length) {
         invoke("import_files", { paths: foreign, zone })

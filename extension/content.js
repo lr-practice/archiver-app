@@ -1504,6 +1504,14 @@
         fallbackImageUrl = null;
         e.dataTransfer.setData("application/x-archiver-video", "1");
         e.dataTransfer.setData("text/plain", location.href);
+        // Vorschau beim Ziehen: das sichtbare Videobild statt der grauen Fläche
+        const frame = videoFrame(hiddenDrag.video);
+        if (frame) {
+          frame.style.cssText += "position:fixed;left:-10000px;top:0;pointer-events:none";
+          document.documentElement.appendChild(frame);
+          e.dataTransfer.setDragImage(frame, frame.width / 2, frame.height / 2);
+          setTimeout(() => frame.remove(), 0);
+        }
         return;
       }
       const url = resolveUrl(hiddenDrag.url);
@@ -1539,6 +1547,60 @@
     const fy = r.height ? Math.min(1, Math.max(0, (e.clientY - r.top) / r.height)) : 0.5;
     e.dataTransfer.setDragImage(canvas, Math.round(w * fx), Math.round(h * fy));
     setTimeout(() => canvas.remove(), 0);
+  }
+
+  // Ziehbild für Bild und Video (3.28.0): das Motiv im eigenen Seitenverhältnis,
+  // ohne Rundung, höchstens DRAG_PX an der langen Seite (wie cappedDragImage).
+  // Video: das gerade sichtbare Bild, sonst das Poster.
+  const DRAG_PX = 220;
+  const GHOST_CSS =
+    "position:fixed;left:0;top:0;z-index:2147483647;pointer-events:none;border-radius:0;display:block;" +
+    "box-shadow:0 12px 32px rgba(0,0,0,.4);opacity:.92;";
+
+  function fitDrag(w, h) {
+    const scale = Math.min(1, DRAG_PX / Math.max(w, h, 1));
+    return [Math.max(1, Math.round(w * scale)), Math.max(1, Math.round(h * scale))];
+  }
+
+  function videoFrame(video) {
+    if (!video || video.readyState < 2 || !video.videoWidth) return null;
+    const [w, h] = fitDrag(video.videoWidth, video.videoHeight);
+    const canvas = document.createElement("canvas");
+    canvas.width = w;
+    canvas.height = h;
+    canvas.style.cssText = `width:${w}px;height:${h}px;`;
+    try {
+      // Fremde Videos lassen die Fläche „tainted“; zeichnen und zeigen geht trotzdem
+      canvas.getContext("2d").drawImage(video, 0, 0, w, h);
+    } catch {
+      return null;
+    }
+    return canvas;
+  }
+
+  function mediaGhost(d) {
+    const frame = d.video ? videoFrame(d.video) : null;
+    if (frame) {
+      frame.style.cssText += GHOST_CSS;
+      return frame;
+    }
+    const src = d.url || (d.video && d.video.poster);
+    const r = (d.video || d.el).getBoundingClientRect();
+    const [w, h] = fitDrag(r.width || DRAG_PX, r.height || DRAG_PX);
+    if (src) {
+      const img = document.createElement("img");
+      img.style.cssText = GHOST_CSS + `width:${w}px;height:${h}px;object-fit:cover;background:#222;`;
+      img.onload = () => {
+        const [nw, nh] = fitDrag(img.naturalWidth, img.naturalHeight);
+        img.style.width = nw + "px";
+        img.style.height = nh + "px";
+      };
+      img.src = src;
+      return img;
+    }
+    const box = document.createElement("div");
+    box.style.cssText = GHOST_CSS + `width:${w}px;height:${h}px;background:#222;`;
+    return box;
   }
 
   // Instagram: eigenes Ziehen mit Zeiger-Ereignissen statt des Browser-Ziehens,
@@ -1590,16 +1652,12 @@
       d.moving = true;
       dragCounter = 1;
       showZones();
-      const g = document.createElement("div");
-      const thumb = d.url || d.video.poster;
-      g.style.cssText =
-        "position:fixed;left:0;top:0;z-index:2147483647;width:120px;height:120px;border-radius:10px;pointer-events:none;" +
-        "background:#222 center/cover no-repeat;box-shadow:0 12px 32px rgba(0,0,0,.4);opacity:.92;color:#fff;" +
-        "font:600 12px/120px -apple-system,sans-serif;text-align:center";
-      if (thumb) g.style.backgroundImage = `url("${String(thumb).replace(/"/g, "%22")}")`;
-      else g.textContent = "▶ Video";
-      document.documentElement.appendChild(g);
-      d.ghost = g;
+      d.ghost = mediaGhost(d);
+      document.documentElement.appendChild(d.ghost);
+      // in die Überlagerung, damit das Bild über den Zonen liegt (wie beim Text)
+      ensureOverlay().then(() => {
+        if (mediaDrag === d && d.ghost) rootEl.appendChild(d.ghost);
+      });
       window.getSelection && window.getSelection().removeAllRanges();
     }
     e.preventDefault();

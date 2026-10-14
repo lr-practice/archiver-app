@@ -1,6 +1,6 @@
 # Archiver – Design-System
 
-Stand: App 0.34.2 · Extension 3.27.1
+Stand: App 0.35.0 · Extension 3.28.0
 
 Diese Datei hält fest, wie Archiver aussieht und warum. Sie gilt für die Mac-App
 (`app/src`) und die Chrome-Extension (`extension/`). Wer an der Oberfläche
@@ -204,6 +204,12 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
   - Ziel unter dem Zeiger (Ring)
   - Herkunftszone (Inhalt auf 45 % zurückgenommen, Glas bleibt)
   - Abgelegt (Ziel glüht kurz in `--glow-rgb`, dann fährt die Leiste aus)
+- **Angeschnitten (0.35, Einstellungen › Ansicht, ab Werk „Ganz“):** Wahlweise
+  ragen die Karten erst 90 px herein (`.p-dropbar.strip`), genau wie die Leiste
+  der Extension (4.13): oben gerundet, unten bündig, ohne Hinweis. Zeiger in
+  den Streifen → volle Höhe, mehr als 24 px darüber → wieder Streifen. Höhe mit
+  0.22 s Übergang, ohne bei `prefers-reduced-motion`. Die Vorschau beim
+  Glas-Regler zeigt immer die ganze Leiste.
 - **Nicht:** Sie erscheint nicht ohne Ziehen und zeigt nicht mehr als vier
   Zonen.
 
@@ -234,6 +240,10 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
   legt den Ordner hinein (gleiches Anheben wie 4.4, Ziel mit Ring).
 - **Titel:** Steht oben im Kopf (`align-self: start`) und springt nicht, wenn
   sich die Zahl der Karten beim Wechsel der Ebene ändert.
+- **Abschnitte als Ablageziel (0.35):** In „(Abschnitte)“ ist jeder Abschnitt
+  (`.p-folder-section`) Ziel für seinen Ordner, auch im Unterordner; der Abschnitt
+  der losen Objekte legt direkt in die offene Ebene. Ziel zeigt den Ring (4.1,
+  `--ring-lg`, 8 px Abstand) ohne Fläche, der eigene Abschnitt ist kein Ziel.
 
 ### 4.6 Objekt (`.card`)
 - **Zweck:** Ein gesichertes Bild, Video, PDF oder eine Text- bzw. Seitenkarte
@@ -247,9 +257,9 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
   Gezählt ab dem ersten Sehen (`inboxSeen` im Snapshot). Die Kopfzeile von
   Unsorted sagt nur „Nach 7 Tagen gelöscht.“, ohne Anzahl, Datum und Quellen.
   Dieselben Worte stehen im Index hinter dem Namen (dim) und auf der Zonenkarte
-  hinter der Anzahl statt des Datums (0.33.1). Welche Zone sich so leert, steht
-  in Einstellungen › Bibliothek unter der Standard-Zone (ab Werk Unsorted, auch
-  „Aus“). Unsorted entsteht mit jeder eigenen Bibliothek, auch in einem
+  hinter der Anzahl statt des Datums (0.33.1). Es ist immer Unsorted (0.35, vorher
+  wählbar); Einstellungen › Bibliothek „Unsorted nach 7 Tagen gelöscht“ schaltet
+  nur an (ab Werk) oder aus. Unsorted lässt sich nicht umbenennen. Unsorted entsteht mit jeder eigenen Bibliothek, auch in einem
   bestehenden Ordnersystem, und steht vorn als erste Active Zone; in einer
   Bibliothek mit eigener Reihenfolge, sobald sie neu dazukommt (0.33.2). Wer sie
   danach verschiebt, behält seinen Platz. Geteilte
@@ -479,6 +489,15 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
   Markierreihenfolge. Text und Bild → jedes Bild mit allem Text als Bildtext.
   Nur Bilder → jedes Bild einzeln.
 - **Nicht:** Kein Zähler, kein zweiter Rahmen um Text, keine Akzentfarbe.
+
+### 4.18 Ziehbild (Extension 3.28.0, `content.js`)
+- **Zweck:** Am Zeiger hängt beim Ziehen das Motiv selbst.
+- **Form:** Bild oder Video im eigenen Seitenverhältnis, höchstens 220 px an
+  der langen Seite, eckig (ohne Rundung), Schatten `0 12px 32px` 40 %, 92 %
+  Deckkraft. Video zeigt das gerade sichtbare Bild, sonst das Poster. Liegt in
+  der Überlagerung über den Zonen. Gilt für das eigene Ziehen (Instagram) und
+  für Videos beim Browser-Ziehen.
+- **Nicht:** Kein Quadrat, kein grauer Kasten mit „Video“.
 
 ---
 
