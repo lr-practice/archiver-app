@@ -248,6 +248,13 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
   Unsorted trägt nur den Satz zu den 7 Tagen, ohne Anzahl, Datum und Quellen; im
   Index steht hinter dem Namen in dim „Leert sich nach 7 Tagen“. Geteilte
   Bibliotheken zeigen nichts davon.
+- **Liste (Entwurf 0.34, noch nicht entschieden):** dritte Ansicht neben
+  Raster und Original, Chip „(Liste)“. Dateiname in Geist 13 px/500
+  (`--p-text`), Angaben in 12 px `--p-dim`, Spaltenköpfe als Label (Mono,
+  Versalien), Zeilen mit `--p-rule` getrennt, Auswahl mit `--ring-0` um die
+  ganze Zeile. Die Größenstufen setzen die Bildhöhe (`--lt`, 24–96 px).
+  Varianten A Zeilen mit Spalten, B Raster mit Name darunter, C große Zeilen
+  in Spalten (`data-lv`, nur für die Vorschau). Nach der Wahl bleibt eine.
 - **Nicht:** Keine Rundung, kein Schatten und keine Bildunterschrift im Raster.
   Die Info gibt es per `I` oder im Seitenblatt.
 

@@ -132,6 +132,7 @@
   // ---- Zustand ----
 
   const SIZES = [72, 96, 120, 160, 220, 300];
+  const LIST_THUMBS = [24, 32, 40, 56, 72, 96]; // Liste: Bildhöhe je Stufe
   const ALL = "\u0000all";
   const DELETED = "\u0000deleted"; // „Zuletzt gelöscht“ (0.27)
   const isZone = (f) => f != null && !String(f).startsWith("\u0000");
@@ -229,6 +230,12 @@
       dateStyle: "medium",
       timeStyle: "short",
     });
+  }
+
+  // Liste: kurzes Datum wie im Finder, „12. Okt. 2026“
+  function shortDate(ms) {
+    if (!ms) return "–";
+    return new Date(ms).toLocaleDateString(lang === "de" ? "de-DE" : "en-GB", { day: "numeric", month: "short", year: "numeric" });
   }
 
   const Media = window.ArchiverMedia;
@@ -752,6 +759,7 @@
   // links Zonen (Startseite) bzw. „← Zonen“ in einer Zone, dann Suche und ⋯.
   function renderToolbar() {
     document.documentElement.style.setProperty("--thumb", state.size + "px");
+    document.documentElement.style.setProperty("--lt", LIST_THUMBS[Math.max(0, SIZES.indexOf(state.size))] + "px");
     const main = $("navMain");
     const btns = [];
     const inZone = isZone(state.focus) && !state.query;
@@ -1229,6 +1237,8 @@
     const home = state.focus == null && !words.length && !filtering;
     document.body.classList.toggle("at-home", home);
     grid.classList.toggle("original", state.view === "original");
+    grid.classList.toggle("listview", state.view === "list");
+    grid.dataset.lv = pref("listVariant", "a");
     const key = home ? "home:" + state.home : words.length || filtering ? "search" : "zone:" + state.focus;
     const scroll = key === lastViewKey ? grid.scrollTop : 0;
     lastViewKey = key;
@@ -2943,13 +2953,13 @@
         bar.appendChild(chip("(" + t(l === "mosaic" ? "layoutMosaic" : "layoutSections") + ")", zoneLayout(shown[0].path) === l, () => setZoneLayout(shown[0].path, l)));
       bar.appendChild(el("span", "p-filter-gap"));
     }
-    for (const v of ["grid", "original"]) {
-      const c = chip("(" + t(v === "grid" ? "viewGrid" : "viewOriginal") + ")", state.view === v, () => {
+    for (const v of ["grid", "original", "list"]) {
+      const c = chip("(" + t({ grid: "viewGrid", original: "viewOriginal", list: "viewList" }[v]) + ")", state.view === v, () => {
         state.view = v;
         setPref("view", v);
         render();
       });
-      c.title = t(v === "grid" ? "viewGridTitle" : "viewOriginalTitle");
+      c.title = t({ grid: "viewGridTitle", original: "viewOriginalTitle", list: "viewListTitle" }[v]);
       bar.appendChild(c);
     }
     bar.appendChild(sizeChips(Math.max(0, SIZES.indexOf(state.size)), SIZES.length, (step) => {
@@ -3010,6 +3020,13 @@
     renderZones();
   }
 
+  // Liste: Spaltenköpfe über den Zeilen
+  function listHead() {
+    const head = el("div", "p-list-head");
+    for (const k of ["listName", "viewerFormat", "viewerSize", "listBytes", "source", "listDate"]) head.appendChild(mono(t(k), "dim"));
+    return head;
+  }
+
   function gallerySection(zone, index, withHeader, searching) {
     const list = state.lists.get(zone.path) || [];
     const card = el("section", "zone-card p-section");
@@ -3025,6 +3042,7 @@
     }
     const body = el("div", "zone-card-grid");
     body.tabIndex = -1;
+    if (state.view === "list") body.appendChild(listHead());
     const items = el("div", "zone-card-items");
     if (state.view === "original") {
       items.classList.add("p-masonry");
@@ -3067,6 +3085,7 @@
     const card = el("section", "zone-card p-section p-found");
     const body = el("div", "zone-card-grid");
     body.tabIndex = -1;
+    if (state.view === "list") body.appendChild(listHead());
     const items = el("div", "zone-card-items");
     if (state.view === "original") {
       items.classList.add("p-masonry");
@@ -3337,6 +3356,13 @@
       card.appendChild(el("span", "card-fresh"));
       card.appendChild(el("div", "card-days"));
       card.appendChild(el("span", "card-ear"));
+      // Liste: Dateiname und Angaben neben bzw. unter dem Bild
+      const info = el("div", "card-info");
+      info.appendChild(el("span", "card-name"));
+      const meta = el("span", "card-meta");
+      for (const k of ["kind", "dims", "bytes", "src", "date"]) meta.appendChild(el("span", "card-m card-m-" + k));
+      info.appendChild(meta);
+      card.appendChild(info);
       cardCache.set(item.path, card);
     }
     const label = mediaLabel(item);
@@ -3379,6 +3405,13 @@
     else card.style.removeProperty("--ar");
     card.classList.toggle("selected", state.selection.has(item.path));
     card.classList.toggle("fresh", isFresh(item));
+    const info = card.querySelector(".card-info");
+    info.querySelector(".card-name").textContent = item.filename;
+    info.querySelector(".card-m-kind").textContent = (item.format || item.filename.split(".").pop() || "").toUpperCase();
+    info.querySelector(".card-m-dims").textContent = item.width && item.height ? item.width + " × " + item.height : "–";
+    info.querySelector(".card-m-bytes").textContent = item.bytes ? formatBytes(item.bytes) : "–";
+    info.querySelector(".card-m-src").textContent = domainOf(item.pageUrl);
+    info.querySelector(".card-m-date").textContent = shortDate(item.capturedAt || item.addedAt);
     // 0.33: Bild mit Bildtext trägt ein Eselsohr in der Farbe seiner Textkarte
     const ear = card.querySelector(".card-ear");
     ear.hidden = !hasCaption(item) || !!quote || isNote(item);
@@ -3576,6 +3609,7 @@
 
   function columnsOf(zone) {
     if (state.view === "original") return 1;
+    if (state.view === "list" && pref("listVariant", "a") !== "b") return 1;
     const node = document.querySelector(`.zone-card[data-zone="${CSS.escape(zone)}"] .zone-card-items`);
     return node ? getComputedStyle(node).gridTemplateColumns.split(" ").filter(Boolean).length || 1 : 1;
   }
@@ -6190,6 +6224,7 @@
     const section = el("section", "zone-card p-section");
     const body = el("div", "zone-card-grid");
     body.tabIndex = -1;
+    if (state.view === "list") body.appendChild(listHead());
     const items = el("div", "zone-card-items");
     for (const item of list) {
       const card = el("div", "card del" + (sel.has(item.abs) ? " selected" : ""));
