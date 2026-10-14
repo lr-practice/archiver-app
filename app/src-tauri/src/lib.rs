@@ -1690,7 +1690,7 @@ mod tests {
     fn slots_from_old_settings() {
         let s = Settings { library: Some("/x/Referenzen".into()), ..Default::default() };
         let slots = library_slots(&s);
-        assert_eq!(slots.len(), 3);
+        assert_eq!(slots.len(), 4, "vier Plätze seit 0.36.0");
         assert_eq!(slots[0].name, "Referenzen");
         assert!(slots[1].path.is_none());
     }
