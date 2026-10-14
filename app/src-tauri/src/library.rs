@@ -845,6 +845,12 @@ impl Library {
             let _ = conn.execute("DELETE FROM thumb WHERE hash IN (SELECT hash FROM media WHERE sample_rate IS NOT NULL OR title IS NOT NULL)", []);
             let _ = conn.execute_batch("PRAGMA user_version = 2;");
         }
+        // ab 0.31.1: Motive mit Sicherheit („poster:0.92“). Ältere Analysen ohne
+        // Sicherheit laufen einmal neu, damit die Suche unsichere Motive auslässt.
+        if version < 3 {
+            let _ = conn.execute("DELETE FROM analysis WHERE labels <> '' AND labels NOT LIKE '%:%'", []);
+            let _ = conn.execute_batch("PRAGMA user_version = 3;");
+        }
         let lib = Library {
             root: root.to_path_buf(),
             conn: Mutex::new(conn),
@@ -2868,6 +2874,25 @@ mod tests {
         assert!(root.join("Unsorted/Projekt X/Sub/d.png").is_file());
         assert!(lib.items().unwrap().iter().any(|i| i.path == "Unsorted/Projekt X/Sub/d.png"));
         assert!(lib.move_folder("Unsorted/Projekt X", "Unsorted/Projekt X/Sub").is_err(), "nicht in sich selbst");
+    }
+
+    #[test]
+    fn old_labels_without_confidence_are_analysed_again() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path().join("Bib");
+        {
+            let lib = Library::open(&root).unwrap();
+            for (hash, labels) in [("alt", "poster, art"), ("neu", "poster:0.92, art:0.41"), ("leer", "")] {
+                let a = Analysis { hash: hash.into(), labels: labels.into(), text: String::new(), colors: String::new() };
+                lib.save_analysis(&a).unwrap();
+            }
+            lib.conn.lock().unwrap().execute_batch("PRAGMA user_version = 2;").unwrap();
+        }
+        let lib = Library::open(&root).unwrap();
+        let conn = lib.conn.lock().unwrap();
+        let mut stmt = conn.prepare("SELECT hash FROM analysis ORDER BY hash").unwrap();
+        let left: Vec<String> = stmt.query_map([], |r| r.get(0)).unwrap().map(|r| r.unwrap()).collect();
+        assert_eq!(left, ["leer", "neu"], "nur die Analyse ohne Sicherheit läuft neu");
     }
 
     #[test]

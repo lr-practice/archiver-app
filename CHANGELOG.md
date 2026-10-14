@@ -1,5 +1,16 @@
 # Changelog
 
+## App 0.31.1 (14.10.2026)
+
+Genauere Suche. App und Tray suchen jetzt gleich.
+
+- Gesucht wird nach ganzen Wörtern und ihren Formen: „Kreise“, „Kreisen“ und „Kreis“ finden dasselbe, „rote“ findet Rot. Umlaute gehen auch als ae/oe/ue, ß als ss.
+- Keine Treffer mehr mitten im Wort: „rot“ findet weder „Brot“ noch „Protokoll“. Wortanfänge zählen nur beim Wort, das du gerade tippst.
+- Wortteile nur in Namen, etwa „Entwurf“ in „Plakatentwurf“. Dateinamen werden an Großbuchstaben und Ziffern getrennt („KonzertPlakat2024“).
+- Erkannte Motive zählen erst ab 50 % Sicherheit, in Suche und Motiv-Filter. Bisher reichten 30 %, daher viele falsche Treffer bei „Mensch“, „Pflanze“ und Ähnlichem. Bilder mit älterer Analyse werden dafür einmal im Hintergrund neu erkannt.
+- Text im Bild zählt nur als ganzes Wort, Füllwörter wie „mit“ oder „und“ werden übersprungen.
+- Treffer im Namen stehen vor Treffern im Bildinhalt, die ganze Suche im Namen ganz vorn. Der Tray sortiert jetzt auch nach Relevanz.
+
 ## App 0.31.0 · Extension 3.24.0 (13.10.2026)
 
 Stabilitäts-Release nach dem Prüfbericht zu 0.30.1. Keine neuen Funktionen, dafür weniger Datenverlust, weniger stille Fehler und mehr Tempo bei großen Bibliotheken.

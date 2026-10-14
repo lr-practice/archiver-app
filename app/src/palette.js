@@ -139,21 +139,21 @@
     return fileSrc(item.abs);
   }
 
-  // Suchtext eines Objekts: Name, Zone, Quelle, Notiz, erkannter Inhalt und Text
-  function haystack(item) {
-    return [item.filename, item.zone, item.pageTitle, item.pageUrl, item.note, item.labels, item.text, item.quote, item.title, item.artist]
-      .filter(Boolean)
-      .join(" ")
-      .toLowerCase();
-  }
+  // Suche wie in der App (search.js): ganze Wörter, deutsche Wortformen,
+  // sichere Motive; Treffer nach Relevanz
+  const Find = window.ArchiverSearch;
 
   function search(q) {
-    const words = q.toLowerCase().split(/\s+/).filter(Boolean);
-    const zones = state.zones.filter((z) => words.every((w) => zoneName(z.path).toLowerCase().includes(w)));
-    const items = state.snap.items.filter((i) => {
-      const h = haystack(i);
-      return words.every((w) => h.includes(w));
+    const words = Find.parse(q);
+    const zones = state.zones.filter((z) => {
+      const name = Find.tokens(zoneName(z.path));
+      return words.every((w, i) => name.some((n) => n.startsWith(Find.stem(w)) || (i === words.length - 1 && n.startsWith(w))));
     });
+    const items = state.snap.items
+      .map((i) => [Find.score(i, words), i])
+      .filter(([s]) => s > 0)
+      .sort((a, b) => b[0] - a[0])
+      .map(([, i]) => i);
     return { zones, items };
   }
 

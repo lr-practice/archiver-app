@@ -153,7 +153,8 @@ pub fn analyze_image(path: &std::path::Path) -> (Vec<String>, String) {
         let _: () = msg_send![ocr, release];
 
         labels.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
-        let labels = labels.into_iter().take(16).map(|(l, _)| l.replace('_', " ")).collect();
+        // Mit Sicherheit („poster:0.92“), damit die Suche unsichere Motive auslassen kann (0.31.1)
+        let labels = labels.into_iter().take(16).map(|(l, c)| format!("{}:{c:.2}", l.replace('_', " "))).collect();
         (labels, text.join(" "))
     })
 }

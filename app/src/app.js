@@ -478,113 +478,17 @@
 
   const cardCache = new Map(); // Pfad → Bild-Element (bleibt beim Neuzeichnen erhalten)
 
-  // Suche: Dateiname, Quelle, Zone, dazu Bildinhalt, Text im Bild und Farben
-  // (Analyse im Hintergrund, lib.rs). Deutsche Begriffe werden mitübersetzt.
-  const SEARCH_DE = {
-    rot: "red", orange: "orange", gelb: "yellow", grün: "green", gruen: "green", türkis: "teal", blau: "blue",
-    lila: "purple", violett: "purple", rosa: "pink", pink: "pink", braun: "brown", schwarz: "black", grau: "gray",
-    weiß: "white", weiss: "white", mensch: "people", menschen: "people", person: "people", personen: "people",
-    frau: "woman", mann: "man", kind: "child", gesicht: "face", porträt: "portrait", portrait: "portrait",
-    tier: "animal", hund: "dog", katze: "cat", vogel: "bird", pferd: "horse", fisch: "fish",
-    pflanze: "plant", blume: "flower", blumen: "flower", baum: "tree", wald: "forest", gras: "grass",
-    himmel: "sky", wolke: "cloud", wolken: "cloud", wasser: "water", meer: "ocean", see: "lake", strand: "beach",
-    berg: "mountain", berge: "mountain", landschaft: "landscape", natur: "nature", schnee: "snow", sonne: "sun",
-    stadt: "city", straße: "street", strasse: "street", gebäude: "building", haus: "house", architektur: "architecture",
-    innenraum: "interior", raum: "room", zimmer: "room", küche: "kitchen", möbel: "furniture", stuhl: "chair",
-    tisch: "table", sofa: "sofa", lampe: "lamp", licht: "light", fenster: "window", tür: "door", treppe: "stairs",
-    auto: "car", fahrzeug: "vehicle", fahrrad: "bicycle", flugzeug: "airplane", boot: "boat", schiff: "ship",
-    essen: "food", getränk: "drink", obst: "fruit", gemüse: "vegetable", brot: "bread", kaffee: "coffee",
-    kleidung: "clothing", mode: "fashion", schuh: "shoe", schuhe: "shoe", tasche: "bag", hut: "hat",
-    buch: "book", bücher: "book", papier: "paper", zeitschrift: "magazine", plakat: "poster", poster: "poster",
-    schrift: "text", typografie: "typography", text: "text", dokument: "document", zeichnung: "drawing",
-    illustration: "illustration", gemälde: "painting", malerei: "painting", kunst: "art", skulptur: "sculpture",
-    foto: "photo", muster: "pattern", textur: "texture", logo: "logo", bildschirm: "screen", computer: "computer",
-    telefon: "phone", uhr: "clock", musik: "music", instrument: "instrument", sport: "sport", nacht: "night",
-    erwachsener: "adult", leute: "people", gruppe: "group", hand: "hand", hände: "hand", auge: "eye", haar: "hair",
-    körper: "body", tanz: "dance", bühne: "stage", konzert: "concert", kamera: "camera", film: "film",
-    draußen: "outdoor", aussen: "outdoor", außen: "outdoor", drinnen: "indoor", innen: "indoor", büro: "office",
-    wohnzimmer: "living room", schlafzimmer: "bedroom", bad: "bathroom", badezimmer: "bathroom", bett: "bed",
-    regal: "shelf", teppich: "rug", vorhang: "curtain", spiegel: "mirror", vase: "vase", keramik: "ceramic",
-    holz: "wood", stein: "stone", beton: "concrete", metall: "metal", glas: "glass", stoff: "textile",
-    textil: "textile", leder: "leather", ziegel: "brick", marmor: "marble", wand: "wall", boden: "floor",
-    decke: "ceiling", dach: "roof", brücke: "bridge", turm: "tower", kirche: "church", fassade: "facade",
-    garten: "garden", park: "park", feld: "field", wüste: "desert", fluss: "river", insel: "island",
-    küste: "coast", hügel: "hill", felsen: "rock", sand: "sand", eis: "ice", feuer: "fire", rauch: "smoke",
-    sonnenuntergang: "sunset", mond: "moon", stern: "star", regen: "rain", nebel: "fog",
-    blatt: "leaf", blätter: "leaf", kaktus: "cactus", palme: "palm tree", frucht: "fruit", wein: "wine",
-    flasche: "bottle", tasse: "cup", teller: "plate", besteck: "cutlery", kuchen: "cake", pizza: "pizza",
-    schild: "sign", grafik: "graphic", diagramm: "diagram", karte: "map", landkarte: "map", tabelle: "chart",
-    form: "shape", kreis: "circle", linie: "line", streifen: "stripes", punkt: "dot", punkte: "polka dots",
-    raster: "grid", geometrie: "geometric", abstrakt: "abstract", collage: "collage", skizze: "sketch",
-    bildschirmfoto: "screenshot", website: "website", verpackung: "packaging", etikett: "label", flyer: "flyer",
-    broschüre: "brochure", magazin: "magazine", zeitung: "newspaper", cover: "cover", album: "album",
-    möbelstück: "furniture", sessel: "armchair", leuchte: "lamp", kerze: "candle", schmuck: "jewelry",
-    uhrwerk: "watch", brille: "glasses", kleid: "dress", jacke: "jacket", hemd: "shirt", hose: "pants",
-    zug: "train", bahn: "train", bus: "bus", motorrad: "motorcycle", lkw: "truck", straßenbahn: "tram",
-    vogelperspektive: "aerial", luftbild: "aerial", schwarzweiß: "monochrome", monochrom: "monochrome",
-    struktur: "structure", konstruktion: "structure", wohnraum: "interior room", ausstellung: "exhibition",
-    galerie: "gallery", museum: "museum", produkt: "product", werkzeug: "tool", spielzeug: "toy",
-  };
-
-  // Rückweg Englisch → Deutsch für die Motiv-Chips (erster deutscher Begriff gewinnt)
-  const LABEL_DE = {};
-  for (const [de, en] of Object.entries(SEARCH_DE)) if (!LABEL_DE[en]) LABEL_DE[en] = de;
-  Object.assign(LABEL_DE, { "interior room": "innenraum", adult: "erwachsene", people: "menschen", outdoor: "draußen", indoor: "drinnen" });
-  const COLOR_NAMES = new Set(["red", "orange", "yellow", "green", "teal", "blue", "purple", "pink", "brown", "black", "gray", "white"]);
-  const COLOR_SHARE = 0.12; // ab diesem Anteil zählt eine Farbe für Suche und Filter
-
-  const tokens = (text) => String(text || "").toLowerCase().split(/[^\p{L}\p{N}]+/u).filter(Boolean);
-  const stem = (name) => String(name || "").replace(/\.[a-z0-9]{2,5}$/i, "");
-
-  // Suchindex pro Objekt, wird bei neuen Analyse-Ergebnissen verworfen
-  function searchIndex(item) {
-    if (item._idx) return item._idx;
-    const colors = new Map();
-    for (const part of String(item.colors || "").split(" ")) {
-      const [name, share] = part.split(":");
-      if (name) colors.set(name, Number(share) || 0);
-    }
-    item._idx = {
-      name: tokens([stem(item.filename), item.pageTitle, item.title, item.artist, item.album].join(" ")),
-      zone: tokens(item.zone),
-      site: tokens(domainOf(item.pageUrl) + " " + domainOf(item.imageUrl)),
-      labels: String(item.labels || "").toLowerCase().split(",").map((l) => l.trim()).filter(Boolean),
-      text: tokens([item.text, item.quote, item.caption, feat("rights") ? item.credit : "", item.addedBy].join(" ")),
-      colors,
-    };
-    return item._idx;
-  }
-
-  // Punkte für ein Suchwort: ganzes Wort zählt mehr als ein Wortanfang,
-  // Titel mehr als Bildinhalt, Bildinhalt mehr als Text im Bild.
-  function wordScore(idx, w) {
-    const en = SEARCH_DE[w];
-    const hit = (list, exact, prefix) =>
-      list.some((x) => x === w || (en && x === en)) ? exact : prefix && w.length >= 3 && list.some((x) => x.startsWith(w)) ? prefix : 0;
-    let best = Math.max(hit(idx.name, 6, 5), hit(idx.zone, 4, 3.5), hit(idx.site, 4, 3.5), hit(idx.text, 2, w.length >= 4 ? 1.5 : 0));
-    idx.labels.forEach((label, i) => {
-      const words = label.split(" ");
-      const rank = Math.max(1, 4 - i * 0.25); // Apple sortiert nach Sicherheit
-      if (label === w || label === en || words.includes(w) || (en && words.includes(en))) best = Math.max(best, rank);
-      else if (w.length >= 4 && words.some((x) => x.startsWith(w))) best = Math.max(best, rank - 1);
-    });
-    const color = en && COLOR_NAMES.has(en) ? en : COLOR_NAMES.has(w) ? w : null;
-    const share = color ? idx.colors.get(color) || 0 : 0;
-    if (share >= COLOR_SHARE) best = Math.max(best, 2 + share * 4);
-    return best;
-  }
+  // Suche: eine für App und Tray (search.js). Deutsche Begriffe werden
+  // mitübersetzt, Motive zählen erst ab einer sicheren Erkennung.
+  const Find = window.ArchiverSearch;
+  const LABEL_DE = Find.LABEL_DE;
+  const COLOR_SHARE = Find.COLOR_SHARE;
+  const findOpts = () => ({ rights: feat("rights") });
+  const queryWords = () => Find.parse(state.query);
 
   // 0 = kein Treffer; jedes Wort muss irgendwo passen
   function searchScore(item, words) {
-    if (!words.length) return 1;
-    const idx = searchIndex(item);
-    let total = 0;
-    for (const w of words) {
-      const score = wordScore(idx, w);
-      if (!score) return 0;
-      total += score;
-    }
-    return total;
+    return Find.score(item, words, findOpts());
   }
 
   function matches(item, words) {
@@ -619,8 +523,8 @@
   function passesFilters(item, dupes) {
     const f = state.filters;
     if (f.kind && kindOf(item) !== f.kind) return false;
-    if (f.color && !((searchIndex(item).colors.get(f.color) || 0) >= COLOR_SHARE)) return false;
-    if (f.label && !searchIndex(item).labels.includes(f.label)) return false;
+    if (f.color && !(Find.colorShare(item, f.color, findOpts()) >= COLOR_SHARE)) return false;
+    if (f.label && !Find.motifs(item, 0, findOpts()).includes(f.label)) return false;
     if (f.site && domainOf(item.pageUrl) !== f.site) return false;
     if (f.orient && orientation(item) !== f.orient) return false;
     if (f.format && formatKey(item) !== f.format) return false;
@@ -738,7 +642,7 @@
     const sites = new Map();
     for (const item of state.items) {
       if (!matches(item, words)) continue;
-      searchIndex(item).labels.slice(0, 6).forEach((l) => labels.set(l, (labels.get(l) || 0) + 1));
+      Find.motifs(item, 6, findOpts()).forEach((l) => labels.set(l, (labels.get(l) || 0) + 1));
       const site = domainOf(item.pageUrl);
       if (site) sites.set(site, (sites.get(site) || 0) + 1);
     }
@@ -763,7 +667,7 @@
   function filterBar() {
     const wrap = el("div", "p-find-facets");
     wrap.appendChild(filterRow());
-    const words = state.query.toLowerCase().split(/\s+/).filter(Boolean);
+    const words = queryWords();
     const { labels, sites } = facetCounts(words);
     const motif = (l) => (lang === "de" && LABEL_DE[l] ? LABEL_DE[l][0].toUpperCase() + LABEL_DE[l].slice(1) : l);
     if (labels.length || state.filters.label) wrap.appendChild(facetRow("facetMotif", labels, "label", motif));
@@ -1262,7 +1166,7 @@
 
   function renderZones() {
     document.body.classList.toggle("has-selection", state.selection.size > 0);
-    const words = state.query.toLowerCase().split(/\s+/).filter(Boolean);
+    const words = queryWords();
     const filtering = filtersActive();
     const dupes = state.filters.dup ? duplicateHashes() : null;
     state.lists = new Map(state.zones.map((z) => [z.path, []]));
@@ -4418,7 +4322,7 @@
       foot.replaceChildren(el("span", null, zone || input.value.trim() ? t("noteLinkHintPick") : t("noteLinkHintZone")), el("span", null, n ? t("noteObjects", { n }) : ""));
     };
     const fill = () => {
-      const words = input.value.trim().toLowerCase().split(/\s+/).filter(Boolean);
+      const words = Find.parse(input.value);
       const linked = new Set(item.links || []);
       const pool = state.items.filter((i) => i !== item && i.hash !== item.hash);
       let tiles = null;
