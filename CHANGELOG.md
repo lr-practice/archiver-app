@@ -1,5 +1,25 @@
 # Changelog
 
+## App 0.37.0 · Extension 3.28.3
+
+- ⌘Z wirkt nur noch in der Bibliothek, in der der Schritt passiert ist. Nach
+  einem Wechsel (⌘1–4, Palette) konnte ein altes „Verschieben“ sonst Dateien
+  mit gleichem Pfad in der anderen Bibliothek treffen.
+- Zone löschen: Dateien ohne Vorschau (PSD, AI, INDD, ZIP …) wandern sichtbar
+  mit. Die Rückfrage nennt sie, „Zuletzt gelöscht“ zeigt sie als Karte und holt
+  sie zurück. Bisher waren sie dort unsichtbar.
+- Eine gewachsene Bibliothek öffnet sich auch über 20.000 Dateien weiter. Die
+  Größenprüfung gilt nur noch für Ordner, die neu zur Bibliothek werden.
+- Unsorted: Wer das Leeren nach 7 Tagen aus- und wieder einschaltet, bekommt
+  neue Fristen. Vorher wanderte alles länger Liegende sofort nach „Zuletzt
+  gelöscht“.
+- Vorabversionen: eigener Update-Kanal nur für Lukas' Tests (⌥-Klick auf die
+  Version unter ☰ › Information). Beta-Tester bekommen nur, was danach mit
+  „App freigeben“ unverändert an alle geht.
+- Extension 3.28.3: „Board importieren“ auf Pinterest ist entfernt (keine
+  Massen-Downloads).
+- Beta-Anleitung nennt den Freischalt-Code und den richtigen Weg zum Feedback.
+
 ## App 0.36.4 · Extension 3.28.2
 
 - Nichts wird mehr beim Sichern oder Importieren umbenannt. „Beim Ablegen

@@ -1,6 +1,6 @@
 # Archiver – Design-System
 
-Stand: App 0.36.4 · Extension 3.28.2
+Stand: App 0.37.0 · Extension 3.28.3
 
 Diese Datei hält fest, wie Archiver aussieht und warum. Sie gilt für die Mac-App
 (`app/src`) und die Chrome-Extension (`extension/`). Wer an der Oberfläche
@@ -450,6 +450,10 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
 - **Form (0.28):** Dasselbe Raster und dieselbe Karte wie in jeder Zone (4.6),
   mit Größenstufen. Das Badge zeigt Zone und Resttage. Auswahl zeigt den Ring
   (4.1). Wiederherstellen und Sofort löschen stehen als Chips rechts.
+- **Dateien ohne Vorschau (0.37.0):** PSD, AI, ZIP … aus einer gelöschten Zone
+  erscheinen als Karte mit dem Format-Platzhalter (wie ein Video ohne Vorschau)
+  und lassen sich ebenso zurückholen. Die Rückfrage beim Zone-Löschen nennt sie:
+  „12 Objekte und 3 Dateien ohne Vorschau“.
 - **Lightbox (0.29.1):** Doppelklick, Leertaste oder Enter öffnen sie wie in
   jeder Zone. In der Leiste stehen statt Zone und Info „Wiederherstellen“ und
   „Sofort löschen“ (rot beim Überfahren). Notizen sind hier nur lesbar.

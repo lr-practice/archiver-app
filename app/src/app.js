@@ -1179,6 +1179,11 @@
     const img = el("img");
     img.alt = "";
     img.decoding = "async";
+    // Zuletzt gelöscht: PSD, AI, ZIP … aus einer gelöschten Zone, ohne Vorschau
+    if (item.other) {
+      img.src = Media.placeholder((item.format || "").toUpperCase());
+      return img;
+    }
     img.src = thumbSrc(item);
     img.onerror = () => {
       img.onerror = null;
@@ -2201,7 +2206,8 @@
       del.addEventListener("click", async () => {
         if (!armed) {
           armed = true;
-          del.textContent = t("trashZoneConfirm", { count: zone.count === 1 ? t("countImage") : t("countImages", { n: zone.count }) });
+          const other = await invoke("zone_other_files", { zone: zone.path }).catch(() => 0);
+          del.textContent = t("trashZoneConfirm", { count: zoneCountText(zone, other) });
           del.classList.add("armed");
           return;
         }
@@ -2861,7 +2867,29 @@
 
     const meta = block(t("aboutApp"));
     const version = el("span", null, "–");
-    if (TAURI.app && TAURI.app.getVersion) TAURI.app.getVersion().then((v) => (version.textContent = v)).catch(() => {});
+    let number = "";
+    const showVersion = (pre) => (version.textContent = number + (pre ? " · " + t("aboutPrerelease") : ""));
+    if (TAURI.app && TAURI.app.getVersion)
+      Promise.all([TAURI.app.getVersion(), invoke("update_channel").catch(() => false)])
+        .then(([v, pre]) => {
+          number = v;
+          showVersion(pre);
+        })
+        .catch(() => {});
+    // ⌥-Klick: Vorabversionen an oder aus (0.37.0). Nur für Lukas' Tests,
+    // darum ohne sichtbaren Schalter; Beta-Tester bekommen nur Freigegebenes.
+    version.addEventListener("click", async (e) => {
+      if (!e.altKey) return;
+      const pre = !(await invoke("update_channel").catch(() => false));
+      try {
+        await invoke("set_update_channel", { prerelease: pre });
+      } catch (err) {
+        return fail(err);
+      }
+      showVersion(pre);
+      toast(t(pre ? "prereleaseOn" : "prereleaseOff"));
+      checkUpdate();
+    });
     meta.appendChild(blockRow(t("aboutVersion"), version));
     meta.appendChild(blockRow(t("setLibrary"), pathEl(state.root)));
     meta.appendChild(blockRow(t("aboutFont"), "SIL OFL"));
@@ -3371,14 +3399,28 @@
     }
   }
 
+  // „12 Bilder“, „12 Bilder und 3 Dateien ohne Vorschau“, „3 Dateien ohne Vorschau“
+  function zoneCountText(zone, other) {
+    const parts = [];
+    if (zone.count) parts.push(zone.count === 1 ? t("countImage") : t("countImages", { n: zone.count }));
+    if (other) parts.push(other === 1 ? t("countOtherFile") : t("countOtherFiles", { n: other }));
+    return parts.length ? parts.join(" " + t("and") + " ") : t("countImages", { n: 0 });
+  }
+
   // ⌫ auf der Startseite: gewählte oder überfahrene Zone löschen, nach Rückfrage.
   function askTrashZone(path) {
     const zone = state.zones.find((z) => z.path === path);
     if (!zone || !canEdit(zone.path)) return false;
     const dialog = el("div", "dialog confirm");
     dialog.appendChild(el("h3", null, t("trashZoneAsk", { zone: zoneLabel(zone.path) })));
-    const count = zone.count === 1 ? t("countImage") : t("countImages", { n: zone.count });
-    dialog.appendChild(el("p", null, zone.count ? t("trashZoneAskText", { count }) : t("trashZoneAskEmpty")));
+    const text = el("p", null, zone.count ? t("trashZoneAskText", { count: zoneCountText(zone, 0) }) : t("trashZoneAskEmpty"));
+    dialog.appendChild(text);
+    // Dateien ohne Vorschau (PSD, AI, ZIP …) wandern mit, also nennen
+    invoke("zone_other_files", { zone: zone.path })
+      .then((other) => {
+        if (other) text.textContent = t("trashZoneAskText", { count: zoneCountText(zone, other) });
+      })
+      .catch(() => {});
     const foot = el("div", "confirm-foot");
     const go = () => {
       closeModal();
@@ -3819,12 +3861,15 @@
   const undoStack = [];
   const UNDO_MAX = 30;
 
+  // Jeder Schritt gehört zu seiner Bibliothek: Die Pfade sind relativ, nach
+  // einem Wechsel (⌘1–4, Palette) träfen sie sonst fremde Dateien.
   function pushUndo(label, run) {
-    undoStack.push({ label, run });
+    undoStack.push({ label, run, root: state.root });
     if (undoStack.length > UNDO_MAX) undoStack.shift();
   }
 
   async function undo() {
+    while (undoStack.length && undoStack[undoStack.length - 1].root !== state.root) undoStack.pop();
     const step = undoStack.pop();
     if (!step) return toast(t("undoNothing"));
     try {
@@ -4742,7 +4787,7 @@
     } else selectAndShow(item.path);
     if (lbShowMedia(item)) return;
     const img = $("lightboxImg");
-    const src = fileSrc(item.abs);
+    const src = item.other ? Media.placeholder((item.format || "").toUpperCase()) : fileSrc(item.abs);
     img.classList.add("loading");
     img.onload = () => {
       if (img.getAttribute("src") !== src) return;
@@ -7290,6 +7335,7 @@
   }
 
   function afterLibrarySwitch() {
+    undoStack.length = 0;
     state.focus = null;
     state.selection = new Set();
     cardCache.clear();

@@ -1,0 +1,50 @@
+# Gibt die geprüfte Vorabversion (Tag „vorab“ in Archiver-Releases) an alle
+# Tester frei: dieselben Dateien, kein neuer Build. Die Signatur gilt für das
+# Paket selbst und bleibt darum gültig (0.37.0).
+name: App freigeben
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version, die freigegeben wird (zur Sicherheit, z. B. 0.37.0)"
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  promote:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.RELEASES_TOKEN }}
+      REPO: lr-practice/Archiver-Releases
+      VERSION: ${{ inputs.version }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Vorabversion holen
+        run: |
+          if [ -z "$GH_TOKEN" ]; then echo "::error::RELEASES_TOKEN fehlt"; exit 1; fi
+          mkdir upd
+          gh release download vorab -R "$REPO" -D upd
+          ls -la upd
+          GOT=$(jq -r .version upd/vorab.json)
+          if [ "$GOT" != "$VERSION" ]; then
+            echo "::error::Unter „vorab“ liegt $GOT, nicht $VERSION"
+            exit 1
+          fi
+
+      - name: An alle freigeben
+        run: |
+          TAG=v$VERSION
+          PKG="Archiver-$VERSION-mac-arm64.app.tar.gz"
+          URL="https://github.com/$REPO/releases/download/$TAG/$PKG"
+          jq --arg u "$URL" --arg d "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            '.platforms["darwin-aarch64"].url = $u | .pub_date = $d' upd/vorab.json > upd/latest.json
+          rm upd/vorab.json
+          cat upd/latest.json
+          gh release view "$TAG" -R "$REPO" >/dev/null 2>&1 || gh release create "$TAG" -R "$REPO" --title "Archiver $VERSION" --notes-file docs/beta.md --latest
+          gh release upload "$TAG" upd/* -R "$REPO" --clobber
+          gh release edit "$TAG" -R "$REPO" --latest --notes-file docs/beta.md

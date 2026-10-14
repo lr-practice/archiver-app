@@ -407,6 +407,11 @@ pub const DEFAULT_DEPTH: usize = 2;
 /// Pakete, die im Finder wie Dateien aussehen (Programme, Mediatheken, Projekte)
 const PACKAGE_EXTS: &[&str] = &["app", "photoslibrary", "logicx", "fcpbundle", "band", "rtfd", "pages", "key", "numbers", "imovielibrary", "lrdata", "bundle", "framework", "plugin"];
 
+fn is_package_dir(e: &walkdir::DirEntry) -> bool {
+    e.file_type().is_dir()
+        && e.path().extension().and_then(|x| x.to_str()).is_some_and(|x| PACKAGE_EXTS.contains(&x.to_lowercase().as_str()))
+}
+
 /// Ordnerregeln einer Bibliothek: Zonentiefe und übersprungene Ordner
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Structure {
@@ -467,6 +472,8 @@ pub struct DeletedItem {
     pub quote: Option<String>,
     pub tone: Option<String>,
     pub deleted_at: i64,
+    /// Keine Mediendatei (PSD, AI, INDD, ZIP …), kam mit einer gelöschten Zone
+    pub other: bool,
 }
 
 /// Schreibt über eine eigene Temp-Datei und benennt dann um. App und Brücke
@@ -1041,6 +1048,12 @@ impl Library {
     pub fn set_expire_zone(&self, zone: &str) -> Result<()> {
         if !zone.is_empty() && zone != INBOX {
             return Err(format!("Nur Unsorted leert sich nach 7 Tagen: {zone}"));
+        }
+        // Wieder an: Fristen beginnen neu. Sonst wanderte alles, was schon vor
+        // dem Ausschalten in Unsorted lag, beim nächsten Lauf sofort nach
+        // „Zuletzt gelöscht“.
+        if !zone.is_empty() && self.expire_zone().is_none() {
+            let _ = fs::remove_file(self.root.join(META_DIR).join(INBOX_SEEN));
         }
         let mut v = self.zone_file();
         v["expire"] = serde_json::json!(zone);
@@ -2132,6 +2145,22 @@ impl Library {
         Ok(())
     }
 
+    /// Dateien in einer Zone, die Archiver nicht zeigt (PSD, AI, ZIP …). Die
+    /// Rückfrage beim Löschen nennt sie, denn sie wandern mit.
+    pub fn zone_other_files(&self, zone: &str) -> usize {
+        let Ok(dir) = safe_join(&self.root, zone) else { return 0 };
+        if is_link(&dir) {
+            return 0;
+        }
+        WalkDir::new(&dir)
+            .min_depth(1)
+            .into_iter()
+            .filter_entry(|e| !is_hidden(e.file_name()) && !is_package_dir(e))
+            .filter_map(|e| e.ok())
+            .filter(|e| e.file_type().is_file() && !is_media(e.path()))
+            .count()
+    }
+
     /// Legt eine Zone samt Inhalt in den Papierkorb. Inbox und Bibliotheksordner bleiben.
     pub fn trash_zone(&self, zone: &str) -> Result<()> {
         if zone.is_empty() || zone == self.default_zone() {
@@ -2197,8 +2226,10 @@ impl Library {
         for stamp in rd.filter_map(|e| e.ok()).map(|e| e.path()).filter(|p| p.is_dir()) {
             let Some(at) = stamp.file_name().and_then(|n| n.to_str()).and_then(|n| n.parse::<i64>().ok()) else { continue };
             let hashes = read_deleted_hashes(&stamp);
-            for entry in WalkDir::new(&stamp).min_depth(1).into_iter().filter_map(|e| e.ok()) {
-                if !entry.file_type().is_file() || is_hidden(entry.file_name()) || !is_media(entry.path()) {
+            // Auch Nicht-Medien (PSD, AI, ZIP …): Sie kommen mit einer gelöschten
+            // Zone hierher und müssen sich ebenso zurückholen lassen.
+            for entry in WalkDir::new(&stamp).min_depth(1).into_iter().filter_entry(|e| !is_package_dir(e)).filter_map(|e| e.ok()) {
+                if !entry.file_type().is_file() || is_hidden(entry.file_name()) {
                     continue;
                 }
                 let rel = rel_path(&stamp, entry.path());
@@ -2241,6 +2272,7 @@ impl Library {
                     quote,
                     tone,
                     deleted_at: at,
+                    other: !is_media(entry.path()),
                 });
             }
         }
@@ -2252,8 +2284,9 @@ impl Library {
         WalkDir::new(self.deleted_dir())
             .min_depth(2)
             .into_iter()
+            .filter_entry(|e| !is_package_dir(e))
             .filter_map(|e| e.ok())
-            .filter(|e| e.file_type().is_file() && !is_hidden(e.file_name()) && is_media(e.path()))
+            .filter(|e| e.file_type().is_file() && !is_hidden(e.file_name()))
             .count()
     }
 
@@ -3119,8 +3152,18 @@ mod tests {
         let done = lib.trash_items(&["Typo/a.png".into()]).unwrap();
         lib.restore_items(&done).unwrap();
         assert!(root.join("Typo/a.png").is_file());
+        fs::write(root.join("Typo/layout.psd"), b"8BPS").unwrap();
+        assert_eq!(lib.zone_other_files("Typo"), 1);
         lib.trash_zone("Typo").unwrap();
         assert!(!root.join("Typo").exists());
+        // Die PSD ist sichtbar und lässt sich zurückholen (BC2)
+        let del = lib.deleted_items().unwrap();
+        assert_eq!(del.len(), 3);
+        assert_eq!(lib.deleted_count(), 3);
+        let psd = del.iter().find(|d| d.other).unwrap();
+        assert_eq!(psd.filename, "layout.psd");
+        assert_eq!(lib.restore_deleted(&[psd.abs.clone()]).unwrap(), 1);
+        assert!(root.join("Typo/layout.psd").is_file());
         assert_eq!(lib.deleted_items().unwrap().len(), 2);
         // Alt genug: wandert aus „Zuletzt gelöscht“ (in den Papierkorb des Macs)
         let stamp = fs::read_dir(lib.deleted_dir()).unwrap().next().unwrap().unwrap().path();
@@ -3307,6 +3350,28 @@ mod tests {
         assert_eq!(lib.expire_inbox(DELETED_DAYS).unwrap(), 1);
         assert!(root.join("Typo/b.png").is_file());
         assert_eq!(lib.deleted_items().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn switching_unsorted_back_on_restarts_the_clock() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path().join("Bib");
+        let lib = Library::open(&root).unwrap();
+        let src = tmp.path().join("src");
+        write_png(&src.join("a.png"), 4, 4, 51);
+        lib.import_files(&[src.join("a.png")], INBOX).unwrap();
+        assert_eq!(lib.expire_inbox(DELETED_DAYS).unwrap(), 0);
+        let seen_path = root.join(META_DIR).join(INBOX_SEEN);
+        let mut seen = lib.inbox_seen();
+        for v in seen.values_mut() {
+            *v = now_ms() - 30 * 24 * 3600 * 1000;
+        }
+        fs::write(&seen_path, serde_json::to_vec(&seen).unwrap()).unwrap();
+        lib.set_expire_zone("").unwrap();
+        assert_eq!(lib.expire_inbox(DELETED_DAYS).unwrap(), 0, "aus");
+        lib.set_expire_zone(INBOX).unwrap();
+        assert_eq!(lib.expire_inbox(DELETED_DAYS).unwrap(), 0, "Frist beginnt neu");
+        assert!(root.join("Unsorted/a.png").is_file());
     }
 
     #[test]

@@ -11,15 +11,20 @@
 name: App macOS
 
 # Nur von Hand: Mac-Minuten zählen bei GitHub zehnfach, daher kein Build bei jedem Push.
-# Das Auto-Update an alle Tester geht nur raus, wenn „publish“ angehakt ist
-# (0.31.0). Vorher veröffentlichte jeder Lauf, von jedem Zweig, als „latest“.
+# Ausspielen (0.37.0):
+#   nein   nur bauen, DMG als Artefakt und unter „app-latest“ in diesem Repo
+#   vorab  Auto-Update nur für Macs mit eingeschalteten Vorabversionen (Lukas):
+#          Tag „vorab“ in Archiver-Releases, vorab.json, nicht „latest“
+#   beta   Auto-Update an alle Tester (latest.json), wie bisher „publish“
+# Eine geprüfte Vorabversion geht ohne neuen Build mit app-freigeben.yml an alle.
 on:
   workflow_dispatch:
     inputs:
-      publish:
-        description: "Als Auto-Update an alle Tester veröffentlichen"
-        type: boolean
-        default: false
+      ausspielen:
+        description: "Ausspielen: nein, vorab (nur Lukas) oder beta (alle Tester)"
+        type: choice
+        options: [nein, vorab, beta]
+        default: nein
 
 permissions:
   contents: write
@@ -32,7 +37,8 @@ jobs:
   build:
     runs-on: macos-14
     env:
-      PUBLISH_UPDATE: ${{ inputs.publish && secrets.RELEASES_TOKEN != '' && secrets.TAURI_SIGNING_PRIVATE_KEY != '' }}
+      CHANNEL: ${{ inputs.ausspielen }}
+      HAS_RELEASE_SECRETS: ${{ secrets.RELEASES_TOKEN != '' && secrets.TAURI_SIGNING_PRIVATE_KEY != '' }}
       APPLE_SIGN: ${{ secrets.APPLE_CERTIFICATE != '' }}
       APPLE_NOTARIZE: ${{ secrets.APPLE_CERTIFICATE != '' && secrets.APPLE_ID != '' && secrets.APPLE_PASSWORD != '' && secrets.APPLE_TEAM_ID != '' }}
     steps:
@@ -151,16 +157,24 @@ jobs:
           gh release edit "$TAG" --notes "$NOTES"
           gh release upload "$TAG" dist/* --clobber
 
-      # Auto-Update: Paket, Signatur und latest.json ins öffentliche
-      # Repository Archiver-Releases. Nur mit beiden Secrets.
+      # Ohne Secrets kein Update: dann laut scheitern statt still nichts tun
+      - name: Secrets prüfen
+        if: env.CHANNEL != 'nein' && env.HAS_RELEASE_SECRETS != 'true'
+        run: |
+          echo "::error::RELEASES_TOKEN oder TAURI_SIGNING_PRIVATE_KEY fehlt, nichts veröffentlicht"
+          exit 1
+
+      # Auto-Update: Paket, Signatur und Feed ins öffentliche Repository
+      # Archiver-Releases. vorab → Tag „vorab“ + vorab.json (nur Lukas),
+      # beta → Tag vX.Y.Z + latest.json (alle Tester).
       - name: Update veröffentlichen
         env:
           GH_TOKEN: ${{ secrets.RELEASES_TOKEN }}
-        if: env.PUBLISH_UPDATE == 'true'
+        if: env.CHANNEL != 'nein'
         run: |
           VERSION=${{ steps.out.outputs.version }}
           REPO=lr-practice/Archiver-Releases
-          TAG=v$VERSION
+          if [ "$CHANNEL" = "vorab" ]; then TAG=vorab; FEED=vorab.json; else TAG=v$VERSION; FEED=latest.json; fi
           BUNDLE=app/src-tauri/target/release/bundle/macos
           TGZ=$(ls "$BUNDLE"/*.app.tar.gz | head -1)
           mkdir -p upd
@@ -171,13 +185,22 @@ jobs:
           SIG=$(cat "$TGZ.sig")
           URL="https://github.com/$REPO/releases/download/$TAG/Archiver-$VERSION-mac-arm64.app.tar.gz"
           jq -n --arg v "$VERSION" --arg s "$SIG" --arg u "$URL" --arg d "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-            '{version:$v, notes:"", pub_date:$d, platforms:{"darwin-aarch64":{signature:$s, url:$u}}}' > upd/latest.json
-          cat upd/latest.json
+            '{version:$v, notes:"", pub_date:$d, platforms:{"darwin-aarch64":{signature:$s, url:$u}}}' > "upd/$FEED"
+          cat "upd/$FEED"
           # Leeres Repository: erst eine README anlegen, sonst gibt es keine Releases.
           if ! gh api "repos/$REPO/commits?per_page=1" >/dev/null 2>&1; then
             printf '# Archiver Releases\n\nUpdates für die Archiver-App (signiert, automatisch geladen).\n' > README.md
             gh api -X PUT "repos/$REPO/contents/README.md" -f message="README" -f content="$(base64 < README.md | tr -d '\n')"
           fi
-          gh release view "$TAG" -R "$REPO" >/dev/null 2>&1 || gh release create "$TAG" -R "$REPO" --title "Archiver $VERSION" --notes-file docs/beta.md --latest
-          gh release upload "$TAG" upd/* -R "$REPO" --clobber
-          gh release edit "$TAG" -R "$REPO" --latest --notes-file docs/beta.md
+          if [ "$CHANNEL" = "vorab" ]; then
+            # Ein fester Tag, immer nur die jüngste Vorabversion; nie „latest“
+            gh release view vorab -R "$REPO" >/dev/null 2>&1 || gh release create vorab -R "$REPO" --prerelease --latest=false --title "Archiver Vorab" --notes "Nur zum Testen. Freigabe an alle über app-freigeben.yml."
+            OLD=$(gh release view vorab -R "$REPO" --json assets -q '.assets[].name')
+            for a in $OLD; do gh release delete-asset vorab "$a" -R "$REPO" -y; done
+            gh release upload vorab upd/* -R "$REPO" --clobber
+            gh release edit vorab -R "$REPO" --prerelease --latest=false --title "Archiver Vorab $VERSION"
+          else
+            gh release view "$TAG" -R "$REPO" >/dev/null 2>&1 || gh release create "$TAG" -R "$REPO" --title "Archiver $VERSION" --notes-file docs/beta.md --latest
+            gh release upload "$TAG" upd/* -R "$REPO" --clobber
+            gh release edit "$TAG" -R "$REPO" --latest --notes-file docs/beta.md
+          fi

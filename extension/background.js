@@ -753,7 +753,6 @@ const PRIVILEGED = new Set([
   "export-for-app",
   "open-app",
   "open-dashboard",
-  "pinterest-import",
 ]);
 
 function trustedSender(sender) {
@@ -787,16 +786,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === "video-info" && message.url) {
     videoInfo(message.url).then(sendResponse, () => sendResponse(null));
     return true;
-  }
-
-  // Pinterest-Board importieren: Popup → Seite sammelt → hier ablegen
-  if (message.type === "pinterest-import" && message.tabId != null) {
-    chrome.tabs.sendMessage(message.tabId, { type: "pinterest-collect" }, { frameId: 0 }).catch(() => {});
-    return;
-  }
-  if (message.type === "pinterest-pins" && Array.isArray(message.pins)) {
-    importPinterestPins(message, sender);
-    return;
   }
 
   if (message.type === "capture-visible") {
@@ -1127,33 +1116,3 @@ function sanitizeSegment(name) {
   return name.replace(/[\\/:*?"<>|]/g, "_").slice(0, 150);
 }
 
-// ---- Pinterest-Board importieren (Entwicklungshilfe) ----
-// Legt alle Pins eines Boards in einer Zone mit dem Namen des Boards ab,
-// drei Downloads gleichzeitig, mit Zwischenstand als Meldung auf der Seite.
-
-async function importPinterestPins({ board, pins }, sender) {
-  const tabId = sender.tab && sender.tab.id;
-  let zone = sanitizePath(String(board || "Pinterest").replace(/\//g, "-")) || "Pinterest";
-  if (await appBridge()) {
-    const { zones } = await getZones();
-    if (!(zones || []).includes(zone)) zone = await createAppZone(zone).catch(() => zone);
-  } else {
-    const { zones } = await new Promise((r) => chrome.storage.sync.get({ zones: [] }, r));
-    if (!zones.includes(zone)) await new Promise((r) => chrome.storage.sync.set({ zones: [...zones, zone] }, r));
-  }
-  const quietSender = { tab: tabId != null ? { id: tabId } : null, frameId: 0 };
-  let done = 0;
-  let failed = 0;
-  const queue = pins.slice();
-  const worker = async () => {
-    while (queue.length) {
-      const pin = queue.shift();
-      const r = await handleDownload({ ...pin, folder: zone, quiet: true }, quietSender).catch(() => ({ ok: false }));
-      if (r && r.ok) done++;
-      else failed++;
-      if ((done + failed) % 10 === 0) sendFeedback(tabId, 0, `Pinterest: ${done + failed} / ${pins.length}`, true);
-    }
-  };
-  await Promise.all([worker(), worker(), worker()]);
-  sendFeedback(tabId, 0, `${zone}: ${done} abgelegt${failed ? `, ${failed} fehlgeschlagen` : ""}`, failed === 0);
-}

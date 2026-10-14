@@ -52,6 +52,10 @@ struct Settings {
     /// Einheitliche Dateinamen (0.36.0)
     #[serde(default)]
     naming: naming::Naming,
+    /// Vorabversionen statt nur Beta-Updates (0.37.0). Nur auf Lukas' Mac an,
+    /// geschaltet mit ⌥-Klick auf die Version unter ☰ › Information.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    prerelease: bool,
 }
 
 #[derive(Serialize, Deserialize, Default, Clone)]
@@ -101,6 +105,17 @@ fn cloud_depth(root: &Path) -> Option<usize> {
 }
 
 fn check_library(root: &Path) -> Result<(), String> {
+    check_folder(root, true)
+}
+
+/// Wie check_library, zählt aber nur bei Ordnern, die noch keine Bibliothek
+/// sind. Eine gewachsene Bibliothek (mit .archiver) öffnet sich also auch über
+/// 20.000 Dateien weiter; vorher landete man beim Start auf „Bibliothek anlegen“.
+fn check_library_open(root: &Path) -> Result<(), String> {
+    check_folder(root, !root.join(library::META_DIR).is_dir())
+}
+
+fn check_folder(root: &Path, count_files: bool) -> Result<(), String> {
     let root = root.canonicalize().map_err(|e| e.to_string())?;
     if !root.is_dir() {
         return Err("library-missing".into());
@@ -129,6 +144,9 @@ fn check_library(root: &Path) -> Result<(), String> {
     }
     if blocked.contains(&root) || is_volume || (cloud.is_none() && system.iter().any(|s| root.starts_with(s))) {
         return Err("library-system".into());
+    }
+    if !count_files {
+        return Ok(());
     }
     // Vorab zählen: zu viele Dateien oder zu langsam → ablehnen.
     // Geteilte Bibliotheken liegen oft im Netz, dort zählt nur die Menge.
@@ -475,7 +493,7 @@ async fn pick_export_file(app: AppHandle) -> Option<String> {
 async fn open_library(app: AppHandle, path: String) -> Result<(), String> {
     let worker = app.clone();
     tauri::async_runtime::spawn_blocking(move || {
-        check_library(Path::new(&path))?;
+        check_library_open(Path::new(&path))?;
         activate(&worker, Path::new(&path))?;
         update_settings(&worker, |settings| {
             let mut slots = library_slots(settings);
@@ -523,7 +541,7 @@ async fn set_library_slot(app: AppHandle, index: usize, name: Option<String>, pa
         return Err("Unbekannter Platz".into());
     }
     if let Some(p) = path.clone() {
-        tauri::async_runtime::spawn_blocking(move || check_library(Path::new(&p))).await.map_err(|e| e.to_string())??;
+        tauri::async_runtime::spawn_blocking(move || check_library_open(Path::new(&p))).await.map_err(|e| e.to_string())??;
     }
     update_settings(&app, |settings| {
         let mut slots = library_slots(settings);
@@ -1111,6 +1129,12 @@ async fn restore_items(app: AppHandle, state: State<'_, AppState>, items: Vec<(S
 }
 
 #[tauri::command]
+async fn zone_other_files(state: State<'_, AppState>, zone: String) -> Result<usize, String> {
+    let lib = current(&state)?;
+    blocking(move || Ok(lib.zone_other_files(&zone))).await
+}
+
+#[tauri::command]
 async fn trash_zone(app: AppHandle, state: State<'_, AppState>, zone: String) -> Result<(), String> {
     let lib = current(&state)?;
     blocking(move || lib.trash_zone(&zone)).await?;
@@ -1362,17 +1386,47 @@ fn set_appearance(window: tauri::WebviewWindow, light: bool, radius: Option<f64>
     }
 }
 
+/// Vorabversionen: eigener Kanal im selben Release-Repository (Tag „vorab“,
+/// kein „latest“). Die Beta-Tester sehen ihn nie; was dort geprüft ist, gibt
+/// app-freigeben.yml unverändert an alle frei.
+const PRERELEASE_FEED: &str = "https://github.com/lr-practice/Archiver-Releases/releases/download/vorab/vorab.json";
+
+/// Erst der Vorab-Kanal (falls an), dann der Beta-Kanal. Ist die Beta schon
+/// weiter als die letzte Vorabversion, gewinnt die Beta.
+async fn find_update(app: &AppHandle) -> Result<Option<tauri_plugin_updater::Update>, String> {
+    use tauri_plugin_updater::UpdaterExt;
+    if load_settings(app).prerelease {
+        let url = tauri::Url::parse(PRERELEASE_FEED).map_err(|e| e.to_string())?;
+        if let Ok(updater) = app.updater_builder().endpoints(vec![url]).and_then(|b| b.build()) {
+            match updater.check().await {
+                Ok(Some(update)) => return Ok(Some(update)),
+                Ok(None) => {}
+                Err(e) => log::warn("update", format!("Vorab-Kanal: {e}")),
+            }
+        }
+    }
+    app.updater().map_err(|e| e.to_string())?.check().await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn update_channel(app: AppHandle) -> bool {
+    load_settings(&app).prerelease
+}
+
+#[tauri::command]
+fn set_update_channel(app: AppHandle, prerelease: bool) -> Result<(), String> {
+    update_settings(&app, |s| s.prerelease = prerelease)
+}
+
 #[tauri::command]
 async fn update_check(app: AppHandle) -> Result<Option<UpdateInfo>, String> {
-    use tauri_plugin_updater::UpdaterExt;
-    let update = app.updater().map_err(|e| e.to_string())?.check().await.map_err(|e| e.to_string())?;
+    let update = find_update(&app).await?;
     Ok(update.map(|u| UpdateInfo { version: u.version, notes: u.body }))
 }
 
 #[tauri::command]
 async fn update_install(app: AppHandle) -> Result<(), String> {
-    use tauri_plugin_updater::UpdaterExt;
-    let Some(update) = app.updater().map_err(|e| e.to_string())?.check().await.map_err(|e| e.to_string())? else {
+    let Some(update) = find_update(&app).await? else {
         return Ok(());
     };
     update.download_and_install(|_, _| {}, || {}).await.map_err(|e| e.to_string())?;
@@ -1561,6 +1615,7 @@ pub fn run() {
             set_structure,
             set_look,
             trash_zone,
+            zone_other_files,
             reveal_zone,
             import_extension_export,
             import_folder,
@@ -1589,6 +1644,8 @@ pub fn run() {
             reset_startup_sound,
             set_appearance,
             update_check,
+            update_channel,
+            set_update_channel,
             update_install,
             viewer::viewer_state,
             viewer::viewer_siblings,
@@ -1668,6 +1725,11 @@ mod tests {
             std::fs::write(big.join(format!("{i}")), "").unwrap();
         }
         assert_eq!(check_library(&dir).unwrap_err(), "library-large");
+        // Schon eine Bibliothek: öffnet sich trotz Menge, ein neuer Ordner nicht
+        assert!(check_library_open(&dir).is_ok());
+        std::fs::remove_dir_all(dir.join(".archiver")).unwrap();
+        assert_eq!(check_library_open(&dir).unwrap_err(), "library-large");
+        assert_eq!(check_library_open(&home).unwrap_err(), "library-system");
         std::fs::remove_dir_all(&dir).unwrap();
     }
 

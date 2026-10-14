@@ -217,8 +217,6 @@
       ensureOverlay().then(() => UI.showToast(rootEl, message.text, message.ok));
     } else if (message.type === "toggle-overlay" && window === window.top) {
       toggleManualOverlay(); // Chrome-Befehl, kommt nur im Top-Frame an
-    } else if (message.type === "pinterest-collect" && window === window.top) {
-      collectPinterestBoard().then((result) => chrome.runtime.sendMessage({ type: "pinterest-pins", ...result }));
     } else if (message.type === "context-save") {
       dropLibrary = null;
       contextSave(message);
@@ -676,49 +674,6 @@
         }, 60)
       )
     );
-  }
-
-  // ---- Pinterest-Board einsammeln (Entwicklungshilfe) ----
-  // Scrollt das Board durch und merkt sich jeden Pin. Pinterest blendet Pins
-  // außerhalb des Bildschirms aus, deshalb wird beim Scrollen gesammelt.
-  // Schluss ist bei der Pin-Zahl des Boards oder bei „Mehr Ideen“.
-
-  function bestPinImage(img) {
-    const set = parseSrcset(img.getAttribute("srcset")).map((c) => c.url);
-    const url = set.length ? set[set.length - 1] : img.src;
-    return url.includes("/originals/") ? url : url.replace(/\/\d+x(\d+)?\//, "/736x/");
-  }
-
-  async function collectPinterestBoard() {
-    const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-    const toast = (text) => ensureOverlay().then(() => UI.showToast(rootEl, text, true));
-    const h1 = document.querySelector("h1");
-    const board = ((h1 && h1.textContent) || decodeURIComponent(location.pathname.split("/")[2] || "Pinterest")).trim();
-    const countEl = [...document.querySelectorAll("div, span")].find((n) => /^\s*[\d.,]+\s+Pins?\s*$/i.test(n.textContent));
-    const expected = countEl ? parseInt(countEl.textContent.replace(/[^\d]/g, ""), 10) : Infinity;
-    const stopHeading = () =>
-      [...document.querySelectorAll("h2, h3")].find((h) => /mehr ideen|weitere ideen|more ideas|more like this/i.test(h.textContent));
-    const pins = new Map();
-    window.scrollTo(0, 0);
-    await sleep(800);
-    let idle = 0;
-    while (idle < 5 && pins.size < expected) {
-      const stop = stopHeading();
-      const before = pins.size;
-      for (const a of document.querySelectorAll('a[href*="/pin/"]')) {
-        if (stop && stop.compareDocumentPosition(a) & Node.DOCUMENT_POSITION_FOLLOWING) continue;
-        const img = a.querySelector('img[src*="pinimg.com"]');
-        const id = (a.getAttribute("href").match(/\/pin\/([^/?#]+)/) || [])[1];
-        if (!img || !id || pins.has(id)) continue;
-        pins.set(id, { url: bestPinImage(img), pageUrl: `https://www.pinterest.com/pin/${id}/`, pageTitle: img.alt || board });
-      }
-      idle = pins.size === before ? idle + 1 : 0;
-      if (pins.size !== before) toast(`Pinterest: ${pins.size}${expected !== Infinity ? " / " + expected : ""} Pins gefunden`);
-      if (stop && stop.getBoundingClientRect().top < window.innerHeight) break;
-      window.scrollBy(0, window.innerHeight * 0.8);
-      await sleep(900);
-    }
-    return { board, pins: [...pins.values()].slice(0, expected) };
   }
 
   // ---- Manuell geöffnetes Overlay ----
