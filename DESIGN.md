@@ -1,6 +1,6 @@
 # Archiver – Design-System
 
-Stand: App 0.33.0 · Extension 3.25.3
+Stand: App 0.33.1 · Extension 3.25.3
 
 Diese Datei hält fest, wie Archiver aussieht und warum. Sie gilt für die Mac-App
 (`app/src`) und die Chrome-Extension (`extension/`). Wer an der Oberfläche
@@ -245,8 +245,12 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
 - **Unsorted (0.33):** Die letzten zwei Tage vor „Zuletzt gelöscht“ steht oben
   links „noch n T.“ (`.card-days`, Marke wie `.card-media`, Schrift `--danger`).
   Gezählt ab dem ersten Sehen (`inboxSeen` im Snapshot). Die Kopfzeile von
-  Unsorted trägt nur den Satz zu den 7 Tagen, ohne Anzahl, Datum und Quellen; im
-  Index steht hinter dem Namen in dim „Leert sich nach 7 Tagen“. Geteilte
+  Unsorted sagt nur „Nach 7 Tagen gelöscht.“, ohne Anzahl, Datum und Quellen.
+  Dieselben Worte stehen im Index hinter dem Namen (dim) und auf der Zonenkarte
+  hinter der Anzahl statt des Datums (0.33.1). Welche Zone sich so leert, steht
+  in Einstellungen › Bibliothek unter der Standard-Zone (ab Werk Unsorted, auch
+  „Aus“). Unsorted entsteht mit jeder eigenen Bibliothek, auch in einem
+  bestehenden Ordnersystem, und steht ohne eigene Reihenfolge vorn. Geteilte
   Bibliotheken zeigen nichts davon.
 - **Nicht:** Keine Rundung, kein Schatten und keine Bildunterschrift im Raster.
   Die Info gibt es per `I` oder im Seitenblatt.
@@ -296,9 +300,10 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
   (Zone—Nummer Position/Anzahl, etwa TYPO—02 3/7), Text in Geist 17 px
   (Lightbox).
 - **Raster (0.33):** Kein Textauszug mehr unter dem Bild, der Chip „(+ Text)“
-  ist entfallen. Ein Eselsohr 16 px unten rechts in der Farbe der Textkarte
-  (`.card-ear`, wie `.lb-ear`) zeigt an, dass das Bild Text hat. Bilder ohne
-  Text bleiben stumm.
+  ist entfallen. Ein Punkt 10 px, 6 px vom Rand unten rechts, in der Farbe der
+  Textkarte (`.card-dot`, 0.33.1 statt Eselsohr) zeigt an, dass das Bild Text
+  hat. Feine dunkle Kante, damit er auf gleichfarbigen Bildern stehen bleibt.
+  Bilder ohne Text bleiben stumm.
 - **Farbe (0.33):** In ⌘D unter „Bildtext“ wählbar, dieselbe Reihe wie bei
   Textkarten und Notizen (`tonePicker`). Ohne Wahl gilt die Farbe aus dem Hash.
 - **Lightbox (0.30.1):** Karte im Ton des Bildes wie eine Textkarte

@@ -900,15 +900,16 @@ impl Library {
             user: Mutex::new(None),
             people_sig: Mutex::new(0),
         };
-        // Inbox nur in einer neuen Bibliothek. In einem bestehenden Ordnersystem
-        // entsteht sie erst, wenn wirklich etwas ohne Ziel hereinkommt.
+        // Unsorted (Standard-Zone) gibt es in jeder eigenen Bibliothek von Anfang
+        // an, auch in einem bestehenden Ordnersystem (0.33.1). Geteilte
+        // Bibliotheken bekommen sie nur, wenn sie noch leer sind.
         let has_folders = fs::read_dir(root)
             .map(|rd| rd.filter_map(|e| e.ok()).any(|e| e.path().is_dir() && !is_hidden(&e.file_name())))
             .unwrap_or(false);
-        if !has_folders {
+        lib.migrate_inbox()?;
+        if !shared || !has_folders {
             fs::create_dir_all(root.join(lib.default_zone())).map_err(err)?;
         }
-        lib.migrate_inbox()?;
         lib.restore_metadata()?;
         lib.merge_people()?;
         Ok(lib)
@@ -990,6 +991,26 @@ impl Library {
                 }
             }
         }
+        self.write_zone_file(&v)
+    }
+
+    /// Zone, die sich nach 7 Tagen selbst leert (0.33.1, Einstellungen ›
+    /// Bibliothek). Ohne Wahl die Standard-Zone (Unsorted), "" heißt aus.
+    /// Gibt es die gewählte Zone nicht mehr, räumt nichts auf.
+    pub fn expire_zone(&self) -> Option<String> {
+        match self.zone_file().get("expire").and_then(|z| z.as_str()) {
+            None => Some(self.default_zone()),
+            Some("") => None,
+            Some(z) => self.root.join(z).is_dir().then(|| z.to_string()),
+        }
+    }
+
+    pub fn set_expire_zone(&self, zone: &str) -> Result<()> {
+        if !zone.is_empty() && !safe_join(&self.root, zone)?.is_dir() {
+            return Err(format!("Zone nicht gefunden: {zone}"));
+        }
+        let mut v = self.zone_file();
+        v["expire"] = serde_json::json!(zone);
         self.write_zone_file(&v)
     }
 
@@ -2194,7 +2215,7 @@ impl Library {
         if self.shared {
             return Ok(0);
         }
-        let zone = self.default_zone();
+        let Some(zone) = self.expire_zone() else { return Ok(0) };
         let seen_path = self.root.join(META_DIR).join(INBOX_SEEN);
         let seen: HashMap<String, i64> = fs::read(&seen_path).ok().and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or_default();
         let now = now_ms();
@@ -3019,6 +3040,24 @@ mod tests {
     }
 
     #[test]
+    fn expire_zone_is_a_setting() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path().join("Bib");
+        let lib = Library::open(&root).unwrap();
+        assert_eq!(lib.expire_zone().as_deref(), Some(INBOX), "ab Werk Unsorted");
+        std::fs::create_dir_all(root.join("Downloads")).unwrap();
+        lib.set_expire_zone("Downloads").unwrap();
+        assert_eq!(lib.expire_zone().as_deref(), Some("Downloads"));
+        assert_eq!(lib.default_zone(), INBOX, "Standard-Zone bleibt");
+        let neu = lib.rename_zone("Downloads", "Eingang").unwrap();
+        assert_eq!(lib.expire_zone().as_deref(), Some(neu.as_str()), "folgt dem Umbenennen");
+        lib.set_expire_zone("").unwrap();
+        assert_eq!(lib.expire_zone(), None);
+        assert_eq!(lib.expire_inbox(DELETED_DAYS).unwrap(), 0);
+        assert!(lib.set_expire_zone("Gibtsnicht").is_err());
+    }
+
+    #[test]
     fn unsorted_empties_itself_after_seven_days() {
         let tmp = tempfile::tempdir().unwrap();
         let root = tmp.path().join("Bib");
@@ -3325,7 +3364,7 @@ mod tests {
         std::fs::create_dir_all(root.join("Neu")).unwrap();
 
         let lib = Library::open(&root).unwrap();
-        assert!(!root.join(INBOX).exists(), "keine Inbox in bestehenden Ordnern");
+        assert!(root.join(INBOX).is_dir(), "Unsorted auch in bestehenden Ordnern (0.33.1)");
         lib.scan().unwrap();
         let items = lib.items().unwrap();
         assert_eq!(items.len(), 2, "Links und Pakete übersprungen");
@@ -3334,14 +3373,14 @@ mod tests {
         folders.sort();
         assert_eq!(folders, ["02_Layout", "02_Layout"], "Unterordner als Ordner der Zone");
         let zones: Vec<String> = lib.zones().unwrap().into_iter().map(|z| z.path).collect();
-        assert_eq!(zones, vec!["01_Outra".to_string(), "Neu".to_string()]);
+        assert_eq!(zones, vec![INBOX.to_string(), "01_Outra".to_string(), "Neu".to_string()], "Unsorted zuerst");
 
         lib.set_structure(&Structure { depth: 2, skip: DEFAULT_SKIP.iter().map(|s| s.to_string()).collect(), subzones: true }).unwrap();
         let items = lib.items().unwrap();
         assert!(items.iter().all(|i| i.zone == "01_Outra/02_Layout"));
         assert!(items.iter().any(|i| i.folder == "04_Products") && items.iter().any(|i| i.folder.is_empty()));
         let zones: Vec<String> = lib.zones().unwrap().into_iter().map(|z| z.path).collect();
-        assert_eq!(zones, vec!["01_Outra/02_Layout".to_string(), "Neu".to_string()], "nur Ebene 2, ohne reine Projektordner");
+        assert_eq!(zones, vec![INBOX.to_string(), "01_Outra/02_Layout".to_string(), "Neu".to_string()], "nur Ebene 2, ohne reine Projektordner");
 
         lib.set_structure(&Structure { depth: 3, skip: vec![], subzones: true }).unwrap();
         let items = lib.items().unwrap();
