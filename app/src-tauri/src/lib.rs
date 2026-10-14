@@ -9,6 +9,7 @@
 pub mod bridge;
 pub mod library;
 pub mod log;
+pub mod naming;
 pub mod pdf;
 pub mod studio;
 mod system;
@@ -48,6 +49,9 @@ struct Settings {
     /// Palette per Kürzel und Zonenleiste beim Ziehen am ganzen Mac
     #[serde(default)]
     system: system::SystemPrefs,
+    /// Einheitliche Dateinamen (0.36.0)
+    #[serde(default)]
+    naming: naming::Naming,
 }
 
 #[derive(Serialize, Deserialize, Default, Clone)]
@@ -327,6 +331,7 @@ fn allow_external(app: &AppHandle, lib: &Library) {
 fn activate(app: &AppHandle, root: &Path) -> Result<(), String> {
     let lib = Arc::new(Library::open(root)?);
     lib.set_user(load_settings(app).user);
+    lib.set_naming(Some((load_settings(app).naming, folder_name(&root.to_string_lossy()))));
     // „Zuletzt gelöscht“: was älter als 7 Tage ist, geht in den Papierkorb des Macs
     let purge = lib.clone();
     std::thread::spawn(move || purge.purge_deleted(library::DELETED_DAYS));
@@ -544,7 +549,47 @@ async fn set_library_slot(app: AppHandle, index: usize, name: Option<String>, pa
     })?
 }
 
-/// Neue, leere Bibliothek (0.35.1): Ort und Name im Finder wählen, Ordner anlegen,
+// ---- Einheitliche Dateinamen (F10) und Namensvorschlag (F11), 0.36.0 ----
+
+#[tauri::command]
+fn naming_prefs(app: AppHandle) -> naming::Naming {
+    load_settings(&app).naming
+}
+
+#[tauri::command]
+fn set_naming_prefs(app: AppHandle, state: State<'_, AppState>, prefs: naming::Naming) -> Result<(), String> {
+    update_settings(&app, |s| s.naming = prefs.clone())?;
+    if let Ok(lib) = current(&state) {
+        let name = folder_name(&lib.root.to_string_lossy());
+        lib.set_naming(Some((prefs, name)));
+    }
+    Ok(())
+}
+
+/// Vorschau fürs Umbenennen-Blatt und den Vorschlag in der Info-Spalte. `scheme`
+/// überschreibt das Schema aus den Einstellungen, ohne es zu speichern.
+#[tauri::command]
+async fn name_plan(app: AppHandle, state: State<'_, AppState>, paths: Vec<String>, scheme: Option<String>) -> Result<Vec<library::NamePlan>, String> {
+    let lib = current(&state)?;
+    let mut n = load_settings(&app).naming;
+    if let Some(s) = scheme {
+        n.preset = s;
+    }
+    let name = folder_name(&lib.root.to_string_lossy());
+    tauri::async_runtime::spawn_blocking(move || lib.name_plan(&paths, &n, &name)).await.map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+async fn rename_items(app: AppHandle, state: State<'_, AppState>, items: Vec<(String, String)>) -> Result<Vec<(String, String)>, String> {
+    let lib = current(&state)?;
+    let done = tauri::async_runtime::spawn_blocking(move || lib.rename_items(&items)).await.map_err(|e| e.to_string())??;
+    if !done.is_empty() {
+        let _ = app.emit("library-changed", ());
+    }
+    Ok(done)
+}
+
+/// Neue, leere Bibliothek (0.36.0): Ort und Name im Finder wählen, Ordner anlegen,
 /// auf den Platz legen. Öffnen übernimmt danach open_library (legt Unsorted an).
 #[tauri::command]
 async fn create_library(app: AppHandle, index: usize, name: String) -> Result<Option<String>, String> {
@@ -1494,6 +1539,10 @@ pub fn run() {
             libraries,
             set_library_slot,
             create_library,
+            naming_prefs,
+            set_naming_prefs,
+            name_plan,
+            rename_items,
             open_demo,
             close_demo,
             demo_collect,

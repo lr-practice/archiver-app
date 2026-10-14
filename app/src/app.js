@@ -2255,12 +2255,12 @@
   // Einstellungen: oben eine ruhige Liste der Bereiche, jeder öffnet sein Untermenü.
   // Ganz unten steht immer der Freischalt-Code.
   // 0.28: Tray, Observer und Extension je ein eigener Bereich (Tray und Observer nur am Mac)
-  const SETTINGS_SECTIONS = ["library", "view", "look", "start", "tray", "observer", "extension", "studio", "general"].filter(
+  const SETTINGS_SECTIONS = ["library", "names", "view", "look", "start", "tray", "observer", "extension", "studio", "general"].filter(
     (id) => isMac || (id !== "tray" && id !== "observer")
   );
 
   function sectionTitle(id) {
-    return t({ library: "setLibrary", view: "setSecView", look: "setLook", start: "setSecStart", tray: "setTray", observer: "setViewer", extension: "setExtension", studio: "setStudio", general: "setGeneral" }[id]);
+    return t({ library: "setLibrary", names: "setSecNames", view: "setSecView", look: "setLook", start: "setSecStart", tray: "setTray", observer: "setViewer", extension: "setExtension", studio: "setStudio", general: "setGeneral" }[id]);
   }
 
   function sectionSummary(id) {
@@ -2268,6 +2268,10 @@
       const slots = state.libraries || [];
       const i = slots.findIndex((l) => l.active);
       return i >= 0 ? libraryName(slots[i], i) : shortPath(state.root);
+    }
+    if (id === "names") {
+      const n = state.naming;
+      return n && n.preset !== "original" ? t(NAME_PRESET_KEYS[n.preset]) + (n.onSave ? " · " + t("nameOnSaveShort") : "") : t("nameOriginal");
     }
     if (id === "look") {
       const th = window.ArchiverI18n.theme();
@@ -2385,6 +2389,8 @@
       wrap.appendChild(renderStructure());
       wrap.appendChild(renderZoneSettings());
     }
+
+    if (sub === "names") wrap.appendChild(renderNamingSettings());
 
     if (sub === "view") {
       const view = block(null);
@@ -3411,7 +3417,7 @@
     }
   }
 
-  // Zone, die sich nach 7 Tagen leert (Einstellungen › Bibliothek, 0.33.1): seit 0.35.1
+  // Zone, die sich nach 7 Tagen leert (Einstellungen › Bibliothek, 0.33.1): seit 0.36.0
   // jeder Ordner namens Unsorted, auch selbst angelegt (library.rs is_unsorted)
   function isUnsortedPath(zonePath) {
     return String(zonePath || "")
@@ -4893,6 +4899,12 @@
     const lead = [size, formatBytes(item.bytes)].filter(Boolean).join(", ");
     head.appendChild(el("span", "lead", lead + "."));
     inner.appendChild(head);
+    if (!isNote(item) && !state.shared) {
+      const slot = el("div");
+      slot.hidden = true;
+      inner.appendChild(slot);
+      nameSuggestion(item, slot);
+    }
     if (isNote(item)) inner.appendChild(lbBlock(t("noteLabelTitle"), [lbRow(t("noteLinks"), String(linkedItems(item).length)), lbRow(t("toneLabel"), tonePicker(item))]));
     else if (quoteOf(item)) inner.appendChild(lbBlock(t("quote"), [quoteBox(item, "lb-quote"), lbRow(t("toneLabel"), tonePicker(item))]));
     // 0.33: Farbe der Bildtext-Karte wählbar wie bei Textkarten und Notizen
@@ -6294,6 +6306,7 @@
     menu.appendChild(grid);
     rule();
     if (isZone(state.focus) && !state.query.trim() && canEdit(state.focus)) entry(menu, t("newFolderWith"), () => newFolder(true));
+    if (!state.shared) entry(menu, t("renameItems"), () => openRenameSheet(items));
     entry(menu, t("ctxCopy"), () => copyImages(items), "⌘C");
     if (one) entry(menu, t("reveal"), () => invoke("reveal", { path: one.abs }).catch(fail));
     entry(menu, t("pdfExport"), exportPdf, "⌘P");
@@ -6303,6 +6316,312 @@
     const r = menu.getBoundingClientRect();
     menu.style.left = Math.max(8, Math.min(x, window.innerWidth - r.width - 8)) + "px";
     menu.style.top = Math.max(8, Math.min(y, window.innerHeight - r.height - 8)) + "px";
+  }
+
+  // ---- Dateinamen (F10, F11, 0.36.0) ----
+  // Schema einmal in Einstellungen › Dateinamen, Umbenennen-Blatt zum Aufräumen
+  // (Auswahl › Rechtsklick), Namensvorschlag aus dem Inhalt in der Info-Spalte.
+  // Ab Werk bleibt jeder Name, wie er ist. Der Kern liegt in naming.rs.
+
+  const NAME_PRESETS = ["original", "date-zone-nr", "zone-nr", "date-source-nr", "zone-content", "custom"];
+  const NAME_PRESET_KEYS = { original: "nameOriginal", "date-zone-nr": "nameDateZoneNr", "zone-nr": "nameZoneNr", "date-source-nr": "nameDateSourceNr", "zone-content": "nameZoneContent", custom: "nameCustom" };
+  const NAME_PARTS = ["prefix", "zone", "date", "nr", "source", "library", "kind", "content"];
+  const NAME_PART_KEYS = { prefix: "partPrefix", zone: "partZone", date: "partDate", nr: "partNr", source: "partSource", library: "partLibrary", kind: "partKind", content: "partContent" };
+
+  async function loadNaming() {
+    try {
+      const n = await invoke("naming_prefs");
+      const tz = -new Date().getTimezoneOffset();
+      if (n.lang !== lang || n.tz !== tz) {
+        n.lang = lang;
+        n.tz = tz;
+        await invoke("set_naming_prefs", { prefs: n });
+      }
+      state.naming = n;
+    } catch (e) {}
+    return state.naming;
+  }
+
+  function saveNaming(next) {
+    next.lang = lang;
+    next.tz = -new Date().getTimezoneOffset();
+    state.naming = next;
+    return invoke("set_naming_prefs", { prefs: next }).catch(fail);
+  }
+
+  const nameStem = (name) => String(name || "").replace(/\.[^.]+$/, "");
+
+  function renderNamingSettings() {
+    const host = el("div");
+    const sample = () => selectedItems()[0] || state.items[0];
+    const draw = async () => {
+      const n = state.naming || (await loadNaming());
+      if (!n) return;
+      const set = (patch, custom) => {
+        const next = { ...n, ...patch };
+        if (custom) next.preset = "custom";
+        saveNaming(next).then(draw);
+      };
+      const s = sample();
+      const plan = (scheme) => (s ? invoke("name_plan", { paths: [s.path], scheme }).then((p) => (p[0] && p[0].new) || "").catch(() => "") : Promise.resolve(""));
+
+      const schema = block(t("nameScheme"));
+      for (const id of NAME_PRESETS) {
+        const ex = el("span", "nm-ex", "");
+        const label = el("div", null, "");
+        label.appendChild(el("span", "nm-radio"));
+        label.appendChild(document.createTextNode(t(NAME_PRESET_KEYS[id])));
+        if (id === "original") label.appendChild(el("span", "nm-note", " · " + t("nameOriginalNote")));
+        if (id === "zone-content") label.appendChild(el("span", "nm-note", " · " + t("nameContentNote")));
+        const row = blockRow(label, ex);
+        row.classList.add("nm-row");
+        if (n.preset === id) row.classList.add("nm-on");
+        row.addEventListener("click", () => set({ preset: id }));
+        if (id === "original") ex.textContent = s ? s.filename : "";
+        else plan(id).then((v) => (ex.textContent = v));
+        schema.appendChild(row);
+      }
+
+      const custom = block(t("nameCustom"));
+      const active = n.parts.filter((p) => NAME_PARTS.includes(p));
+      const bricks = el("div", "nm-bricks");
+      active.forEach((p, i) => {
+        if (i) bricks.appendChild(el("span", "nm-sep", n.sep === "" ? "" : n.sep));
+        const b = el("span", "nm-brick");
+        if (i > 0) b.appendChild(button("nm-mv", "‹", () => {
+          const parts = [...active];
+          [parts[i - 1], parts[i]] = [parts[i], parts[i - 1]];
+          set({ parts }, true);
+        }));
+        b.appendChild(el("span", null, t(NAME_PART_KEYS[p])));
+        b.appendChild(button("nm-mv", "×", () => set({ parts: active.filter((q) => q !== p) }, true)));
+        bricks.appendChild(b);
+      });
+      const more = el("div", "nm-bricks nm-more");
+      for (const p of NAME_PARTS.filter((q) => !active.includes(q)))
+        more.appendChild(button("nm-brick off", "+ " + t(NAME_PART_KEYS[p]), () => set({ parts: [...active, p] }, true)));
+      const prev = el("div", "nm-prev", "");
+      plan("custom").then((v) => (prev.textContent = v || "…"));
+      custom.appendChild(blockRow([bricks, more, prev]));
+      custom.appendChild(
+        blockRow(t("nameSep"), choice([["_", "_"], ["-", "-"], ["·", "·"], ["", t("nameSepNone")]], n.sep, (id) => set({ sep: id }, true)))
+      );
+      custom.appendChild(blockRow(t("nameDate"), choice([["iso", "2026-10-14"], ["short", "261014"]], n.date, (id) => set({ date: id }, true))));
+      custom.appendChild(blockRow(t("nameLower"), choice([["on", t("setOn")], ["off", t("setOff")]], n.lower ? "on" : "off", (id) => set({ lower: id === "on" }, true))));
+      const input = el("input", "nm-input");
+      input.value = n.prefix;
+      input.spellcheck = false;
+      input.placeholder = "ar";
+      input.addEventListener("change", () => set({ prefix: input.value.trim() }, true));
+      custom.appendChild(blockRow(t("partPrefix"), input));
+
+      const apply = block(t("nameApply"));
+      apply.appendChild(
+        blockRow(
+          [el("div", null, t("nameOnSave")), el("div", "p-block-text nm-hint", t("nameOnSaveText"))],
+          choice([["on", t("setOn")], ["off", t("setOff")]], n.onSave ? "on" : "off", (id) => set({ onSave: id === "on" }))
+        )
+      );
+      apply.appendChild(
+        blockRow(
+          [el("div", null, t("nameFlag")), el("div", "p-block-text nm-hint", t("nameFlagText"))],
+          choice([["on", t("setOn")], ["off", t("setOff")]], n.flag ? "on" : "off", (id) => set({ flag: id === "on" }))
+        )
+      );
+      host.replaceChildren(schema, custom, apply);
+    };
+    draw();
+    return host;
+  }
+
+  // Umbenennen-Blatt: Liste alt → neu, prüfen, einzelne Namen ändern, bestätigen
+  async function openRenameSheet(items) {
+    if (!items.length) return;
+    closeMenus();
+    const n = state.naming || (await loadNaming()) || { preset: "original", flag: true };
+    let scheme = n.preset === "original" ? "date-zone-nr" : n.preset;
+    let rows = [];
+    const dim = el("div", "rn-dim");
+    const sheet = el("div", "rn-sheet");
+    const close = () => {
+      document.removeEventListener("keydown", onKey, true);
+      dim.remove();
+      sheet.remove();
+    };
+    const onKey = (e) => {
+      if (e.target && e.target.tagName === "INPUT") return;
+      if (e.key === "Escape") {
+        e.preventDefault();
+        e.stopPropagation();
+        close();
+      }
+    };
+    document.addEventListener("keydown", onKey, true);
+    dim.addEventListener("click", close);
+    const confirmBtn = button("ok", "", async () => {
+      const list = rows.filter((r) => r.on && r.name && r.name !== r.item.filename).map((r) => [r.item.path, r.name]);
+      close();
+      if (!list.length) return;
+      try {
+        const done = await invoke("rename_items", { items: list });
+        await refresh();
+        state.selection = new Set(done.map(([, to]) => to));
+        updateSelectionClasses();
+        toast(t("nameDone", { n: done.length }));
+      } catch (e) {
+        fail(e);
+      }
+    });
+    const foot = el("div", "rn-foot");
+    const summary = el("span", "sp");
+    foot.append(summary, button("no", t("cancel"), close), confirmBtn);
+    const head = el("div", "rn-h", t("renameTitle", { n: items.length }));
+    const sub = el("div", "rn-sub", t("renameText"));
+    const schemeRow = el("div", "rn-scheme");
+    schemeRow.appendChild(document.createTextNode(t("nameScheme") + " "));
+    const list = el("div", "rn-list");
+    const update = () => {
+      const on = rows.filter((r) => r.on && r.name && r.name !== r.item.filename).length;
+      confirmBtn.textContent = t("renameDo", { n: on });
+      confirmBtn.disabled = !on;
+      summary.textContent = t("renameSummary", { on, all: rows.length });
+    };
+    const draw = () => {
+      list.replaceChildren(
+        ...rows.map((r) => {
+          const row = el("div", "rn-row");
+          const chk = el("span", "rn-chk" + (r.on ? "" : " off"));
+          chk.addEventListener("click", () => {
+            r.on = !r.on;
+            draw();
+          });
+          const img = el("img");
+          img.src = thumbSrc(r.item);
+          img.draggable = false;
+          const old = el("span", "rn-old", r.item.filename);
+          if ((n.flag !== false) && r.messy) old.appendChild(el("span", "flag", t("nameMessy")));
+          const nu = el("span", "rn-new" + (r.edited ? " edit" : ""), r.name || "—");
+          nu.title = t("renameEdit");
+          if (!r.on) nu.style.opacity = "0.4";
+          nu.addEventListener("click", () => {
+            const input = el("input", "rn-input");
+            input.value = nameStem(r.name || r.item.filename);
+            input.spellcheck = false;
+            nu.replaceChildren(input);
+            input.focus();
+            input.select();
+            let done = false;
+            const finish = (commit) => {
+              if (done) return;
+              done = true;
+              const v = input.value.trim();
+              if (commit && v) {
+                const ext = (r.item.filename.match(/\.[^.]+$/) || [""])[0];
+                r.name = v.endsWith(ext) ? v : v + ext;
+                r.edited = true;
+              }
+              draw();
+            };
+            input.addEventListener("keydown", (e) => {
+              e.stopPropagation();
+              if (e.key === "Enter") finish(true);
+              else if (e.key === "Escape") finish(false);
+            });
+            input.addEventListener("blur", () => finish(true));
+          });
+          row.append(chk, img, old, el("span", "rn-arrow", "→"), nu);
+          return row;
+        })
+      );
+      update();
+    };
+    const load = async () => {
+      const plan = await invoke("name_plan", { paths: items.map((i) => i.path), scheme }).catch((e) => (fail(e), []));
+      rows = plan.map((p) => ({ item: items.find((i) => i.path === p.path), name: p.new, messy: p.messy, on: !!p.new && p.new !== p.old, edited: false }));
+      draw();
+    };
+    const chips = el("span", "p-choice");
+    const drawChips = () =>
+      chips.replaceChildren(
+        ...NAME_PRESETS.filter((id) => id !== "original").map((id) =>
+          chip("(" + t(NAME_PRESET_KEYS[id]) + ")", scheme === id, () => {
+            scheme = id;
+            drawChips();
+            load();
+          })
+        )
+      );
+    drawChips();
+    schemeRow.appendChild(chips);
+    sheet.append(head, sub, schemeRow, list, foot);
+    document.body.append(dim, sheet);
+    load();
+  }
+
+  // Namensvorschlag in der Info-Spalte (F11): aus Seitentitel, Motiv und Farbe,
+  // nichts wird ungefragt umbenannt
+  function nameSuggestion(item, box) {
+    invoke("name_plan", { paths: [item.path], scheme: "zone-content" })
+      .then((plan) => {
+        const p = plan[0];
+        if (!p || !p.suggestion || nameStem(item.filename) === p.suggestion) return;
+        const ext = (item.filename.match(/\.[^.]+$/) || [""])[0];
+        const draw = (value) => {
+          const bx = el("div", "lb-info-sugg");
+          bx.appendChild(el("div", "k", "✦ " + t("suggestTitle")));
+          const nm = el("div", "n", value + ext);
+          bx.appendChild(nm);
+          bx.appendChild(el("div", "why", t("suggestWhy")));
+          const row = el("div", "row");
+          row.appendChild(
+            button("ok", t("suggestApply"), async () => {
+              try {
+                const done = await invoke("rename_items", { items: [[item.path, value + ext]] });
+                if (done.length) {
+                  const wasOpen = state.lightbox;
+                  await refresh();
+                  state.selection = new Set([done[0][1]]);
+                  if (wasOpen) {
+                    const list = lbList(state.lightbox);
+                    const at = list.findIndex((i) => i.path === done[0][1]);
+                    if (at >= 0) state.lightbox.index = at;
+                    showLightboxItem();
+                  }
+                  toast(t("nameDone", { n: 1 }));
+                }
+              } catch (e) {
+                fail(e);
+              }
+            })
+          );
+          row.appendChild(
+            button("ed", t("suggestEdit"), () => {
+              const input = el("input", "nm-input wide");
+              input.value = value;
+              input.spellcheck = false;
+              nm.replaceChildren(input);
+              input.focus();
+              input.select();
+              let taken = false;
+              const take = () => {
+                if (taken) return;
+                taken = true;
+                const v = input.value.trim();
+                bx.replaceWith(draw(v || value));
+              };
+              input.addEventListener("keydown", (e) => {
+                e.stopPropagation();
+                if (e.key === "Enter") take();
+              });
+              input.addEventListener("blur", take);
+            })
+          );
+          bx.appendChild(row);
+          return bx;
+        };
+        box.replaceWith(draw(p.suggestion));
+      })
+      .catch(() => {});
   }
 
   // ---- Zuletzt gelöscht (0.27) ----
@@ -7000,7 +7319,7 @@
           renderPage(true);
         })
       );
-      // Leerer Platz: ganz neue Bibliothek, Ort und Name im Finder (0.35.1)
+      // Leerer Platz: ganz neue Bibliothek, Ort und Name im Finder (0.36.0)
       if (!slot.path) {
         side.push(
           button("p-link", t("libCreate"), async () => {
@@ -7220,6 +7539,7 @@
     $("app").hidden = false;
     applyLock();
     loadLibraries();
+    loadNaming();
     return refresh().then(() => {
       // Nach dem Sprachwechsel wieder in den Einstellungen landen
       const reopen = sessionStorage.getItem("archiver.reopen") || "";

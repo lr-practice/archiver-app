@@ -1,6 +1,6 @@
 # Archiver – Design-System
 
-Stand: App 0.35.1 · Extension 3.28.2
+Stand: App 0.36.0 · Extension 3.28.2
 
 Diese Datei hält fest, wie Archiver aussieht und warum. Sie gilt für die Mac-App
 (`app/src`) und die Chrome-Extension (`extension/`). Wer an der Oberfläche
@@ -219,7 +219,7 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
 - **Form:** 2:1, `--r-lg`, Fläche ink × 0.055, beim Hover × 0.08.
   Umsortieren hebt die Karte an (Schatten, 85 %).
 - **Nicht:** Keine Rahmenlinie. Die Karte setzt sich nur über die Fläche ab.
-- **Bibliotheken (0.35.1):** vier Plätze in Einstellungen › Bibliothek, ⌘1–4.
+- **Bibliotheken (0.36.0):** vier Plätze in Einstellungen › Bibliothek, ⌘1–4.
   Ein leerer Platz bietet „Ordner wählen…“ und „Neue Bibliothek…“ (Ort und Name
   im Sichern-Dialog des Finders, der Ordner wird angelegt und gleich geöffnet).
 - **Externe Zone (0.30.1):** Ordner außerhalb der Bibliothek, angelegt nur in
@@ -262,7 +262,7 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
   Dieselben Worte stehen im Index hinter dem Namen (dim) und auf der Zonenkarte
   hinter der Anzahl statt des Datums (0.33.1). Es ist immer Unsorted (0.35, vorher
   wählbar); Einstellungen › Bibliothek „Unsorted nach 7 Tagen gelöscht“ schaltet
-  nur an (ab Werk) oder aus. Seit 0.35.1 zählt jeder Ordner namens Unsorted, auch
+  nur an (ab Werk) oder aus. Seit 0.36.0 zählt jeder Ordner namens Unsorted, auch
   selbst angelegt, klein geschrieben, mit Nummer davor oder als Unterzone
   (`library.rs is_unsorted`). Unsorted lässt sich nicht umbenennen. Unsorted entsteht mit jeder eigenen Bibliothek, auch in einem
   bestehenden Ordnersystem, und steht vorn als erste Active Zone; in einer
@@ -503,6 +503,31 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
   der Überlagerung über den Zonen. Gilt für das eigene Ziehen (Instagram) und
   für Videos beim Browser-Ziehen.
 - **Nicht:** Kein Quadrat, kein grauer Kasten mit „Video“.
+
+### 4.19 Dateinamen (App 0.36.0, `.nm-*`, `.rn-*`, `.lb-info-sugg`)
+- **Zweck:** Einheitliche Namen auf Wunsch, nie ungefragt. Ab Werk „Original
+  behalten“, „Beim Ablegen umbenennen“ aus.
+- **Einstellungen › Dateinamen:** Blöcke „Schema“ (sechs Zeilen mit Punkt und
+  Beispiel in Geist Mono, gewählt = gefüllter Punkt, Text `--p-text`, sonst
+  `--p-dim`), „Eigenes Schema“ (Bausteine als Kästchen mit ‹ und ×, nicht
+  benutzte als „+ Baustein“, darunter die Vorschau; jede Änderung dort wählt
+  das eigene Schema) und „Anwenden“ (Wörter statt Schalter, 4.7).
+- **Umbenennen-Blatt:** Rechtsklick auf die Auswahl › „Umbenennen …“. Blatt in
+  `--menu-bg`/`--menu-shadow`, `--r-lg`, 760 px, blendet in 0.18 s ein, Grund
+  abgedunkelt. Zeilen: Häkchen, Vorschaubild 40 px eckig, alter Name (Geist
+  Mono, `--p-dim`, „uneinheitlich“ als Kästchen mit Linie), Pfeil, neuer Name
+  (Fläche ink × 0.06, Klick = bearbeiten, gestrichelter Ring wie 4.1). Ein
+  Primärknopf „n umbenennen“ (4.8). Nicht in geteilten Bibliotheken.
+- **Namensvorschlag (Info-Spalte, Details und Lightbox):** Kasten ink × 0.055
+  über „Bildtext“, Überschrift Geist Mono 11 px, Name in Geist Mono 12.5 px,
+  Begründung `--p-dim`, „Übernehmen“ (Primär) und „Ändern“. Erscheint, wenn
+  Seitentitel, Motiv oder Farbe einen Namen ergeben, der vom jetzigen
+  abweicht. Beim Einblenden läuft einmal ein Lichtstreif über den Namen.
+- **Ausnahme zur Tabelle 2.5:** Der Lichtstreif braucht 1.1 s, einmal, auf
+  ausdrücklichen Wunsch (F11). Mit `prefers-reduced-motion` entfällt er.
+- **Nicht:** Kein Umbenennen ohne Bestätigung im Blatt oder auf „Übernehmen“,
+  kein Dienst im Netz: Vorschlag und Schema nutzen nur vorhandene Daten
+  (`naming.rs`).
 
 ---
 

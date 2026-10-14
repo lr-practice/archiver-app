@@ -216,6 +216,8 @@ struct AppSettings {
     user: Option<String>,
     #[serde(default)]
     libraries: Vec<LibrarySlotSetting>,
+    #[serde(default)]
+    naming: crate::naming::Naming,
 }
 
 fn app_settings() -> Option<AppSettings> {
@@ -299,7 +301,11 @@ fn library<'a>(slot: &'a mut Vec<(PathBuf, Library)>, msg: &Value) -> Result<&'a
         }
     };
     // Name für „abgelegt von“ kann sich in der App jederzeit ändern
-    slot[i].1.set_user(app_settings().and_then(|s| s.user));
+    let settings = app_settings();
+    slot[i].1.set_user(settings.as_ref().and_then(|s| s.user.clone()));
+    // Schema für „Beim Ablegen umbenennen“ ebenso frisch aus den Einstellungen (0.36.0)
+    let lib_name = root.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+    slot[i].1.set_naming(settings.map(|s| (s.naming, lib_name)));
     Ok(&slot[i].1)
 }
 

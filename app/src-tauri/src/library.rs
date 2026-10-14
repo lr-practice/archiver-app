@@ -188,6 +188,17 @@ fn paste_name(text: &str) -> String {
     format!("Eingefügt {y}-{m:02}-{d:02}")
 }
 
+#[derive(Serialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct NamePlan {
+    pub path: String,
+    pub hash: String,
+    pub old: String,
+    pub new: String,
+    pub suggestion: Option<String>,
+    pub messy: bool,
+}
+
 #[derive(Serialize, Clone, Debug, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct ImportReport {
@@ -209,6 +220,8 @@ pub struct Library {
     pub(crate) user: Mutex<Option<String>>,
     /// Stand der Personen-Dateien beim letzten Abgleich
     pub(crate) people_sig: Mutex<u64>,
+    /// Dateinamen-Schema und Name der Bibliothek, für „Beim Ablegen umbenennen“ (0.36.0)
+    pub(crate) naming: Mutex<Option<(crate::naming::Naming, String)>>,
 }
 
 pub fn now_ms() -> i64 {
@@ -336,7 +349,7 @@ fn parent_rel(rel: &str) -> String {
 
 /// Zone eines Ordners: nur die ersten `depth` Ebenen. Tiefere Unterordner
 /// gehören zu ihrer Zone (bestehende Projektordner werden nicht zerfasert).
-/// Zone, die sich nach 7 Tagen leert (0.35.1): jeder Ordner namens Unsorted,
+/// Zone, die sich nach 7 Tagen leert (0.36.0): jeder Ordner namens Unsorted,
 /// auch selbst angelegt, klein geschrieben, mit Nummer davor (00_Unsorted) oder
 /// als Unterzone (Projekt/Unsorted), dazu alles darin.
 pub fn is_unsorted(zone: &str) -> bool {
@@ -910,6 +923,7 @@ impl Library {
             shared,
             user: Mutex::new(None),
             people_sig: Mutex::new(0),
+            naming: Mutex::new(None),
         };
         // Unsorted (Standard-Zone) gibt es in jeder eigenen Bibliothek von Anfang
         // an, auch in einem bestehenden Ordnersystem (0.33.1). Geteilte
@@ -1008,7 +1022,7 @@ impl Library {
     /// Zone, die sich nach 7 Tagen selbst leert: immer Unsorted (0.35, vorher
     /// wählbar und an die Standard-Zone gebunden). "" heißt aus (Einstellungen ›
     /// Bibliothek); jede frühere Wahl einer anderen Zone gilt als Unsorted.
-    /// Welche Ordner als Unsorted zählen, sagt is_unsorted (0.35.1).
+    /// Welche Ordner als Unsorted zählen, sagt is_unsorted (0.36.0).
     pub fn expire_zone(&self) -> Option<String> {
         if self.zone_file().get("expire").and_then(|z| z.as_str()) == Some("") {
             return None;
@@ -1380,7 +1394,7 @@ impl Library {
                  LEFT JOIN thumb t ON t.hash = i.hash
                  LEFT JOIN analysis a ON a.hash = i.hash
                  LEFT JOIN media m ON m.hash = i.hash
-                 WHERE ?1 IS NULL OR substr(i.path, 1, length(?1) + 1) = ?1 || '/'
+                 WHERE ?1 IS NULL OR i.path = ?1 OR substr(i.path, 1, length(?1) + 1) = ?1 || '/'
                  ORDER BY COALESCE(s.captured_at, i.added_at) DESC, i.path",
             )
             .map_err(err)?;
@@ -1779,6 +1793,122 @@ impl Library {
             moved.push(new_rel);
         }
         Ok(moved)
+    }
+
+    // ---- Dateinamen (F10, F11, 0.36.0) ----
+
+    pub fn set_naming(&self, naming: Option<(crate::naming::Naming, String)>) {
+        *self.naming.lock().unwrap() = naming;
+    }
+
+    /// Plan fürs Umbenennen-Blatt: je Objekt alter Name, neuer Name nach Schema
+    /// (leer bei „Original behalten“), Vorschlag aus dem Inhalt und ob der alte
+    /// Name uneinheitlich ist. Die Nummer zählt pro Zone nach Ablagedatum.
+    pub fn name_plan(&self, paths: &[String], naming: &crate::naming::Naming, library: &str) -> Result<Vec<NamePlan>> {
+        let items = self.items()?;
+        let mut by_zone: HashMap<&str, Vec<&Item>> = HashMap::new();
+        for it in &items {
+            by_zone.entry(it.zone.as_str()).or_default().push(it);
+        }
+        let mut nr: HashMap<&str, usize> = HashMap::new();
+        for list in by_zone.values_mut() {
+            list.sort_by(|a, b| (a.captured_at.unwrap_or(a.added_at), &a.path).cmp(&(b.captured_at.unwrap_or(b.added_at), &b.path)));
+            for (i, it) in list.iter().enumerate() {
+                nr.insert(it.path.as_str(), i + 1);
+            }
+        }
+        let wanted: HashSet<&str> = paths.iter().map(|p| p.as_str()).collect();
+        let mut out = Vec::new();
+        let mut taken: HashSet<String> = HashSet::new();
+        for it in items.iter().filter(|i| wanted.contains(i.path.as_str())) {
+            let ctx = crate::naming::Ctx { item: it, library, nr: nr.get(it.path.as_str()).copied().unwrap_or(1) };
+            let ext = it.filename.rsplit_once('.').map(|(_, e)| e.to_string());
+            let mut new = crate::naming::render(naming, &ctx).unwrap_or_default();
+            // zwei Objekte im selben Ordner mit gleichem Namen: hinten zählen
+            if !new.is_empty() {
+                let dir = parent_rel(&it.path);
+                let base = new.clone();
+                let mut k = 2;
+                while !taken.insert(format!("{dir}/{new}")) {
+                    new = format!("{base}-{k}");
+                    k += 1;
+                }
+            }
+            out.push(NamePlan {
+                path: it.path.clone(),
+                hash: it.hash.clone(),
+                old: it.filename.clone(),
+                new: if new.is_empty() { String::new() } else { ext.as_ref().map(|e| format!("{new}.{e}")).unwrap_or(new) },
+                suggestion: crate::naming::suggest(it, &naming.lang),
+                messy: crate::naming::messy(&it.filename),
+            });
+        }
+        out.sort_by_key(|p| paths.iter().position(|q| q == &p.path).unwrap_or(usize::MAX));
+        Ok(out)
+    }
+
+    /// Objekte umbenennen: (Pfad, neuer Name ohne oder mit alter Endung). Bleibt
+    /// im selben Ordner, die Endung bleibt immer die alte. Gibt (alt, neu) zurück.
+    pub fn rename_items(&self, list: &[(String, String)]) -> Result<Vec<(String, String)>> {
+        let mut done = Vec::new();
+        for (rel, wanted) in list {
+            let src = safe_join(&self.root, rel)?;
+            if !src.is_file() {
+                continue;
+            }
+            let old = file_name(rel);
+            let ext = old.rsplit_once('.').map(|(_, e)| e.to_string());
+            let mut stem = crate::naming::clean_stem(wanted);
+            if let Some(e) = &ext {
+                if let Some(s) = stem.strip_suffix(&format!(".{e}")) {
+                    stem = s.trim().to_string();
+                }
+            }
+            if stem.is_empty() {
+                continue;
+            }
+            let name = ext.as_ref().map(|e| format!("{stem}.{e}")).unwrap_or(stem);
+            if name == old {
+                continue;
+            }
+            let dir = src.parent().ok_or("Kein Ordner")?.to_path_buf();
+            // Nur Groß/klein geändert: auf dem Mac ist das dieselbe Datei
+            let dst = if name.to_lowercase() == old.to_lowercase() { dir.join(&name) } else { unique_path(&dir, &name) };
+            fs::rename(&src, &dst).map_err(err)?;
+            let new_rel = rel_path(&self.root, &dst);
+            {
+                let conn = self.conn.lock().unwrap();
+                conn.execute("UPDATE item SET path = ?2 WHERE path = ?1", params![rel, new_rel]).map_err(err)?;
+            }
+            done.push((rel.clone(), new_rel));
+        }
+        if !done.is_empty() {
+            self.write_metadata()?;
+        }
+        Ok(done)
+    }
+
+    /// „Beim Ablegen umbenennen“: neuen Namen nach Schema geben, sonst bleibt er.
+    /// Holt nur dieses eine Objekt und zählt die Nummer per Abfrage, damit ein
+    /// Import vieler Dateien nicht jedes Mal die ganze Bibliothek liest.
+    fn auto_name(&self, rel: &str) -> String {
+        let Some((naming, library)) = self.naming.lock().unwrap().clone() else { return rel.to_string() };
+        if self.shared || !naming.on_save || !naming.active() {
+            return rel.to_string();
+        }
+        let Some(item) = self.items_under(Some(rel)).ok().and_then(|mut v| v.pop()) else { return rel.to_string() };
+        let nr: usize = {
+            let conn = self.conn.lock().unwrap();
+            conn.query_row(
+                "SELECT COUNT(*) FROM item WHERE substr(path, 1, length(?1) + 1) = ?1 || '/'",
+                params![item.zone],
+                |r| r.get::<_, i64>(0),
+            )
+            .unwrap_or(1)
+            .max(1) as usize
+        };
+        let Some(stem) = crate::naming::render(&naming, &crate::naming::Ctx { item: &item, library: &library, nr }) else { return rel.to_string() };
+        self.rename_items(&[(rel.to_string(), stem)]).ok().and_then(|mut d| d.pop()).map(|(_, n)| n).unwrap_or_else(|| rel.to_string())
     }
 
     /// Legt Dateien unter „Zuletzt gelöscht“ ab (.archiver/deleted/<Zeit>/<Pfad>).
@@ -2369,8 +2499,10 @@ impl Library {
         let meta = fs::metadata(&dst).map_err(err)?;
         let mtime = time_ms(meta.modified()).unwrap_or(0);
         let added = source.and_then(|s| s.captured_at).unwrap_or_else(now_ms);
-        self.upsert_item(&rel_path(&self.root, &dst), &hash, meta.len() as i64, mtime, added, &dst)?;
+        let rel = rel_path(&self.root, &dst);
+        self.upsert_item(&rel, &hash, meta.len() as i64, mtime, added, &dst)?;
         self.mark_added_by(&hash)?;
+        self.auto_name(&rel);
         report.imported += 1;
         Ok(())
     }
@@ -2411,6 +2543,7 @@ impl Library {
         let rel = rel_path(&self.root, &dst);
         self.upsert_item(&rel, &hash, meta.len() as i64, mtime, added, &dst)?;
         self.mark_added_by(&hash)?;
+        let rel = self.auto_name(&rel);
         self.write_metadata()?;
         Ok((rel, false))
     }
@@ -3101,6 +3234,44 @@ mod tests {
         assert!(root.join("Typo/zone.png").is_file());
         // unter „Zuletzt gelöscht“, also wiederherstellbar
         assert_eq!(lib.deleted_items().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn rename_and_auto_name() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path().join("Bib");
+        let lib = Library::open(&root).unwrap();
+        let src = tmp.path().join("src");
+        write_png(&src.join("IMG_1.png"), 4, 4, 41);
+        write_png(&src.join("IMG_2.png"), 4, 4, 42);
+        // Ab Werk bleibt der Name
+        lib.import_files(&[src.join("IMG_1.png")], "Typo").unwrap();
+        assert!(root.join("Typo/IMG_1.png").is_file());
+        // Schema an: neue Objekte heißen nach Schema
+        let mut n = crate::naming::Naming::default();
+        n.preset = "zone-nr".into();
+        n.on_save = true;
+        lib.set_naming(Some((n.clone(), "Bib".into())));
+        lib.import_files(&[src.join("IMG_2.png")], "Typo").unwrap();
+        let names: Vec<String> = std::fs::read_dir(root.join("Typo")).unwrap().map(|e| e.unwrap().file_name().to_string_lossy().into_owned()).collect();
+        assert!(names.iter().any(|f| f == "typo_002.png") || names.iter().any(|f| f.starts_with("typo_")), "{names:?}");
+        assert!(root.join("Typo/IMG_1.png").is_file(), "Vorhandenes bleibt");
+        // Aufräumen: Plan, dann umbenennen, Datenbank folgt
+        let plan = lib.name_plan(&["Typo/IMG_1.png".into()], &n, "Bib").unwrap();
+        assert_eq!(plan.len(), 1);
+        assert!(plan[0].messy);
+        assert!(plan[0].new.starts_with("typo_") && plan[0].new.ends_with(".png"));
+        let done = lib.rename_items(&[("Typo/IMG_1.png".into(), "Mein Plakat".into())]).unwrap();
+        assert_eq!(done, vec![("Typo/IMG_1.png".to_string(), "Typo/Mein Plakat.png".to_string())]);
+        assert!(root.join("Typo/Mein Plakat.png").is_file());
+        assert!(!root.join("Typo/IMG_1.png").exists());
+        assert!(lib.hash_of("Typo/Mein Plakat.png").is_some(), "Eintrag wanderte mit");
+        // nur Groß/klein
+        lib.rename_items(&[("Typo/Mein Plakat.png".into(), "mein plakat.png".into())]).unwrap();
+        assert!(root.join("Typo/mein plakat.png").is_file());
+        // Pfadzeichen im Namen werden entfernt, nichts verlässt den Ordner
+        let done = lib.rename_items(&[("Typo/mein plakat.png".into(), "../x/y".into())]).unwrap();
+        assert_eq!(done[0].1, "Typo/xy.png");
     }
 
     #[test]

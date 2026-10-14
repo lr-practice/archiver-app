@@ -1,6 +1,23 @@
 # Changelog
 
-## App 0.35.1 · Extension 3.28.2
+## App 0.36.0 · Extension 3.28.2
+
+- Einstellungen › Dateinamen: ein Schema für einheitliche Namen. Fünf fertige
+  Vorlagen (Datum_Zone_Nr, Zone_Nr, Datum_Quelle_Nr, Zone_Inhalt) und ein
+  eigenes Schema aus Bausteinen mit Trenner, Datumsformat, Kleinschreibung und
+  Präfix. Ab Werk bleibt jeder Name, wie er ist.
+- „Beim Ablegen umbenennen“: neue Objekte bekommen das Schema gleich, auch
+  über die Extension.
+- Aufräumen: Auswahl › Rechtsklick › „Umbenennen …“ zeigt die Liste alt → neu.
+  Uneinheitliche Namen (IMG_…, Bild (3), Screenshot …) sind markiert, einzelne
+  Namen lassen sich ändern, Häkchen nehmen Objekte heraus.
+- Namensvorschlag aus dem Inhalt (Seitentitel, erkanntes Motiv, Farbe) in der
+  Info-Spalte. Er gilt erst, wenn du „Übernehmen“ drückst. Alles läuft lokal.
+- Rechtsklick › „Ablegen in …“ der Extension sichert wieder (3.28.2).
+- Unsorted leert sich nach 7 Tagen in jedem Ordner namens Unsorted.
+- Vier statt drei Bibliotheken (⌘4), dazu „Neue Bibliothek…“ im Finder-Dialog.
+
+## Vorabstand 0.35.1 (nicht veröffentlicht, in 0.36.0 aufgegangen)
 
 - Extension: Rechtsklick › „Ablegen in …“ sichert wieder. Chrome beendet die
   Extension im Hintergrund nach kurzer Ruhe, danach fand der Klick sein Ziel
