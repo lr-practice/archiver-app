@@ -1,6 +1,6 @@
 # Archiver – Design-System
 
-Stand: App 0.33.1 · Extension 3.25.3
+Stand: App 0.33.2 · Extension 3.25.3
 
 Diese Datei hält fest, wie Archiver aussieht und warum. Sie gilt für die Mac-App
 (`app/src`) und die Chrome-Extension (`extension/`). Wer an der Oberfläche
@@ -250,7 +250,9 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
   hinter der Anzahl statt des Datums (0.33.1). Welche Zone sich so leert, steht
   in Einstellungen › Bibliothek unter der Standard-Zone (ab Werk Unsorted, auch
   „Aus“). Unsorted entsteht mit jeder eigenen Bibliothek, auch in einem
-  bestehenden Ordnersystem, und steht ohne eigene Reihenfolge vorn. Geteilte
+  bestehenden Ordnersystem, und steht vorn als erste Active Zone; in einer
+  Bibliothek mit eigener Reihenfolge, sobald sie neu dazukommt (0.33.2). Wer sie
+  danach verschiebt, behält seinen Platz. Geteilte
   Bibliotheken zeigen nichts davon.
 - **Nicht:** Keine Rundung, kein Schatten und keine Bildunterschrift im Raster.
   Die Info gibt es per `I` oder im Seitenblatt.

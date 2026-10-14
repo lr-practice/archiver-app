@@ -376,6 +376,9 @@
     const rank = (z) => {
       let i = order.indexOf(z.path);
       if (i < 0 && z.path) i = order.findIndex((p) => p.startsWith(z.path + "/"));
+      // 0.33.2: neu hinzugekommene Standard-Zone (Unsorted) steht vorn, als erste
+      // Active Zone, bis man sie selbst verschiebt
+      if (i < 0 && z.path === state.defaultZone) return -1;
       return i < 0 ? order.length : i;
     };
     return zones.map((z, i) => [z, i]).sort((a, b) => rank(a[0]) - rank(b[0]) || a[1] - b[1]).map(([z]) => z);
@@ -423,13 +426,13 @@
     }
     state.root = snap.root;
     state.name = snap.name;
+    state.defaultZone = snap.defaultZone || "Unsorted";
     state.zones = orderZones(displayZones(snap.zones));
     syncZoneOrder();
     state.items = snap.items;
     state.byPath = new Map(snap.items.map((i) => [i.path, i]));
     state.order = snap.order || {};
     state.shared = !!snap.shared;
-    state.defaultZone = snap.defaultZone || "Unsorted";
     state.inboxSeen = snap.inboxSeen || {};
     state.expireZone = snap.expireZone === undefined ? state.defaultZone : snap.expireZone;
     state.structure = snap.structure || { depth: 2, skip: [], subzones: false };

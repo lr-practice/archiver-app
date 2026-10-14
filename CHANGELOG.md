@@ -1,5 +1,11 @@
 # Changelog
 
+## App 0.33.2 (14.10.2026)
+
+- Unsorted steht auch in Bibliotheken mit eigener Reihenfolge vorn als erste
+  Active Zone, wenn es neu dazukommt. Wer es danach verschiebt, behält seinen
+  Platz.
+
 ## App 0.33.1 (14.10.2026)
 
 - Unsorted: kurz „Nach 7 Tagen gelöscht“, in der Kopfzeile, im Index und
