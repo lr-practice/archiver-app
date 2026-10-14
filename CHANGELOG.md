@@ -9,6 +9,11 @@
   mehr unter der Leiste weg, und Ablagen der Seite darunter greifen nicht mehr
   mit. Auch beim Ziehen von Text und auf Instagram fährt die Leiste jetzt aus
   dem Streifen hoch.
+- Extension 3.25.2: Zonenkarten genau wie in der App (Name unten, gestrichelter
+  Ring, ohne Unschärfe; ruckelt nicht mehr). Streifen 60 statt 30 px, in App und
+  Extension. Die Leiste steht beim ersten Ziehen sofort (lädt nicht erst nach)
+  und kommt früher auf langsamen Seiten. Nach einem Update zeigt ein noch
+  offener Tab keine alte Leiste mehr.
 
 ## App 0.32.0 · Extension 3.25.0 (14.10.2026)
 

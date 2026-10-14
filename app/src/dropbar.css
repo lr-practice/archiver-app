@@ -109,11 +109,12 @@ html.light .db-hot {
   }
 }
 
-/* 0.32: Streifen am Rand. Beim Ziehen ist die Leiste erst nur 30 px hoch,
-   damit darüber alles frei bleibt (etwa das Eingabefeld eines Chats). Fährt
-   der Zeiger hinein, wird das Fenster 280 px hoch (system.rs, dropbar-tall). */
+/* 0.32: Streifen am Rand. Beim Ziehen ist die Leiste erst nur 60 px hoch
+   (0.32.1, vorher 30), damit darüber alles frei bleibt (etwa das Eingabefeld
+   eines Chats). Fährt der Zeiger hinein, wird das Fenster 280 px hoch
+   (system.rs, dropbar-tall). Oben 4 px für den Ring. */
 .db-bar.strip {
-  padding: 0 14px;
+  padding: 4px 14px 0;
 }
 
 .db-bar.strip .db-hot {

@@ -396,7 +396,7 @@ fn watch_drags(app: AppHandle) {
 
 /// Zonenleiste (DESIGN.md 4.13): Streifen beim Ziehen, volle Höhe unter dem Zeiger
 #[cfg(target_os = "macos")]
-const DROPBAR_STRIP: f64 = 30.0;
+const DROPBAR_STRIP: f64 = 60.0;
 #[cfg(target_os = "macos")]
 const DROPBAR_TALL: f64 = 280.0;
 

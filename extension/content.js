@@ -16,7 +16,7 @@
   // Leiste beim Ziehen (0.32 der App, 3.25.0): erst ein Streifen von STRIP_PX am
   // unteren Rand, damit darüber alles frei bleibt (Eingabefeld eines Chats).
   // Fährt der Zeiger hinein, kommt die volle Höhe (overlay.css .zones-bar).
-  const STRIP_PX = 30;
+  const STRIP_PX = 60;
   const barHeight = () => Math.min(window.innerHeight * 0.3, 260);
   const { DEFAULT_ZONES, DEFAULT_SHORTCUT, isRootZoneName, loadZones, debugLog, currentPageSource, extractDroppedImage, t } =
     ArchiverShared;
@@ -25,6 +25,16 @@
   let zones = DEFAULT_ZONES.slice();
   // Leiste beim Ziehen: mit App die vier Hot Zones aus der Übersicht, sonst alle Zonen
   let barZones = zones;
+  // Nach einem Update der Extension läuft dieses Skript in schon offenen Tabs
+  // verwaist weiter (ohne chrome.*). Dann hält es still, statt eine alte
+  // Leiste ohne Texte zu zeigen; die neue Fassung übernimmt.
+  const gone = () => {
+    try {
+      return !chrome.runtime || !chrome.runtime.id;
+    } catch {
+      return true;
+    }
+  };
   const hotOf = (list, info) => (info && Array.isArray(info.hot) && info.hot.length ? info.hot.slice() : list);
   let shortcut = DEFAULT_SHORTCUT;
   let dragCounter = 0;
@@ -165,7 +175,7 @@
   }
 
   document.addEventListener("keydown", (e) => {
-    if (!e.isTrusted) return; // nur echte Eingaben, keine von der Seite erzeugten Events
+    if (!e.isTrusted || gone()) return; // nur echte Eingaben, keine von der Seite erzeugten Events
     if (recordingShortcut) return; // nimmt das Einstellungen-Panel selbst entgegen
 
     if (manualOpen) {
@@ -771,14 +781,16 @@
       zoneEls = barZones.map((name, i) => {
         const zone = UI.el("div", "zone" + (isRootZoneName(name) ? " root" : ""));
         zone.dataset.index = String(i);
-        // Schwebende Karte wie in der App: Name oben links, Unterzone mit grauem Elternteil
+        // Schwebende Karte wie in der App: Nummer oben, Name unten links, Unterzone mit grauem Elternteil
         zone.appendChild(UI.el("span", "zone-key", String(i + 1).padStart(2, "0")));
         const label = UI.el("div", "zone-label");
         const parts = String(name).split("/");
         if (parts.length > 1) label.appendChild(UI.el("span", "zone-parent", parts.slice(0, -1).join(" / ") + " / "));
         label.appendChild(document.createTextNode(parts[parts.length - 1]));
-        zone.appendChild(label);
-        zone.appendChild(UI.el("div", "zone-hint", t("dropRelease")));
+        const text = UI.el("div", "zone-text");
+        text.appendChild(label);
+        text.appendChild(UI.el("div", "zone-hint", t("dropRelease")));
+        zone.appendChild(text);
         zonesBarEl.appendChild(zone);
         return zone;
       });
@@ -1181,7 +1193,7 @@
     "mousedown",
     (e) => {
       if (!e.isTrusted) return; // nur echte Eingaben, keine von der Seite erzeugten Events
-      if (e.button !== 0 || manualOpen || textDrag) return;
+      if (e.button !== 0 || manualOpen || textDrag || gone()) return;
       const text = selectedText();
       if (!text || !insideSelection(e.clientX, e.clientY)) return;
       // Kein neues Markieren und kein natives Ziehen: Archiver zieht selbst.
@@ -1233,7 +1245,7 @@
   function armHiddenDrag(e) {
     if (!e.isTrusted) return; // nur echte Eingaben, keine von der Seite erzeugten Events
     clearHiddenDrag();
-    if (e.button !== 0 || manualOpen || textDrag) return;
+    if (e.button !== 0 || manualOpen || textDrag || gone()) return;
     const t = e.target;
     if (!(t instanceof Element) || t.closest("input, textarea, select, button, [contenteditable=''], [contenteditable='true']")) return;
     // Echt ziehbare Bilder und Links laufen wie bisher
@@ -1631,6 +1643,7 @@
     "dragenter",
     (e) => {
       if (!e.isTrusted) return; // nur echte Eingaben, keine von der Seite erzeugten Events
+      if (gone()) return removeZones();
       if (!e.dataTransfer || manualOpen) return; // im offenen Overlay übernehmen die Zonen-Karten
       dragCounter++;
       if (dragCounter === 1 && !zonesBarEl) loadDragLibs();
@@ -1643,6 +1656,7 @@
     "dragover",
     (e) => {
       if (!e.isTrusted) return; // nur echte Eingaben, keine von der Seite erzeugten Events
+      if (gone()) return;
       if (!e.dataTransfer || manualOpen) return;
       e.preventDefault(); // notwendig, damit "drop" überhaupt feuert
       e.dataTransfer.dropEffect = "copy";
@@ -1680,6 +1694,7 @@
     "drop",
     (e) => {
       if (!e.isTrusted) return; // nur echte Eingaben, keine von der Seite erzeugten Events
+      if (gone()) return;
       if (manualOpen) return;
       const zoneIdx = getZoneIndex(e.clientX, e.clientY);
       shiftDrop = dragLibs.length > 1 ? false : e.shiftKey;
@@ -1780,4 +1795,7 @@
     },
     true
   );
+  // Overlay vorab bauen (nur im Hauptfenster), damit die Leiste schon beim
+  // ersten Ziehen sofort steht und nicht erst die Styles nachlädt
+  if (window === window.top) (window.requestIdleCallback || setTimeout)(() => ensureOverlay(), { timeout: 2000 });
 })();

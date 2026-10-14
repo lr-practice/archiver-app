@@ -369,13 +369,16 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
 - **Zweck:** Wie 4.3, aber beim Ziehen von Dateien in jedem Programm.
 - **Form:** Volle Breite unten auf dem Bildschirm mit dem Zeiger, 280 px hoch,
   dieselben vier Glaskarten, Ring und Glühen wie 4.3.
-- **Streifen (0.32):** Beim Ziehen erst nur 30 px hoch (`.strip`): Karten
-  oben gerundet, Nummer und Name in einer Zeile, 13 px, ohne Hinweis. Darüber
+- **Streifen (0.32, 60 px seit 0.32.1 / 3.25.2):** Beim Ziehen erst nur
+  60 px hoch (`.strip`, oben 4 px für den Ring): Karten oben gerundet, Nummer
+  und Name in einer Zeile, 13 px, ohne Hinweis. Darüber
   bleibt alles frei, etwa das Eingabefeld eines Chats. Fährt der Zeiger in den
   Streifen, wird das Fenster mit macOS-Animation 280 px hoch; steht er mehr
   als 24 px darüber, wird es wieder Streifen. Gleiches gilt für die Leiste der
   Extension im Browser (3.25.0, `overlay.css` `.zones-bar.strip`, Höhe mit
-  0.22 s Übergang, ohne bei `prefers-reduced-motion`). Die Leiste der Extension nimmt
+  0.22 s Übergang, ohne bei `prefers-reduced-motion`). Die Leiste der Extension hat
+  seit 3.25.2 genau die Karten der App (`overlay.css` folgt `dropbar.css`:
+  ohne Unschärfe und Schatten, Name unten, gestrichelter Ring). Sie nimmt
   den Zeiger an (3.25.1), damit Chrome am unteren Rand die Seite nicht
   darunter wegscrollt; Text- und Instagram-Ziehen nutzen denselben Streifen. Die Karten haben keine
   eigene Unschärfe (das Fenster ist durchsichtig), deshalb gilt `--zone-alpha`.
