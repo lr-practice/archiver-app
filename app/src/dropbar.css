@@ -109,25 +109,16 @@ html.light .db-hot {
   }
 }
 
-/* 0.32: Streifen am Rand. Beim Ziehen ist die Leiste erst nur 60 px hoch
+/* 0.32: Streifen am Rand. Beim Ziehen ragen die Karten erst nur 90 px herein
    (0.32.1, vorher 30), damit darüber alles frei bleibt (etwa das Eingabefeld
-   eines Chats). Fährt der Zeiger hinein, wird das Fenster 280 px hoch
-   (system.rs, dropbar-tall). Oben 4 px für den Ring. */
+   eines Chats). Dieselbe Karte, unten bündig, ohne Hinweis. Fährt der Zeiger
+   hinein, wird das Fenster 280 px hoch (system.rs, dropbar-tall). */
 .db-bar.strip {
   padding: 4px 14px 0;
 }
 
 .db-bar.strip .db-hot {
-  flex-direction: row;
-  align-items: center;
-  justify-content: flex-start;
-  gap: 10px;
-  padding: 0 14px;
   border-radius: var(--r-lg) var(--r-lg) 0 0;
-}
-
-.db-bar.strip .db-name {
-  font-size: 13px;
 }
 
 .db-bar.strip .db-hint {

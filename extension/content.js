@@ -16,7 +16,7 @@
   // Leiste beim Ziehen (0.32 der App, 3.25.0): erst ein Streifen von STRIP_PX am
   // unteren Rand, damit darüber alles frei bleibt (Eingabefeld eines Chats).
   // Fährt der Zeiger hinein, kommt die volle Höhe (overlay.css .zones-bar).
-  const STRIP_PX = 60;
+  const STRIP_PX = 90;
   const barHeight = () => Math.min(window.innerHeight * 0.3, 260);
   const { DEFAULT_ZONES, DEFAULT_SHORTCUT, isRootZoneName, loadZones, debugLog, currentPageSource, extractDroppedImage, t } =
     ArchiverShared;
@@ -779,18 +779,16 @@
       zonesBarEl = UI.el("div", "zones-bar strip");
       if (zoneAlpha != null) zonesBarEl.style.setProperty("--zone-alpha", String(zoneAlpha));
       zoneEls = barZones.map((name, i) => {
-        const zone = UI.el("div", "zone" + (isRootZoneName(name) ? " root" : ""));
+        const zone = UI.el("div", "zone" + (isRootZoneName(name) ? " zone-root" : ""));
         zone.dataset.index = String(i);
-        // Schwebende Karte wie in der App: Nummer oben, Name unten links, Unterzone mit grauem Elternteil
+        // Schwebende Karte wie in der App (.p-hot): Nummer oben, Name in der Mitte, Hinweis unten, Unterzone mit grauem Elternteil
         zone.appendChild(UI.el("span", "zone-key", String(i + 1).padStart(2, "0")));
         const label = UI.el("div", "zone-label");
         const parts = String(name).split("/");
         if (parts.length > 1) label.appendChild(UI.el("span", "zone-parent", parts.slice(0, -1).join(" / ") + " / "));
         label.appendChild(document.createTextNode(parts[parts.length - 1]));
-        const text = UI.el("div", "zone-text");
-        text.appendChild(label);
-        text.appendChild(UI.el("div", "zone-hint", t("dropRelease")));
-        zone.appendChild(text);
+        zone.appendChild(label);
+        zone.appendChild(UI.el("div", "zone-hint", t("dropRelease")));
         zonesBarEl.appendChild(zone);
         return zone;
       });
