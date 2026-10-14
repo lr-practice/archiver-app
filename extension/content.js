@@ -1415,10 +1415,9 @@
   }
 
   // Video abgelegt: hat das Video eine echte Dateiadresse, wird die Datei
-  // gesichert. Instagram streamt (blob:): dort fragt die Extension wie gängige
-  // Downloader die Beitragsdaten bei Instagram ab (mit der Anmeldung im
-  // Browser) und lädt die fertige MP4 mit Ton im Hintergrund. Klappt das
-  // nicht, wird das aktuelle Bild des Videos fotografiert.
+  // gesichert. Instagram streamt (blob:): dort nimmt die Extension die MP4
+  // mit Ton aus den Beitragsdaten, die Instagram selbst geladen hat (siehe
+  // dropInstagram). Klappt das nicht, wird das aktuelle Bild fotografiert.
   async function dropHiddenVideo(folder) {
     const video = hiddenDrag.video;
     const src = video.currentSrc || video.src || "";
@@ -1437,12 +1436,71 @@
   }
 
   // ---- Instagram: Bilder und Videos in Originalgröße aus den Beitragsdaten ----
-  // Wie gängige Downloader: Beitragscode → Medien-ID → /api/v1/media/ID/info/
-  // (mit der Anmeldung im Browser). Bei Karussells wird das gezogene Bild über
-  // den Dateinamen, ein Video über seine Länge zugeordnet.
+  // Archiver fragt Instagram nicht selbst ab. ig-page.js liest mit, was
+  // Instagram ohnehin in den Browser lädt (Feed, Beitrag, Reels, Stories),
+  // und meldet die Medien hierher. Bei Karussells wird das gezogene Bild über
+  // den Dateinamen, ein Video über seine Länge zugeordnet. Fehlt ein Beitrag,
+  // gilt das angezeigte Bild in der größten Variante der Seite (srcset).
   const IG = /(^|\.)instagram\.com$/.test(location.hostname);
   let dragSource = null;
-  const igCache = new Map();
+  const igMedia = new Map();
+  const IG_MEDIA_MAX = 3000;
+
+  // Nur Adressen von Instagrams Bildservern übernehmen; die Seite selbst
+  // könnte das Ereignis sonst mit fremden Adressen füttern.
+  function igCdnUrl(u) {
+    try {
+      const url = new URL(u);
+      return url.protocol === "https:" && /(^|\.)(cdninstagram\.com|fbcdn\.net)$/.test(url.hostname);
+    } catch {
+      return false;
+    }
+  }
+
+  function igClean(m) {
+    if (!m || typeof m !== "object") return null;
+    const urls = (list) => (Array.isArray(list) ? list.filter((v) => v && igCdnUrl(v.url)).map((v) => ({ url: v.url })) : []);
+    const out = {
+      code: typeof m.code === "string" ? m.code : null,
+      pk: typeof m.pk === "string" ? m.pk : null,
+      product_type: typeof m.product_type === "string" ? m.product_type : null,
+      video_duration: typeof m.video_duration === "number" ? m.video_duration : null,
+      video_versions: urls(m.video_versions),
+      image_versions2: { candidates: urls(m.image_versions2 && m.image_versions2.candidates) },
+      user: m.user && typeof m.user.username === "string" ? { username: m.user.username } : null,
+      carousel_media: Array.isArray(m.carousel_media) ? m.carousel_media.map(igClean).filter(Boolean) : [],
+    };
+    if (!out.video_versions.length) out.video_versions = null;
+    return out;
+  }
+
+  function igRemember(key, item) {
+    if (!key) return;
+    const prev = igMedia.get(key);
+    // Ein vollständigerer Eintrag (mit Video oder Karussell) gewinnt
+    if (prev && !item.video_versions && !item.carousel_media.length && (prev.video_versions || prev.carousel_media.length)) return;
+    igMedia.delete(key);
+    igMedia.set(key, item);
+    if (igMedia.size > IG_MEDIA_MAX) igMedia.delete(igMedia.keys().next().value);
+  }
+
+  if (IG) {
+    document.addEventListener("archiver:ig-media", (e) => {
+      let list;
+      try {
+        list = JSON.parse(e.detail);
+      } catch {
+        return;
+      }
+      if (!Array.isArray(list)) return;
+      for (const raw of list) {
+        const item = igClean(raw);
+        if (!item) continue;
+        igRemember(item.code, item);
+        igRemember(item.pk, item);
+      }
+    });
+  }
 
   function postCodeNear(el) {
     const loc = location.pathname.match(/\/(?:p|reel|reels|tv)\/([\w-]+)/);
@@ -1469,22 +1527,17 @@
     return m && m[1] !== "highlights" ? { user: m[1], id: m[2] } : null;
   }
 
-  const igItem = (code) => igItemById(mediaIdOf(code));
+  const igItem = (code) => igMedia.get(code) || igMedia.get(mediaIdOf(code)) || null;
 
-  async function igItemById(id) {
-    if (!igCache.has(id)) {
-      igCache.set(
-        id,
-        fetch(`/api/v1/media/${id}/info/`, {
-          credentials: "include",
-          headers: { "X-IG-App-ID": "936619743392459", "X-Requested-With": "XMLHttpRequest" },
-        })
-          .then((r) => (r.ok ? r.json() : null))
-          .then((j) => (j && j.items && j.items[0]) || null)
-          .catch(() => null)
-      );
+  // Kontoname aus dem Kopf des Beitrags, falls Instagram den Beitrag nicht mitgeliefert hat
+  function igUserNear(el) {
+    const art = el && el.closest ? el.closest("article") : null;
+    if (!art) return null;
+    for (const a of art.querySelectorAll("header a[href], a[href]")) {
+      const m = (a.getAttribute("href") || "").match(/^\/([\w.]+)\/$/);
+      if (m && !["explore", "reels", "stories", "p", "reel"].includes(m[1])) return m[1];
     }
-    return igCache.get(id);
+    return null;
   }
 
   const fileNameOf = (url) => {
@@ -1516,9 +1569,9 @@
   }
 
   // Quelle ist der Beitrag selbst, nicht der Feed, auf dem gezogen wurde.
-  function igSource(code, item) {
+  function igSource(code, item, el) {
     const reel = item ? item.product_type === "clips" : /\/reels?\//.test(location.pathname);
-    const user = item && item.user && item.user.username;
+    const user = (item && item.user && item.user.username) || igUserNear(el);
     return {
       pageUrl: `https://www.instagram.com/${reel ? "reel" : "p"}/${code}/`,
       pageTitle: user ? `@${user} · Instagram` : "Instagram",
@@ -1529,14 +1582,14 @@
     clearHiddenDrag();
     removeZones();
     fallbackImageUrl = null;
-    // Stories: Original aus den Mediendaten statt eines Standbilds (3.25.3)
+    // Stories: Original aus den mitgelesenen Mediendaten statt eines Standbilds
     const story = storyOfPage();
     const code = story ? null : el ? postCodeNear(el) : null;
-    const item = story ? await igItemById(story.id) : code ? await igItem(code) : null;
+    const item = story ? igMedia.get(story.id) || null : code ? igItem(code) : null;
     const source = story
       ? { pageUrl: `https://www.instagram.com/stories/${story.user}/${story.id}/`, pageTitle: `@${story.user} · Instagram` }
       : code
-        ? igSource(code, item)
+        ? igSource(code, item, el)
         : currentPageSource();
     const hit = item ? igPick(item, video, imageUrl) : null;
     if (hit) {

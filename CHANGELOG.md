@@ -1,5 +1,18 @@
 # Changelog
 
+## Extension 3.26.0 (14.10.2026)
+
+Instagram ohne eigene Anfragen an Instagram (zum Testen).
+
+- Archiver fragt Instagrams interne Schnittstelle nicht mehr ab. Stattdessen
+  liest die Extension passiv mit, was Instagram selbst an Beitragsdaten in den
+  Browser lädt (Feed, Beitrag, Reels, Stories), und nimmt daraus Bild oder
+  Video in Originalgröße, Videos als MP4 mit Ton.
+- Fehlen die Daten für einen Beitrag, wird das angezeigte Bild in der größten
+  Variante der Seite gesichert, bei Videos wie bisher ein Standbild.
+- Kontoname für die Quelle notfalls aus dem Kopf des Beitrags.
+- Nur Adressen von Instagrams Bildservern werden übernommen.
+
 ## App 0.34.2 (14.10.2026)
 
 - Liste: Text- und Notizkarten stehen klein links wie die Bilder, nicht mehr
