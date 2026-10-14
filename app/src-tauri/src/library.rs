@@ -220,8 +220,6 @@ pub struct Library {
     pub(crate) user: Mutex<Option<String>>,
     /// Stand der Personen-Dateien beim letzten Abgleich
     pub(crate) people_sig: Mutex<u64>,
-    /// Dateinamen-Schema und Name der Bibliothek, für „Beim Ablegen umbenennen“ (0.36.0)
-    pub(crate) naming: Mutex<Option<(crate::naming::Naming, String)>>,
 }
 
 pub fn now_ms() -> i64 {
@@ -929,7 +927,6 @@ impl Library {
             shared,
             user: Mutex::new(None),
             people_sig: Mutex::new(0),
-            naming: Mutex::new(None),
         };
         // Unsorted (Standard-Zone) gibt es in jeder eigenen Bibliothek von Anfang
         // an, auch in einem bestehenden Ordnersystem (0.33.1). Geteilte
@@ -1820,10 +1817,6 @@ impl Library {
 
     // ---- Dateinamen (F10, F11, 0.36.0) ----
 
-    pub fn set_naming(&self, naming: Option<(crate::naming::Naming, String)>) {
-        *self.naming.lock().unwrap() = naming;
-    }
-
     /// Plan fürs Umbenennen-Blatt: je Objekt alter Name, neuer Name nach Schema
     /// (leer bei „Original behalten“), Vorschlag aus dem Inhalt und ob der alte
     /// Name uneinheitlich ist. Die Nummer zählt pro Zone nach Ablagedatum.
@@ -1909,29 +1902,6 @@ impl Library {
             self.write_metadata()?;
         }
         Ok(done)
-    }
-
-    /// „Beim Ablegen umbenennen“: neuen Namen nach Schema geben, sonst bleibt er.
-    /// Holt nur dieses eine Objekt und zählt die Nummer per Abfrage, damit ein
-    /// Import vieler Dateien nicht jedes Mal die ganze Bibliothek liest.
-    fn auto_name(&self, rel: &str) -> String {
-        let Some((naming, library)) = self.naming.lock().unwrap().clone() else { return rel.to_string() };
-        if self.shared || !naming.on_save || !naming.active() {
-            return rel.to_string();
-        }
-        let Some(item) = self.items_under(Some(rel)).ok().and_then(|mut v| v.pop()) else { return rel.to_string() };
-        let nr: usize = {
-            let conn = self.conn.lock().unwrap();
-            conn.query_row(
-                "SELECT COUNT(*) FROM item WHERE substr(path, 1, length(?1) + 1) = ?1 || '/'",
-                params![item.zone],
-                |r| r.get::<_, i64>(0),
-            )
-            .unwrap_or(1)
-            .max(1) as usize
-        };
-        let Some(stem) = crate::naming::render(&naming, &crate::naming::Ctx { item: &item, library: &library, nr }) else { return rel.to_string() };
-        self.rename_items(&[(rel.to_string(), stem)]).ok().and_then(|mut d| d.pop()).map(|(_, n)| n).unwrap_or_else(|| rel.to_string())
     }
 
     /// Legt Dateien unter „Zuletzt gelöscht“ ab (.archiver/deleted/<Zeit>/<Pfad>).
@@ -2520,7 +2490,6 @@ impl Library {
         let rel = rel_path(&self.root, &dst);
         self.upsert_item(&rel, &hash, meta.len() as i64, mtime, added, &dst)?;
         self.mark_added_by(&hash)?;
-        self.auto_name(&rel);
         report.imported += 1;
         Ok(())
     }
@@ -2561,7 +2530,6 @@ impl Library {
         let rel = rel_path(&self.root, &dst);
         self.upsert_item(&rel, &hash, meta.len() as i64, mtime, added, &dst)?;
         self.mark_added_by(&hash)?;
-        let rel = self.auto_name(&rel);
         self.write_metadata()?;
         Ok((rel, false))
     }
@@ -3255,7 +3223,7 @@ mod tests {
     }
 
     #[test]
-    fn rename_and_auto_name() {
+    fn rename_only_on_request() {
         let tmp = tempfile::tempdir().unwrap();
         let root = tmp.path().join("Bib");
         let lib = Library::open(&root).unwrap();
@@ -3265,14 +3233,11 @@ mod tests {
         // Ab Werk bleibt der Name
         lib.import_files(&[src.join("IMG_1.png")], "Typo").unwrap();
         assert!(root.join("Typo/IMG_1.png").is_file());
-        // Schema an: neue Objekte heißen nach Schema
+        // Auch mit gewähltem Schema benennt der Import nie um (nur das Blatt, 0.36.4)
         let mut n = crate::naming::Naming::default();
         n.preset = "zone-nr".into();
-        n.on_save = true;
-        lib.set_naming(Some((n.clone(), "Bib".into())));
         lib.import_files(&[src.join("IMG_2.png")], "Typo").unwrap();
-        let names: Vec<String> = std::fs::read_dir(root.join("Typo")).unwrap().map(|e| e.unwrap().file_name().to_string_lossy().into_owned()).collect();
-        assert!(names.iter().any(|f| f == "typo_002.png") || names.iter().any(|f| f.starts_with("typo_")), "{names:?}");
+        assert!(root.join("Typo/IMG_2.png").is_file(), "Import behält den Namen");
         assert!(root.join("Typo/IMG_1.png").is_file(), "Vorhandenes bleibt");
         // Aufräumen: Plan, dann umbenennen, Datenbank folgt
         let plan = lib.name_plan(&["Typo/IMG_1.png".into()], &n, "Bib").unwrap();

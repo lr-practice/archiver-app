@@ -2271,7 +2271,7 @@
     }
     if (id === "names") {
       const n = state.naming;
-      return n && n.preset !== "original" ? t(NAME_PRESET_KEYS[n.preset]) + (n.onSave ? " · " + t("nameOnSaveShort") : "") : t("nameOriginal");
+      return n && n.preset !== "original" ? t(NAME_PRESET_KEYS[n.preset]) : t("nameOriginal");
     }
     if (id === "look") {
       const th = window.ArchiverI18n.theme();
@@ -4899,7 +4899,7 @@
     const lead = [size, formatBytes(item.bytes)].filter(Boolean).join(", ");
     head.appendChild(el("span", "lead", lead + "."));
     inner.appendChild(head);
-    if (!isNote(item) && !state.shared) {
+    if (!isNote(item)) {
       const slot = el("div");
       slot.hidden = true;
       inner.appendChild(slot);
@@ -5145,6 +5145,7 @@
   }
 
   function closeLightbox() {
+    closeMenus();
     noteLeave();
     $("lightbox").classList.remove("is-deleted");
     $("lbAction").hidden = false;
@@ -5210,6 +5211,11 @@
       if (bg && lbView.fitted && state.lightbox) closeLightbox();
     };
     stage.addEventListener("click", backdropClick);
+    $("lightbox").addEventListener("contextmenu", (e) => {
+      if (e.target.closest("input, textarea, [contenteditable], .lb-bar, .lb-info")) return;
+      e.preventDefault();
+      openLightboxMenu(e.clientX, e.clientY);
+    });
     $("lbMedia").addEventListener("click", backdropClick);
     // PDF: Zwei-Finger-Zoom bzw. ⌘ + Scrollen zoomt, Scrollen blättert
     $("lbMedia").addEventListener(
@@ -6254,6 +6260,37 @@
     renderAll();
   }
 
+  // ---- Rechtsklick in der Lightbox (0.36.4): Umbenennen, Öffnen, Quelle, Finder, Kopieren ----
+  function openLightboxMenu(x, y) {
+    const lb = state.lightbox;
+    const item = lightboxItem();
+    if (!lb || !item || lb.deleted || isNote(item)) return;
+    closeMenus();
+    closeMoreMenu();
+    selectOnly(item.path);
+    const menu = el("div", "zone-menu p-ctx-menu");
+    menu.addEventListener("click", (e) => e.stopPropagation());
+    menu.addEventListener("contextmenu", (e) => e.preventDefault());
+    const entry = (text, fn, key) => {
+      const b = button("zone-menu-item", text, () => {
+        closeMenus();
+        fn();
+      });
+      if (key) b.appendChild(el("span", "p-ctx-key", key));
+      menu.appendChild(b);
+    };
+    entry(t("renameItems"), () => openRenameSheet([item]));
+    menu.appendChild(el("div", "p-more-rule"));
+    entry(t("openFile"), () => invoke("open_file", { path: item.abs }).catch(fail));
+    if (item.pageUrl) entry(t("ctxSource"), () => invoke("open_url", { url: sourceUrl(item) }).catch(fail));
+    entry(t("reveal"), () => invoke("reveal", { path: item.abs }).catch(fail));
+    entry(t("ctxCopy"), () => copyImages([item]), "⌘C");
+    document.body.appendChild(menu);
+    const r = menu.getBoundingClientRect();
+    menu.style.left = Math.max(8, Math.min(x, window.innerWidth - r.width - 8)) + "px";
+    menu.style.top = Math.max(8, Math.min(y, window.innerHeight - r.height - 8)) + "px";
+  }
+
   // ---- Rechtsklick auf ein Bild: Vorschau, Öffnen, Quelle, Ablegen in, Kopieren … ----
   // Gilt für die Auswahl; liegt das Bild nicht darin, wird es allein ausgewählt.
   function openItemMenu(path, x, y) {
@@ -6306,7 +6343,7 @@
     menu.appendChild(grid);
     rule();
     if (isZone(state.focus) && !state.query.trim() && canEdit(state.focus)) entry(menu, t("newFolderWith"), () => newFolder(true));
-    if (!state.shared) entry(menu, t("renameItems"), () => openRenameSheet(items));
+    entry(menu, t("renameItems"), () => openRenameSheet(items));
     entry(menu, t("ctxCopy"), () => copyImages(items), "⌘C");
     if (one) entry(menu, t("reveal"), () => invoke("reveal", { path: one.abs }).catch(fail));
     entry(menu, t("pdfExport"), exportPdf, "⌘P");
@@ -6418,16 +6455,11 @@
       const apply = block(t("nameApply"));
       apply.appendChild(
         blockRow(
-          [el("div", null, t("nameOnSave")), el("div", "p-block-text nm-hint", t("nameOnSaveText"))],
-          choice([["on", t("setOn")], ["off", t("setOff")]], n.onSave ? "on" : "off", (id) => set({ onSave: id === "on" }))
-        )
-      );
-      apply.appendChild(
-        blockRow(
           [el("div", null, t("nameFlag")), el("div", "p-block-text nm-hint", t("nameFlagText"))],
           choice([["on", t("setOn")], ["off", t("setOff")]], n.flag ? "on" : "off", (id) => set({ flag: id === "on" }))
         )
       );
+      schema.appendChild(el("div", "p-block-text nm-hint", t("nameManual")));
       host.replaceChildren(schema, custom, apply);
     };
     draw();
@@ -6450,6 +6482,8 @@
     };
     const onKey = (e) => {
       if (e.target && e.target.tagName === "INPUT") return;
+      // Blatt über der Lightbox: Pfeile und Leertaste blättern nicht dahinter
+      if (state.lightbox) e.stopPropagation();
       if (e.key === "Escape") {
         e.preventDefault();
         e.stopPropagation();
@@ -6464,9 +6498,17 @@
       if (!list.length) return;
       try {
         const done = await invoke("rename_items", { items: list });
+        const wasOpen = state.lightbox;
+        const shown = wasOpen ? lightboxItem() : null;
         await refresh();
         state.selection = new Set(done.map(([, to]) => to));
         updateSelectionClasses();
+        if (wasOpen && shown) {
+          const to = (done.find(([from]) => from === shown.path) || [])[1] || shown.path;
+          const at = lbList(state.lightbox).findIndex((i) => i.path === to);
+          if (at >= 0) state.lightbox.index = at;
+          showLightboxItem();
+        }
         toast(t("nameDone", { n: done.length }));
       } catch (e) {
         fail(e);

@@ -21,8 +21,6 @@ pub struct Naming {
     pub date: String,
     pub lower: bool,
     pub prefix: String,
-    /// Beim Ablegen umbenennen (App und Extension)
-    pub on_save: bool,
     /// Uneinheitliche Namen (IMG_…, Bild (3)) markieren
     pub flag: bool,
     /// Sprache für Typ, Motiv und Farbe (de, en), von der App gesetzt
@@ -40,7 +38,6 @@ impl Default for Naming {
             date: "short".into(),
             lower: true,
             prefix: String::new(),
-            on_save: false,
             flag: true,
             lang: "de".into(),
             tz: 0,

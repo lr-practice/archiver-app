@@ -1,6 +1,6 @@
 # Archiver – Design-System
 
-Stand: App 0.36.3 · Extension 3.28.2
+Stand: App 0.36.4 · Extension 3.28.2
 
 Diese Datei hält fest, wie Archiver aussieht und warum. Sie gilt für die Mac-App
 (`app/src`) und die Chrome-Extension (`extension/`). Wer an der Oberfläche
@@ -508,18 +508,27 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
 
 ### 4.19 Dateinamen (App 0.36.0, `.nm-*`, `.rn-*`, `.lb-info-sugg`)
 - **Zweck:** Einheitliche Namen auf Wunsch, nie ungefragt. Ab Werk „Original
-  behalten“, „Beim Ablegen umbenennen“ aus.
+  behalten“. Seit 0.36.4 benennt nichts mehr beim Sichern oder Importieren um,
+  auch nicht über die Extension: Umbenannt wird nur im Blatt.
 - **Einstellungen › Dateinamen:** Blöcke „Schema“ (sechs Zeilen mit Punkt und
   Beispiel in Geist Mono, gewählt = gefüllter Punkt, Text `--p-text`, sonst
   `--p-dim`), „Eigenes Schema“ (Bausteine als Kästchen mit ‹ und ×, nicht
   benutzte als „+ Baustein“, darunter die Vorschau; jede Änderung dort wählt
-  das eigene Schema) und „Anwenden“ (Wörter statt Schalter, 4.7).
+  das eigene Schema) und „Aufräumen“ (Wörter statt Schalter, 4.7).
 - **Umbenennen-Blatt:** Rechtsklick auf die Auswahl › „Umbenennen …“. Blatt in
   `--menu-bg`/`--menu-shadow`, `--r-lg`, 760 px, blendet in 0.18 s ein, Grund
   abgedunkelt. Zeilen: Häkchen, Vorschaubild 40 px eckig, alter Name (Geist
   Mono, `--p-dim`, „uneinheitlich“ als Kästchen mit Linie), Pfeil, neuer Name
   (Fläche ink × 0.06, Klick = bearbeiten, gestrichelter Ring wie 4.1). Ein
-  Primärknopf „n umbenennen“ (4.8). Nicht in geteilten Bibliotheken.
+  Primärknopf „n umbenennen“ (4.8). Gilt seit 0.36.4 auch in geteilten
+  Bibliotheken. Im Blatt wählen die Chips ein anderes Schema, ohne die
+  Einstellung zu ändern. Das Blatt liegt über der Lightbox (z-index 90).
+- **Rechtsklick in der Lightbox (0.36.4):** dasselbe Menü wie 4.7
+  (`zone-menu p-ctx-menu`, `--menu-bg`, `--menu-shadow`), nur mit
+  „Umbenennen …“, Trennlinie, „Öffnen“, „Quelle“ (bei Seitenadresse),
+  „Im Finder zeigen“, „Kopieren ⌘C“. Gilt für das gezeigte Objekt. Nicht für
+  Notizen und nicht in „Zuletzt gelöscht“. Über Eingabefeldern, der Leiste und
+  der Info-Spalte bleibt das Systemmenü.
 - **Namensvorschlag (Info-Spalte, Details und Lightbox):** Kasten ink × 0.055
   über „Bildtext“, Überschrift Geist Mono 11 px, Name in Geist Mono 12.5 px,
   Begründung `--p-dim`, „Übernehmen“ (Primär) und „Ändern“. Erscheint, wenn

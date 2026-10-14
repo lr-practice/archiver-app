@@ -331,7 +331,6 @@ fn allow_external(app: &AppHandle, lib: &Library) {
 fn activate(app: &AppHandle, root: &Path) -> Result<(), String> {
     let lib = Arc::new(Library::open(root)?);
     lib.set_user(load_settings(app).user);
-    lib.set_naming(Some((load_settings(app).naming, folder_name(&root.to_string_lossy()))));
     // „Zuletzt gelöscht“: was älter als 7 Tage ist, geht in den Papierkorb des Macs
     let purge = lib.clone();
     std::thread::spawn(move || purge.purge_deleted(library::DELETED_DAYS));
@@ -557,13 +556,8 @@ fn naming_prefs(app: AppHandle) -> naming::Naming {
 }
 
 #[tauri::command]
-fn set_naming_prefs(app: AppHandle, state: State<'_, AppState>, prefs: naming::Naming) -> Result<(), String> {
-    update_settings(&app, |s| s.naming = prefs.clone())?;
-    if let Ok(lib) = current(&state) {
-        let name = folder_name(&lib.root.to_string_lossy());
-        lib.set_naming(Some((prefs, name)));
-    }
-    Ok(())
+fn set_naming_prefs(app: AppHandle, prefs: naming::Naming) -> Result<(), String> {
+    update_settings(&app, |s| s.naming = prefs.clone())
 }
 
 /// Vorschau fürs Umbenennen-Blatt und den Vorschlag in der Info-Spalte. `scheme`

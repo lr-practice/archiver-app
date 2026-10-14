@@ -1,5 +1,15 @@
 # Changelog
 
+## App 0.36.4 · Extension 3.28.2
+
+- Nichts wird mehr beim Sichern oder Importieren umbenannt. „Beim Ablegen
+  umbenennen“ ist entfallen, auch für die Extension. Umbenannt wird nur, wenn du
+  es im Umbenennen-Blatt bestätigst.
+- „Umbenennen …“ und der Namensvorschlag gibt es jetzt auch in geteilten
+  Libraries.
+- Die Lightbox hat ein Rechtsklick-Menü: Umbenennen …, Öffnen, Quelle, Im Finder
+  zeigen, Kopieren.
+
 ## App 0.36.3 · Extension 3.28.2
 
 - Namensvorschlag inhaltlicher, alles lokal: Absender und Titel der Seite,
