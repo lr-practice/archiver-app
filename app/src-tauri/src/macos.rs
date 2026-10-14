@@ -7,6 +7,9 @@ use objc2_foundation::NSString;
 // ---- Zwischenablage ----
 
 /// Bilddateien als Bilder in die Zwischenablage (TIFF/PNG je nach Ziel-App).
+/// Bei mehreren Objekten (0.36.2) kommen die Dateien selbst dazu: ⌘V liest aus
+/// der Zwischenablage sonst nur das erste Bild (read_pasteboard), und Videos
+/// fielen ganz heraus. Finder und Archiver nehmen dann alle Dateien.
 pub fn copy_images(paths: &[String]) -> bool {
     unsafe {
         let images: *mut AnyObject = msg_send![class!(NSMutableArray), array];
@@ -21,6 +24,16 @@ pub fn copy_images(paths: &[String]) -> bool {
             let _: () = msg_send![images, addObject: image];
             let _: () = msg_send![image, release];
             count += 1;
+        }
+        if paths.len() > 1 {
+            for path in paths {
+                let path = NSString::from_str(path);
+                let url: *mut AnyObject = msg_send![class!(NSURL), fileURLWithPath: &*path];
+                if !url.is_null() {
+                    let _: () = msg_send![images, addObject: url];
+                    count += 1;
+                }
+            }
         }
         if count == 0 {
             return false;
