@@ -1,5 +1,9 @@
 # Changelog
 
+## Nächste Version
+
+- Neue Unterzeile: „A Visual Library for Creative Thinking“ im Startbild, „A visual library for creative thinking“ und „Eine visuelle Bibliothek für kreatives Denken“ im Info-Text von App und Extension.
+
 ## App 0.31.2 (14.10.2026)
 
 Menschen finden.
