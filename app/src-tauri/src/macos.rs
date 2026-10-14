@@ -31,6 +31,55 @@ pub fn copy_images(paths: &[String]) -> bool {
     }
 }
 
+/// ⌘V (0.32): Dateien aus dem Finder (Pfade), sonst Bilddaten (PNG vor TIFF),
+/// sonst Text. Kopiert der Finder Dateien, liegen auch ihr Symbol und ihr Name
+/// in der Zwischenablage; die Dateien gehen deshalb vor (library.rs paste_into).
+pub fn read_pasteboard() -> (Vec<String>, Option<Vec<u8>>, Option<String>) {
+    objc2::rc::autoreleasepool(|_| unsafe {
+        let board: *mut AnyObject = msg_send![class!(NSPasteboard), generalPasteboard];
+        let mut files = Vec::new();
+        let items: *mut AnyObject = msg_send![board, pasteboardItems];
+        if !items.is_null() {
+            let ty = NSString::from_str("public.file-url");
+            let n: usize = msg_send![items, count];
+            for i in 0..n {
+                let item: *mut AnyObject = msg_send![items, objectAtIndex: i];
+                let s: *mut AnyObject = msg_send![item, stringForType: &*ty];
+                if s.is_null() {
+                    continue;
+                }
+                let url: *mut AnyObject = msg_send![class!(NSURL), URLWithString: s];
+                if url.is_null() {
+                    continue;
+                }
+                let path: *mut AnyObject = msg_send![url, path];
+                let path = rust_string(path);
+                if !path.is_empty() {
+                    files.push(path);
+                }
+            }
+        }
+        let mut image = None;
+        for t in ["public.png", "public.tiff"] {
+            let ty = NSString::from_str(t);
+            let data: *mut AnyObject = msg_send![board, dataForType: &*ty];
+            if data.is_null() {
+                continue;
+            }
+            let len: usize = msg_send![data, length];
+            let ptr: *const std::ffi::c_void = msg_send![data, bytes];
+            if !ptr.is_null() && len > 0 {
+                image = Some(std::slice::from_raw_parts(ptr as *const u8, len).to_vec());
+                break;
+            }
+        }
+        let ty = NSString::from_str("public.utf8-plain-text");
+        let s: *mut AnyObject = msg_send![board, stringForType: &*ty];
+        let text = Some(rust_string(s)).filter(|t| !t.trim().is_empty());
+        (files, image, text)
+    })
+}
+
 /// Textkarte: Text und Bild als ein Eintrag. Texteditoren nehmen den Text,
 /// Figma, Photoshop & Co. das Bild.
 pub fn copy_text_image(path: &str, text: &str) -> bool {
@@ -86,6 +135,23 @@ unsafe fn rust_string(ns: *mut AnyObject) -> String {
     std::ffi::CStr::from_ptr(ptr).to_string_lossy().into_owned()
 }
 
+/// Sicherheit und Höhe (Anteil am Bild) aller Treffer einer Erkennung
+unsafe fn observations(request: *mut AnyObject) -> Vec<(f32, f64)> {
+    let results: *mut AnyObject = msg_send![request, results];
+    if results.is_null() {
+        return Vec::new();
+    }
+    let n: usize = msg_send![results, count];
+    (0..n)
+        .map(|i| {
+            let obs: *mut AnyObject = msg_send![results, objectAtIndex: i];
+            let c: f32 = msg_send![obs, confidence];
+            let r: objc2_foundation::NSRect = msg_send![obs, boundingBox];
+            (c, r.size.height)
+        })
+        .collect()
+}
+
 /// Erkennt, was auf einem Bild ist (englische Begriffe von Vision) und welcher
 /// Text darin steht. Leere Ergebnisse, wenn Vision nichts liefert.
 pub fn analyze_image(path: &std::path::Path) -> (Vec<String>, String) {
@@ -103,6 +169,12 @@ pub fn analyze_image(path: &std::path::Path) -> (Vec<String>, String) {
         let classify: *mut AnyObject = msg_send![classify, init];
         let ocr: *mut AnyObject = msg_send![class!(VNRecognizeTextRequest), alloc];
         let ocr: *mut AnyObject = msg_send![ocr, init];
+        // Gesichter und Personen eigens (0.31.2): die Klassifikation erkennt
+        // Menschen auf Plakaten, in Grafiken und Ausschnitten oft gar nicht.
+        let faces: *mut AnyObject = msg_send![class!(VNDetectFaceRectanglesRequest), alloc];
+        let faces: *mut AnyObject = msg_send![faces, init];
+        let humans: *mut AnyObject = msg_send![class!(VNDetectHumanRectanglesRequest), alloc];
+        let humans: *mut AnyObject = msg_send![humans, init];
         // VNRequestTextRecognitionLevelAccurate
         let _: () = msg_send![ocr, setRecognitionLevel: 0isize];
         let _: () = msg_send![ocr, setUsesLanguageCorrection: true];
@@ -116,6 +188,8 @@ pub fn analyze_image(path: &std::path::Path) -> (Vec<String>, String) {
         let requests: *mut AnyObject = msg_send![class!(NSMutableArray), array];
         let _: () = msg_send![requests, addObject: classify];
         let _: () = msg_send![requests, addObject: ocr];
+        let _: () = msg_send![requests, addObject: faces];
+        let _: () = msg_send![requests, addObject: humans];
         let ok: bool = msg_send![handler, performRequests: requests, error: std::ptr::null_mut::<*mut AnyObject>()];
 
         let mut labels = Vec::new();
@@ -148,12 +222,46 @@ pub fn analyze_image(path: &std::path::Path) -> (Vec<String>, String) {
                 }
             }
         }
+        // Ein winziges Gesicht im Hintergrund zählt nicht, ein großes macht ein Porträt
+        let mut face = 0f32;
+        let mut face_h = 0f64;
+        let mut person = 0f32;
+        if ok {
+            for (c, h) in observations(faces) {
+                if h >= 0.04 {
+                    face = face.max(c);
+                    face_h = face_h.max(h);
+                }
+            }
+            for (c, h) in observations(humans) {
+                if h >= 0.15 {
+                    person = person.max(c);
+                }
+            }
+        }
+        let mut add = |name: &str, c: f32| {
+            if c < 0.3 {
+                return;
+            }
+            match labels.iter_mut().find(|(n, _)| n == name) {
+                Some(l) => l.1 = l.1.max(c),
+                None => labels.push((name.to_string(), c)),
+            }
+        };
+        add("face", face);
+        add("people", face.max(person));
+        if face_h >= 0.3 {
+            add("portrait", face);
+        }
         let _: () = msg_send![handler, release];
         let _: () = msg_send![classify, release];
         let _: () = msg_send![ocr, release];
+        let _: () = msg_send![faces, release];
+        let _: () = msg_send![humans, release];
 
         labels.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
-        let labels = labels.into_iter().take(16).map(|(l, _)| l.replace('_', " ")).collect();
+        // Mit Sicherheit („poster:0.92“), damit die Suche unsichere Motive auslassen kann (0.31.1)
+        let labels = labels.into_iter().take(16).map(|(l, c)| format!("{}:{c:.2}", l.replace('_', " "))).collect();
         (labels, text.join(" "))
     })
 }
@@ -515,10 +623,19 @@ pub unsafe fn panel_center_on_mouse_screen(window: *mut AnyObject) {
 }
 
 /// Zonenleiste: volle Breite unten auf dem Bildschirm mit dem Zeiger.
-pub unsafe fn panel_bottom_of_mouse_screen(window: *mut AnyObject, height: f64) {
+pub unsafe fn panel_bottom_of_mouse_screen(window: *mut AnyObject, height: f64, animate: bool) {
     let Some(vf) = mouse_screen_frame() else { return };
     let rect = NSRect::new(vf.origin, NSSize::new(vf.size.width, height.min(vf.size.height)));
-    let _: () = msg_send![window, setFrame: rect, display: true];
+    let _: () = msg_send![window, setFrame: rect, display: true, animate: animate];
+}
+
+/// Höhe des Zeigers über der Unterkante des sichtbaren Bildschirms (über dem
+/// Dock); negativ, wenn er im Dock steht (Zonenleiste als Streifen, 0.32)
+pub fn mouse_above_bottom() -> Option<f64> {
+    unsafe {
+        let mouse: NSPoint = msg_send![class!(NSEvent), mouseLocation];
+        mouse_screen_frame().map(|vf| mouse.y - vf.origin.y)
+    }
 }
 
 /// Linke Maustaste gedrückt? Und der Zähler der Drag-Zwischenablage.

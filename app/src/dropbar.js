@@ -90,21 +90,34 @@
     state.target = card;
   }
 
+  const hold = (ms) => invoke("dropbar_hold", { ms }).catch(() => {});
+
+  // „Gesichert“ erst, wenn es wirklich gesichert ist (0.31.0). Bis dahin bleibt
+  // die Leiste stehen; ein Fehler bleibt lesbar stehen, bevor sie ausblendet.
   async function drop(paths, card) {
     mark(null);
     if (!card || !paths.length || !state.snap) return;
     const zone = card.dataset.zone;
-    card.classList.add("landed");
-    card.querySelector(".db-hint").textContent = t("dropSaved", { zone: zoneName(zone) });
-    $("bar").classList.add("leaving");
+    const hint = card.querySelector(".db-hint");
+    hold(60000);
+    card.classList.add("busy");
+    hint.textContent = t("dropBusy");
     const root = state.snap.root + "/";
     const own = paths.filter((p) => p.startsWith(root)).map((p) => p.slice(root.length));
     const foreign = paths.filter((p) => !p.startsWith(root));
     try {
       if (own.length) await invoke("move_items", { paths: own, zone });
       if (foreign.length) await invoke("import_files", { paths: foreign, zone });
+      card.classList.replace("busy", "landed");
+      hint.textContent = t("dropSaved", { zone: zoneName(zone) });
+      hold(500);
+      $("bar").classList.add("leaving");
     } catch (e) {
-      console.error(e);
+      invoke("log_error", { area: "dropbar", msg: String(e) }).catch(() => {});
+      card.classList.replace("busy", "failed");
+      hint.textContent = t("dropFailed", { msg: String(e) });
+      hold(3000);
+      setTimeout(() => $("bar").classList.add("leaving"), 2500);
     }
   }
 
@@ -120,9 +133,12 @@
   TAURI.event.listen("dropbar-show", async () => {
     await load();
     render();
+    $("bar").classList.add("strip");
   });
+  // 0.32: Zeiger im Streifen → volle Leiste, darüber hinaus → wieder Streifen
+  TAURI.event.listen("dropbar-tall", (e) => $("bar").classList.toggle("strip", !e.payload));
   TAURI.event.listen("dropbar-release", () => {
-    if (!document.querySelector(".landed")) $("bar").classList.add("leaving");
+    if (!document.querySelector(".landed, .busy, .failed")) $("bar").classList.add("leaving");
   });
   window.addEventListener("storage", (e) => {
     if (e.key === "archiver.zoneOrder") state.dirty = true;

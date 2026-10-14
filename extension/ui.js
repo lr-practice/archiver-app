@@ -413,6 +413,41 @@
       });
     }
 
+    // Vorschau aus der App erst holen, wenn die Karte ins Bild kommt (3.24.0).
+    // Das Ergebnis bleibt am Eintrag, damit die Lightbox es wiederverwendet.
+    const previewWaiting = new Map(); // img -> item
+    const previewSeen = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (!entry.isIntersecting) continue;
+          const img = entry.target;
+          const item = previewWaiting.get(img);
+          previewSeen.unobserve(img);
+          previewWaiting.delete(img);
+          if (item) fetchPreview(item, (url) => (img.src = url));
+        }
+      },
+      { rootMargin: "400px" }
+    );
+    function fetchPreview(item, done) {
+      chrome.runtime.sendMessage({ type: "app-preview", path: item.preview, hash: item.hash }, (r) => {
+        void chrome.runtime.lastError;
+        const url = (r && r.url) || item.fallback;
+        if (!url) return done("");
+        item.url = url;
+        item.preview = null;
+        done(url);
+      });
+    }
+    function showImage(img, item) {
+      if (item.url || !item.preview) {
+        img.src = item.url || item.fallback || "";
+        return;
+      }
+      previewWaiting.set(img, item);
+      previewSeen.observe(img);
+    }
+
     function loadFolder(folderKey, cardGrid, countEl, cover) {
       chrome.runtime.sendMessage({ type: "list-folder-downloads", folder: folderKey }, (response) => {
         const items = (response && response.items) || [];
@@ -427,10 +462,10 @@
           cover.hidden = !items.length;
           for (const item of items.slice(0, items.length >= 3 ? 3 : 1)) {
             const img = el("img");
-            img.src = item.url;
             img.loading = "lazy";
             img.draggable = false;
             img.addEventListener("error", () => img.remove());
+            showImage(img, item);
             cover.appendChild(img);
           }
           return;
@@ -447,13 +482,13 @@
           cell.title = (item.filename || "").split(/[\\/]/).pop() || "";
 
           const img = el("img");
-          img.src = item.url;
           img.loading = "lazy";
           img.draggable = false; // eigenes Maus-basiertes Verschieben statt nativer Drag-API
           img.addEventListener("error", () => {
             cell.classList.add("broken");
             cell.appendChild(el("span", null, cell.title || t("imageUnavailable")));
           });
+          showImage(img, item);
           cell.appendChild(img);
 
           const finderBtn = button("zoom-btn", "+", (e) => {
@@ -505,7 +540,9 @@
       const count = lightbox.items.length;
       lightbox.index = ((index % count) + count) % count;
       const item = lightbox.items[lightbox.index];
-      lightbox.img.src = item.url;
+      const shown = lightbox;
+      if (item.url || !item.preview) lightbox.img.src = item.url || item.fallback || "";
+      else fetchPreview(item, (url) => lightbox === shown && shown.items[shown.index] === item && (shown.img.src = url));
       renderLightboxCaption(lightbox.caption, item, lightbox.index, count, "lightbox-source");
     }
 
@@ -746,6 +783,7 @@
       if (onRecordingChange) onRecordingChange(true);
 
       const onKeydown = (e) => {
+        if (!e.isTrusted) return; // nur echte Tasten, keine von der Seite erzeugten Events
         e.preventDefault();
         e.stopPropagation();
         if (e.key === "Escape") {

@@ -1,5 +1,127 @@
 # Changelog
 
+## App 0.33.2 (14.10.2026)
+
+- Unsorted steht auch in Bibliotheken mit eigener Reihenfolge vorn als erste
+  Active Zone, wenn es neu dazukommt. Wer es danach verschiebt, behält seinen
+  Platz.
+
+## App 0.33.1 (14.10.2026)
+
+- Unsorted: kurz „Nach 7 Tagen gelöscht“, in der Kopfzeile, im Index und
+  jetzt auch auf der Zonenkarte in der Übersicht.
+- Einstellungen › Bibliothek: wählbar, welche Zone sich nach 7 Tagen leert
+  (ab Werk Unsorted, oder „Aus“).
+- Unsorted entsteht mit jeder Bibliothek, auch in einem bestehenden
+  Ordnersystem, und steht als erste Zone vorn.
+- Bild mit Text: farbiger Punkt unten rechts statt Eselsohr.
+
+## App 0.33.0 (14.10.2026)
+
+Unsorted zeigt seine Frist, Bildtext ruhiger im Raster.
+
+- Unsorted: Die Kopfzeile sagt nur noch, dass hier nach 7 Tagen aufgeräumt
+  wird. Im Index steht „Leert sich nach 7 Tagen“ hinter dem Namen. Die letzten
+  zwei Tage zeigt jedes Objekt oben links „noch n T.“ in Rot.
+- Bild mit Text: kein Textauszug mehr unter dem Bild, stattdessen ein
+  Eselsohr unten rechts in der Farbe der Textkarte. Der Chip „(+ Text)“
+  entfällt.
+- ⌘D: Unter „Bildtext“ lässt sich die Farbe der Textkarte wählen, wie bei
+  Textkarten und Notizen.
+
+## App 0.32.1 · Extension 3.25.3 (14.10.2026)
+
+Leiste wie in der App, Ziehen überall.
+
+- Zonenleiste am ganzen Mac ist ab Werk aus; einschalten unter
+  Einstellungen › Tray. Auch bei bisherigen Installationen aus, bis man sie
+  selbst wieder einschaltet.
+- Extension 3.25.1: Die Seite scrollt beim Ziehen an den unteren Rand nicht
+  mehr unter der Leiste weg, und Ablagen der Seite darunter greifen nicht mehr
+  mit. Auch beim Ziehen von Text und auf Instagram fährt die Leiste jetzt aus
+  dem Streifen hoch.
+- Extension 3.25.2: Zonenkarten genau wie in der Leiste der App (gestrichelter
+  Ring statt Outline, „Downloads“ in derselben Schrift). Streifen 90 statt
+  30 px, in App und Extension: dieselbe Karte, die unten hereinragt. Die
+  Leiste steht beim ersten Ziehen sofort (lädt nicht erst nach) und kommt
+  früher auf langsamen Seiten. Nach einem Update zeigt ein noch offener Tab
+  keine alte Leiste mehr.
+- Extension 3.25.3: Ziehen klappt auch auf Seiten, die Maus- und
+  Ziehen-Ereignisse selbst abfangen (Archiver hört jetzt als Erstes zu, am
+  Fenster statt am Dokument). Instagram-Stories: gesichert wird die
+  Originaldatei (Foto oder Video) aus den Mediendaten statt eines Standbilds.
+
+## App 0.32.0 · Extension 3.25.0 (14.10.2026)
+
+Ablegen, ohne dass etwas im Weg ist.
+
+- Zonenleiste beim Ziehen, am Mac und in der Extension im Browser: Sie erscheint erst als 30 px schmaler Streifen am unteren Rand, Nummer und Name in einer Zeile. Darüber bleibt alles frei, etwa das Eingabefeld eines Chats. Fährt der Zeiger in den Streifen, kommt die volle Leiste; weiter oben wird sie wieder Streifen.
+- ⌘V legt die Zwischenablage in die offene Zone oder ihren Ordner: Dateien aus dem Finder, kopierte Bilder und Screenshots, Text als Textkarte (benannt nach seinen ersten Wörtern). Auf der Startseite landet es in Unsorted. Im Tray mit ⌘V in der offenen Zone, ⌘C kopiert dort das gewählte Objekt.
+- Unsorted räumt sich selbst auf: Was 7 Tage dort liegt, kommt unter „Zuletzt gelöscht“ und lässt sich von dort noch 7 Tage wiederherstellen. Die Frist zählt ab dem Tag, an dem es in Unsorted auftaucht, für alles Vorhandene also ab dem ersten Start mit 0.32. Geteilte Bibliotheken bleiben unberührt. Der Kopf von Unsorted sagt es dazu.
+- Tray: Unterordner einer Zone stehen als Karten über den Objekten, ↵ oder Klick öffnet, ⌫ geht eine Ebene hoch. Der gestrichelte Ring der ersten Reihe wird oben nicht mehr abgeschnitten. Active Zones sind so hoch wie die Karten im Index.
+- Neue Unterzeile: „A Visual Library for Creative Research“ im Startbild, „A visual library for creative research“ bzw. „Eine visuelle Bibliothek für kreative Recherche“ im Info-Text von App und Extension.
+
+## App 0.31.2 (14.10.2026)
+
+Menschen finden.
+
+- Gesichter und Personen erkennt die App jetzt mit einer eigenen Erkennung. Bisher kamen sie nur aus der allgemeinen Bilderkennung, die Menschen auf Plakaten, in Grafiken und Ausschnitten oft gar nicht meldet. Ein großes Gesicht gilt zusätzlich als Porträt.
+- „Frau“, „Mann“ und „Kind“ finden Bilder mit Personen. Ein Geschlecht erkennt macOS nicht, daher findet „Frau“ alle Personen. „Kopf“ und „Gesicht“ finden Gesichter.
+- Alle Bilder laufen dafür einmal neu durch die Erkennung. Bis sie durch ist, steht in der Filterzeile „Bilderkennung: noch n von m“.
+
+## App 0.31.1 (14.10.2026)
+
+Genauere Suche. App und Tray suchen jetzt gleich.
+
+- Gesucht wird nach ganzen Wörtern und ihren Formen: „Kreise“, „Kreisen“ und „Kreis“ finden dasselbe, „rote“ findet Rot. Umlaute gehen auch als ae/oe/ue, ß als ss.
+- Keine Treffer mehr mitten im Wort: „rot“ findet weder „Brot“ noch „Protokoll“. Wortanfänge zählen nur beim Wort, das du gerade tippst.
+- Wortteile nur in Namen, etwa „Entwurf“ in „Plakatentwurf“. Dateinamen werden an Großbuchstaben und Ziffern getrennt („KonzertPlakat2024“).
+- Erkannte Motive zählen erst ab 50 % Sicherheit, in Suche und Motiv-Filter. Bisher reichten 30 %, daher viele falsche Treffer bei „Mensch“, „Pflanze“ und Ähnlichem. Bilder mit älterer Analyse werden dafür einmal im Hintergrund neu erkannt.
+- Text im Bild zählt nur als ganzes Wort, Füllwörter wie „mit“ oder „und“ werden übersprungen.
+- Treffer im Namen stehen vor Treffern im Bildinhalt, die ganze Suche im Namen ganz vorn. Der Tray sortiert jetzt auch nach Relevanz.
+
+## App 0.31.0 · Extension 3.24.0 (13.10.2026)
+
+Stabilitäts-Release nach dem Prüfbericht zu 0.30.1. Keine neuen Funktionen, dafür weniger Datenverlust, weniger stille Fehler und mehr Tempo bei großen Bibliotheken.
+
+Sicherheit:
+- Die Extension reagiert nur noch auf echte Eingaben. Eine Webseite kann kein Overlay öffnen, keine Zonenleiste einblenden und nichts in deine Bibliothek sichern. Das Overlay ist für die Seite unsichtbar (geschlossenes Shadow DOM).
+- Die Brücke übernimmt nur Dateien aus Downloads/Archiver-Transfer, nie einen beliebigen Pfad auf dem Mac. Zonennamen mit „..“ werden abgelehnt.
+- Rechte wie Zonen anlegen oder Galerie lesen hat nur noch die Seite selbst, nicht eingebettete Frames.
+
+Externe Zonen:
+- Ein abgezogenes Laufwerk oder ein umbenannter Projektordner zeigt die Zone als „offline“, statt ihre Objekte samt Bildtexten aus der Bibliothek zu löschen. Dasselbe gilt für Ordner, die gerade nicht lesbar sind.
+- Bilder aus externen Zonen erscheinen wieder in App und Observer.
+- Systemordner, ganze Laufwerke und ineinanderliegende Zonen werden abgelehnt, mit Hinweis.
+
+Dateien:
+- Verschieben auf ein anderes Laufwerk kopiert erst vollständig und löscht dann das Original. Bricht es ab, bleibt das Original unangetastet.
+- metadata.json, zones.json und die Einstellungen werden atomar geschrieben, ein Absturz hinterlässt keine halbe Datei.
+- Zitat-Text, Löschen mehrerer Objekte und Umbenennen einer Zone nur in Groß/Kleinschreibung funktionieren zuverlässig. Eigene Reihenfolge, Standard-Zone und Hot Zones ziehen beim Umbenennen mit.
+- „Zuletzt gelöscht“ greift nur noch auf Dateien im eigenen Papierkorb zu.
+- Jede Bibliothek merkt sich ihre eigene Zonen-Reihenfolge. Bisher übernahm eine Bibliothek beim Wechsel die Reihenfolge der vorigen.
+
+Fehler sichtbar:
+- Protokoll unter ~/Library/Logs/Archiver/archiver.log.
+- Fehler beim Einlesen erscheinen als Hinweis, statt still zu verschwinden.
+- Die Zonenleiste am Mac sagt „Gesichert“ erst, wenn es gesichert ist, sonst „Nicht gesichert“ mit Grund.
+- Notizen zeigen „Nicht gesichert“ und versuchen es erneut.
+- Eine beschädigte Datenbank wird beiseitegelegt und neu aufgebaut. Kaputte Einstellungen werden als settings.json.broken aufgehoben.
+- Ein Bild, an dem die Vorschau abstürzt, legt den Vorschau-Dienst nicht mehr lahm.
+
+Tempo:
+- Die Extension fragt Zonen und Galerie seltener ab, die App liest dafür nicht mehr jedes Mal den ganzen Ordner ein. Galerie-Vorschauen laden erst, wenn sie sichtbar werden.
+- Die Startseite rechnet „zuletzt gesichert“ einmal statt pro Zeile. Lange PDFs geben Speicher frei. Verschieben und Löschen blockieren die Oberfläche nicht mehr.
+
+Extension 3.24.0:
+- Antwortet die App nicht, obwohl sie schon verbunden war, sagt die Extension, dass das Bild in Downloads liegt, statt es still dort abzulegen.
+- Nicht übernommene Übergaben werden aus Archiver-Transfer geräumt.
+- Nach einem Extension-Update sagt die Seite „Bitte neu laden“, statt nichts zu tun.
+- Das Rechtsklickmenü zeigt auch leere Ordner.
+
+Veröffentlichen:
+- Das Auto-Update an alle Tester geht nur noch raus, wenn beim Start des Workflows „publish“ angehakt ist. Alle Actions sind auf feste Commits gepinnt.
+
 ## App 0.30.1 · Extension 3.23.0 (13.10.2026)
 
 Bildtext in der Lightbox:

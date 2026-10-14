@@ -187,7 +187,7 @@ function hostCall(cmd, args = {}) {
         hostPending.delete(msg.id);
         clearTimeout(pending.timer);
         if (msg.ok) pending.resolve(msg);
-        else pending.reject(new Error(msg.error || "App-Fehler"));
+        else pending.reject(Object.assign(new Error(msg.error || "App-Fehler"), { fromApp: true }));
       });
       port.onDisconnect.addListener(() => {
         const err = new Error((chrome.runtime.lastError && chrome.runtime.lastError.message) || "App getrennt");
@@ -231,7 +231,38 @@ async function appBridge() {
     if (r.library) info = { library: r.library, name: r.name || "Archiver", version: r.version, libraries: Array.isArray(r.libraries) ? r.libraries : [] };
   } catch {}
   bridgeCache = { at: Date.now(), info };
+  if (info) {
+    // Ab jetzt weiß die Extension: hier gibt es die App. Fällt sie später aus,
+    // wird nicht mehr still in Downloads gesichert (3.24.0)
+    storageGet({ appSeen: false }).then((s) => !s.appSeen && storageSet({ appSeen: true }));
+    sweepStrayTransfers();
+  }
   return info;
+}
+
+// Übergaben, auf die die App nicht geantwortet hat, liegen noch in
+// Downloads/Archiver-Transfer. Sobald die App wieder da ist und die Datei nach
+// zwei Minuten immer noch dort liegt, hat sie sie nicht übernommen: weg damit.
+const STRAY_AFTER_MS = 2 * 60 * 1000;
+async function noteStrayTransfer(...ids) {
+  const { strayTransfers } = await storageGet({ strayTransfers: [] });
+  const list = (Array.isArray(strayTransfers) ? strayTransfers : []).concat(ids.filter((id) => id != null).map((id) => ({ id, at: Date.now() })));
+  await storageSet({ strayTransfers: list.slice(-200) });
+}
+async function sweepStrayTransfers() {
+  const { strayTransfers } = await storageGet({ strayTransfers: [] });
+  if (!Array.isArray(strayTransfers) || !strayTransfers.length) return;
+  const keep = [];
+  for (const entry of strayTransfers) {
+    if (Date.now() - entry.at < STRAY_AFTER_MS) {
+      keep.push(entry);
+      continue;
+    }
+    const [item] = await searchDownloads({ id: entry.id });
+    if (item && item.exists !== false && String(item.filename).includes(TRANSFER_DIR)) await removeFile(entry.id);
+    await eraseDownload(entry.id);
+  }
+  await storageSet({ strayTransfers: keep });
 }
 
 // Zonen der Bibliothek in der Reihenfolge der App. Die ersten vier („hot“)
@@ -241,12 +272,28 @@ async function appBridge() {
 let bridgeDefaultZone = null; // Standard-Zone der App (Standard: Unsorted)
 let bridgeFolders = {}; // Zone → Ordner darin (bis zwei Ebenen), fürs Rechtsklickmenü
 
+// Zonenantwort der App, kurz zwischengespeichert: jedes Ziehen und jede
+// Overlay-Ansicht fragte sonst neu, und die App las dafür den Ordner ein
+// (3.24.0). Nach Sichern, Verschieben und neuer Zone wird sie verworfen.
+const ZONES_CACHE_MS = 10000;
+const zonesCache = new Map(); // Bibliothek ("" = aktive) -> { at, promise }
+function hostZones(library) {
+  const key = library || "";
+  const hit = zonesCache.get(key);
+  if (hit && Date.now() - hit.at < ZONES_CACHE_MS) return hit.promise;
+  const promise = hostCall("zones", library ? { library } : {});
+  zonesCache.set(key, { at: Date.now(), promise });
+  promise.catch(() => zonesCache.delete(key));
+  return promise;
+}
+const forgetZones = () => zonesCache.clear();
+
 // Zonen einer anderen Bibliothek (⇧ beim Ziehen): nur die Active Zones zählen
 async function libraryZones(library) {
   const info = await appBridge();
   if (!info) return { app: false };
   const libraries = info.libraries || [];
-  const r = await hostCall("zones", { library: library || null });
+  const r = await hostZones(library);
   const zones = (r.zones || []).map((z) => z.path);
   const hot = Array.isArray(r.hot) && r.hot.length ? r.hot.filter((n) => zones.includes(n)) : zones.slice(0, 4);
   return { app: true, libraries, library: library || null, zones, hot, alpha: typeof r.alpha === "number" ? r.alpha : null };
@@ -267,7 +314,7 @@ async function getZones() {
   const info = await appBridge();
   if (info) {
     try {
-      const r = await hostCall("zones");
+      const r = await hostZones(null);
       const zones = (r.zones || []).map((z) => z.path);
       bridgeDefaultZone = r.default || null;
       const hot = Array.isArray(r.hot) ? r.hot.filter((n) => zones.includes(n)) : zones.slice(0, 4);
@@ -354,6 +401,7 @@ async function saveToApp(message, sender) {
       library: message.library || null,
     });
     if (!message.library) rememberRecent(zone || bridgeDefaultZone);
+    forgetZones();
     await eraseDownload(id);
     if (archive) await eraseDownload(archive.id); // Datei liegt jetzt in der Bibliothek, Eintrag im Verlauf wäre tot
     // Gleiches Bild schon in der Bibliothek: nicht doppelt ablegen, sagen wo es liegt
@@ -364,24 +412,50 @@ async function saveToApp(message, sender) {
   } catch (err) {
     console.warn("[Archiver] Übergabe an die App fehlgeschlagen:", err.message);
     bridgeCache.at = 0;
-    sendFeedback(tabId, frameId, t("appSaveFailed"), false);
+    // Hat die App abgelehnt, liegt die Datei ungenutzt im Zwischenordner: sofort
+    // aufräumen. Ohne Antwort könnte sie noch übernehmen, also später (3.24.0)
+    if (err.fromApp) {
+      await removeFile(id);
+      await eraseDownload(id);
+      if (archive) {
+        await removeFile(archive.id);
+        await eraseDownload(archive.id);
+      }
+    } else {
+      await noteStrayTransfer(id, archive && archive.id);
+    }
+    sendFeedback(tabId, frameId, t("appSaveFailed") + (err.fromApp && err.message ? ": " + err.message : ""), false);
     return { ok: false };
   }
 }
 
+// Liste einer Zone aus der App. Vorschauen kommen nicht mehr alle vorab mit
+// (bis zu 500 Bilder je Zone, auch für die Übersicht mit nur drei sichtbaren):
+// die Galerie holt sie einzeln, sobald eine Karte sichtbar wird (3.24.0).
+const LIST_MAX = 500;
 async function listAppFolder(zone) {
-  const r = await hostCall("list", { zone: zone || null });
-  const items = await Promise.all(
-    (r.items || []).map(async (it) => ({
+  const raw = [];
+  let offset = 0;
+  do {
+    const r = await hostCall("list", { zone: zone || null, offset });
+    raw.push(...(r.items || []));
+    offset = typeof r.next === "number" && r.next > offset ? r.next : null;
+  } while (offset != null && raw.length < LIST_MAX);
+  const items = raw.map((it) => {
+    const cached = !it.quote && previewCache.get(it.hash);
+    return {
       id: it.path,
-      url: it.quote ? textPreview(it.quote, it.tone, it.hash) : (await appPreview(it)) || it.imageUrl || "",
+      url: it.quote ? textPreview(it.quote, it.tone, it.hash) : cached || "",
+      preview: it.quote || cached ? null : it.path,
+      hash: it.hash,
+      fallback: it.imageUrl || null,
       filename: it.path,
       inHistory: true,
       pageUrl: it.pageUrl || null,
       pageTitle: it.pageTitle || null,
       ts: it.ts || null,
-    }))
-  );
+    };
+  });
   return { items };
 }
 
@@ -434,6 +508,7 @@ async function appPreview(it) {
 async function moveInApp(path, targetZone) {
   try {
     const r = await hostCall("move", { paths: [path], zone: targetZone || bridgeDefaultZone || "Unsorted" });
+    forgetZones();
     return { ok: true, newId: (r.moved || [])[0] || path };
   } catch (err) {
     return { ok: false, error: err.message || t("moveFailed") };
@@ -443,6 +518,7 @@ async function moveInApp(path, targetZone) {
 async function createAppZone(name) {
   const r = await hostCall("create_zone", { name });
   bridgeCache.at = 0;
+  forgetZones();
   return r.zone;
 }
 
@@ -476,7 +552,8 @@ function lastName(path) {
 }
 
 function buildMenus() {
-  menuBuild = menuBuild.then(async () => {
+  // Ein Fehler (App weg, Menü-ID doppelt) darf die Kette nicht für immer blockieren
+  menuBuild = menuBuild.catch(() => {}).then(async () => {
     menuZones = await menuZoneList();
     await new Promise((r) => chrome.contextMenus.removeAll(r));
     chrome.contextMenus.create({ id: "archiver", title: t("menuDropIn"), contexts: MENU_CONTEXTS });
@@ -526,6 +603,7 @@ function buildMenus() {
     chrome.contextMenus.create({ id: "sep", parentId: "archiver", type: "separator", contexts: MENU_CONTEXTS });
     chrome.contextMenus.create({ id: "area", parentId: "archiver", title: t("menuArea"), contexts: MENU_CONTEXTS });
   });
+  menuBuild.catch((err) => console.warn("[Archiver] Menü nicht aufgebaut:", err && err.message));
   return menuBuild;
 }
 
@@ -661,8 +739,40 @@ async function captureVisible(message, sender) {
 
 // ---- Nachrichten ----
 
+// Was die Bibliothek liest oder verändert, nehmen wir nur aus Seiten der Extension
+// selbst (Popup, Dashboard) oder aus dem Top-Frame eines Tabs an, in dem das
+// Overlay lebt. Content-Scripts in iframes (Werbung, Einbettungen) dürfen nur
+// sichern, Zonen und Bibliotheken für die Leiste abfragen und ein Bildschirmfoto
+// anstoßen.
+const PRIVILEGED = new Set([
+  "create-app-zone",
+  "list-folder-downloads",
+  "app-preview",
+  "show-download",
+  "move-download",
+  "open-chrome-page",
+  "export-for-app",
+  "open-app",
+  "open-dashboard",
+  "pinterest-import",
+]);
+
+function trustedSender(sender) {
+  if (!sender || sender.id !== chrome.runtime.id) return false;
+  if (!sender.tab) return true; // Popup oder Service Worker
+  if (sender.url && sender.url.startsWith(chrome.runtime.getURL(""))) return true; // Dashboard im Tab
+  return sender.frameId === 0;
+}
+
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (!message) return;
+  if (PRIVILEGED.has(message.type) && !trustedSender(sender)) return;
+
+  // Tastenkürzel in einem iframe: Overlay im Top-Frame desselben Tabs öffnen
+  if (message.type === "toggle-overlay-top" && sender.tab) {
+    chrome.tabs.sendMessage(sender.tab.id, { type: "toggle-overlay" }, { frameId: 0 }).catch(() => {});
+    return;
+  }
 
   if (message.type === "download-image" && message.url) {
     handleDownload(message, sender).then(sendResponse);
@@ -706,6 +816,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       (zone) => sendResponse({ ok: true, zone }),
       (err) => sendResponse({ ok: false, error: err.message })
     );
+    return true;
+  }
+
+  if (message.type === "app-preview" && typeof message.path === "string") {
+    appPreview({ path: message.path, hash: message.hash }).then((url) => sendResponse({ url }), () => sendResponse({ url: null }));
     return true;
   }
 
@@ -843,6 +958,9 @@ function asTextFile(message) {
 async function handleDownload(message, sender) {
   if (message.toDownloads) return saveToDownloads(message, sender);
   if (await appBridge()) return saveToApp(asTextFile(message), sender);
+  // Die App war schon einmal verbunden, antwortet jetzt aber nicht: trotzdem
+  // sichern (nichts geht verloren), aber deutlich sagen, wo es gelandet ist (3.24.0)
+  const { appSeen } = await storageGet({ appSeen: false });
   const folderKey = message.folder ? sanitizePath(message.folder) : "";
   const filename = buildFilename(message.url, message.suggestedName, folderKey);
   const tabId = sender.tab && sender.tab.id;
@@ -861,7 +979,8 @@ async function handleDownload(message, sender) {
   // Sofort eintragen, damit die Galerie das Bild direkt zeigt …
   const source = { pageUrl: message.pageUrl, pageTitle: message.pageTitle };
   await withIndex((index) => addEntry(index, folderKey, makeEntry(id, message.url, filename, Date.now(), source)));
-  if (!message.quiet) sendFeedback(tabId, frameId, t("savedIn", [label]), true);
+  if (appSeen) sendFeedback(tabId, frameId, t("appOfflineSaved", [folderKey ? "Downloads/" + folderKey : "Downloads"]), false);
+  else if (!message.quiet) sendFeedback(tabId, frameId, t("savedIn", [label]), true);
 
   // … und wieder austragen, falls der Download doch scheitert (z. B. 403).
   const { state, item } = await waitForDownload(id);

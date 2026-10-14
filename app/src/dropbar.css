@@ -5,6 +5,7 @@
 :root {
   --menu-bg: rgba(40, 40, 40, 0.97);
   --glow-rgb: 91, 124, 255;
+  --danger: #e5484d;
 }
 
 html.light {
@@ -70,7 +71,9 @@ html.light .db-hot {
 }
 
 .db-hot.drop-active .db-hint,
-.db-hot.landed .db-hint {
+.db-hot.busy .db-hint,
+.db-hot.landed .db-hint,
+.db-hot.failed .db-hint {
   opacity: 1;
   color: var(--p-text);
 }
@@ -91,6 +94,11 @@ html.light .db-hot {
   box-shadow: 0 0 0 1px rgba(var(--glow-rgb), 0.9), 0 0 28px rgba(var(--glow-rgb), 0.45);
 }
 
+/* Nicht gesichert: Hinweis in --danger, kein Glühen (0.31.0) */
+.db-hot.failed .db-hint {
+  color: var(--danger);
+}
+
 .db-bar.leaving {
   animation: db-out 0.2s ease 0.3s forwards;
 }
@@ -99,6 +107,22 @@ html.light .db-hot {
   to {
     opacity: 0;
   }
+}
+
+/* 0.32: Streifen am Rand. Beim Ziehen ragen die Karten erst nur 90 px herein
+   (0.32.1, vorher 30), damit darüber alles frei bleibt (etwa das Eingabefeld
+   eines Chats). Dieselbe Karte, unten bündig, ohne Hinweis. Fährt der Zeiger
+   hinein, wird das Fenster 280 px hoch (system.rs, dropbar-tall). */
+.db-bar.strip {
+  padding: 4px 14px 0;
+}
+
+.db-bar.strip .db-hot {
+  border-radius: var(--r-lg) var(--r-lg) 0 0;
+}
+
+.db-bar.strip .db-hint {
+  display: none;
 }
 
 @media (prefers-reduced-motion: reduce) {

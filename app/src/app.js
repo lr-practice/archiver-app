@@ -343,7 +343,9 @@
   }
 
   function fail(e) {
-    toast(t("error", { msg: String(e && e.message ? e.message : e) }), false);
+    const msg = String(e && e.message ? e.message : e);
+    toast(t("error", { msg }), false);
+    invoke("log_error", { area: "app", msg }).catch(() => {});
   }
 
   function debounce(fn, ms) {
@@ -363,20 +365,27 @@
   }
 
   // Eigene Reihenfolge der Zonen (Einstellungen › Zonen). Neue Zonen hinten.
-  // Der Betrachter liest denselben Eintrag.
+  // Sie gehört zur Bibliothek (.archiver/zones.json) und kommt mit dem Snapshot;
+  // vorher galt eine Reihenfolge für alle Bibliotheken und überschrieb beim
+  // Wechsel die der anderen (0.31.0). Palette und Zonenleiste lesen die Kopie
+  // in localStorage „zoneOrder“, die hier mit der aktiven Bibliothek mitzieht.
   function orderZones(zones) {
-    const order = pref("zoneOrder", []);
+    const order = state.zoneOrder || [];
     if (!order.length) return zones;
     // Zone, die früher in Unterzonen geteilt war: Platz ihrer ersten Unterzone
     const rank = (z) => {
       let i = order.indexOf(z.path);
       if (i < 0 && z.path) i = order.findIndex((p) => p.startsWith(z.path + "/"));
+      // 0.33.2: neu hinzugekommene Standard-Zone (Unsorted) steht vorn, als erste
+      // Active Zone, bis man sie selbst verschiebt
+      if (i < 0 && z.path === state.defaultZone) return -1;
       return i < 0 ? order.length : i;
     };
     return zones.map((z, i) => [z, i]).sort((a, b) => rank(a[0]) - rank(b[0]) || a[1] - b[1]).map(([z]) => z);
   }
 
   function setZoneOrder(paths) {
+    state.zoneOrder = paths;
     setPref("zoneOrder", paths);
     state.zones = orderZones(state.zones);
     syncZoneOrder();
@@ -396,12 +405,10 @@
   }
 
   function renameInOrder(oldPath, newPath) {
-    const order = pref("zoneOrder", []);
+    const order = state.zoneOrder || [];
     if (!order.length) return;
-    setPref(
-      "zoneOrder",
-      order.map((p) => (p === oldPath ? newPath : p.startsWith(oldPath + "/") ? newPath + p.slice(oldPath.length) : p))
-    );
+    state.zoneOrder = order.map((p) => (p === oldPath ? newPath : p.startsWith(oldPath + "/") ? newPath + p.slice(oldPath.length) : p));
+    setPref("zoneOrder", state.zoneOrder);
   }
 
   async function refresh() {
@@ -411,15 +418,23 @@
     } catch (e) {
       return fail(e);
     }
+    if (snap.root !== state.root || !state.zoneOrder) {
+      // Bibliothek (neu) geladen: ihre eigene Reihenfolge übernehmen
+      state.zoneOrder = snap.zoneOrder || [];
+      syncedOrder = JSON.stringify(state.zoneOrder);
+      if (JSON.stringify(pref("zoneOrder", [])) !== syncedOrder) setPref("zoneOrder", state.zoneOrder);
+    }
     state.root = snap.root;
     state.name = snap.name;
+    state.defaultZone = snap.defaultZone || "Unsorted";
     state.zones = orderZones(displayZones(snap.zones));
     syncZoneOrder();
     state.items = snap.items;
     state.byPath = new Map(snap.items.map((i) => [i.path, i]));
     state.order = snap.order || {};
     state.shared = !!snap.shared;
-    state.defaultZone = snap.defaultZone || "Unsorted";
+    state.inboxSeen = snap.inboxSeen || {};
+    state.expireZone = snap.expireZone === undefined ? state.defaultZone : snap.expireZone;
     state.structure = snap.structure || { depth: 2, skip: [], subzones: false };
     state.user = snap.user || "";
     state.folders = snap.folders || [];
@@ -468,113 +483,17 @@
 
   const cardCache = new Map(); // Pfad → Bild-Element (bleibt beim Neuzeichnen erhalten)
 
-  // Suche: Dateiname, Quelle, Zone, dazu Bildinhalt, Text im Bild und Farben
-  // (Analyse im Hintergrund, lib.rs). Deutsche Begriffe werden mitübersetzt.
-  const SEARCH_DE = {
-    rot: "red", orange: "orange", gelb: "yellow", grün: "green", gruen: "green", türkis: "teal", blau: "blue",
-    lila: "purple", violett: "purple", rosa: "pink", pink: "pink", braun: "brown", schwarz: "black", grau: "gray",
-    weiß: "white", weiss: "white", mensch: "people", menschen: "people", person: "people", personen: "people",
-    frau: "woman", mann: "man", kind: "child", gesicht: "face", porträt: "portrait", portrait: "portrait",
-    tier: "animal", hund: "dog", katze: "cat", vogel: "bird", pferd: "horse", fisch: "fish",
-    pflanze: "plant", blume: "flower", blumen: "flower", baum: "tree", wald: "forest", gras: "grass",
-    himmel: "sky", wolke: "cloud", wolken: "cloud", wasser: "water", meer: "ocean", see: "lake", strand: "beach",
-    berg: "mountain", berge: "mountain", landschaft: "landscape", natur: "nature", schnee: "snow", sonne: "sun",
-    stadt: "city", straße: "street", strasse: "street", gebäude: "building", haus: "house", architektur: "architecture",
-    innenraum: "interior", raum: "room", zimmer: "room", küche: "kitchen", möbel: "furniture", stuhl: "chair",
-    tisch: "table", sofa: "sofa", lampe: "lamp", licht: "light", fenster: "window", tür: "door", treppe: "stairs",
-    auto: "car", fahrzeug: "vehicle", fahrrad: "bicycle", flugzeug: "airplane", boot: "boat", schiff: "ship",
-    essen: "food", getränk: "drink", obst: "fruit", gemüse: "vegetable", brot: "bread", kaffee: "coffee",
-    kleidung: "clothing", mode: "fashion", schuh: "shoe", schuhe: "shoe", tasche: "bag", hut: "hat",
-    buch: "book", bücher: "book", papier: "paper", zeitschrift: "magazine", plakat: "poster", poster: "poster",
-    schrift: "text", typografie: "typography", text: "text", dokument: "document", zeichnung: "drawing",
-    illustration: "illustration", gemälde: "painting", malerei: "painting", kunst: "art", skulptur: "sculpture",
-    foto: "photo", muster: "pattern", textur: "texture", logo: "logo", bildschirm: "screen", computer: "computer",
-    telefon: "phone", uhr: "clock", musik: "music", instrument: "instrument", sport: "sport", nacht: "night",
-    erwachsener: "adult", leute: "people", gruppe: "group", hand: "hand", hände: "hand", auge: "eye", haar: "hair",
-    körper: "body", tanz: "dance", bühne: "stage", konzert: "concert", kamera: "camera", film: "film",
-    draußen: "outdoor", aussen: "outdoor", außen: "outdoor", drinnen: "indoor", innen: "indoor", büro: "office",
-    wohnzimmer: "living room", schlafzimmer: "bedroom", bad: "bathroom", badezimmer: "bathroom", bett: "bed",
-    regal: "shelf", teppich: "rug", vorhang: "curtain", spiegel: "mirror", vase: "vase", keramik: "ceramic",
-    holz: "wood", stein: "stone", beton: "concrete", metall: "metal", glas: "glass", stoff: "textile",
-    textil: "textile", leder: "leather", ziegel: "brick", marmor: "marble", wand: "wall", boden: "floor",
-    decke: "ceiling", dach: "roof", brücke: "bridge", turm: "tower", kirche: "church", fassade: "facade",
-    garten: "garden", park: "park", feld: "field", wüste: "desert", fluss: "river", insel: "island",
-    küste: "coast", hügel: "hill", felsen: "rock", sand: "sand", eis: "ice", feuer: "fire", rauch: "smoke",
-    sonnenuntergang: "sunset", mond: "moon", stern: "star", regen: "rain", nebel: "fog",
-    blatt: "leaf", blätter: "leaf", kaktus: "cactus", palme: "palm tree", frucht: "fruit", wein: "wine",
-    flasche: "bottle", tasse: "cup", teller: "plate", besteck: "cutlery", kuchen: "cake", pizza: "pizza",
-    schild: "sign", grafik: "graphic", diagramm: "diagram", karte: "map", landkarte: "map", tabelle: "chart",
-    form: "shape", kreis: "circle", linie: "line", streifen: "stripes", punkt: "dot", punkte: "polka dots",
-    raster: "grid", geometrie: "geometric", abstrakt: "abstract", collage: "collage", skizze: "sketch",
-    bildschirmfoto: "screenshot", website: "website", verpackung: "packaging", etikett: "label", flyer: "flyer",
-    broschüre: "brochure", magazin: "magazine", zeitung: "newspaper", cover: "cover", album: "album",
-    möbelstück: "furniture", sessel: "armchair", leuchte: "lamp", kerze: "candle", schmuck: "jewelry",
-    uhrwerk: "watch", brille: "glasses", kleid: "dress", jacke: "jacket", hemd: "shirt", hose: "pants",
-    zug: "train", bahn: "train", bus: "bus", motorrad: "motorcycle", lkw: "truck", straßenbahn: "tram",
-    vogelperspektive: "aerial", luftbild: "aerial", schwarzweiß: "monochrome", monochrom: "monochrome",
-    struktur: "structure", konstruktion: "structure", wohnraum: "interior room", ausstellung: "exhibition",
-    galerie: "gallery", museum: "museum", produkt: "product", werkzeug: "tool", spielzeug: "toy",
-  };
-
-  // Rückweg Englisch → Deutsch für die Motiv-Chips (erster deutscher Begriff gewinnt)
-  const LABEL_DE = {};
-  for (const [de, en] of Object.entries(SEARCH_DE)) if (!LABEL_DE[en]) LABEL_DE[en] = de;
-  Object.assign(LABEL_DE, { "interior room": "innenraum", adult: "erwachsene", people: "menschen", outdoor: "draußen", indoor: "drinnen" });
-  const COLOR_NAMES = new Set(["red", "orange", "yellow", "green", "teal", "blue", "purple", "pink", "brown", "black", "gray", "white"]);
-  const COLOR_SHARE = 0.12; // ab diesem Anteil zählt eine Farbe für Suche und Filter
-
-  const tokens = (text) => String(text || "").toLowerCase().split(/[^\p{L}\p{N}]+/u).filter(Boolean);
-  const stem = (name) => String(name || "").replace(/\.[a-z0-9]{2,5}$/i, "");
-
-  // Suchindex pro Objekt, wird bei neuen Analyse-Ergebnissen verworfen
-  function searchIndex(item) {
-    if (item._idx) return item._idx;
-    const colors = new Map();
-    for (const part of String(item.colors || "").split(" ")) {
-      const [name, share] = part.split(":");
-      if (name) colors.set(name, Number(share) || 0);
-    }
-    item._idx = {
-      name: tokens([stem(item.filename), item.pageTitle, item.title, item.artist, item.album].join(" ")),
-      zone: tokens(item.zone),
-      site: tokens(domainOf(item.pageUrl) + " " + domainOf(item.imageUrl)),
-      labels: String(item.labels || "").toLowerCase().split(",").map((l) => l.trim()).filter(Boolean),
-      text: tokens([item.text, item.quote, item.caption, feat("rights") ? item.credit : "", item.addedBy].join(" ")),
-      colors,
-    };
-    return item._idx;
-  }
-
-  // Punkte für ein Suchwort: ganzes Wort zählt mehr als ein Wortanfang,
-  // Titel mehr als Bildinhalt, Bildinhalt mehr als Text im Bild.
-  function wordScore(idx, w) {
-    const en = SEARCH_DE[w];
-    const hit = (list, exact, prefix) =>
-      list.some((x) => x === w || (en && x === en)) ? exact : prefix && w.length >= 3 && list.some((x) => x.startsWith(w)) ? prefix : 0;
-    let best = Math.max(hit(idx.name, 6, 5), hit(idx.zone, 4, 3.5), hit(idx.site, 4, 3.5), hit(idx.text, 2, w.length >= 4 ? 1.5 : 0));
-    idx.labels.forEach((label, i) => {
-      const words = label.split(" ");
-      const rank = Math.max(1, 4 - i * 0.25); // Apple sortiert nach Sicherheit
-      if (label === w || label === en || words.includes(w) || (en && words.includes(en))) best = Math.max(best, rank);
-      else if (w.length >= 4 && words.some((x) => x.startsWith(w))) best = Math.max(best, rank - 1);
-    });
-    const color = en && COLOR_NAMES.has(en) ? en : COLOR_NAMES.has(w) ? w : null;
-    const share = color ? idx.colors.get(color) || 0 : 0;
-    if (share >= COLOR_SHARE) best = Math.max(best, 2 + share * 4);
-    return best;
-  }
+  // Suche: eine für App und Tray (search.js). Deutsche Begriffe werden
+  // mitübersetzt, Motive zählen erst ab einer sicheren Erkennung.
+  const Find = window.ArchiverSearch;
+  const LABEL_DE = Find.LABEL_DE;
+  const COLOR_SHARE = Find.COLOR_SHARE;
+  const findOpts = () => ({ rights: feat("rights") });
+  const queryWords = () => Find.parse(state.query);
 
   // 0 = kein Treffer; jedes Wort muss irgendwo passen
   function searchScore(item, words) {
-    if (!words.length) return 1;
-    const idx = searchIndex(item);
-    let total = 0;
-    for (const w of words) {
-      const score = wordScore(idx, w);
-      if (!score) return 0;
-      total += score;
-    }
-    return total;
+    return Find.score(item, words, findOpts());
   }
 
   function matches(item, words) {
@@ -609,8 +528,8 @@
   function passesFilters(item, dupes) {
     const f = state.filters;
     if (f.kind && kindOf(item) !== f.kind) return false;
-    if (f.color && !((searchIndex(item).colors.get(f.color) || 0) >= COLOR_SHARE)) return false;
-    if (f.label && !searchIndex(item).labels.includes(f.label)) return false;
+    if (f.color && !(Find.colorShare(item, f.color, findOpts()) >= COLOR_SHARE)) return false;
+    if (f.label && !Find.motifs(item, 0, findOpts()).includes(f.label)) return false;
     if (f.site && domainOf(item.pageUrl) !== f.site) return false;
     if (f.orient && orientation(item) !== f.orient) return false;
     if (f.format && formatKey(item) !== f.format) return false;
@@ -710,6 +629,11 @@
         bar.appendChild(chip("(" + t("filterFresh") + " " + fresh + ")", f.fresh, () => setFilter("fresh", true)));
       }
     }
+    // Bilderkennung läuft im Hintergrund; bis sie durch ist, finden Motive weniger (0.31.2)
+    if (analysisLeft()) {
+      bar.appendChild(el("span", "p-filter-gap"));
+      bar.appendChild(mono(analysisText(), "dim p-analysis"));
+    }
     if (filtersActive()) {
       bar.appendChild(el("span", "p-flex"));
       bar.appendChild(
@@ -728,7 +652,7 @@
     const sites = new Map();
     for (const item of state.items) {
       if (!matches(item, words)) continue;
-      searchIndex(item).labels.slice(0, 6).forEach((l) => labels.set(l, (labels.get(l) || 0) + 1));
+      Find.motifs(item, 6, findOpts()).forEach((l) => labels.set(l, (labels.get(l) || 0) + 1));
       const site = domainOf(item.pageUrl);
       if (site) sites.set(site, (sites.get(site) || 0) + 1);
     }
@@ -753,7 +677,7 @@
   function filterBar() {
     const wrap = el("div", "p-find-facets");
     wrap.appendChild(filterRow());
-    const words = state.query.toLowerCase().split(/\s+/).filter(Boolean);
+    const words = queryWords();
     const { labels, sites } = facetCounts(words);
     const motif = (l) => (lang === "de" && LABEL_DE[l] ? LABEL_DE[l][0].toUpperCase() + LABEL_DE[l].slice(1) : l);
     if (labels.length || state.filters.label) wrap.appendChild(facetRow("facetMotif", labels, "label", motif));
@@ -770,6 +694,23 @@
     return wrap;
   }
 
+  // Bilder ohne Analyse (Farben fehlen noch); Vorschau und Analyse laufen nacheinander
+  function analysisLeft() {
+    let left = 0;
+    let total = 0;
+    for (const item of state.items) {
+      if (kindOf(item) !== "image") continue;
+      total++;
+      if (item.colors == null) left++;
+    }
+    return left ? { left, total } : null;
+  }
+
+  function analysisText() {
+    const a = analysisLeft();
+    return a ? "(" + t("analysisLeft", { n: a.left, total: a.total }) + ")" : "";
+  }
+
   // Analyse-Ergebnisse (Inhalt, Text, Farben) kommen nach und nach
   function applyAnalysis(list) {
     const byHash = new Map(list.map((a) => [a.hash, a]));
@@ -781,6 +722,12 @@
       item.colors = a.colors;
       item._idx = null;
     }
+    const note = document.querySelector(".p-analysis");
+    if (note) {
+      const text = analysisText();
+      if (text) note.textContent = text;
+      else note.remove();
+    }
     if (state.query.trim() || filtersActive()) rerenderSearch();
   }
 
@@ -789,11 +736,20 @@
     renderZones();
   }, 800);
 
+  // Während eines Zeichendurchgangs werden Objekte je Zone und „zuletzt
+  // gesichert“ nur einmal ausgerechnet statt für jede Zeile neu über die ganze
+  // Bibliothek (0.31.0). Außerhalb von render() rechnet alles frisch.
+  let pass = null;
   function render() {
-    renderZones();
-    renderToolbar();
-    renderInfo();
-    renderLibTab();
+    pass = { byZone: null, saved: null };
+    try {
+      renderZones();
+      renderToolbar();
+      renderInfo();
+      renderLibTab();
+    } finally {
+      pass = null;
+    }
   }
 
   // Prototyp: keine Toolbar mehr. Die Navigation schwebt unten in der Mitte,
@@ -913,7 +869,16 @@
   }
 
   function zoneItems(path) {
-    return state.items.filter((i) => i.zone === path); // neueste zuerst (Reihenfolge aus Rust)
+    if (!pass) return state.items.filter((i) => i.zone === path); // neueste zuerst (Reihenfolge aus Rust)
+    if (!pass.byZone) {
+      pass.byZone = new Map();
+      for (const i of state.items) {
+        const list = pass.byZone.get(i.zone);
+        if (list) list.push(i);
+        else pass.byZone.set(i.zone, [i]);
+      }
+    }
+    return (pass.byZone.get(path) || []).slice();
   }
 
   // Für Übersichten (Karten-Cover, Index-Thumbs, Vorschau): in der eigenen Reihenfolge der Zone
@@ -1234,7 +1199,7 @@
 
   function renderZones() {
     document.body.classList.toggle("has-selection", state.selection.size > 0);
-    const words = state.query.toLowerCase().split(/\s+/).filter(Boolean);
+    const words = queryWords();
     const filtering = filtersActive();
     const dupes = state.filters.dup ? duplicateHashes() : null;
     state.lists = new Map(state.zones.map((z) => [z.path, []]));
@@ -1467,6 +1432,7 @@
     head.appendChild(el("span"));
     list.appendChild(head);
 
+    const current = compact ? previewZone() : null;
     zones.forEach((zone, i) => {
       const index = offset + i;
       const row = el("div", "p-row p-zone");
@@ -1476,11 +1442,12 @@
         row.dataset.swap = zone.path;
         row.addEventListener("pointerdown", (e) => dragSwap(e, row));
       }
-      if (compact && zone.path === previewZone()) row.classList.add("current");
+      if (compact && zone.path === current) row.classList.add("current");
       const no = mono(String(index + 1).padStart(2, "0"), "dim");
       if (index < HOT_ZONES) no.title = t("keyHint", { n: index + 1 });
       row.appendChild(no);
       const name = zoneNameEl(zone);
+      if (isInbox(zone.path)) name.appendChild(el("span", "p-zone-note", " " + t("inboxNote")));
       row.appendChild(name);
       row.appendChild(el("span", "p-num", String(zone.count)));
       if (!compact) {
@@ -1896,7 +1863,9 @@
     const latest = lastSaved(zone.path);
     const folders = zoneFolders(zoneItems(zone.path)).filter(([f]) => f).length;
     const inside = folders ? " · " + t(folders === 1 ? "folderCount1" : "folderCount", { n: folders }) : "";
-    return zone.count ? countText(zone.count) + inside + (latest ? " · " + recentDate(latest) : "") : t("emptyShort");
+    const meta = zone.count ? countText(zone.count) + inside + (latest ? " · " + recentDate(latest) : "") : t("emptyShort");
+    // 0.33.1: auch auf der Zonenkarte, nicht nur in der Index-Zeile
+    return isInbox(zone.path) ? (zone.count ? countText(zone.count) + inside : t("emptyShort")) + " · " + t("inboxNote") : meta;
   }
 
   function zoneCardTile(zone) {
@@ -2104,6 +2073,26 @@
     });
     b.appendChild(blockRow(t("setDefaultZoneLabel"), select));
     b.appendChild(el("p", "p-block-hint", t("setDefaultZoneHint")));
+    if (state.shared) return b;
+    // 0.33.1: welche Zone sich nach 7 Tagen leert, oder keine
+    const expire = el("select", "p-select");
+    for (const [value, label] of [["", t("setExpireOff")], ...state.zones.filter((z) => z.path !== "").map((z) => [z.path, zoneLabel(z.path)])]) {
+      const opt = el("option", null, label);
+      opt.value = value;
+      if (value === (state.expireZone || "")) opt.selected = true;
+      expire.appendChild(opt);
+    }
+    expire.addEventListener("change", async () => {
+      try {
+        await invoke("set_expire_zone", { zone: expire.value });
+        await refresh();
+        renderPage(true);
+      } catch (e) {
+        fail(e);
+      }
+    });
+    b.appendChild(blockRow(t("setExpireLabel"), expire));
+    b.appendChild(el("p", "p-block-hint", t("setExpireHint")));
     return b;
   }
 
@@ -2330,7 +2319,7 @@
         ),
         blockRow(
           t("setDropbarSys"),
-          choice([["on", t("setOn")], ["off", t("setOff")]], prefs.dropbar ? "on" : "off", (id) => save({ ...prefs, dropbar: id === "on" }))
+          choice([["on", t("setOn")], ["off", t("setOff")]], prefs.dropbar ? "on" : "off", (id) => save({ ...prefs, dropbar: id === "on", dropbarChosen: true }))
         )
       );
     };
@@ -2914,7 +2903,9 @@
       const sentence = items.length
         ? [t("headZone", { count: countText(items.length), date: recentDate(latest) }).replace(/\.\.$/, "."), hasFolders ? t(named === 1 ? "headFolder1" : "headFolders", { n: named }) : "", topDomains(items)].filter(Boolean).join(" ")
         : t("headZoneEmpty");
-      const h = headline(lastSegment(zone.path), sentence);
+      // 0.32: Unsorted räumt sich nach 7 Tagen selbst auf (library.rs expire_inbox).
+      // 0.33: dort steht nur dieser Satz, ohne Anzahl, Datum und Quellen
+      const h = headline(lastSegment(zone.path), isInbox(zone.path) ? t("headUnsorted") : sentence);
       if (canEdit(zone.path)) {
         const title = h.querySelector(".p-head-title");
         title.classList.add("zone-card-name");
@@ -2985,16 +2976,6 @@
         render();
       });
       c.title = t(v === "grid" ? "viewGridTitle" : "viewOriginalTitle");
-      bar.appendChild(c);
-    }
-    // 0.29: Bildtext unter den Bildern (nur in „Original“)
-    if (state.view === "original") {
-      const c = chip("(+ " + t("captionChip") + ")", captionsOn(), () => {
-        setPref("captions", !captionsOn());
-        renderToolbar();
-        renderZones();
-      });
-      c.title = t("captionChipTitle");
       bar.appendChild(c);
     }
     bar.appendChild(sizeChips(Math.max(0, SIZES.indexOf(state.size)), SIZES.length, (step) => {
@@ -3141,6 +3122,13 @@
   }
 
   function lastSaved(zonePath) {
+    if (pass) {
+      if (!pass.saved) {
+        pass.saved = new Map();
+        for (const item of state.items) pass.saved.set(item.zone, Math.max(pass.saved.get(item.zone) || 0, item.capturedAt || item.addedAt || 0));
+      }
+      return pass.saved.get(zonePath) || 0;
+    }
     let latest = 0;
     for (const item of state.items) {
       if (item.zone === zonePath) latest = Math.max(latest, item.capturedAt || item.addedAt || 0);
@@ -3328,16 +3316,24 @@
       const cols = Array.from({ length: count }, () => el("div", "p-masonry-col"));
       list.forEach((item, i) => {
         cols[i % count].appendChild(itemCard(item));
-        if (captionsOn() && hasCaption(item)) cols[i % count].appendChild(captionBlock(item, i, list.length, "card-cap"));
       });
       node.replaceChildren(...cols);
     }
   }
 
-  // ---- Bildtext (0.29): Kennung, Text, Notiz – unter dem Bild und in der Lightbox ----
-  function captionsOn() {
-    return pref("captions", true) !== false;
+  // Zone, die sich nach 7 Tagen leert (ab Werk Unsorted, Einstellungen › Bibliothek, 0.33.1)
+  function isInbox(zonePath) {
+    return !!state.expireZone && zonePath === state.expireZone && !state.shared;
   }
+  // Resttage eines Objekts in Unsorted, gezählt ab dem ersten Sehen (library.rs inbox_seen)
+  function inboxDaysLeft(item) {
+    if (!isInbox(item.zone)) return Infinity;
+    const since = (state.inboxSeen || {})[item.hash];
+    if (!since) return DELETED_DAYS;
+    return Math.max(1, Math.ceil(DELETED_DAYS - (Date.now() - since) / 86400000));
+  }
+
+  // ---- Bildtext (0.29): Kennung, Text, Notiz – in der Lightbox ----
   function hasCaption(item) {
     return !!(item && item.caption);
   }
@@ -3346,13 +3342,6 @@
   function captionId(item, i, total) {
     const n = state.zones.findIndex((z) => z.path === item.zone);
     return zoneLabel(item.zone) + "—" + String(n + 1).padStart(2, "0") + (total ? " " + (i + 1) + "/" + total : "");
-  }
-
-  function captionBlock(item, i, total, cls) {
-    const box = el("div", cls);
-    box.appendChild(el("div", "cap-id", captionId(item, i, total)));
-    if (item.caption) box.appendChild(el("div", "cap-text", item.caption));
-    return box;
   }
 
   function itemCard(item) {
@@ -3372,6 +3361,8 @@
       card.appendChild(el("div", "card-badge"));
       card.appendChild(el("div", "card-media"));
       card.appendChild(el("span", "card-fresh"));
+      card.appendChild(el("div", "card-days"));
+      card.appendChild(el("span", "card-dot"));
       cardCache.set(item.path, card);
     }
     const label = mediaLabel(item);
@@ -3414,6 +3405,15 @@
     else card.style.removeProperty("--ar");
     card.classList.toggle("selected", state.selection.has(item.path));
     card.classList.toggle("fresh", isFresh(item));
+    // 0.33.1: Bild mit Bildtext trägt einen Punkt in der Farbe seiner Textkarte
+    const dot = card.querySelector(".card-dot");
+    dot.hidden = !hasCaption(item) || !!quote || isNote(item);
+    if (!dot.hidden) dot.style.setProperty("--ts-bg", quoteTone(item)[0]);
+    // 0.33: In Unsorted die letzten zwei Tage vor „Zuletzt gelöscht“ zeigen
+    const days = card.querySelector(".card-days");
+    const left = inboxDaysLeft(item);
+    days.hidden = !(left <= 2);
+    days.textContent = days.hidden ? "" : t("deletedDays", { n: left });
     return card;
   }
 
@@ -3751,6 +3751,19 @@
     const quote = items.length === 1 ? quoteOf(items[0]) : null;
     invoke("copy_images", { paths: items.map((i) => i.abs), text: quote || null })
       .then(() => toast(quote ? t("copiedText") : items.length === 1 ? t("copiedOne") : t("copiedMany", { n: items.length })))
+      .catch(fail);
+  }
+
+  // ⌘V (0.32): in die offene Zone bzw. ihren Ordner, auf der Startseite nach Unsorted
+  function pasteIntoZone() {
+    const zone = isZone(state.focus) ? (state.level ? state.focus + "/" + state.level : state.focus) : "";
+    invoke("paste_into", { zone })
+      .then((r) => {
+        if (r.imported) toast(t("pasted", { zone: zoneLabel(zone || state.defaultZone) }));
+        else if (r.duplicates) toast(t("importDone", { imported: 0, duplicates: r.duplicates, sources: 0 }));
+        else toast(t("pasteEmpty"));
+        return refresh();
+      })
       .catch(fail);
   }
 
@@ -4137,7 +4150,17 @@
     ed.status.textContent = t("noteSaving");
     const item = ed.item;
     await noteChain(async () => {
-      const r = await invoke("write_note", { path: item.path, text, rename: !!rename });
+      let r;
+      try {
+        r = await invoke("write_note", { path: item.path, text, rename: !!rename });
+      } catch (e) {
+        // Nicht gesichert: Text bleibt „ungespeichert“, der nächste Anlauf
+        // (Tippen, ⌘S, Schließen) versucht es erneut (0.31.0)
+        ed.dirty = true;
+        if (rename) ed.renameDue = true;
+        if (noteEd === ed) ed.status.textContent = t("noteSaveFailed");
+        throw e;
+      }
       const old = item.path;
       Object.assign(item, { hash: r.hash, quote: text.trim() || null, path: r.path, mtime: Date.now() });
       if (r.path !== old) {
@@ -4372,7 +4395,7 @@
       foot.replaceChildren(el("span", null, zone || input.value.trim() ? t("noteLinkHintPick") : t("noteLinkHintZone")), el("span", null, n ? t("noteObjects", { n }) : ""));
     };
     const fill = () => {
-      const words = input.value.trim().toLowerCase().split(/\s+/).filter(Boolean);
+      const words = Find.parse(input.value);
       const linked = new Set(item.links || []);
       const pool = state.items.filter((i) => i !== item && i.hash !== item.hash);
       let tiles = null;
@@ -4761,7 +4784,12 @@
     inner.appendChild(head);
     if (isNote(item)) inner.appendChild(lbBlock(t("noteLabelTitle"), [lbRow(t("noteLinks"), String(linkedItems(item).length)), lbRow(t("toneLabel"), tonePicker(item))]));
     else if (quoteOf(item)) inner.appendChild(lbBlock(t("quote"), [quoteBox(item, "lb-quote"), lbRow(t("toneLabel"), tonePicker(item))]));
-    if (!quoteOf(item)) inner.appendChild(lbBlock(t("captionTitle"), [noteField(item, "caption", t("captionPlaceholder"), true)]));
+    // 0.33: Farbe der Bildtext-Karte wählbar wie bei Textkarten und Notizen
+    if (!quoteOf(item)) {
+      const rows = [noteField(item, "caption", t("captionPlaceholder"), true)];
+      if (!isNote(item)) rows.push(lbRow(t("toneLabel"), tonePicker(item)));
+      inner.appendChild(lbBlock(t("captionTitle"), rows));
+    }
 
     let source = null;
     if (item.pageUrl) {
@@ -6508,13 +6536,19 @@
       state.homeKbd = false;
       applyHomeCursor(false);
     });
-    // 0.29: ⌘V mit Text auf ein gewähltes Bild (oder in der Lightbox) setzt den Bildtext
+    // 0.29: ⌘V mit Text auf ein gewähltes Bild (oder in der Lightbox) setzt den Bildtext.
+    // 0.32: sonst kommt die Zwischenablage in die offene Zone (Dateien, Bild, Text).
     document.addEventListener("paste", (e) => {
       if (e.target.closest && e.target.closest("input, textarea, [contenteditable]")) return;
+      if (!$("modal").hidden) return;
       const text = (e.clipboardData && e.clipboardData.getData("text/plain") || "").trim();
-      if (!text || (e.clipboardData.files && e.clipboardData.files.length)) return;
+      const files = e.clipboardData && e.clipboardData.files && e.clipboardData.files.length;
       const items = state.lightbox ? [lightboxItem()].filter(Boolean) : selectedItems();
-      if (items.length !== 1 || quoteOf(items[0])) return;
+      if (!text || files || items.length !== 1 || quoteOf(items[0])) {
+        if (state.lightbox || state.focus === DELETED) return;
+        e.preventDefault();
+        return pasteIntoZone();
+      }
       e.preventDefault();
       const item = items[0];
       const had = !!item.caption;
@@ -6844,9 +6878,9 @@
     b.appendChild(list);
     const fill = (rows) => {
       list.replaceChildren(
-        ...rows.map(({ zone, path }) =>
+        ...rows.map(({ zone, path, online }) =>
           blockRow(
-            [el("div", "p-lib-name", zone), pathEl(path, "p-lib-path")],
+            [el("div", "p-lib-name", online === false ? `${zone} · ${t("extZoneOffline")}` : zone), pathEl(path, "p-lib-path")],
             [
               button("p-link", t("reveal"), () => invoke("reveal_zone", { zone }).catch(fail)),
               button("p-link p-lib-clear", "✕", async () => {
@@ -6871,7 +6905,10 @@
             await refresh();
             toast(t("extZonesAdded", { zone }));
           } catch (e) {
-            fail(e);
+            const msg = String(e && e.message ? e.message : e);
+            const key = { "zone-system": "zoneSystem", "zone-large": "zoneLarge", "zone-slow": "zoneSlow", "zone-overlap": "zoneOverlap", "zone-missing": "zoneMissing" }[msg];
+            if (key) toast(t(key), false, 5200);
+            else fail(e);
           }
           renderPage(true);
         })
@@ -7175,6 +7212,13 @@
   async function boot() {
     bindEvents();
     TAURI.event.listen("library-changed", debounce(refresh, 120));
+    // Fehler im Hintergrund (Einlesen, Ordner nicht lesbar) und vergessene
+    // Promise-Fehler nicht mehr still schlucken (0.31.0)
+    TAURI.event.listen("library-error", (e) => toast(t("error", { msg: String(e.payload) }), false, 5000));
+    window.addEventListener("unhandledrejection", (e) => {
+      e.preventDefault();
+      fail(e.reason);
+    });
     TAURI.event.listen("thumbs-ready", (e) => applyThumbs(e.payload));
     TAURI.event.listen("analysis-ready", (e) => applyAnalysis(e.payload));
     TAURI.event.listen("reveal-in-app", (e) => revealFromViewer(e.payload));

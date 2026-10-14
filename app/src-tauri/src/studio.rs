@@ -8,7 +8,7 @@
 //! damit nichts an der Datenbank hängt.
 
 use crate::library::{err, now_ms, Item, Library, Source, META_DIR};
-use rusqlite::params;
+use rusqlite::{params, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::fs;
@@ -260,7 +260,10 @@ impl Library {
                     })
                 },
             )
-            .ok();
+            .optional()
+            .map_err(err)?;
+        // Nur „keine Zeile“ heißt leere Notiz. Ein DB-Fehler (z. B. gesperrt) darf
+        // nicht als leer gelten, sonst überschriebe set_note alle Angaben (0.31.0).
         Ok(n.unwrap_or_default())
     }
 
@@ -359,21 +362,42 @@ impl Library {
     }
 
     /// Nach Umbenennen einer Zone: Reihenfolge wandert mit.
+    /// Zone oder Ordner umbenannt/verschoben: Sortierung, Standard-Zone,
+    /// Reihenfolge und Hot Zones in zones.json mitziehen (Standard seit 0.31.0,
+    /// sonst fiel die Standard-Zone still auf „Unsorted“ zurück).
     pub(crate) fn rename_item_order(&self, old: &str, new: &str) -> Result<()> {
         let mut v = self.zone_file();
-        let Some(sort) = v.get_mut("sort").and_then(|s| s.as_object_mut()) else { return Ok(()) };
-        let moves: Vec<(String, String)> = sort
-            .keys()
-            .filter(|k| k.as_str() == old || k.starts_with(&format!("{old}/")))
-            .map(|k| (k.clone(), format!("{new}{}", &k[old.len()..])))
-            .collect();
-        if moves.is_empty() {
-            return Ok(());
-        }
-        for (from, to) in moves {
-            if let Some(list) = sort.remove(&from) {
-                sort.insert(to, list);
+        let renamed = |k: &str| -> Option<String> {
+            (k == old || k.starts_with(&format!("{old}/"))).then(|| format!("{new}{}", &k[old.len()..]))
+        };
+        let mut changed = false;
+        if let Some(sort) = v.get_mut("sort").and_then(|s| s.as_object_mut()) {
+            let moves: Vec<(String, String)> = sort.keys().filter_map(|k| renamed(k).map(|to| (k.clone(), to))).collect();
+            for (from, to) in moves {
+                if let Some(list) = sort.remove(&from) {
+                    sort.insert(to, list);
+                    changed = true;
+                }
             }
+        }
+        for key in ["default", "expire"] {
+            if let Some(to) = v.get(key).and_then(|d| d.as_str()).and_then(renamed) {
+                v[key] = serde_json::json!(to);
+                changed = true;
+            }
+        }
+        for key in ["order", "hot"] {
+            if let Some(list) = v.get_mut(key).and_then(|a| a.as_array_mut()) {
+                for z in list.iter_mut() {
+                    if let Some(to) = z.as_str().and_then(renamed) {
+                        *z = serde_json::json!(to);
+                        changed = true;
+                    }
+                }
+            }
+        }
+        if !changed {
+            return Ok(());
         }
         self.write_zone_file(&v)
     }
@@ -638,8 +662,13 @@ mod tests {
         assert!(lib.item_order().get(&zone).is_none());
         lib.set_item_order(&new, &[]).unwrap();
         assert!(lib.item_order().is_empty());
-        // Reihenfolge der Zonen bleibt dabei erhalten
-        assert_eq!(lib.zone_order().0, vec![zone]);
+        // Reihenfolge der Zonen und Standard-Zone ziehen mit (0.31.0)
+        assert_eq!(lib.zone_order().0, vec![new.clone()]);
+        lib.set_default_zone(&new).unwrap();
+        let renamed = lib.rename_zone(&new, "Schriften").unwrap();
+        assert_eq!(lib.default_zone(), renamed);
+        // Nur Groß-/Kleinschreibung: kein „schriften 2“
+        assert_eq!(lib.rename_zone(&renamed, "schriften").unwrap(), "schriften");
     }
 
     #[test]

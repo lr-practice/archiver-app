@@ -1,6 +1,6 @@
 # Archiver – Design-System
 
-Stand: App 0.30.1 · Extension 3.23.0
+Stand: App 0.33.2 · Extension 3.25.3
 
 Diese Datei hält fest, wie Archiver aussieht und warum. Sie gilt für die Mac-App
 (`app/src`) und die Chrome-Extension (`extension/`). Wer an der Oberfläche
@@ -141,7 +141,7 @@ Ebenen vor: Navigation, Active-Zones-Leiste, Menüs und Ladeplatzhalter.
 | Ein- und Ausblenden, Toast, Wenden in der Lightbox (je Hälfte) | 0.18 s | `ease` / `ease-out` |
 | Seitenblatt, Gleiten | 0.28 s | `cubic-bezier(0.2, 0.7, 0.2, 1)` (`--sheet-ease`) |
 | Zonenleiste rein | 0.14 s | `ease-out` |
-| Zonenleiste raus | 0.2 s, 0.3 s verzögert | `ease` (Glühen auf dem Ziel bleibt kurz sichtbar) |
+| Zonenleiste raus | 0.2 s, 0.3 s verzögert | `ease` (Glühen auf dem Ziel bleibt kurz sichtbar). Am ganzen Mac erst, wenn gesichert ist; bei einem Fehler 2.5 s später (4.13) |
 | Ring „Umlaufend“ | 1.6 s je Runde | `linear` |
 
 Für die Bewegung gilt:
@@ -215,7 +215,11 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
 - **Nicht:** Keine Rahmenlinie. Die Karte setzt sich nur über die Fläche ab.
 - **Externe Zone (0.30.1):** Ordner außerhalb der Bibliothek, angelegt nur in
   Einstellungen › Bibliothek (Verknüpfung im Bibliotheksordner). Sieht aus wie
-  jede Zone; ✕ löst nur die Verknüpfung.
+  jede Zone; ✕ löst nur die Verknüpfung. Seit 0.31.0 gelten dieselben Schranken
+  wie für eine Bibliothek (kein Benutzer- oder Systemordner, höchstens 20.000
+  Dateien), und verschachtelte Ziele werden abgelehnt. Ist das Ziel nicht
+  erreichbar, bleibt die Zone mit ihren Vorschauen stehen; in den Einstellungen
+  steht hinter dem Namen „· offline“.
 
 ### 4.5 Ordnerkarte (`.p-folder-card`)
 - **Zweck:** Unterordner neben dem Zonen-Titel als Karten (3/6, die Liste
@@ -238,6 +242,18 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
 - **Video beim Hover (0.27):** Nach 250 ms Verweilen zeigt `.card-scrub` acht
   Standbilder aus dem ganzen Clip nacheinander (alle 320 ms), ohne Ton. Mit
   `prefers-reduced-motion` bleibt das Standbild.
+- **Unsorted (0.33):** Die letzten zwei Tage vor „Zuletzt gelöscht“ steht oben
+  links „noch n T.“ (`.card-days`, Marke wie `.card-media`, Schrift `--danger`).
+  Gezählt ab dem ersten Sehen (`inboxSeen` im Snapshot). Die Kopfzeile von
+  Unsorted sagt nur „Nach 7 Tagen gelöscht.“, ohne Anzahl, Datum und Quellen.
+  Dieselben Worte stehen im Index hinter dem Namen (dim) und auf der Zonenkarte
+  hinter der Anzahl statt des Datums (0.33.1). Welche Zone sich so leert, steht
+  in Einstellungen › Bibliothek unter der Standard-Zone (ab Werk Unsorted, auch
+  „Aus“). Unsorted entsteht mit jeder eigenen Bibliothek, auch in einem
+  bestehenden Ordnersystem, und steht vorn als erste Active Zone; in einer
+  Bibliothek mit eigener Reihenfolge, sobald sie neu dazukommt (0.33.2). Wer sie
+  danach verschiebt, behält seinen Platz. Geteilte
+  Bibliotheken zeigen nichts davon.
 - **Nicht:** Keine Rundung, kein Schatten und keine Bildunterschrift im Raster.
   Die Info gibt es per `I` oder im Seitenblatt.
 
@@ -245,6 +261,9 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
 - **Zweck:** Filter und Ansichtswahl.
 - **Form:** Geist Mono, 11 px, Versalien, ohne Fläche. Die Zustände laufen nur
   über die Textfarbe: faint → dim (Hover) → text (aktiv).
+- **Hinweis in der Filterzeile (0.31.2):** Solange die Bilderkennung läuft,
+  steht am Ende der Filterzeile „(Bilderkennung: noch n von m)“ als Mono-Text in
+  dim, ohne Klick. Er zählt mit und verschwindet, wenn alles erkannt ist.
 
 ### 4.8 Knopf (`.btn`)
 - **Zweck:** Handlungen in Dialogen und Einstellungen.
@@ -280,10 +299,15 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
   Seit 0.30 ist das frühere Studio-Feld „Notiz“ darin aufgegangen (wird beim
   Öffnen der Bibliothek angehängt). Durchsuchbar, im PDF „Mit Bildtext“.
 - **Form:** Drei Zeilen: Kennung in Geist Mono 10/11 px, Versalien, `--p-dim`
-  (Zone—Nummer Position/Anzahl, etwa TYPO—02 3/7), Text in Geist 13 px (Raster,
-  zwei Zeilen) bzw. 17 px (Lightbox).
-- **Raster:** Nur in „Original“ mit dem Chip „(+ Text)“, unter dem Bild in
-  derselben Spalte. Bilder ohne Text bleiben stumm.
+  (Zone—Nummer Position/Anzahl, etwa TYPO—02 3/7), Text in Geist 17 px
+  (Lightbox).
+- **Raster (0.33):** Kein Textauszug mehr unter dem Bild, der Chip „(+ Text)“
+  ist entfallen. Ein Punkt 10 px, 6 px vom Rand unten rechts, in der Farbe der
+  Textkarte (`.card-dot`, 0.33.1 statt Eselsohr) zeigt an, dass das Bild Text
+  hat. Feine dunkle Kante, damit er auf gleichfarbigen Bildern stehen bleibt.
+  Bilder ohne Text bleiben stumm.
+- **Farbe (0.33):** In ⌘D unter „Bildtext“ wählbar, dieselbe Reihe wie bei
+  Textkarten und Notizen (`tonePicker`). Ohne Wahl gilt die Farbe aus dem Hash.
 - **Lightbox (0.30.1):** Karte im Ton des Bildes wie eine Textkarte
   (`quoteTone`, `.text-sheet.lb-cap-card`): Kennung BILDTEXT · Zone—Nummer,
   Text in Geist 500 nach Länge 7 / 5 / 3,6 `cqmin` (mind. 15 px), Fuß Quelle ·
@@ -334,8 +358,11 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
   der Standard des App-Fensters und folgt seit 0.30 dem Glas-Regler (2.1). Hell/Dunkel und Ecken folgen Einstellungen › Aussehen;
   die Fensterecke ist eckig 0, klein 6, mittel 12 (Standard), groß 18 px.
   Start: Active Zones als Zonenkarten (4.4) mit 01–04 und „Active Zone“,
-  darunter der Index als flachere Karten (8:3). Zone: Active Zones als Reiter,
-  Objekte eckig in sechs Spalten (4.6). Suche: passende Zonen als Karten,
+  darunter der Index; seit 0.32 haben alle Karten dieselbe Höhe (Cover 8:3).
+  Zone: Active Zones als Reiter, darüber ihre Unterordner als Karten
+  („(Ordner)“, Klick oder ↵ öffnet, ⌫ eine Ebene hoch, Kopf „Zone / Ordner“),
+  darunter die Objekte eckig in sechs Spalten (4.6). Der Inhalt hat oben 4 px
+  Luft, damit der Ring (4.1) der ersten Reihe nicht abgeschnitten wird. Suche: passende Zonen als Karten,
   darunter Objekte. Fußzeile: links „Tray“, rechts die Tasten als
   Mono-Etiketten, esc am Ende.
 - **Verhalten:** Aus InDesign geöffnet heißt ↵ „Platzieren“ (markierter
@@ -348,6 +375,9 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
   blättern, Leertaste oder esc schließen. Im Suchfeld mit Text tippt die
   Leertaste weiter.
 - **⌘1–3:** wechselt die Bibliothek wie in der App.
+- **⌘C, ⌘V (0.32):** ⌘C kopiert das gewählte Objekt, ⌘V legt die
+  Zwischenablage in die offene Zone. Steht etwas im Suchfeld, gehören beide
+  dem Suchfeld.
 - **Nicht:** Sie aktiviert Archiver nicht und holt das Hauptfenster nicht nach vorne.
   Liegt Archiver hinten, wird das Hauptfenster beim Öffnen weggelegt und beim
   Schließen hinter alle Fenster zurückgelegt (0.28).
@@ -355,10 +385,32 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
 ### 4.13 Zonenleiste am ganzen Mac (`dropbar.css`)
 - **Zweck:** Wie 4.3, aber beim Ziehen von Dateien in jedem Programm.
 - **Form:** Volle Breite unten auf dem Bildschirm mit dem Zeiger, 280 px hoch,
-  dieselben vier Glaskarten, Ring und Glühen wie 4.3. Die Karten haben keine
-  eigene Unschärfe (das Fenster ist durchsichtig), deshalb gilt `--zone-alpha`.
+  dieselben vier Glaskarten, Ring und Glühen wie 4.3.
+- **Streifen (0.32, 90 px seit 0.32.1 / 3.25.2):** Beim Ziehen ragen die
+  Karten erst nur 90 px herein (`.strip`): dieselbe Karte, oben gerundet, unten
+  bündig, ohne Hinweis. Darüber
+  bleibt alles frei, etwa das Eingabefeld eines Chats. Fährt der Zeiger in den
+  Streifen, wird das Fenster mit macOS-Animation 280 px hoch; steht er mehr
+  als 24 px darüber, wird es wieder Streifen. Gleiches gilt für die Leiste der
+  Extension im Browser (3.25.0, `overlay.css` `.zones-bar.strip`, Höhe mit
+  0.22 s Übergang, ohne bei `prefers-reduced-motion`). Die Leiste der Extension hat
+  seit 3.25.2 genau die Karten der Leiste in der App (4.3, `.p-hot`): Glas mit
+  Unschärfe und Schatten, Nummer oben, Name in der Mitte, Ziel mit
+  gestricheltem Ring (`--ring-lg`, 3 px) statt Outline. Sie nimmt
+  den Zeiger an (3.25.1), damit Chrome am unteren Rand die Seite nicht
+  darunter wegscrollt; Text- und Instagram-Ziehen nutzen denselben Streifen. Die Karten
+  am ganzen Mac haben keine eigene Unschärfe (das Fenster ist durchsichtig),
+  deshalb gilt dort nur `--zone-alpha`.
+- **Ablauf (0.31.0):** Nach dem Loslassen zeigt das Ziel „Wird gesichert …“
+  (`.busy`, kein Glühen). Erst wenn Import oder Verschieben fertig ist, kommt
+  „Gesichert in …“ mit Glühen (`.landed`). Scheitert es, steht „Nicht
+  gesichert: …“ in `--danger` (`.failed`, kein Glühen) 2.5 s lang, dann
+  blendet die Leiste aus. Die Leiste bleibt so lange stehen (`dropbar_hold`).
+- **Ab Werk aus (0.32.1):** Einschalten unter Einstellungen › Tray. Erst die
+  eigene Wahl zählt (`dropbarChosen`); ein `dropbar: true` aus älteren
+  Versionen ohne Wahl gilt als aus. Im Browser übernimmt die Extension.
 - **Nicht:** Erscheint nicht, wenn Archiver selbst vorne ist, und nicht bei
-  Text oder Links ohne Datei.
+  Text oder Links ohne Datei. Zeigt nie „Gesichert“, bevor es gesichert ist.
 
 ### 4.14 Zuletzt gelöscht (`.p-deleted`, `.card.del`)
 - **Zweck:** Gelöschte Objekte und Zonen liegen 7 Tage unter

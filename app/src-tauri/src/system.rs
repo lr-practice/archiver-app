@@ -19,7 +19,7 @@
 //   "dropbar-release" an die Leiste: Maustaste losgelassen
 
 use serde::{Deserialize, Serialize};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use tauri::AppHandle;
 #[cfg(target_os = "macos")]
 use tauri::{Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
@@ -30,9 +30,13 @@ pub const DROPBAR: &str = "dropbar";
 pub const DEFAULT_SHORTCUT: &str = "Alt+Space";
 
 /// Zonenleiste beim Ziehen eingeschaltet
-static DROPBAR_ON: AtomicBool = AtomicBool::new(true);
+static DROPBAR_ON: AtomicBool = AtomicBool::new(false);
 /// Gerade wird aus der Palette gezogen: keine Leiste, Palette nicht schließen
 static PALETTE_DRAG: AtomicBool = AtomicBool::new(false);
+/// Zonenleiste nach dem Loslassen stehen lassen bis zu diesem Zeitpunkt (ms):
+/// solange der Import läuft und kurz danach, damit Erfolg oder Fehler zu sehen
+/// sind (0.31.0). Vorher verschwand sie nach 0.9 s, auch mitten im Import.
+static DROPBAR_HOLD: AtomicU64 = AtomicU64::new(0);
 /// Hauptfenster beim Öffnen des Trays weggelegt (0.28): kommt beim Schließen
 /// hinter alle Fenster zurück, statt mit Archiver nach vorne zu springen.
 pub static MAIN_TUCKED: AtomicBool = AtomicBool::new(false);
@@ -47,11 +51,24 @@ pub struct SystemPrefs {
     pub shortcut: String,
     /// Zonenleiste beim Ziehen am ganzen Mac
     pub dropbar: bool,
+    /// Leiste selbst in den Einstellungen gewählt (0.32.1). Ohne Wahl ist sie
+    /// aus, auch wenn eine ältere Version `dropbar: true` gespeichert hat.
+    #[serde(default)]
+    pub dropbar_chosen: bool,
 }
 
 impl Default for SystemPrefs {
     fn default() -> Self {
-        SystemPrefs { shortcut: DEFAULT_SHORTCUT.into(), dropbar: true }
+        SystemPrefs { shortcut: DEFAULT_SHORTCUT.into(), dropbar: false, dropbar_chosen: false }
+    }
+}
+
+impl SystemPrefs {
+    /// Ab Werk aus: nur an, wenn jemand sie in den Einstellungen eingeschaltet hat
+    pub fn settle(&mut self) {
+        if !self.dropbar_chosen {
+            self.dropbar = false;
+        }
     }
 }
 
@@ -215,6 +232,12 @@ pub fn palette_blurred(app: &AppHandle) {
     }
 }
 
+/// Die Zonenleiste bittet, noch `ms` stehen zu bleiben (höchstens eine Minute)
+#[tauri::command]
+pub fn dropbar_hold(ms: u64) {
+    DROPBAR_HOLD.store(crate::library::now_ms() as u64 + ms.min(60_000), Ordering::Relaxed);
+}
+
 #[tauri::command]
 pub fn palette_hide(app: AppHandle) {
     hide_palette(&app);
@@ -314,6 +337,7 @@ fn watch_drags(app: AppHandle) {
     std::thread::spawn(move || {
         let mut base: Option<isize> = None;
         let mut showing = false;
+        let mut tall = false;
         let mut released: Option<Instant> = None;
         loop {
             std::thread::sleep(Duration::from_millis(50));
@@ -326,7 +350,8 @@ fn watch_drags(app: AppHandle) {
                         Instant::now()
                     });
                     // kurz stehen lassen: der Drop und seine Bestätigung brauchen einen Moment
-                    if at.elapsed() > Duration::from_millis(900) {
+                    let held = (crate::library::now_ms() as u64) < DROPBAR_HOLD.load(Ordering::Relaxed);
+                    if at.elapsed() > Duration::from_millis(900) && !held {
                         showing = false;
                         released = None;
                         set_dropbar(&app, false);
@@ -335,6 +360,18 @@ fn watch_drags(app: AppHandle) {
                 continue;
             }
             released = None;
+            // 0.32: erst nur ein Streifen am Rand, damit darüber alles frei bleibt
+            // (z. B. das Eingabefeld eines Chats). Fährt der Zeiger hinein, kommt
+            // die volle Leiste, verlässt er sie nach oben, wird sie wieder Streifen.
+            if showing {
+                if let Some(y) = crate::macos::mouse_above_bottom() {
+                    let want = if tall { y < DROPBAR_TALL + 24.0 } else { y < DROPBAR_STRIP };
+                    if want != tall {
+                        tall = want;
+                        resize_dropbar(&app, tall);
+                    }
+                }
+            }
             let Some(b) = base else {
                 base = Some(count);
                 continue;
@@ -351,8 +388,26 @@ fn watch_drags(app: AppHandle) {
                 continue;
             }
             showing = true;
+            tall = false;
             set_dropbar(&app, true);
         }
+    });
+}
+
+/// Zonenleiste (DESIGN.md 4.13): Streifen beim Ziehen, volle Höhe unter dem Zeiger
+#[cfg(target_os = "macos")]
+const DROPBAR_STRIP: f64 = 90.0;
+#[cfg(target_os = "macos")]
+const DROPBAR_TALL: f64 = 280.0;
+
+#[cfg(target_os = "macos")]
+fn resize_dropbar(app: &AppHandle, tall: bool) {
+    let Some(win) = app.get_webview_window(DROPBAR) else { return };
+    let app2 = app.clone();
+    let _ = app.run_on_main_thread(move || {
+        let Ok(ns) = win.ns_window() else { return };
+        unsafe { crate::macos::panel_bottom_of_mouse_screen(ns.cast(), if tall { DROPBAR_TALL } else { DROPBAR_STRIP }, tall) };
+        let _ = app2.emit_to(DROPBAR, "dropbar-tall", tall);
     });
 }
 
@@ -365,7 +420,7 @@ fn set_dropbar(app: &AppHandle, show: bool) {
         let ns = ns.cast();
         unsafe {
             if show {
-                crate::macos::panel_bottom_of_mouse_screen(ns, 280.0);
+                crate::macos::panel_bottom_of_mouse_screen(ns, DROPBAR_STRIP, false);
                 crate::macos::panel_show(ns, false);
                 let _ = app2.emit_to(DROPBAR, "dropbar-show", ());
             } else {
@@ -373,4 +428,22 @@ fn set_dropbar(app: &AppHandle, show: bool) {
             }
         }
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::SystemPrefs;
+
+    #[test]
+    fn dropbar_is_off_unless_chosen() {
+        // Ältere Versionen haben `dropbar: true` ohne Wahl gespeichert
+        let mut old: SystemPrefs = serde_json::from_str(r#"{"shortcut":"Alt+Space","dropbar":true}"#).unwrap();
+        old.settle();
+        assert!(!old.dropbar);
+        let mut chosen: SystemPrefs =
+            serde_json::from_str(r#"{"shortcut":"Alt+Space","dropbar":true,"dropbarChosen":true}"#).unwrap();
+        chosen.settle();
+        assert!(chosen.dropbar);
+        assert!(!SystemPrefs::default().dropbar);
+    }
 }

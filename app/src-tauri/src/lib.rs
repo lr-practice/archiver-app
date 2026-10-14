@@ -8,6 +8,7 @@
 
 pub mod bridge;
 pub mod library;
+pub mod log;
 pub mod pdf;
 pub mod studio;
 mod system;
@@ -150,11 +151,25 @@ fn settings_path(app: &AppHandle) -> Option<PathBuf> {
     app.path().app_config_dir().ok().map(|d| d.join("settings.json"))
 }
 
+/// Einstellungen lesen und schreiben geht über diese Sperre: open_library
+/// (Hintergrund) und set_system_prefs (Hauptthread) überschrieben sich sonst.
+static SETTINGS_LOCK: Mutex<()> = Mutex::new(());
+
 fn load_settings(app: &AppHandle) -> Settings {
-    settings_path(app)
-        .and_then(|p| std::fs::read_to_string(p).ok())
-        .and_then(|t| serde_json::from_str(&t).ok())
-        .unwrap_or_default()
+    let Some(p) = settings_path(app) else { return Settings::default() };
+    let Ok(text) = std::fs::read_to_string(&p) else { return Settings::default() };
+    match serde_json::from_str::<Settings>(&text) {
+        Ok(mut s) => {
+            s.system.settle();
+            s
+        }
+        Err(e) => {
+            // Kaputte Datei nicht still überschreiben: beiseitelegen, dann Standard
+            log::error("settings", format!("{}: {e}", p.display()));
+            let _ = std::fs::copy(&p, p.with_extension("json.broken"));
+            Settings::default()
+        }
+    }
 }
 
 fn save_settings(app: &AppHandle, s: &Settings) -> Result<(), String> {
@@ -162,19 +177,53 @@ fn save_settings(app: &AppHandle, s: &Settings) -> Result<(), String> {
     if let Some(dir) = p.parent() {
         std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
     }
-    std::fs::write(p, serde_json::to_vec_pretty(s).unwrap()).map_err(|e| e.to_string())
+    library::write_atomic(&p, &serde_json::to_vec_pretty(s).map_err(|e| e.to_string())?)
+}
+
+/// Einstellungen lesen, ändern, schreiben, ohne dass ein anderer Thread dazwischenkommt
+fn update_settings<T>(app: &AppHandle, f: impl FnOnce(&mut Settings) -> T) -> Result<T, String> {
+    let _guard = SETTINGS_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let mut s = load_settings(app);
+    let out = f(&mut s);
+    save_settings(app, &s)?;
+    Ok(out)
 }
 
 fn current(state: &State<AppState>) -> Result<Arc<Library>, String> {
     state.library.lock().unwrap().clone().ok_or_else(|| "Keine Bibliothek geöffnet".into())
 }
 
+/// Dateiarbeit im Hintergrund-Pool: eine lange Kopie (anderes Laufwerk, großer
+/// Ordner) belegt sonst einen der wenigen Befehls-Threads, und die Oberfläche
+/// wartet auf alles andere mit (0.31.0)
+async fn blocking<T: Send + 'static>(f: impl FnOnce() -> Result<T, String> + Send + 'static) -> Result<T, String> {
+    tauri::async_runtime::spawn_blocking(f).await.map_err(|e| e.to_string())?
+}
+
 /// Bestand neu einlesen und bei Änderungen die Oberfläche und den Vorschau-Worker anstoßen.
 fn rescan(app: &AppHandle, lib: &Library) {
-    if lib.scan().unwrap_or(false) {
-        let _ = app.emit("library-changed", ());
+    match lib.scan() {
+        Ok(true) => {
+            let _ = app.emit("library-changed", ());
+        }
+        Ok(false) => {}
+        Err(e) => report(app, "scan", &e),
     }
     kick_thumbs(app);
+}
+
+/// Fehler ins Protokoll und als Hinweis an die Oberfläche (0.31.0)
+/// Dieselbe Meldung höchstens einmal pro Minute, sonst meldet ein abgezogenes
+/// Laufwerk bei jedem Einlesen erneut.
+fn report(app: &AppHandle, area: &str, msg: &str) {
+    static LAST: Mutex<Option<(String, std::time::Instant)>> = Mutex::new(None);
+    log::error(area, msg);
+    let mut last = LAST.lock().unwrap_or_else(|e| e.into_inner());
+    if last.as_ref().is_some_and(|(m, at)| m == msg && at.elapsed() < Duration::from_secs(60)) {
+        return;
+    }
+    *last = Some((msg.to_string(), std::time::Instant::now()));
+    let _ = app.emit("library-error", msg.to_string());
 }
 
 fn kick_thumbs(app: &AppHandle) {
@@ -208,8 +257,16 @@ fn start_thumb_worker(app: AppHandle, lib: Arc<Library>) -> mpsc::Sender<()> {
                         let (lib, ready) = (&lib, &ready);
                         s.spawn(move || {
                             for (hash, path) in part {
-                                if let Some(thumb) = lib.make_thumb(hash, path) {
-                                    ready.lock().unwrap().push(ThumbReady { hash: hash.clone(), thumb });
+                                // Ein Decoder, der bei einer kaputten Datei abstürzt, darf
+                                // nicht den ganzen Worker mitnehmen (0.31.0)
+                                let made = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| lib.make_thumb(hash, path)));
+                                match made {
+                                    Ok(Some(thumb)) => ready.lock().unwrap_or_else(|e| e.into_inner()).push(ThumbReady { hash: hash.clone(), thumb }),
+                                    Ok(None) => {}
+                                    Err(_) => {
+                                        log::error("thumbs", format!("Vorschau abgestürzt: {}", path.display()));
+                                        lib.mark_thumb_failed(hash);
+                                    }
                                 }
                             }
                         });
@@ -257,6 +314,15 @@ fn start_analysis_worker(app: AppHandle, lib: Arc<Library>) -> mpsc::Sender<()> 
     tx
 }
 
+/// Externe Zonen (0.30.1) sind Verknüpfungen. Das Asset-Protokoll prüft den
+/// aufgelösten Pfad, deshalb muss jedes Ziel draußen eigens freigegeben werden,
+/// sonst laden Originale, Videos und PDFs daraus nicht (0.31.0).
+fn allow_external(app: &AppHandle, lib: &Library) {
+    for target in lib.external_targets() {
+        let _ = app.asset_protocol_scope().allow_directory(&target, true);
+    }
+}
+
 /// Öffnet eine Bibliothek, startet Watcher und Vorschau-Worker und liest den Bestand ein.
 fn activate(app: &AppHandle, root: &Path) -> Result<(), String> {
     let lib = Arc::new(Library::open(root)?);
@@ -264,10 +330,24 @@ fn activate(app: &AppHandle, root: &Path) -> Result<(), String> {
     // „Zuletzt gelöscht“: was älter als 7 Tage ist, geht in den Papierkorb des Macs
     let purge = lib.clone();
     std::thread::spawn(move || purge.purge_deleted(library::DELETED_DAYS));
+    // Unsorted räumt sich nach 7 Tagen selbst auf (0.32): beim Öffnen und dann
+    // stündlich, solange diese Bibliothek offen ist
+    let inbox = Arc::downgrade(&lib);
+    let inbox_app = app.clone();
+    std::thread::spawn(move || {
+        while let Some(lib) = inbox.upgrade() {
+            if lib.expire_inbox(library::DELETED_DAYS).unwrap_or(0) > 0 {
+                let _ = inbox_app.emit("library-changed", ());
+            }
+            drop(lib);
+            std::thread::sleep(std::time::Duration::from_secs(3600));
+        }
+    });
     let state = app.state::<AppState>();
     *state.watcher.lock().unwrap() = None;
 
     app.asset_protocol_scope().allow_directory(root, true).map_err(|e| e.to_string())?;
+    allow_external(app, &lib);
 
     let tx = start_thumb_worker(app.clone(), lib.clone());
     *state.thumbs.lock().unwrap() = Some(tx);
@@ -282,12 +362,20 @@ fn activate(app: &AppHandle, root: &Path) -> Result<(), String> {
         Duration::from_millis(400),
         None,
         move |res: notify_debouncer_full::DebounceEventResult| {
-            let Ok(events) = res else { return };
+            let events = match res {
+                Ok(events) => events,
+                Err(errors) => {
+                    for e in errors {
+                        log::error("watcher", e);
+                    }
+                    return;
+                }
+            };
             let relevant = events.iter().any(|ev| {
                 ev.paths.iter().any(|p| !p.components().any(|c| c.as_os_str() == library::META_DIR))
             });
             if relevant {
-                let changed = watch_lib.scan().unwrap_or(false);
+                let changed = log::check("scan", watch_lib.scan()).unwrap_or(false);
                 let sig = watch_lib.signature();
                 let mut last = last_sig.lock().unwrap();
                 if changed || sig != *last {
@@ -300,6 +388,10 @@ fn activate(app: &AppHandle, root: &Path) -> Result<(), String> {
     )
     .map_err(|e| e.to_string())?;
     debouncer.watch(root, notify::RecursiveMode::Recursive).map_err(|e| e.to_string())?;
+    // FSEvents folgt keinen Verknüpfungen: externe Zonen eigens beobachten
+    for target in lib.external_targets() {
+        let _ = debouncer.watch(&target, notify::RecursiveMode::Recursive);
+    }
     *state.watcher.lock().unwrap() = Some(debouncer);
 
     // Geteilt: Änderungen der anderen kommen übers Netz oft ohne Ereignis an,
@@ -381,20 +473,20 @@ async fn open_library(app: AppHandle, path: String) -> Result<(), String> {
     tauri::async_runtime::spawn_blocking(move || {
         check_library(Path::new(&path))?;
         activate(&worker, Path::new(&path))?;
-        let mut settings = load_settings(&worker);
-        let mut slots = library_slots(&settings);
-        // Neue Bibliothek bekommt einen Platz: den ersten freien, sonst den bisher aktiven
-        if !slots.iter().any(|l| l.path.as_deref() == Some(path.as_str())) {
-            let i = slots
-                .iter()
-                .position(|l| l.path.is_none())
-                .or_else(|| slots.iter().position(|l| l.path.is_some() && l.path == settings.library))
-                .unwrap_or(0);
-            slots[i] = LibrarySlot { name: folder_name(&path), path: Some(path.clone()) };
-        }
-        settings.libraries = slots;
-        settings.library = Some(path.clone());
-        save_settings(&worker, &settings)?;
+        update_settings(&worker, |settings| {
+            let mut slots = library_slots(settings);
+            // Neue Bibliothek bekommt einen Platz: den ersten freien, sonst den bisher aktiven
+            if !slots.iter().any(|l| l.path.as_deref() == Some(path.as_str())) {
+                let i = slots
+                    .iter()
+                    .position(|l| l.path.is_none())
+                    .or_else(|| slots.iter().position(|l| l.path.is_some() && l.path == settings.library))
+                    .unwrap_or(0);
+                slots[i] = LibrarySlot { name: folder_name(&path), path: Some(path.clone()) };
+            }
+            settings.libraries = slots;
+            settings.library = Some(path.clone());
+        })?;
         // Hauptfenster, Palette und Leiste ziehen nach (auch beim Wechsel aus der Palette)
         let _ = worker.emit("library-switched", path);
         Ok(())
@@ -429,26 +521,27 @@ async fn set_library_slot(app: AppHandle, index: usize, name: Option<String>, pa
     if let Some(p) = path.clone() {
         tauri::async_runtime::spawn_blocking(move || check_library(Path::new(&p))).await.map_err(|e| e.to_string())??;
     }
-    let mut settings = load_settings(&app);
-    let mut slots = library_slots(&settings);
-    let slot = &mut slots[index];
-    if clear.unwrap_or(false) {
-        if slot.path.is_some() && slot.path == settings.library {
-            return Err("library-active".into());
+    update_settings(&app, |settings| {
+        let mut slots = library_slots(settings);
+        let slot = &mut slots[index];
+        if clear.unwrap_or(false) {
+            if slot.path.is_some() && slot.path == settings.library {
+                return Err("library-active".to_string());
+            }
+            *slot = LibrarySlot::default();
         }
-        *slot = LibrarySlot::default();
-    }
-    if let Some(p) = path {
-        if slot.name.trim().is_empty() || slot.path.as_deref().map(folder_name).as_deref() == Some(slot.name.as_str()) {
-            slot.name = folder_name(&p);
+        if let Some(p) = path {
+            if slot.name.trim().is_empty() || slot.path.as_deref().map(folder_name).as_deref() == Some(slot.name.as_str()) {
+                slot.name = folder_name(&p);
+            }
+            slot.path = Some(p);
         }
-        slot.path = Some(p);
-    }
-    if let Some(n) = name {
-        slot.name = n.trim().to_string();
-    }
-    settings.libraries = slots;
-    save_settings(&app, &settings)
+        if let Some(n) = name {
+            slot.name = n.trim().to_string();
+        }
+        settings.libraries = slots;
+        Ok(())
+    })?
 }
 
 // ---- Demo-Bibliothek für die Einstiegstour ----
@@ -636,10 +729,7 @@ async fn close_demo(app: AppHandle, keep: bool) -> Result<usize, String> {
             }
             let name = e.file_name().to_string_lossy().into_owned();
             let dest = library::unique_path(&inbox, &name);
-            if std::fs::rename(e.path(), &dest).is_err() {
-                std::fs::copy(e.path(), &dest).map_err(|e| e.to_string())?;
-                let _ = std::fs::remove_file(e.path());
-            }
+            library::move_file(e.path(), &dest)?;
             moved += 1;
         }
     }
@@ -659,7 +749,7 @@ async fn close_demo(app: AppHandle, keep: bool) -> Result<usize, String> {
 async fn demo_collect(file: String, zone: String) -> Result<(), String> {
     let root = demo_root();
     let src = PathBuf::from(&file);
-    if !src.starts_with(root.join(".web")) || file.contains("..") || zone.contains("..") || zone.starts_with('.') {
+    if !src.starts_with(root.join(".web")) || file.contains("..") || library::check_rel(&zone).is_err() {
         return Err("Ungültiger Pfad".into());
     }
     let name = src.file_name().ok_or("Ungültiger Name")?.to_string_lossy().into_owned();
@@ -693,6 +783,12 @@ struct Snapshot {
     folders: Vec<String>,
     /// Anzahl unter „Zuletzt gelöscht“
     deleted: usize,
+    /// Reihenfolge der Zonen dieser Bibliothek (.archiver/zones.json), 0.31.0
+    zone_order: Vec<String>,
+    /// Seit wann ein Objekt in Unsorted liegt (Hash → ms), 0.33
+    inbox_seen: std::collections::HashMap<String, i64>,
+    /// Zone, die sich nach 7 Tagen leert; None = aus (0.33.1)
+    expire_zone: Option<String>,
 }
 
 #[tauri::command]
@@ -712,22 +808,36 @@ async fn set_default_zone(app: AppHandle, state: State<'_, AppState>, zone: Stri
 }
 
 #[tauri::command]
+async fn set_expire_zone(app: AppHandle, state: State<'_, AppState>, zone: String) -> Result<(), String> {
+    current(&state)?.set_expire_zone(&zone)?;
+    let _ = app.emit("library-changed", ());
+    Ok(())
+}
+
+#[tauri::command]
 async fn snapshot(state: State<'_, AppState>) -> Result<Snapshot, String> {
     let lib = current(&state)?;
-    let user = lib.user.lock().unwrap().clone();
-    Ok(Snapshot {
-        root: lib.root.to_string_lossy().into_owned(),
-        name: lib.root.file_name().and_then(|n| n.to_str()).unwrap_or("Archiver").to_string(),
-        zones: lib.zones()?,
-        items: lib.items()?,
-        order: lib.item_order(),
-        shared: lib.shared,
-        user,
-        default_zone: lib.default_zone(),
-        structure: lib.structure(),
-        folders: lib.folders(),
-        deleted: lib.deleted_count(),
+    // Liest alle Objekte und läuft durch die Ordner: nicht auf den Befehls-Threads
+    blocking(move || {
+        let user = lib.user.lock().unwrap().clone();
+        Ok(Snapshot {
+            root: lib.root.to_string_lossy().into_owned(),
+            name: lib.root.file_name().and_then(|n| n.to_str()).unwrap_or("Archiver").to_string(),
+            zones: lib.zones()?,
+            items: lib.items()?,
+            order: lib.item_order(),
+            shared: lib.shared,
+            user,
+            default_zone: lib.default_zone(),
+            structure: lib.structure(),
+            folders: lib.folders(),
+            deleted: lib.deleted_count(),
+            zone_order: lib.zone_order().0,
+            inbox_seen: lib.inbox_seen(),
+            expire_zone: if lib.shared { None } else { lib.expire_zone() },
+        })
     })
+    .await
 }
 
 // ---- Notiz, Rechte, geteilte Bibliothek, Reihenfolge, Paket, Moodboard (studio.rs) ----
@@ -759,8 +869,7 @@ async fn set_item_order(state: State<'_, AppState>, zone: String, hashes: Vec<St
 #[tauri::command]
 async fn set_sharing(app: AppHandle, state: State<'_, AppState>, shared: bool, user: Option<String>) -> Result<(), String> {
     let user = user.map(|u| u.trim().to_string()).filter(|u| !u.is_empty());
-    let settings = load_settings(&app);
-    save_settings(&app, &Settings { user: user.clone(), ..settings })?;
+    update_settings(&app, |s| s.user = user.clone())?;
     let lib = current(&state)?;
     lib.set_user(user);
     if lib.shared == shared {
@@ -825,14 +934,16 @@ async fn export_moodboard(app: AppHandle, title: String, meta: String, file_name
 
 #[tauri::command]
 async fn move_items(app: AppHandle, state: State<'_, AppState>, paths: Vec<String>, zone: String, exact: Option<bool>) -> Result<Vec<String>, String> {
-    let moved = current(&state)?.move_items_to(&paths, &zone, exact.unwrap_or(false))?;
+    let lib = current(&state)?;
+    let moved = blocking(move || lib.move_items_to(&paths, &zone, exact.unwrap_or(false))).await?;
     let _ = app.emit("library-changed", ());
     Ok(moved)
 }
 
 #[tauri::command]
 async fn trash_items(app: AppHandle, state: State<'_, AppState>, paths: Vec<String>) -> Result<Vec<(String, String)>, String> {
-    let n = current(&state)?.trash_items(&paths)?;
+    let lib = current(&state)?;
+    let n = blocking(move || lib.trash_items(&paths)).await?;
     let _ = app.emit("library-changed", ());
     Ok(n)
 }
@@ -880,7 +991,8 @@ async fn deleted_items(state: State<'_, AppState>) -> Result<Vec<library::Delete
 
 #[tauri::command]
 async fn restore_deleted(app: AppHandle, state: State<'_, AppState>, files: Vec<String>) -> Result<usize, String> {
-    let n = current(&state)?.restore_deleted(&files)?;
+    let lib = current(&state)?;
+    let n = blocking(move || lib.restore_deleted(&files)).await?;
     let _ = app.emit("library-changed", ());
     kick_thumbs(&app);
     Ok(n)
@@ -888,7 +1000,8 @@ async fn restore_deleted(app: AppHandle, state: State<'_, AppState>, files: Vec<
 
 #[tauri::command]
 async fn remove_deleted(app: AppHandle, state: State<'_, AppState>, files: Vec<String>) -> Result<usize, String> {
-    let n = current(&state)?.remove_deleted(&files)?;
+    let lib = current(&state)?;
+    let n = blocking(move || lib.remove_deleted(&files)).await?;
     let _ = app.emit("library-changed", ());
     Ok(n)
 }
@@ -902,14 +1015,16 @@ async fn create_zone(app: AppHandle, state: State<'_, AppState>, name: String) -
 
 #[tauri::command]
 async fn rename_zone(app: AppHandle, state: State<'_, AppState>, zone: String, name: String) -> Result<String, String> {
-    let z = current(&state)?.rename_zone(&zone, &name)?;
+    let lib = current(&state)?;
+    let z = blocking(move || lib.rename_zone(&zone, &name)).await?;
     let _ = app.emit("library-changed", ());
     Ok(z)
 }
 
 #[tauri::command]
 async fn move_folder(app: AppHandle, state: State<'_, AppState>, from: String, into: String) -> Result<String, String> {
-    let p = current(&state)?.move_folder(&from, &into)?;
+    let lib = current(&state)?;
+    let p = blocking(move || lib.move_folder(&from, &into)).await?;
     let _ = app.emit("library-changed", ());
     Ok(p)
 }
@@ -928,7 +1043,8 @@ async fn set_zone_order(state: State<'_, AppState>, order: Vec<String>, hot: Vec
 
 #[tauri::command]
 async fn restore_items(app: AppHandle, state: State<'_, AppState>, items: Vec<(String, String)>) -> Result<usize, String> {
-    let n = current(&state)?.restore_items(&items)?;
+    let lib = current(&state)?;
+    let n = blocking(move || lib.restore_items(&items)).await?;
     let _ = app.emit("library-changed", ());
     kick_thumbs(&app);
     Ok(n)
@@ -936,7 +1052,8 @@ async fn restore_items(app: AppHandle, state: State<'_, AppState>, items: Vec<(S
 
 #[tauri::command]
 async fn trash_zone(app: AppHandle, state: State<'_, AppState>, zone: String) -> Result<(), String> {
-    current(&state)?.trash_zone(&zone)?;
+    let lib = current(&state)?;
+    blocking(move || lib.trash_zone(&zone)).await?;
     let _ = app.emit("library-changed", ());
     Ok(())
 }
@@ -944,6 +1061,7 @@ async fn trash_zone(app: AppHandle, state: State<'_, AppState>, zone: String) ->
 #[tauri::command]
 async fn reveal_zone(app: AppHandle, state: State<'_, AppState>, zone: String) -> Result<(), String> {
     let lib = current(&state)?;
+    library::check_rel(&zone)?;
     let dir = if zone.is_empty() { lib.root.clone() } else { lib.root.join(&zone) };
     app.opener().open_path(dir.to_string_lossy(), None::<&str>).map_err(|e| e.to_string())
 }
@@ -977,6 +1095,29 @@ async fn import_files(app: AppHandle, state: State<'_, AppState>, paths: Vec<Str
     let lib = current(&state)?;
     let files: Vec<PathBuf> = paths.into_iter().map(PathBuf::from).collect();
     let report = tauri::async_runtime::spawn_blocking(move || lib.import_files(&files, &zone))
+        .await
+        .map_err(|e| e.to_string())??;
+    Ok(after_import(&app, report))
+}
+
+/// ⌘V (0.32): Zwischenablage in eine Zone (Dateien, Bilddaten oder Text).
+/// Gelesen wird auf dem Hauptthread (AppKit), importiert im Hintergrund.
+#[tauri::command]
+async fn paste_into(app: AppHandle, state: State<'_, AppState>, zone: String) -> Result<ImportReport, String> {
+    let lib = current(&state)?;
+    #[cfg(target_os = "macos")]
+    let pasted = {
+        let (tx, rx) = mpsc::channel();
+        app.run_on_main_thread(move || {
+            let _ = tx.send(macos::read_pasteboard());
+        })
+        .map_err(|e| e.to_string())?;
+        let (files, image, text) = rx.recv().map_err(|e| e.to_string())?;
+        library::Pasted { files: files.into_iter().map(PathBuf::from).collect(), image, text }
+    };
+    #[cfg(not(target_os = "macos"))]
+    let pasted = library::Pasted::default();
+    let report = tauri::async_runtime::spawn_blocking(move || lib.paste_into(&zone, pasted))
         .await
         .map_err(|e| e.to_string())??;
     Ok(after_import(&app, report))
@@ -1037,17 +1178,33 @@ async fn export_pdf(
 struct ExternalZone {
     zone: String,
     path: String,
+    online: bool,
 }
 
 #[tauri::command]
 async fn external_zones(state: State<'_, AppState>) -> Result<Vec<ExternalZone>, String> {
-    Ok(current(&state)?.external_zones().into_iter().map(|(zone, path)| ExternalZone { zone, path }).collect())
+    Ok(current(&state)?.external_zones().into_iter().map(|(zone, path, online)| ExternalZone { zone, path, online }).collect())
 }
 
 #[tauri::command]
 async fn link_folder(app: AppHandle, state: State<'_, AppState>, path: String) -> Result<String, String> {
     let lib = current(&state)?;
-    let zone = tauri::async_runtime::spawn_blocking(move || lib.link_folder(std::path::Path::new(&path))).await.map_err(|e| e.to_string())??;
+    let worker = lib.clone();
+    let zone = tauri::async_runtime::spawn_blocking(move || {
+        // Dieselben Schranken wie für eine Bibliothek: kein Benutzer-, System-
+        // oder Laufwerksordner, nicht mehr als 20.000 Dateien (0.31.0)
+        let folder = std::path::Path::new(&path);
+        check_library(folder).map_err(|e| e.replacen("library-", "zone-", 1))?;
+        worker.link_folder(folder)
+    })
+    .await
+    .map_err(|e| e.to_string())??;
+    allow_external(&app, &lib);
+    if let Some(debouncer) = state.watcher.lock().unwrap().as_mut() {
+        for target in lib.external_targets() {
+            let _ = debouncer.watch(&target, notify::RecursiveMode::Recursive);
+        }
+    }
     let _ = app.emit("library-changed", ());
     Ok(zone)
 }
@@ -1077,8 +1234,18 @@ async fn open_web_archive(app: AppHandle, state: State<'_, AppState>, hash: Stri
 }
 
 #[tauri::command]
-async fn open_file(app: AppHandle, path: String) -> Result<(), String> {
-    app.opener().open_path(path, None::<&str>).map_err(|e| e.to_string())
+async fn open_file(app: AppHandle, state: State<'_, AppState>, path: String) -> Result<(), String> {
+    // Nur Objekte der Bibliothek öffnen, nie einen beliebigen Pfad oder ein Programm (0.31.0)
+    let lib = current(&state)?;
+    let rel = PathBuf::from(&path)
+        .strip_prefix(&lib.root)
+        .map(|r| r.to_string_lossy().replace('\\', "/"))
+        .map_err(|_| format!("Nicht in der Bibliothek: {path}"))?;
+    let (abs, _) = lib.locate(&rel)?;
+    if !library::is_media(&abs) || !abs.is_file() {
+        return Err(format!("Kein Objekt: {path}"));
+    }
+    app.opener().open_path(abs.to_string_lossy(), None::<&str>).map_err(|e| e.to_string())
 }
 
 // ---- Updates ----
@@ -1094,6 +1261,13 @@ struct UpdateInfo {
 
 // ---- Am ganzen Mac: Palette und Zonenleiste (system.rs) ----
 
+/// Fehler aus der Oberfläche ins Protokoll (~/Library/Logs/Archiver), 0.31.0
+#[tauri::command]
+fn log_error(area: String, msg: String) {
+    let area: String = area.chars().filter(|c| c.is_ascii_alphanumeric() || *c == '-').take(24).collect();
+    log::error(&format!("ui-{area}"), msg.chars().take(2000).collect::<String>());
+}
+
 #[tauri::command]
 fn system_prefs(app: AppHandle) -> system::SystemPrefs {
     load_settings(&app).system
@@ -1101,9 +1275,7 @@ fn system_prefs(app: AppHandle) -> system::SystemPrefs {
 
 #[tauri::command]
 fn set_system_prefs(app: AppHandle, prefs: system::SystemPrefs) -> Result<(), String> {
-    let mut s = load_settings(&app);
-    s.system = prefs.clone();
-    save_settings(&app, &s)?;
+    update_settings(&app, |s| s.system = prefs.clone())?;
     system::apply(&app, &prefs)
 }
 
@@ -1320,6 +1492,7 @@ pub fn run() {
             move_folder,
             set_zone_order,
             set_default_zone,
+            set_expire_zone,
             set_structure,
             set_look,
             trash_zone,
@@ -1336,6 +1509,7 @@ pub fn run() {
             export_package,
             set_note,
             set_quote,
+            paste_into,
             web_archive,
             external_zones,
             link_folder,
@@ -1362,6 +1536,8 @@ pub fn run() {
             viewer::viewer_defaults,
             viewer::viewer_make_default,
             system::palette_hide,
+            system::dropbar_hold,
+            log_error,
             system::palette_ghost,
             system::palette_place,
             system_prefs,

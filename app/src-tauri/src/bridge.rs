@@ -18,10 +18,15 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
+use std::sync::Mutex;
+use std::time::{Duration, Instant};
 
 pub const HOST_NAME: &str = "app.archiver.bridge";
 const APP_IDENTIFIER: &str = "app.archiver.desktop";
 const LIST_LIMIT: usize = 500;
+/// Chrome nimmt vom Host höchstens 1 MB je Nachricht; etwas Luft bleibt
+const MAX_OUT: usize = 900 * 1024;
+const SCAN_EVERY: Duration = Duration::from_secs(30);
 
 /// Erlaubte Extensions. Die erste ID ergibt sich aus dem "key" in
 /// extension/manifest.json (entpackte Version). Die Chrome-Web-Store-ID kommt
@@ -30,7 +35,7 @@ const EXTENSION_IDS: &[&str] = &["gddcmkfpdfkpnieegdplpilmoodghgdd"];
 
 /// Version der Extension, die diese App mindestens braucht. Meldet sich eine
 /// ältere (oder eine ohne Versionsangabe, vor 3.22.0), zeigt die App einen Hinweis.
-pub const EXTENSION_MIN: &str = "3.23.0";
+pub const EXTENSION_MIN: &str = "3.24.0";
 
 /// Wurde das Programm von Chrome als Native-Messaging-Host gestartet?
 pub fn is_host_invocation() -> bool {
@@ -218,13 +223,23 @@ fn app_settings() -> Option<AppSettings> {
     serde_json::from_str(&std::fs::read_to_string(file).ok()?).ok()
 }
 
-fn read_message(input: &mut impl Read) -> Option<Value> {
+/// Chrome schickt höchstens 64 MiB an den Host; mehr ist ein Fehler im Strom.
+const MAX_IN: usize = 64 * 1024 * 1024;
+
+/// Nächste Nachricht. `None`: Chrome hat die Verbindung geschlossen.
+/// `Some(Err)`: diese eine Nachricht ist unbrauchbar, die Brücke läuft weiter (0.31.0).
+fn read_message(input: &mut impl Read) -> Option<Result<Value, String>> {
     let mut len = [0u8; 4];
     input.read_exact(&mut len).ok()?;
     let len = u32::from_ne_bytes(len) as usize;
+    if len > MAX_IN {
+        // Länge passt nicht zu dem, was Chrome schicken darf: der Strom ist nicht mehr lesbar
+        crate::log::error("bridge", format!("Nachricht mit {len} Bytes, Verbindung beendet"));
+        return None;
+    }
     let mut buf = vec![0u8; len];
     input.read_exact(&mut buf).ok()?;
-    serde_json::from_slice(&buf).ok()
+    Some(serde_json::from_slice(&buf).map_err(|e| format!("bad-message: {e}")))
 }
 
 fn write_message(out: &mut impl Write, value: &Value) -> std::io::Result<()> {
@@ -242,16 +257,30 @@ pub fn run_host() {
     let mut output = stdout.lock();
     let mut lib: Vec<(PathBuf, Library)> = Vec::new();
     while let Some(msg) = read_message(&mut input) {
+        let msg = msg.unwrap_or_else(|e| json!({ "type": "", "error": e }));
         let id = msg.get("id").cloned().unwrap_or(Value::Null);
-        let reply = match handle(&msg, &mut lib) {
+        let result = match msg.get("error").and_then(|e| e.as_str()) {
+            Some(e) => Err(e.to_string()),
+            None => handle(&msg, &mut lib),
+        };
+        let reply = match result {
             Ok(mut v) => {
                 v["ok"] = json!(true);
                 v
             }
-            Err(e) => json!({ "ok": false, "error": e }),
+            Err(e) => {
+                crate::log::error("bridge", format!("{}: {e}", msg.get("type").and_then(|t| t.as_str()).unwrap_or("?")));
+                json!({ "ok": false, "error": e })
+            }
         };
         let mut reply = reply;
-        reply["id"] = id;
+        reply["id"] = id.clone();
+        // Zu groß für Chrome: Chrome würde die Verbindung kappen, alle offenen
+        // Anfragen gingen verloren. Stattdessen ein klarer Fehler (0.31.0).
+        if serde_json::to_vec(&reply).map(|b| b.len() > 1024 * 1024).unwrap_or(true) {
+            crate::log::error("bridge", "Antwort größer als 1 MB");
+            reply = json!({ "ok": false, "error": "reply-too-large", "id": id });
+        }
         if write_message(&mut output, &reply).is_err() {
             break;
         }
@@ -275,26 +304,44 @@ fn library<'a>(slot: &'a mut Vec<(PathBuf, Library)>, msg: &Value) -> Result<&'a
 }
 
 /// Ordner innerhalb der Zonen (bis zwei Ebenen tief) fürs Rechtsklickmenü der Extension.
-fn zone_folders(lib: &Library, zones: &[Zone]) -> Result<Value, String> {
-    let mut map = serde_json::Map::new();
+/// Ordner je Zone (bis zwei Ebenen) fürs Rechtsklickmenü. Aus den Ordnern
+/// selbst statt aus allen Objekten der Bibliothek (0.31.0): schneller, und auch
+/// leere, gerade in der App angelegte Ordner stehen im Menü.
+fn zone_folders(lib: &Library, zones: &[Zone]) -> Value {
     let mut sets: std::collections::BTreeMap<String, std::collections::BTreeSet<String>> = Default::default();
-    for item in lib.items()? {
-        if !zones.iter().any(|z| z.path == item.zone) {
+    for dir in lib.folders() {
+        // die längste passende Zone (Unterzonen haben eigene Einträge)
+        let Some(zone) = zones.iter().filter(|z| !z.path.is_empty() && dir.starts_with(&format!("{}/", z.path))).max_by_key(|z| z.path.len()) else {
             continue;
+        };
+        let rest = &dir[zone.path.len() + 1..];
+        if zones.iter().any(|z| z.path == dir) {
+            continue; // selbst eine Zone
         }
-        let dir = item.path.rsplit_once('/').map(|(d, _)| d).unwrap_or("");
-        let Some(rest) = dir.strip_prefix(&format!("{}/", item.zone)) else { continue };
         let parts: Vec<&str> = rest.split('/').take(2).collect();
-        let set = sets.entry(item.zone.clone()).or_default();
+        let set = sets.entry(zone.path.clone()).or_default();
         set.insert(parts[0].to_string());
         if parts.len() > 1 {
             set.insert(format!("{}/{}", parts[0], parts[1]));
         }
     }
-    for (zone, set) in sets {
-        map.insert(zone, json!(set.into_iter().collect::<Vec<_>>()));
+    Value::Object(sets.into_iter().map(|(zone, set)| (zone, json!(set.into_iter().collect::<Vec<_>>()))).collect())
+}
+
+/// Die Brücke liest den Ordner höchstens alle 30 s neu ein. Vorher lief bei
+/// jedem Ziehen und jeder Galerie ein ganzer Scan, auch auf Netzlaufwerken
+/// (0.31.0). Läuft die App, hält ihr Watcher die Datenbank ohnehin aktuell.
+fn scan_now_and_then(lib: &Library) -> Result<(), String> {
+    static LAST: Mutex<Vec<(PathBuf, Instant)>> = Mutex::new(Vec::new());
+    {
+        let mut last = LAST.lock().unwrap_or_else(|e| e.into_inner());
+        if last.iter().any(|(r, at)| r == &lib.root && at.elapsed() < SCAN_EVERY) {
+            return Ok(());
+        }
+        last.retain(|(r, _)| r != &lib.root);
+        last.push((lib.root.clone(), Instant::now()));
     }
-    Ok(Value::Object(map))
+    lib.scan().map(|_| ())
 }
 
 /// Zonen wie in der App: ohne Bibliotheksordner selbst und ohne leere Elternordner.
@@ -327,14 +374,14 @@ fn handle(msg: &Value, slot: &mut Vec<(PathBuf, Library)>) -> Result<Value, Stri
         }
         "zones" => {
             let lib = library(slot, msg)?;
-            lib.scan()?;
+            scan_now_and_then(lib)?;
             // Reihenfolge und Hot Zones aus der Übersicht der App
             let (order, hot) = lib.zone_order();
             let mut zones = visible_zones(lib.zones()?);
             let rank = |p: &str| order.iter().position(|o| o == p).unwrap_or(order.len());
             zones.sort_by_key(|z| rank(&z.path));
             let hot: Vec<&String> = hot.iter().filter(|h| zones.iter().any(|z| &z.path == *h)).collect();
-            let folders = zone_folders(lib, &zones).unwrap_or(Value::Null);
+            let folders = zone_folders(lib, &zones);
             Ok(json!({
                 "zones": zones,
                 "hot": hot,
@@ -351,57 +398,33 @@ fn handle(msg: &Value, slot: &mut Vec<(PathBuf, Library)>) -> Result<Value, Stri
             Ok(json!({ "zone": lib.create_zone(name)? }))
         }
         "save" => {
-            let lib = library(slot, msg)?;
-            let file = PathBuf::from(str_arg(msg, "file").ok_or("Datei fehlt")?);
-            let fallback = lib.default_zone();
-            let zone = str_arg(msg, "zone").unwrap_or(&fallback);
-            let source = Source {
-                image_url: str_arg(msg, "imageUrl").filter(|u| u.starts_with("http")).map(String::from),
-                page_url: str_arg(msg, "pageUrl").map(String::from),
-                page_title: str_arg(msg, "pageTitle").map(String::from),
-                captured_at: msg.get("capturedAt").and_then(|v| v.as_i64()).or_else(|| Some(now_ms())),
-                quote: str_arg(msg, "quote").map(|q| q.chars().take(20_000).collect()),
-            };
-            let (mut path, mut duplicate) = lib.adopt_file(&file, str_arg(msg, "name"), zone, &source)?;
-            remove_if_empty(file.parent());
-            // Schon in der Bibliothek, aber auf eine andere Zone gezogen (0.30.1):
-            // das vorhandene Bild wandert dorthin, statt still liegen zu bleiben.
-            if duplicate && str_arg(msg, "zone").is_some() && !path.starts_with(&format!("{zone}/")) {
-                let _ = std::fs::create_dir_all(lib.root.join(zone));
-                if let Some(moved) = lib.move_items(&[path.clone()], zone)?.pop() {
-                    path = moved;
-                    duplicate = false;
+            // Das Seitenarchiv gehört zur Bildanfrage: scheitert die, darf es nicht
+            // als Waise im Zwischenordner liegen bleiben (0.31.0)
+            let archive = str_arg(msg, "archive").map(|a| transfer_file(a, Some("mhtml")));
+            let saved = save(msg, slot, archive.as_ref().and_then(|a| a.as_ref().ok()));
+            if let Some(Ok(a)) = &archive {
+                if a.exists() {
+                    let _ = std::fs::remove_file(a);
                 }
+                remove_if_empty(a.parent());
             }
-            // Textkarte: Farbe, die schon beim Markieren gezeigt wurde; Bildtext der Seite (0.29).
-            // Mitgebrachter Bildtext gilt auch für ein schon vorhandenes Bild.
-            let tone = crate::studio::clean_tone(str_arg(msg, "tone")).filter(|_| !duplicate);
-            let caption = str_arg(msg, "caption").map(|c| c.trim().to_string()).filter(|c| !c.is_empty());
-            if tone.is_some() || caption.is_some() {
-                if let Ok((_, hash)) = lib.locate(&path) {
-                    let patch = crate::studio::NotePatch { tone, caption, ..Default::default() };
-                    let _ = lib.set_note(&[hash], &patch);
-                }
+            let mut saved = saved?;
+            if let Some(Err(e)) = archive {
+                warn(&mut saved, "archive", &e);
             }
-            // Linkkarte der offenen Seite: die ganze Seite als MHTML dahinter (0.30.1)
-            if let Some(archive) = str_arg(msg, "archive") {
-                let archive = PathBuf::from(archive);
-                if let Ok((_, hash)) = lib.locate(&path) {
-                    let _ = lib.attach_web_archive(&hash, &archive);
-                }
-                remove_if_empty(archive.parent());
-            }
-            Ok(json!({ "path": path, "duplicate": duplicate }))
+            Ok(saved)
         }
         "list" => {
             let lib = library(slot, msg)?;
-            lib.scan()?;
+            scan_now_and_then(lib)?;
             let fallback = lib.default_zone();
             let zone = str_arg(msg, "zone").unwrap_or(&fallback);
-            let items: Vec<Value> = lib
-                .items()?
+            let offset = msg.get("offset").and_then(|v| v.as_u64()).unwrap_or(0) as usize;
+            let all: Vec<_> = lib.items_under(Some(zone).filter(|z| !z.is_empty()))?.into_iter().filter(|i| i.zone == zone).collect();
+            let total = all.len();
+            let items: Vec<Value> = all
                 .into_iter()
-                .filter(|i| i.zone == zone)
+                .skip(offset)
                 .take(LIST_LIMIT)
                 .map(|i| {
                     json!({
@@ -417,7 +440,10 @@ fn handle(msg: &Value, slot: &mut Vec<(PathBuf, Library)>) -> Result<Value, Stri
                     })
                 })
                 .collect();
-            Ok(json!({ "items": items }))
+            // Chrome nimmt vom Host höchstens 1 MB je Nachricht: lieber kürzen und
+            // „next“ mitgeben, als dass die ganze Antwort verloren geht (0.31.0)
+            let (items, next) = fit_reply(items, offset, total);
+            Ok(json!({ "items": items, "next": next, "total": total }))
         }
         "preview" => {
             let lib = library(slot, msg)?;
@@ -448,6 +474,111 @@ fn handle(msg: &Value, slot: &mut Vec<(PathBuf, Library)>) -> Result<Value, Stri
         }
         other => Err(format!("Unbekannter Befehl: {other}")),
     }
+}
+
+/// So viele Einträge, wie unter das Limit passen; `next` ist der Versatz für die
+/// nächste Seite oder null, wenn alles drin ist.
+fn fit_reply(items: Vec<Value>, offset: usize, total: usize) -> (Vec<Value>, Option<usize>) {
+    let mut size = 200; // Hülle der Antwort
+    let mut out = Vec::new();
+    for item in items {
+        size += item.to_string().len() + 1;
+        if size > MAX_OUT && !out.is_empty() {
+            break;
+        }
+        out.push(item);
+    }
+    let end = offset + out.len();
+    (out, (end < total).then_some(end))
+}
+
+/// Bild (oder Text-/Linkkarte) aus dem Zwischenordner übernehmen
+fn save(msg: &Value, slot: &mut Vec<(PathBuf, Library)>, archive: Option<&PathBuf>) -> Result<Value, String> {
+    let lib = library(slot, msg)?;
+    let file = transfer_file(str_arg(msg, "file").ok_or("Datei fehlt")?, None)?;
+    let fallback = lib.default_zone();
+    let zone = str_arg(msg, "zone").unwrap_or(&fallback);
+    crate::library::check_rel(zone)?;
+    let source = Source {
+        image_url: str_arg(msg, "imageUrl").filter(|u| u.starts_with("http")).map(String::from),
+        page_url: str_arg(msg, "pageUrl").map(String::from),
+        page_title: str_arg(msg, "pageTitle").map(String::from),
+        captured_at: msg.get("capturedAt").and_then(|v| v.as_i64()).or_else(|| Some(now_ms())),
+        quote: str_arg(msg, "quote").map(|q| q.chars().take(20_000).collect()),
+    };
+    let mut warnings: Vec<Value> = Vec::new();
+    let (mut path, duplicate) = lib.adopt_file(&file, str_arg(msg, "name"), zone, &source)?;
+    let mut moved_here = false;
+    remove_if_empty(file.parent());
+    // Schon in der Bibliothek, aber auf eine andere Zone gezogen (0.30.1):
+    // das vorhandene Bild wandert dorthin, statt still liegen zu bleiben.
+    // Liegt es in einer externen Zone (Projektordner draußen), bleibt es dort:
+    // Herausziehen würde Verknüpfungen in InDesign & Co. brechen (0.31.0).
+    let external = lib.external_zones().iter().any(|(z, _, _)| path.starts_with(&format!("{z}/")));
+    if duplicate && !external && str_arg(msg, "zone").is_some() && !path.starts_with(&format!("{zone}/")) {
+        let _ = std::fs::create_dir_all(lib.root.join(zone));
+        if let Some(moved) = lib.move_items(&[path.clone()], zone)?.pop() {
+            path = moved;
+            moved_here = true;
+        }
+    }
+    // Textkarte: Farbe, die schon beim Markieren gezeigt wurde; Bildtext der Seite (0.29).
+    // Mitgebrachter Bildtext gilt auch für ein schon vorhandenes Bild, die Farbe nicht.
+    let tone = crate::studio::clean_tone(str_arg(msg, "tone")).filter(|_| !duplicate);
+    let caption = str_arg(msg, "caption").map(|c| c.trim().to_string()).filter(|c| !c.is_empty());
+    if tone.is_some() || caption.is_some() {
+        if let Ok((_, hash)) = lib.locate(&path) {
+            let patch = crate::studio::NotePatch { tone, caption, ..Default::default() };
+            if let Err(e) = lib.set_note(&[hash], &patch) {
+                warnings.push(json!({ "what": "caption", "error": e }));
+            }
+        }
+    }
+    // Linkkarte der offenen Seite: die ganze Seite als MHTML dahinter (0.30.1)
+    if let Some(archive) = archive {
+        if let Err(e) = lib.locate(&path).and_then(|(_, hash)| lib.attach_web_archive(&hash, archive)) {
+            warnings.push(json!({ "what": "archive", "error": e }));
+        }
+    }
+    // „duplicate“ heißt für die Extension: lag schon in dieser Zone, nichts verschoben.
+    // „warnings“: Bild ist da, aber Bildtext oder Seitenarchiv fehlen (0.31.0)
+    let mut out = json!({ "path": path, "duplicate": duplicate && !moved_here });
+    if !warnings.is_empty() {
+        out["warnings"] = json!(warnings);
+    }
+    Ok(out)
+}
+
+fn warn(out: &mut Value, what: &str, error: &str) {
+    if !out["warnings"].is_array() {
+        out["warnings"] = json!([]);
+    }
+    out["warnings"].as_array_mut().unwrap().push(json!({ "what": what, "error": error }));
+}
+
+/// Datei aus dem Zwischenordner der Extension (Downloads/Archiver-Transfer).
+/// Die Brücke übernimmt (und löscht) nur, was Chrome dort für uns abgelegt hat,
+/// nie einen beliebigen Pfad auf dem Mac.
+fn transfer_file(path: &str, ext: Option<&str>) -> Result<PathBuf, String> {
+    let given = PathBuf::from(path);
+    let meta = std::fs::symlink_metadata(&given).map_err(|e| format!("{}: {e}", given.display()))?;
+    if !meta.file_type().is_file() {
+        return Err(format!("Keine Datei: {}", given.display()));
+    }
+    let real = given.canonicalize().map_err(|e| e.to_string())?;
+    let in_transfer = real
+        .parent()
+        .map(|p| p.ancestors().any(|a| a.file_name().and_then(|n| n.to_str()) == Some(crate::library::TRANSFER_DIR)))
+        .unwrap_or(false);
+    if !in_transfer {
+        return Err(format!("Datei liegt nicht in {}: {}", crate::library::TRANSFER_DIR, given.display()));
+    }
+    if let Some(ext) = ext {
+        if !real.extension().and_then(|e| e.to_str()).is_some_and(|e| e.eq_ignore_ascii_case(ext)) {
+            return Err(format!("Erwartet .{ext}: {}", given.display()));
+        }
+    }
+    Ok(real)
 }
 
 /// Den Zwischenordner der Extension in den Downloads wieder entfernen, wenn er leer ist.
@@ -482,8 +613,81 @@ mod tests {
     fn message_roundtrip() {
         let mut buf = Vec::new();
         write_message(&mut buf, &json!({ "cmd": "hello", "id": 1 })).unwrap();
-        let back = read_message(&mut buf.as_slice()).unwrap();
+        let back = read_message(&mut buf.as_slice()).unwrap().unwrap();
         assert_eq!(back["cmd"], "hello");
+    }
+
+    #[test]
+    fn list_fits_into_one_chrome_message() {
+        let items: Vec<Value> = (0..400).map(|i| json!({ "path": format!("Z/{i}.png"), "quote": "x".repeat(4000) })).collect();
+        let (page, next) = fit_reply(items, 0, 400);
+        assert!(page.len() < 400 && !page.is_empty());
+        assert_eq!(next, Some(page.len()));
+        assert!(serde_json::to_vec(&json!({ "items": page })).unwrap().len() < 1024 * 1024);
+        let small: Vec<Value> = (0..3).map(|i| json!({ "path": i })).collect();
+        assert_eq!(fit_reply(small, 10, 13).1, None, "letzte Seite");
+    }
+
+    #[test]
+    fn folders_per_zone_without_items() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path().join("Bib");
+        for d in ["Typo/Serif/Alt", "Typo/Grotesk", "Farbe"] {
+            std::fs::create_dir_all(root.join(d)).unwrap();
+        }
+        std::fs::write(root.join("Typo/a.txt"), "Zone mit Inhalt").unwrap();
+        let lib = Library::open(&root).unwrap();
+        lib.scan().unwrap();
+        let zones = visible_zones(lib.zones().unwrap());
+        let map = zone_folders(&lib, &zones);
+        let typo: Vec<&str> = map["Typo"].as_array().unwrap().iter().map(|v| v.as_str().unwrap()).collect();
+        assert_eq!(typo, ["Grotesk", "Serif", "Serif/Alt"], "auch leere Ordner, bis zwei Ebenen");
+        assert!(map.get("Farbe").is_none());
+        assert_eq!(lib.items_under(Some("Typo")).unwrap().len(), 1);
+        assert!(lib.items_under(Some("Typ")).unwrap().is_empty(), "nur ganze Ordnernamen");
+    }
+
+    #[test]
+    fn bad_message_does_not_end_the_bridge() {
+        // kaputtes JSON: Fehler für diese Nachricht, die nächste kommt trotzdem an
+        let mut buf = Vec::new();
+        buf.extend_from_slice(&3u32.to_ne_bytes());
+        buf.extend_from_slice(b"{x}");
+        write_message(&mut buf, &json!({ "cmd": "weiter" })).unwrap();
+        let mut input = buf.as_slice();
+        assert!(read_message(&mut input).unwrap().is_err());
+        assert_eq!(read_message(&mut input).unwrap().unwrap()["cmd"], "weiter");
+        // unmögliche Länge: Ende statt 4 GB Speicher anzufordern
+        let huge = u32::MAX.to_ne_bytes();
+        assert!(read_message(&mut huge.as_slice()).is_none());
+    }
+
+    #[test]
+    fn takes_only_files_from_transfer_dir() {
+        let tmp = tempfile::tempdir().unwrap();
+        let transfer = tmp.path().join("Downloads").join(crate::library::TRANSFER_DIR);
+        std::fs::create_dir_all(transfer.join("Zone")).unwrap();
+        let ok = transfer.join("Zone/bild.jpg");
+        std::fs::write(&ok, b"x").unwrap();
+        let page = transfer.join("page-1.mhtml");
+        std::fs::write(&page, b"x").unwrap();
+        let outside = tmp.path().join("Vertrag.pdf");
+        std::fs::write(&outside, b"x").unwrap();
+
+        assert!(transfer_file(ok.to_str().unwrap(), None).is_ok());
+        assert!(transfer_file(page.to_str().unwrap(), Some("mhtml")).is_ok());
+        assert!(transfer_file(ok.to_str().unwrap(), Some("mhtml")).is_err());
+        assert!(transfer_file(outside.to_str().unwrap(), None).is_err());
+        // Umweg über .. oder einen Symlink im Transfer-Ordner zählt nicht
+        let sneaky = format!("{}/../../Vertrag.pdf", transfer.display());
+        assert!(transfer_file(&sneaky, None).is_err());
+        #[cfg(unix)]
+        {
+            let link = transfer.join("link.pdf");
+            std::os::unix::fs::symlink(&outside, &link).unwrap();
+            assert!(transfer_file(link.to_str().unwrap(), None).is_err());
+        }
+        assert!(transfer_file(transfer.to_str().unwrap(), None).is_err());
     }
 
     #[test]
