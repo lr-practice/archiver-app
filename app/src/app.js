@@ -1236,6 +1236,12 @@
     }
     // Finden: eine Liste nach Relevanz, bei gleicher Punktzahl das Neueste zuerst
     state.found = words.length || filtering ? found.sort((a, b) => b[0] - a[0] || b[1] - a[1]).map((x) => x[2]) : null;
+    // Liste nach Spalte sortiert; Tastatur und Lightbox folgen derselben Reihenfolge
+    const sort = listSort();
+    if (sort) {
+      for (const [zone, list] of state.lists) state.lists.set(zone, sortForList(list, sort));
+      if (state.found) state.found = sortForList(state.found, sort);
+    }
 
     const grid = $("zones");
     const home = state.focus == null && !words.length && !filtering;
@@ -3045,11 +3051,62 @@
     renderZones();
   }
 
-  // Liste: Spaltenköpfe über den Zeilen
-  function listHead() {
+  // Liste: Spaltenköpfe über den Zeilen. Klick sortiert (0.34.2): aufsteigend,
+  // absteigend, dann wieder die Reihenfolge der Zone. Maße, Größe und Datum
+  // beginnen mit dem Größten bzw. Neuesten.
+  const LIST_COLS = [["name", "listName"], ["kind", "viewerFormat"], ["dims", "viewerSize"], ["bytes", "listBytes"], ["src", "source"], ["date", "listDate"]];
+  const listSort = () => (state.view === "list" && pref("listSort", null)) || null;
+
+  function listHead(sortable = true) {
     const head = el("div", "p-list-head");
-    for (const k of ["listName", "viewerFormat", "viewerSize", "listBytes", "source", "listDate"]) head.appendChild(mono(t(k), "dim"));
+    const s = listSort();
+    for (const [key, label] of LIST_COLS) {
+      if (!sortable) {
+        head.appendChild(mono(t(label), "dim"));
+        continue;
+      }
+      const on = !!s && s.key === key;
+      const b = button("p-list-sort" + (on ? " active" : ""), t(label) + (on ? (s.dir > 0 ? " ↑" : " ↓") : ""), () => {
+        const first = ["dims", "bytes", "date"].includes(key) ? -1 : 1;
+        setPref("listSort", !on ? { key, dir: first } : s.dir === first ? { key, dir: -first } : null);
+        renderZones();
+      });
+      b.title = t("listSortTitle");
+      head.appendChild(b);
+    }
     return head;
+  }
+
+  // Name in der Liste: bei Text- und Notizkarten der Anfang des Texts
+  function listName(item) {
+    const q = quoteOf(item);
+    if (!q.trim()) return item.filename;
+    if (isNote(item)) {
+      const { title, body } = noteParts(item.quote);
+      return (title || t("noteUntitled")) + (body ? " · " + body.replace(/\s+/g, " ") : "");
+    }
+    return q.replace(/\s+/g, " ").trim();
+  }
+
+  function listValue(item, key) {
+    if (key === "name") return listName(item);
+    if (key === "kind") return (item.format || item.filename.split(".").pop() || "").toUpperCase();
+    if (key === "dims") return (item.width || 0) * (item.height || 0);
+    if (key === "bytes") return item.bytes || 0;
+    if (key === "src") return domainOf(item.pageUrl);
+    return item.capturedAt || item.addedAt || 0;
+  }
+
+  // Leere Werte (ohne Quelle, ohne Maße) stehen immer unten
+  function sortForList(list, s) {
+    const cmp = (a, b) => {
+      const x = listValue(a, s.key);
+      const y = listValue(b, s.key);
+      if (!x !== !y) return !x ? 1 : -1;
+      const d = typeof x === "string" ? x.localeCompare(y, lang, { numeric: true, sensitivity: "base" }) : x - y;
+      return d * s.dir;
+    };
+    return list.slice().sort(cmp);
   }
 
   function gallerySection(zone, index, withHeader, searching) {
@@ -3431,7 +3488,7 @@
     card.classList.toggle("selected", state.selection.has(item.path));
     card.classList.toggle("fresh", isFresh(item));
     const info = card.querySelector(".card-info");
-    info.querySelector(".card-name").textContent = item.filename;
+    info.querySelector(".card-name").textContent = listName(item);
     info.querySelector(".card-m-kind").textContent = (item.format || item.filename.split(".").pop() || "").toUpperCase();
     info.querySelector(".card-m-dims").textContent = item.width && item.height ? item.width + " × " + item.height : "–";
     info.querySelector(".card-m-bytes").textContent = item.bytes ? formatBytes(item.bytes) : "–";
@@ -5465,6 +5522,7 @@
   function reorderTarget(x, y) {
     if (!feat("order") || !isZone(state.focus) || state.query.trim() || filtersActive()) return null;
     if (state.folder != null || zoneLayout(state.focus) === "sections") return null; // nur im vollen Raster
+    if (listSort()) return null; // nach Spalte sortiert: keine eigene Reihenfolge
     if (!dragPaths.length || dragHome !== state.focus) return null;
     const rels = dragPaths.filter(insideLibrary).map((p) => p.slice(state.root.length + 1));
     if (rels.length !== dragPaths.length || rels.some((r) => (state.byPath.get(r) || {}).zone !== state.focus)) return null;
@@ -6249,7 +6307,7 @@
     const section = el("section", "zone-card p-section");
     const body = el("div", "zone-card-grid");
     body.tabIndex = -1;
-    if (state.view === "list") body.appendChild(listHead());
+    if (state.view === "list") body.appendChild(listHead(false));
     const items = el("div", "zone-card-items");
     for (const item of list) {
       const card = el("div", "card del" + (sel.has(item.abs) ? " selected" : ""));
@@ -6266,7 +6324,7 @@
       card.appendChild(media);
       // Liste: Name und Angaben wie in jeder Zone, als Quelle Zone und Resttage
       const info = el("div", "card-info");
-      info.appendChild(el("span", "card-name", item.filename));
+      info.appendChild(el("span", "card-name", listName(item)));
       const meta = el("span", "card-meta");
       meta.append(
         el("span", "card-m card-m-kind", (item.format || item.filename.split(".").pop() || "").toUpperCase()),

@@ -1,5 +1,12 @@
 # Changelog
 
+## App 0.34.2 (14.10.2026)
+
+- Liste: Text- und Notizkarten stehen klein links wie die Bilder, nicht mehr
+  über die ganze Breite. Im Namen steht der Anfang des Texts.
+- Liste: Klick auf Name, Format, Maße, Größe, Quelle oder Gesichert sortiert
+  danach, nochmal umgekehrt, ein drittes Mal wieder wie in der Zone.
+
 ## App 0.34.1 (14.10.2026)
 
 - „(Stände)“ ist wieder raus: kein Bündeln, keine Stapel, keine Stände-Leiste

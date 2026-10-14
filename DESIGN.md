@@ -1,6 +1,6 @@
 # Archiver – Design-System
 
-Stand: App 0.34.1 · Extension 3.25.3
+Stand: App 0.34.2 · Extension 3.25.3
 
 Diese Datei hält fest, wie Archiver aussieht und warum. Sie gilt für die Mac-App
 (`app/src`) und die Chrome-Extension (`extension/`). Wer an der Oberfläche
@@ -261,6 +261,13 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
   Versalien), Zeilen mit `--p-rule` getrennt, Auswahl mit `--ring-0` um die
   ganze Zeile. Die Größenstufen setzen die Bildhöhe (`--lt`, 24–96 px).
   In „Zuletzt gelöscht“ steht als Quelle die Zone und die Resttage.
+  Text- und Notizkarten (0.34.2) stehen als Blatt in der Bildspalte, quadratisch
+  wie im Raster, ohne Kennung und Fuß; im Namen steht der Anfang des Texts
+  (Notiz: Titel · Text). Spaltenköpfe sind Knöpfe (Label faint → dim beim
+  Hover, aktiv in `--p-text` mit ↑/↓): sortieren aufsteigend, absteigend, dann
+  wieder nach der Reihenfolge der Zone. Maße, Größe und Datum beginnen mit dem
+  Größten bzw. Neuesten, leere Werte stehen immer unten. Sortiert ist Ziehen
+  zum Umstellen aus.
 - **Nicht:** Keine Rundung, kein Schatten und keine Bildunterschrift im Raster.
   Die Info gibt es per `I` oder im Seitenblatt.
 

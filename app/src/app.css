@@ -6434,3 +6434,46 @@ html.light {
   font-size: 11px;
   letter-spacing: 0.02em;
 }
+
+/* ---- 0.34.2: Liste – Textkarten klein links, Spalten sortierbar ----
+   Text- und Notizkarten stehen als Blatt in der Bildspalte, im Format wie im
+   Raster (quadratisch); im Namen steht der Anfang des Texts. */
+.zones-grid.listview .card-text {
+  aspect-ratio: auto;
+}
+.zones-grid.listview .card-text .text-sheet {
+  position: relative;
+  inset: auto;
+  width: var(--lt);
+  height: var(--lt);
+}
+.zones-grid.listview .card-text .ts-label,
+.zones-grid.listview .card-text .ts-foot,
+.zones-grid.listview .card-text .note-sheet .ts-body {
+  display: none;
+}
+.zones-grid.listview .card-text .ts-body,
+.zones-grid.listview .card-text .note-sheet .ts-title {
+  padding: 10cqw 10cqw 0;
+  font-size: max(4px, 11cqw);
+  line-height: 1.2;
+}
+.p-list-sort {
+  padding: 0;
+  border: none;
+  background: none;
+  font-family: var(--p-mono);
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  text-align: left;
+  white-space: nowrap;
+  color: var(--p-faint);
+  cursor: default;
+}
+.p-list-sort:hover {
+  color: var(--p-dim);
+}
+.p-list-sort.active {
+  color: var(--p-text);
+}
