@@ -1388,7 +1388,7 @@ fn set_appearance(window: tauri::WebviewWindow, light: bool, radius: Option<f64>
 
 /// Vorabversionen: eigener Kanal im selben Release-Repository (Tag „vorab“,
 /// kein „latest“). Die Beta-Tester sehen ihn nie; was dort geprüft ist, gibt
-/// app-freigeben.yml unverändert an alle frei.
+/// „freigeben“ im Build-Workflow unverändert an alle frei.
 const PRERELEASE_FEED: &str = "https://github.com/lr-practice/Archiver-Releases/releases/download/vorab/vorab.json";
 
 /// Erst der Vorab-Kanal (falls an), dann der Beta-Kanal. Ist die Beta schon

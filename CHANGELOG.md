@@ -15,7 +15,7 @@
   gelöscht“.
 - Vorabversionen: eigener Update-Kanal nur für Lukas' Tests (⌥-Klick auf die
   Version unter ☰ › Information). Beta-Tester bekommen nur, was danach mit
-  „App freigeben“ unverändert an alle geht.
+  „freigeben“ unverändert an alle geht.
 - Extension 3.28.3: „Board importieren“ auf Pinterest ist entfernt (keine
   Massen-Downloads).
 - Beta-Anleitung nennt den Freischalt-Code und den richtigen Weg zum Feedback.
