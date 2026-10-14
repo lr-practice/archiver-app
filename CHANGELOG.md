@@ -1,6 +1,6 @@
 # Changelog
 
-## Vorabstand 0.36.2 (nicht veröffentlicht)
+## App 0.36.2 · Extension 3.28.2
 
 - Namensvorschlag gründlicher: Absender und Titel der Seite (Instagram: Name
   und erste Wörter der Unterschrift), die größten Wörter im Bild, bis zu zwei
