@@ -2962,6 +2962,10 @@
       c.title = t({ grid: "viewGridTitle", original: "viewOriginalTitle", list: "viewListTitle" }[v]);
       bar.appendChild(c);
     }
+    if (state.view === "list" && ["d", "e", "f"].includes(pref("listVariant", "a"))) {
+      bar.appendChild(el("span", "p-filter-gap"));
+      bar.appendChild(chip("(" + t("versionsChip") + ")", true, () => {}));
+    }
     bar.appendChild(sizeChips(Math.max(0, SIZES.indexOf(state.size)), SIZES.length, (step) => {
       state.size = SIZES[step];
       setPref("size", state.size);
@@ -3020,6 +3024,176 @@
     renderZones();
   }
 
+  // ---- Stände (Entwurf): Versionen einer Datei am Dateinamen erkennen ----
+  // „welle-plakat_final_korr.jpg“ → Stamm „welle-plakat“, Kennung „FINAL KORR“.
+  // Erkannt werden v1/ver2/version 3, final, korr, entwurf, draft, wip, fix,
+  // alt, neu, Kopie/copy, (2), macOS-Kopien „Datei 2“ und Datumsangaben.
+  // Gebündelt wird nur in der Ansicht, die Dateien bleiben, wie sie sind.
+  const VERSION_TAIL = /[\s_\-.]+(v(?:er(?:sion)?)?\s?\d{1,3}|final|endg(?:ue|ü)ltig|korr(?:ektur)?|entwurf|draft|wip|fix|alt|neu|kopie|copy|\(\d{1,2}\)|\d{4}-\d{2}-\d{2}|\d{8}|\d{6}|\d{1,2})$/i;
+  const versionCache = new Map();
+  function versionOf(filename) {
+    let v = versionCache.get(filename);
+    if (v) return v;
+    let stem = filename.replace(/\.[^.]+$/, "");
+    const tags = [];
+    for (let m; (m = VERSION_TAIL.exec(stem)) && m.index > 0; ) {
+      tags.unshift(m[1]);
+      stem = stem.slice(0, m.index);
+    }
+    v = { stem, key: stem.toLowerCase().replace(/[\s_\-.]+/g, "-"), tag: tags.join(" ").toUpperCase() };
+    versionCache.set(filename, v);
+    return v;
+  }
+
+  // Gruppen in der Reihenfolge der Zone; innerhalb einer Gruppe alt → neu
+  function versionGroups(list) {
+    const by = new Map();
+    for (const item of list) {
+      const v = versionOf(item.filename);
+      const k = (item.folder || "") + "/" + v.key;
+      if (!by.has(k)) by.set(k, { key: k, stem: v.stem, items: [] });
+      by.get(k).items.push(item);
+    }
+    const groups = [...by.values()];
+    for (const g of groups) g.items.sort((a, b) => (a.mtime || a.addedAt) - (b.mtime || b.addedAt));
+    return groups;
+  }
+
+  // Name zerlegt: Stamm zurückgenommen, die Kennung in voller Farbe
+  function splitName(card, item, stem) {
+    const name = card.querySelector(".card-name");
+    name.replaceChildren(el("span", "nm-stem", item.filename.slice(0, stem.length)), el("span", "nm-tag", item.filename.slice(stem.length)));
+    return name;
+  }
+
+  function verTag(item) {
+    return versionOf(item.filename).tag || "–";
+  }
+
+  const openStacks = new Set(pref("openStacks", []));
+  function toggleStack(key) {
+    if (openStacks.has(key)) openStacks.delete(key);
+    else openStacks.add(key);
+    setPref("openStacks", [...openStacks]);
+    renderZones();
+  }
+
+  // D: Stapel im Raster. Der neueste Stand liegt oben, ältere als Kanten
+  // dahinter; aufgeklappt stehen sie in einem Band unter der Reihe.
+  function stackGrid(list) {
+    const items = el("div", "zone-card-items lv-named ver-stacks");
+    const at = (g) => list.indexOf(g.items[g.items.length - 1]);
+    for (const g of versionGroups(list).sort((a, b) => at(a) - at(b))) {
+      const top = g.items[g.items.length - 1];
+      const card = itemCard(top);
+      items.appendChild(card);
+      if (g.items.length < 2) continue;
+      card.classList.add("stack");
+      card.classList.toggle("open", openStacks.has(g.key));
+      // Unter dem Stapel: der Stamm als Name, darunter die Kennung des neuesten Stands
+      card.querySelector(".card-name").textContent = g.stem;
+      card.querySelector(".card-tag").textContent = verTag(top);
+      const badge = button("card-stack", String(g.items.length), (e) => {
+        e.stopPropagation();
+        toggleStack(g.key);
+      });
+      badge.title = t("versionsN", { n: g.items.length });
+      card.appendChild(badge);
+      if (!openStacks.has(g.key)) continue;
+      const band = el("div", "ver-band");
+      const head = el("div", "ver-band-head");
+      head.appendChild(el("span", "ver-band-stem", g.stem));
+      head.appendChild(mono(t("versionsN", { n: g.items.length }), "dim"));
+      head.appendChild(el("span", "p-flex"));
+      head.appendChild(chip("(" + t("versionsClose") + ")", false, () => toggleStack(g.key)));
+      band.appendChild(head);
+      const strip = el("div", "ver-band-strip");
+      for (const it of g.items.slice(0, -1)) {
+        const c = itemCard(it);
+        c.querySelector(".card-tag").textContent = verTag(it);
+        strip.appendChild(c);
+      }
+      // Entwurf: der neueste Stand steht als Kopie am Ende, zum Vergleichen in einer Reihe
+      const now = card.cloneNode(true);
+      now.classList.remove("stack", "open", "selected");
+      now.classList.add("ver-current");
+      now.querySelector(".card-stack")?.remove();
+      now.querySelector(".card-name").textContent = top.filename;
+      strip.appendChild(now);
+      band.appendChild(strip);
+      items.appendChild(band);
+    }
+    return items;
+  }
+
+  // E: je Datei eine Reihe, die Stände von links (alt) nach rechts (neu).
+  // Einzelne Dateien folgen darunter im Raster mit Namen.
+  function versionRows(list) {
+    const wrap = el("div", "ver-rows");
+    const singles = [];
+    for (const g of versionGroups(list)) {
+      if (g.items.length < 2) {
+        singles.push(g.items[0]);
+        continue;
+      }
+      const row = el("div", "ver-row");
+      const head = el("div", "ver-head");
+      head.appendChild(el("div", "ver-stem", g.stem));
+      const first = g.items[0];
+      const last = g.items[g.items.length - 1];
+      head.appendChild(el("div", "ver-sub", t("versionsN", { n: g.items.length })));
+      head.appendChild(el("div", "ver-sub", shortDate(first.mtime || first.addedAt) + " – " + shortDate(last.mtime || last.addedAt)));
+      row.appendChild(head);
+      const strip = el("div", "ver-strip");
+      for (const it of g.items) {
+        const c = itemCard(it);
+        c.querySelector(".card-tag").textContent = verTag(it);
+        if (it.width && it.height) c.style.setProperty("--ar", `${it.width} / ${it.height}`);
+        strip.appendChild(c);
+      }
+      row.appendChild(strip);
+      wrap.appendChild(row);
+    }
+    if (singles.length) {
+      const head = el("div", "ver-singles-head");
+      head.appendChild(mono(t("versionsSingles") + " (" + singles.length + ")", "dim"));
+      wrap.appendChild(head);
+      const grid = el("div", "zone-card-items lv-named ver-singles");
+      for (const it of singles) grid.appendChild(itemCard(it));
+      wrap.appendChild(grid);
+    }
+    return wrap;
+  }
+
+  // F: Liste wie A, der neueste Stand steht vorne, ältere eingerückt darunter
+  function versionList(list) {
+    const items = el("div", "zone-card-items");
+    const groups = versionGroups(list);
+    const rank = (g) => Math.max(...g.items.map((i) => i.mtime || i.addedAt));
+    for (const g of groups.sort((a, b) => rank(b) - rank(a))) {
+      const newest = [...g.items].reverse();
+      const top = itemCard(newest[0]);
+      items.appendChild(top);
+      if (g.items.length < 2) continue;
+      const name = splitName(top, newest[0], g.stem);
+      const open = openStacks.has(g.key);
+      const more = button("ver-more" + (open ? " open" : ""), "(" + t("versionsOlder", { n: g.items.length - 1 }) + ")", (e) => {
+        e.stopPropagation();
+        toggleStack(g.key);
+      });
+      more.title = t("versionsN", { n: g.items.length });
+      name.appendChild(more);
+      if (!open) continue;
+      for (const it of newest.slice(1)) {
+        const c = itemCard(it);
+        c.classList.add("older");
+        splitName(c, it, g.stem);
+        items.appendChild(c);
+      }
+    }
+    return items;
+  }
+
   // Liste: Spaltenköpfe über den Zeilen
   function listHead() {
     const head = el("div", "p-list-head");
@@ -3042,12 +3216,17 @@
     }
     const body = el("div", "zone-card-grid");
     body.tabIndex = -1;
-    if (state.view === "list") body.appendChild(listHead());
-    const items = el("div", "zone-card-items");
-    if (state.view === "original") {
+    const lv = state.view === "list" ? pref("listVariant", "a") : "";
+    if (lv === "a" || lv === "f") body.appendChild(listHead());
+    let items = el("div", "zone-card-items");
+    if (lv === "d") items = stackGrid(list);
+    else if (lv === "e") items = versionRows(list);
+    else if (lv === "f") items = versionList(list);
+    else if (state.view === "original") {
       items.classList.add("p-masonry");
       masonryLists.set(items, list);
     } else for (const item of list) items.appendChild(itemCard(item));
+    if (lv === "b") items.classList.add("lv-named");
     body.appendChild(items);
     if (!list.length) body.appendChild(el("div", "zone-card-empty", searching ? t("emptySearch") : t("emptyZone")));
     card.appendChild(body);
@@ -3359,6 +3538,7 @@
       // Liste: Dateiname und Angaben neben bzw. unter dem Bild
       const info = el("div", "card-info");
       info.appendChild(el("span", "card-name"));
+      info.appendChild(el("span", "card-tag"));
       const meta = el("span", "card-meta");
       for (const k of ["kind", "dims", "bytes", "src", "date"]) meta.appendChild(el("span", "card-m card-m-" + k));
       info.appendChild(meta);
@@ -3407,6 +3587,9 @@
     card.classList.toggle("fresh", isFresh(item));
     const info = card.querySelector(".card-info");
     info.querySelector(".card-name").textContent = item.filename;
+    info.querySelector(".card-tag").textContent = "";
+    card.classList.remove("stack", "older", "open");
+    card.querySelector(".card-stack")?.remove();
     info.querySelector(".card-m-kind").textContent = (item.format || item.filename.split(".").pop() || "").toUpperCase();
     info.querySelector(".card-m-dims").textContent = item.width && item.height ? item.width + " × " + item.height : "–";
     info.querySelector(".card-m-bytes").textContent = item.bytes ? formatBytes(item.bytes) : "–";
@@ -3609,7 +3792,7 @@
 
   function columnsOf(zone) {
     if (state.view === "original") return 1;
-    if (state.view === "list" && pref("listVariant", "a") !== "b") return 1;
+    if (state.view === "list" && !["b", "d"].includes(pref("listVariant", "a"))) return 1;
     const node = document.querySelector(`.zone-card[data-zone="${CSS.escape(zone)}"] .zone-card-items`);
     return node ? getComputedStyle(node).gridTemplateColumns.split(" ").filter(Boolean).length || 1 : 1;
   }

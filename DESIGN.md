@@ -255,6 +255,14 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
   ganze Zeile. Die Größenstufen setzen die Bildhöhe (`--lt`, 24–96 px).
   Varianten A Zeilen mit Spalten, B Raster mit Name darunter, C große Zeilen
   in Spalten (`data-lv`, nur für die Vorschau). Nach der Wahl bleibt eine.
+- **Stände (Entwurf 0.34, noch nicht entschieden):** Versionen einer Datei
+  erkennt `versionOf` am Dateinamen (Stamm + Kennung wie V2, FINAL KORR,
+  Datum). Gebündelt wird nur in der Ansicht. Der Name ist zerlegt: Stamm in
+  `--p-dim`, Kennung in `--p-text`; Kennungen stehen als Label (Mono,
+  Versalien). Varianten D Stapel im Raster (Zahl oben rechts wie
+  `.card-media`, Band in Kartenfläche ink × 0.055), E eine Reihe je Datei,
+  F Liste mit eingerückten älteren Ständen. Konzept:
+  `entwurf/versionen/konzepte.md` im Projektordner.
 - **Nicht:** Keine Rundung, kein Schatten und keine Bildunterschrift im Raster.
   Die Info gibt es per `I` oder im Seitenblatt.
 
