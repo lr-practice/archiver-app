@@ -1,5 +1,19 @@
 # Changelog
 
+## App 0.34.0 (14.10.2026)
+
+- Neue Ansicht „(Liste)“ neben Raster und Original: Zeilen mit Bild,
+  Dateiname, Format, Maße, Größe, Quelle und Datum. Die Größenstufen setzen
+  die Bildhöhe.
+- Neuer Schalter „(Stände)“ in Raster und Liste: Versionen einer Datei werden
+  am Dateinamen erkannt (v2, final, korr, entwurf, Datum, Kopie …) und
+  gebündelt. Nur in der Ansicht, keine Datei wird umbenannt.
+  - Raster: Stapel mit dem neuesten Stand oben, die Zahl klappt alle Stände
+    alt → neu in einem Band auf.
+  - Liste: neuester Stand vorne, „(n ältere)“ klappt die älteren darunter auf.
+  - Lightbox: Leiste mit allen Ständen, „Vergleichen“ (V) legt zwei Stände
+    übereinander, eine Linie zum Ziehen (oder ←/→).
+
 ## App 0.33.2 (14.10.2026)
 
 - Unsorted steht auch in Bibliotheken mit eigener Reihenfolge vorn als erste

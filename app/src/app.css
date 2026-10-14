@@ -6360,18 +6360,12 @@ html.light {
 }
 
 /* ---- 0.34: Liste – Dateiname und Angaben zum Bild ----
-   Varianten nur für die Vorschau (data-lv): a Zeilen mit Spalten,
-   b Raster mit Dateiname darunter, c große Zeilen mit Name über den Angaben. */
+   Zeilen wie im Finder: Bild, Name, Format, Maße, Größe, Quelle, Gesichert.
+   Die Bildhöhe --lt folgt der Größenstufe (24–96 px). */
 .card-info,
+.card-tag,
 .p-list-head {
   display: none;
-}
-.listview .card-badge {
-  display: none;
-}
-.zones-grid.listview .card {
-  aspect-ratio: auto;
-  cursor: default;
 }
 .card-name {
   overflow: hidden;
@@ -6387,158 +6381,66 @@ html.light {
   font-size: 12px;
   font-variant-numeric: tabular-nums;
 }
-
-/* a: Zeilen wie der Finder, Spalten ausgerichtet */
-.listview:is([data-lv="a"], [data-lv="f"]) .zone-card-items,
-.listview[data-lv="c"] .zone-card-items {
+.listview .card-badge,
+.listview .card-media,
+.listview .card-days,
+.listview .card-dot {
+  display: none;
+}
+.listview .zone-card-items {
   display: block;
 }
-.listview:is([data-lv="a"], [data-lv="f"]) .p-list-head,
-.listview:is([data-lv="a"], [data-lv="f"]) .card {
+.listview .p-list-head,
+.zones-grid.listview .card {
   display: grid;
   grid-template-columns: var(--lt) minmax(0, 3fr) 56px 104px 72px minmax(0, 1.4fr) 104px;
   column-gap: 16px;
   align-items: center;
 }
-.listview:is([data-lv="a"], [data-lv="f"]) .p-list-head {
+.listview .p-list-head {
   padding: 0 8px 8px;
   border-bottom: 1px solid var(--p-rule);
 }
-.listview:is([data-lv="a"], [data-lv="f"]) .p-list-head > :first-child {
+.listview .p-list-head > :first-child {
   grid-column: 2;
 }
-.listview:is([data-lv="a"], [data-lv="f"]) .card {
+.zones-grid.listview .card {
+  aspect-ratio: auto;
   padding: 6px 8px;
   background: transparent;
   border-bottom: 1px solid var(--p-rule);
+  cursor: default;
 }
-.listview:is([data-lv="a"], [data-lv="f"]) .card:hover {
+.zones-grid.listview .card:hover {
   background: rgba(var(--ink-rgb), 0.04);
 }
-.listview:is([data-lv="a"], [data-lv="f"]) .card img,
-.listview[data-lv="c"] .card img {
+.zones-grid.listview .card img {
   width: var(--lt);
   height: var(--lt);
   object-fit: contain;
 }
-.listview:is([data-lv="a"], [data-lv="f"]) .card-info,
-.listview:is([data-lv="a"], [data-lv="f"]) .card-meta {
+.listview .card-info,
+.listview .card-meta {
   display: contents;
 }
-.listview:is([data-lv="a"], [data-lv="f"]) .card-name {
+.listview .card-name {
   font-size: 13px;
   font-weight: 500;
 }
-.listview:is([data-lv="a"], [data-lv="f"]) .card-media,
-.listview:is([data-lv="a"], [data-lv="f"]) .card-days,
-.listview:is([data-lv="a"], [data-lv="f"]) .card-dot,
-.listview[data-lv="c"] .card-media {
-  display: none;
-}
-.listview:is([data-lv="a"], [data-lv="f"]) .card-m:empty::before {
+.listview .card-m:empty::before {
   content: "–";
 }
-.listview:is([data-lv="a"], [data-lv="f"]) .card-m-kind {
+.listview .card-m-kind {
   font-family: "Geist Mono", ui-monospace, monospace;
   font-size: 11px;
   letter-spacing: 0.02em;
 }
 
-/* b: Raster wie gehabt, Dateiname und Format unter jedem Bild
-   (lv-named: auch Stapel d und einzelne Dateien in e) */
-.listview .lv-named {
-  row-gap: 14px;
-}
-.listview .lv-named .card,
-.listview .ver-band .card {
-  background: transparent;
-  overflow: visible;
-}
-.listview .lv-named .card img {
-  aspect-ratio: 1;
-  height: auto;
-  object-fit: contain;
-  background: rgba(var(--ink-rgb), 0.05);
-}
-.listview .lv-named .card-info,
-.listview .ver-band .card-info,
-.listview .ver-strip .card-info {
-  display: flex;
-  flex-direction: column;
-  row-gap: 1px;
-  padding-top: 7px;
-}
-.listview .lv-named .card-name {
-  font-size: 12px;
-  font-weight: 500;
-}
-.listview .lv-named .card-meta,
-.listview[data-lv="c"] .card-meta {
-  display: flex;
-  column-gap: 8px;
-  min-width: 0;
-}
-.listview .lv-named .card-m-bytes,
-.listview .lv-named .card-m-src,
-.listview .lv-named .card-m-date {
-  display: none;
-}
-.listview .lv-named .card.selected {
-  --ring-gap: 3px;
-}
-
-/* c: große Zeilen in Spalten, Bild im Originalformat, Name über den Angaben */
-.listview[data-lv="c"] .zone-card-items {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
-  column-gap: 32px;
-}
-.listview[data-lv="c"] .card {
-  display: grid;
-  grid-template-columns: calc(var(--lt) * 1.6) minmax(0, 1fr);
-  column-gap: 16px;
-  align-items: center;
-  padding: 10px 0;
-  background: transparent;
-  border-bottom: 1px solid var(--p-rule);
-}
-.listview[data-lv="c"] .card img {
-  width: calc(var(--lt) * 1.6);
-  height: calc(var(--lt) * 1.6);
-}
-.listview[data-lv="c"] .card-info {
-  display: flex;
-  flex-direction: column;
-  row-gap: 3px;
-  min-width: 0;
-}
-.listview[data-lv="c"] .card-meta {
-  column-gap: 10px;
-}
-.listview[data-lv="c"] .card-m {
-  flex: none;
-}
-.listview[data-lv="c"] .card-m-src {
-  flex: 0 1 auto;
-}
-.listview[data-lv="c"] .card-name {
-  font-size: 15px;
-  font-weight: 500;
-  letter-spacing: -0.01em;
-}
-.listview[data-lv="c"] .card-m-bytes {
-  display: none;
-}
-.listview[data-lv="c"] .card-m:empty {
-  display: none;
-}
-
-/* ---- 0.34 (Entwurf): Stände – Versionen einer Datei gebündelt ----
-   d Stapel im Raster, e eine Reihe je Datei, f Liste mit eingerückten
-   älteren Ständen. Der Name ist zerlegt: Stamm in dim, Kennung in Text. */
-.card-tag {
-  display: none;
-}
+/* ---- 0.34: Stände – Versionen einer Datei gebündelt (Schalter „(Stände)“) ----
+   Raster: Stapel, der neueste Stand oben, Zahl klappt ein Band mit allen
+   Ständen auf. Liste: ältere Stände eingerückt unter dem neuesten.
+   Der Name ist zerlegt: Stamm in dim, Kennung in Text. Kein neues Zeichen,
+   keine neue Farbe; ausgewählt wird mit dem Ring wie überall. */
 .nm-stem {
   color: var(--p-dim);
 }
@@ -6546,14 +6448,49 @@ html.light {
   color: var(--p-text);
 }
 
-/* d: Stapel. Zwei Kanten über dem Bild zeigen, dass mehr darunter liegt. */
-.ver-stacks {
+/* Raster: unter jedem Bild Name und Format bzw. Kennung */
+.stands:not(.listview) .ver-stacks {
+  row-gap: 14px;
+  /* das Band steht unter der Reihe des Stapels, die Reihe füllt sich weiter */
   grid-auto-flow: row dense;
 }
-.listview .lv-named .card.stack img {
-  box-shadow: 0 -8px 0 -4px rgba(var(--ink-rgb), 0.32), 0 -15px 0 -8px rgba(var(--ink-rgb), 0.16);
+.stands:not(.listview) .ver-stacks .card {
+  aspect-ratio: auto;
+  background: transparent;
+  overflow: visible;
 }
-.listview .lv-named .card.stack .card-tag {
+.stands:not(.listview) .ver-stacks .card img {
+  aspect-ratio: 1;
+  height: auto;
+  object-fit: contain;
+  background: rgba(var(--ink-rgb), 0.05);
+}
+.stands:not(.listview) .ver-stacks .card-badge {
+  display: none;
+}
+.stands:not(.listview) .ver-stacks .card-info {
+  display: flex;
+  flex-direction: column;
+  row-gap: 1px;
+  padding-top: 7px;
+}
+.stands:not(.listview) .ver-stacks .card-name {
+  font-size: 12px;
+  font-weight: 500;
+}
+.stands:not(.listview) .ver-stacks .card-meta {
+  display: flex;
+  column-gap: 8px;
+  min-width: 0;
+}
+.stands:not(.listview) .ver-stacks .card-m-bytes,
+.stands:not(.listview) .ver-stacks .card-m-src,
+.stands:not(.listview) .ver-stacks .card-m-date {
+  display: none;
+}
+/* Kennung in Mono wie Seitenzahl und Dauer */
+.stands:not(.listview) .ver-stacks .card.stack .card-tag,
+.stands:not(.listview) .ver-band .card-tag {
   display: block;
   color: var(--p-dim);
   font-family: "Geist Mono", ui-monospace, monospace;
@@ -6561,8 +6498,16 @@ html.light {
   letter-spacing: 0.02em;
   text-transform: uppercase;
 }
-.listview .lv-named .card.stack .card-meta {
+.stands:not(.listview) .ver-stacks .card.stack .card-meta {
   display: none;
+}
+/* Ring um das Bild mit Namen: etwas Luft */
+.stands:not(.listview) .ver-stacks .card.selected {
+  --ring-gap: 3px;
+}
+/* Stapel: zwei Kanten über dem Bild zeigen, dass mehr darunter liegt */
+.stands:not(.listview) .card.stack img {
+  box-shadow: 0 -8px 0 -4px rgba(var(--ink-rgb), 0.32), 0 -15px 0 -8px rgba(var(--ink-rgb), 0.16);
 }
 .card-stack {
   position: absolute;
@@ -6579,10 +6524,12 @@ html.light {
   letter-spacing: 0.02em;
   cursor: default;
 }
+.card-stack:hover,
 .card.stack.open .card-stack {
-  background: var(--ink);
+  background: var(--p-text);
   color: var(--ink-inverse);
 }
+/* Band unter der Reihe: alle Stände alt → neu */
 .ver-band {
   grid-column: 1 / -1;
   padding: 14px 16px 16px;
@@ -6595,82 +6542,33 @@ html.light {
   gap: 12px;
   margin-bottom: 12px;
 }
-.ver-band-stem,
-.ver-stem {
+.ver-band-stem {
   color: var(--p-text);
   font-size: 15px;
   font-weight: 500;
   letter-spacing: -0.01em;
 }
-.ver-band-strip,
-.ver-strip {
+.ver-band-strip {
   display: flex;
   align-items: flex-start;
   gap: 12px;
   overflow-x: auto;
 }
-.ver-band-strip .card {
+.stands:not(.listview) .ver-band-strip .card {
   flex: 0 0 var(--thumb);
-  aspect-ratio: auto;
 }
-.ver-band-strip .card img {
-  aspect-ratio: 1;
-  height: auto;
-  object-fit: contain;
-  background: rgba(var(--ink-rgb), 0.05);
-}
-.listview .ver-band .card-tag,
-.listview .ver-strip .card-tag {
-  display: block;
+.stands:not(.listview) .ver-band .card-tag {
   color: var(--p-text);
-  font-family: "Geist Mono", ui-monospace, monospace;
-  font-size: 11px;
-  letter-spacing: 0.02em;
-  text-transform: uppercase;
 }
-.listview .ver-band .card:not(.ver-current) .card-name,
-.listview .ver-strip .card-name,
-.listview .ver-band .card-m:not(.card-m-date),
-.listview .ver-strip .card-m:not(.card-m-date) {
+.stands:not(.listview) .ver-band .card-name,
+.stands:not(.listview) .ver-band .card-m:not(.card-m-date) {
   display: none;
 }
-
-/* e: eine Reihe je Datei, links der Stamm, rechts die Stände alt → neu */
-.ver-row {
-  display: grid;
-  grid-template-columns: 220px minmax(0, 1fr);
-  column-gap: 24px;
-  padding: 16px 0;
-  border-bottom: 1px solid var(--p-rule);
-}
-.ver-row:first-child {
-  border-top: 1px solid var(--p-rule);
-}
-.ver-stem {
-  overflow-wrap: anywhere;
-}
-.ver-sub {
-  margin-top: 3px;
-  color: var(--p-dim);
-  font-size: 12px;
-}
-.zones-grid.listview .ver-strip .card {
-  flex: none;
-  aspect-ratio: auto;
-  background: transparent;
-  overflow: visible;
-}
-.ver-strip .card img {
-  width: auto;
-  height: calc(var(--lt) * 3);
-  aspect-ratio: var(--ar, 1);
-  object-fit: cover;
-}
-.ver-singles-head {
-  padding: 32px 0 12px;
+.stands:not(.listview) .ver-band .card-m-date {
+  display: block;
 }
 
-/* f: Liste, ältere Stände eingerückt und kleiner */
+/* Liste: „(3 ältere)“ hinter dem Namen klappt die älteren Stände auf */
 .ver-more {
   margin-left: 10px;
   padding: 0;
@@ -6686,18 +6584,157 @@ html.light {
 .ver-more.open {
   color: var(--p-text);
 }
-.listview[data-lv="f"] .card.older img {
+.listview .card.older img {
   transform: scale(0.7);
   transform-origin: right center;
 }
-.listview[data-lv="f"] .card.older .card-name {
+.listview .card.older .card-name {
   font-weight: 400;
 }
-.listview .lv-named .ver-band .card-meta,
-.listview .lv-named .ver-band .card-m-date,
-.listview .ver-strip .card-m-date {
-  display: block;
+
+/* Lightbox: Stände-Leiste über der Navigation */
+.lb-versions {
+  bottom: 76px;
+  gap: 4px;
+  padding: 6px;
+  align-items: flex-end;
+  overflow-x: auto;
 }
-.listview .ver-band .ver-current .card-name {
-  display: none;
+.lightbox.info-open .lb-versions {
+  max-width: calc(100% - min(380px, 42vw) - 48px);
+}
+.lightbox.has-player .lb-versions {
+  bottom: 120px;
+}
+.lb-versions .lb-mono {
+  align-self: center;
+}
+.lb-ver {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 8px 4px;
+  border: none;
+  border-radius: var(--r-sm);
+  background: transparent;
+  cursor: default;
+}
+.lb-ver:hover {
+  background: rgba(var(--ink-rgb), 0.07);
+}
+.lb-ver img {
+  display: block;
+  height: 46px;
+  width: auto;
+  max-width: 92px;
+  object-fit: contain;
+}
+.lb-ver span {
+  color: var(--p-dim);
+  font-family: "Geist Mono", ui-monospace, monospace;
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.lb-ver.on {
+  background: rgba(var(--ink-rgb), 0.1);
+}
+.lb-ver.on span,
+.lb-ver.cmp span {
+  color: var(--p-text);
+}
+/* Die beiden verglichenen Stände tragen den Ring */
+.lb-ver.cmp {
+  position: relative;
+}
+.lb-ver.cmp::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: var(--p-text);
+  -webkit-mask: var(--ring-in) 0 0 / 100% 100% no-repeat;
+  mask: var(--ring-in) 0 0 / 100% 100% no-repeat;
+}
+.lb-versions .lb-sep {
+  align-self: center;
+}
+.lb-versions .lb-btn {
+  align-self: center;
+}
+
+/* Vergleich mit Schieber: links der ältere, rechts der neuere Stand */
+.lightbox.comparing .lightbox-stage,
+.lightbox.comparing .lb-media,
+.lightbox.comparing .lb-caption,
+.lightbox.comparing .lb-zoom {
+  visibility: hidden;
+}
+.lb-split {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+}
+.lb-split-wrap {
+  position: absolute;
+  --cut: 50%;
+  touch-action: none;
+  cursor: ew-resize;
+}
+.lb-split-wrap img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  pointer-events: none;
+  -webkit-user-drag: none;
+}
+.lb-split-top {
+  clip-path: inset(0 0 0 var(--cut));
+}
+.lb-split-line {
+  position: absolute;
+  top: -10px;
+  bottom: -10px;
+  left: var(--cut);
+  width: 1px;
+  background: var(--p-text);
+  pointer-events: none;
+}
+.lb-split-knob {
+  position: absolute;
+  top: 50%;
+  left: var(--cut);
+  transform: translate(-50%, -50%);
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: var(--p-pill);
+  color: var(--p-text);
+  font-family: "Geist Mono", ui-monospace, monospace;
+  font-size: 11px;
+  white-space: nowrap;
+  pointer-events: none;
+  -webkit-backdrop-filter: blur(24px);
+  backdrop-filter: blur(24px);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+}
+.lb-split-lab {
+  position: absolute;
+  bottom: -26px;
+  color: var(--p-text);
+  font-family: "Geist Mono", ui-monospace, monospace;
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  pointer-events: none;
+}
+.lb-split-lab.l {
+  left: 0;
+}
+.lb-split-lab.r {
+  right: 0;
 }

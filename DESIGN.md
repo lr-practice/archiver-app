@@ -1,6 +1,6 @@
 # Archiver – Design-System
 
-Stand: App 0.33.2 · Extension 3.25.3
+Stand: App 0.34.0 · Extension 3.25.3
 
 Diese Datei hält fest, wie Archiver aussieht und warum. Sie gilt für die Mac-App
 (`app/src`) und die Chrome-Extension (`extension/`). Wer an der Oberfläche
@@ -254,22 +254,30 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
   Bibliothek mit eigener Reihenfolge, sobald sie neu dazukommt (0.33.2). Wer sie
   danach verschiebt, behält seinen Platz. Geteilte
   Bibliotheken zeigen nichts davon.
-- **Liste (Entwurf 0.34, noch nicht entschieden):** dritte Ansicht neben
-  Raster und Original, Chip „(Liste)“. Dateiname in Geist 13 px/500
-  (`--p-text`), Angaben in 12 px `--p-dim`, Spaltenköpfe als Label (Mono,
+- **Liste (0.34):** dritte Ansicht neben Raster und Original, Chip
+  „(Liste)“. Zeilen wie im Finder: Bild, Name, Format, Maße, Größe, Quelle,
+  Gesichert. Dateiname in Geist 13 px/500 (`--p-text`), Angaben in 12 px
+  `--p-dim`, Format als Label (Mono), Spaltenköpfe als Label (Mono,
   Versalien), Zeilen mit `--p-rule` getrennt, Auswahl mit `--ring-0` um die
   ganze Zeile. Die Größenstufen setzen die Bildhöhe (`--lt`, 24–96 px).
-  Varianten A Zeilen mit Spalten, B Raster mit Name darunter, C große Zeilen
-  in Spalten (`data-lv`, nur für die Vorschau). Nach der Wahl bleibt eine.
-- **Stände (Entwurf 0.34, noch nicht entschieden):** Versionen einer Datei
-  erkennt `versionOf` am Dateinamen (Stamm + Kennung wie V2, FINAL KORR,
-  Datum). Gebündelt wird nur in der Ansicht. Der Name ist zerlegt: Stamm in
-  `--p-dim`, Kennung in `--p-text`; Kennungen stehen als Label (Mono,
-  Versalien). Varianten D Stapel im Raster (Zahl oben rechts wie
-  `.card-media`, Band in Kartenfläche ink × 0.055), E eine Reihe je Datei,
-  F Liste mit eingerückten älteren Ständen. Konzept:
-  `entwurf/versionen/konzepte.md` im Projektordner.
-- **Nicht:** Keine Rundung, kein Schatten und keine Bildunterschrift im Raster.
+- **Stände (0.34):** Chip „(Stände)“ hinter den Ansichten, in Raster und
+  Liste (nicht in Original, Suche und „Sections“). `versionOf` liest den
+  Dateinamen als Stamm + Kennung (V2, FINAL KORR, Datum); eine Gruppe ist
+  derselbe Stamm im selben Ordner, alt → neu nach Änderungsdatum. Gebündelt
+  wird nur in der Ansicht, keine Datei wird umbenannt. Kein neues Zeichen,
+  keine neue Farbe:
+  - Raster: Stapel, der neueste Stand oben, zwei Kanten darüber (ink × 0.32
+    und 0.16), Zahl oben rechts als Marke wie `.card-media` (`.card-stack`,
+    offen invertiert). Unter jedem Bild Name (12 px/500) und Format bzw.
+    Kennung (Label). Die Zahl klappt ein Band unter der Reihe auf (Fläche
+    ink × 0.055, `--r-lg`): alle Stände alt → neu mit Kennung und Datum.
+  - Liste: neuester Stand vorne, „(n ältere)“ als Label hinter dem Namen
+    klappt die älteren eingerückt darunter auf (Bild × 0.7). Der Name ist
+    zerlegt: Stamm in `--p-dim`, Kennung in `--p-text`.
+  - Tastatur, Auswahl und Lightbox folgen dem, was zu sehen ist. Eigene
+    Reihenfolge per Ziehen ist mit Ständen aus.
+- **Nicht:** Keine Rundung, kein Schatten und keine Bildunterschrift im Raster
+  (Ausnahme: Raster mit Ständen zeigt Name und Kennung).
   Die Info gibt es per `I` oder im Seitenblatt.
 
 ### 4.7 Chip (`.p-chip`)
@@ -305,6 +313,15 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
 - **Leiste der Lightbox (0.28):** dieselben Maße wie die Navigation (4.2):
   Innenrand `--nav-rim`, Knöpfe `--nav-h`, 13,5 px, Abstand 3 px, Ecke `--r-md`.
   Knopf „Gesichert“ (0.30.1) nur bei Linkkarten mit gesicherter Seite, neben „Quelle“.
+- **Stände in der Lightbox (0.34):** Mit „(Stände)“ steht über der Leiste
+  eine zweite Leiste (`.lb-versions`, gleiche Glasform): Label „Stände“, je
+  Stand ein Bild (46 px hoch) mit Kennung als Label, der gezeigte ink × 0.1
+  hinterlegt. Klick zeigt den Stand. „Vergleichen“ (`V`) legt zwei Stände
+  übereinander (`.lb-split`): links der ältere, rechts der neuere, eine 1 px
+  Linie in `--p-text` mit Knauf „‹ ›“ (Glas wie die Leiste), Kennungen
+  darunter. Ziehen oder ←/→ schiebt die Linie, Esc beendet. Die beiden
+  verglichenen Stände tragen den Ring (`--ring-in`), Klick auf einen anderen
+  Stand tauscht den Partner.
 - **Seitenblatt:** Details von rechts, `--sheet-w` = min(560 px, 46 vw).
 
 ### 4.11a Bildtext (`.card-cap`, `.lb-caption`, 0.29)
