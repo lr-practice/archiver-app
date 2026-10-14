@@ -1,5 +1,11 @@
 # Changelog
 
+## Extension 3.28.1 (14.10.2026)
+
+- Mehrfachmarkierung: Wer nach dem Markieren mit ⌘ die zuletzt markierte
+  Stelle zieht, bekommt jetzt alle Stellen auf die Textkarte. Bisher hob der
+  Griff auf die laufende Markierung die früheren Stücke auf.
+
 ## App 0.35.0 (14.10.2026)
 
 - Abschnitte: Objekte lassen sich jetzt von einem Abschnitt in einen anderen

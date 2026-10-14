@@ -1128,8 +1128,10 @@
       const t = e.target;
       if (t instanceof Element && t.closest("input, textarea, select, [contenteditable=''], [contenteditable='true'], archiver-overlay")) return;
       if (!e.metaKey) {
-        // Klick daneben hebt alle Stücke auf (Ziehen eines Stücks läuft oben)
-        if (hasMarks() && !insideMarks(e.clientX, e.clientY)) clearMarks();
+        // Klick daneben hebt alle Stücke auf. Nicht auf einem Stück und nicht auf
+        // der laufenden Markierung: von dort zieht das Ziehen unten alle Stücke mit.
+        const onLive = !!selectedText() && insideSelection(e.clientX, e.clientY);
+        if (hasMarks() && !onLive && !insideMarks(e.clientX, e.clientY)) clearMarks();
         return;
       }
       keepLiveSelection();
