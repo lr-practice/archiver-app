@@ -81,11 +81,20 @@
     // schon registriert (zweite Injektion) oder nicht unterstützt: Fallback 1 im CSS
   }
 
+  // Styles vorab holen (siehe Ende der Datei), das Overlay selbst erst beim
+  // ersten Gebrauch anlegen: die Seite bekommt bis dahin kein fremdes Element.
+  let stylesReady = null;
+  const loadStyles = () =>
+    (stylesReady ||= Promise.all(
+      ["gallery.css", "panel.css", "overlay.css"].map((file) => fetch(chrome.runtime.getURL(file)).then((r) => r.text()))
+    ).catch((e) => {
+      stylesReady = null; // beim nächsten Mal neu versuchen
+      throw e;
+    }));
+
   function ensureOverlay() {
     if (!overlayReady) {
-      overlayReady = Promise.all(
-        ["gallery.css", "panel.css", "overlay.css"].map((file) => fetch(chrome.runtime.getURL(file)).then((r) => r.text()))
-      ).then((texts) => {
+      overlayReady = loadStyles().then((texts) => {
         const host = document.createElement("archiver-overlay");
         ["position:fixed", "top:0", "left:0", "width:0", "height:0", "display:block", "z-index:2147483647"].forEach((rule) => {
           const [prop, value] = rule.split(":");
@@ -1810,7 +1819,7 @@
     },
     true
   );
-  // Overlay vorab bauen (nur im Hauptfenster), damit die Leiste schon beim
-  // ersten Ziehen sofort steht und nicht erst die Styles nachlädt
-  if (window === window.top) (window.requestIdleCallback || setTimeout)(() => ensureOverlay(), { timeout: 2000 });
+  // Styles vorab holen (nur im Hauptfenster), damit die Leiste schon beim
+  // ersten Ziehen sofort steht und nicht erst nachlädt
+  if (window === window.top) (window.requestIdleCallback || setTimeout)(() => loadStyles().catch(() => {}), { timeout: 2000 });
 })();
