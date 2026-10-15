@@ -1,6 +1,6 @@
 # Changelog
 
-## Extension 3.29.1 (App 0.37.2)
+## Extension 3.29.1 (App 0.37.2, 15.10.2026)
 
 - Mehrere Stellen markieren geht jetzt mit ⌥ statt ⌘: ⌥ + Markieren nimmt
   Text dazu, ⌥-Klick ein Bild. ⌘-Klick gehört wieder ganz dem Browser und
