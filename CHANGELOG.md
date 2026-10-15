@@ -8,6 +8,9 @@
   „Beschreibung“ für die erste Seite.
 - Tray: mehrere Objekte wählen mit ⌘-Klick, ⇧-Klick oder ⇧ + Pfeilen.
   Ziehen und ⌘C nehmen alle mit.
+- Tray beim Herausziehen: Statt fast unsichtbar zu werden, klappt er nach
+  oben auf eine Leiste zusammen. Sie zeigt, was du ziehst, der Rest des
+  Bildschirms bleibt frei. Nach dem Ablegen klappt er wieder auf.
 - Tray und Observer holen das Hauptfenster nicht mehr nach vorn, wenn
   Archiver ausgeblendet war.
 

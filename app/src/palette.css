@@ -362,6 +362,83 @@ body {
   mask-image: var(--ring-0);
 }
 
+/* ---- Beim Herausziehen (V4, 0.37.2): Das Fenster klappt nach oben auf das
+   Suchfeld zusammen (macos.rs panel_ghost, 0.22 s). Im Suchfeld steht dann
+   die Leiste mit Objekt, Name, Zone und Hinweis; der Rest blendet aus. */
+
+.pal-search {
+  position: relative;
+  flex: none; /* behält 44 px, wenn das Fenster auf 72 px zusammenklappt */
+}
+
+.pal-crumb,
+.pal-body,
+.pal-keys {
+  transition: opacity 0.12s;
+}
+
+body.dragging .pal-crumb,
+body.dragging .pal-body,
+body.dragging .pal-keys {
+  opacity: 0;
+}
+
+body.dragging .pal-search > input,
+body.dragging .pal-search > #hits {
+  visibility: hidden;
+}
+
+.pal-dragbar {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 14px;
+  white-space: nowrap;
+  animation: pal-in 0.16s ease-out;
+}
+
+.pal-dragbar-thumb {
+  position: relative;
+  flex: none;
+  width: 30px;
+  height: 30px;
+}
+
+.pal-dragbar-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 3px;
+}
+
+/* Das gezogene Objekt trägt den Ring (4.1) */
+.pal-dragbar-thumb::after {
+  content: "";
+  position: absolute;
+  inset: -3px;
+  background: var(--p-text);
+  -webkit-mask: var(--ring-in) 0 0 / 100% 100% no-repeat;
+  mask: var(--ring-in) 0 0 / 100% 100% no-repeat;
+}
+
+.pal-dragbar-name {
+  font-weight: 400;
+  font-size: 15px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pal-dragbar-zone {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pal-dragbar-hint {
+  margin-left: auto;
+}
+
 /* ---- Tasten ---- */
 
 .pal-keys {
@@ -501,5 +578,9 @@ body {
 @media (prefers-reduced-motion: reduce) {
   * {
     transition: none !important;
+  }
+
+  .pal-dragbar {
+    animation: none;
   }
 }

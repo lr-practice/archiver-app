@@ -401,8 +401,14 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
   darunter Objekte. Fußzeile: links „Tray“, rechts die Tasten als
   Mono-Etiketten, esc am Ende.
 - **Verhalten:** Aus InDesign geöffnet heißt ↵ „Platzieren“ (markierter
-  Rahmen oder Platzieren-Cursor), sonst „Kopieren“. Beim Herausziehen eines Objekts wird die Palette auf 6 %
-  Deckkraft gesetzt und lässt Klicks durch. Klick in ein anderes Programm
+  Rahmen oder Platzieren-Cursor), sonst „Kopieren“. Beim Herausziehen (0.37.2, Variante V4) klappt der Tray
+  in 0.22 s ease-out nach oben auf das Suchfeld zusammen (Fenster 72 px hoch,
+  Oberkante bleibt, `panel_ghost` in macos.rs) und lässt Klicks durch. Im
+  Suchfeld steht dann die Leiste: „Tray“ mono, Vorschau 30 px mit Ring (4.1),
+  Name 15 px (bei mehreren „3 Bilder“), Zone gedimmt, rechts „Loslassen, um
+  abzulegen“ (aus InDesign: „zu platzieren“) und esc · Abbrechen. Der übrige
+  Inhalt blendet in 0.12 s aus. Nach dem Ziehen geht der Tray auf den
+  gemerkten Rahmen zurück. Mit „Bewegung reduzieren“ ohne Animation. Klick in ein anderes Programm
   blendet sie aus.
 - **Textkarten (0.27):** wie in der App in ihrer Grundfarbe (`.pal-text`).
 - **Leertaste (0.27):** zeigt das gewählte Objekt groß, innerhalb der Palette

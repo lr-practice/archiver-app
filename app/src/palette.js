@@ -3,8 +3,8 @@
 //   Zone    Objekte einer Zone, oben die Active Zones als Reiter (1–4),
 //           darüber ihre Unterordner als Karten (0.32)
 //   Suche   passende Zonen als Karten, darunter passende Objekte
-// Objekte zieht man heraus, z. B. in einen InDesign-Rahmen; währenddessen ist
-// die Palette fast unsichtbar und durchklickbar. ↵ kopiert, ⌘↵ zeigt im Finder.
+// Objekte zieht man heraus, z. B. in einen InDesign-Rahmen; währenddessen
+// klappt die Palette auf eine Leiste oben zusammen und ist durchklickbar (0.37.2). ↵ kopiert, ⌘↵ zeigt im Finder.
 // Leertaste zeigt das Objekt groß innerhalb der Palette, ⌘1–3 wechselt die Bibliothek.
 
 (function () {
@@ -771,17 +771,49 @@
     window.addEventListener("mouseup", done);
   }
 
+  // Leiste beim Ziehen (V4): Objekt, Name, Zone, Hinweis. Liegt im Suchfeld,
+  // auf das der Tray nach oben zusammenklappt (macos.rs panel_ghost).
+  const DRAG_BAR = 72; // Suchfeld 44 + 14 oben + 14 unten
+  function showDragBar(list) {
+    const first = list[0];
+    const bar = el("div", "pal-dragbar");
+    bar.appendChild(el("span", "pal-mono pal-dim", "Tray"));
+    const thumb = el("span", "pal-dragbar-thumb");
+    const img = el("img");
+    img.src = thumbSrc(first);
+    img.draggable = false;
+    thumb.appendChild(img);
+    bar.appendChild(thumb);
+    bar.appendChild(el("b", "pal-dragbar-name", list.length > 1 ? countText(list.length) : first.filename));
+    if (list.length === 1) bar.appendChild(el("span", "pal-dim pal-dragbar-zone", zoneName(first.zone || "")));
+    const hint = el("span", "pal-dragbar-hint pal-mono pal-dim", t(state.indesign ? "palDragPlace" : "palDragDrop"));
+    const esc = el("span", "pal-mono pal-dim");
+    esc.append(el("span", "pal-kbd", "esc"), document.createTextNode(t("palDragCancel")));
+    bar.append(hint, esc);
+    document.querySelector(".pal-search").appendChild(bar);
+    document.body.classList.add("dragging");
+  }
+  function hideDragBar() {
+    document.body.classList.remove("dragging");
+    document.querySelectorAll(".pal-dragbar").forEach((b) => b.remove());
+  }
+  const ghost = (on) => {
+    if (on) showDragBar(ghost.list);
+    else hideDragBar();
+    return invoke("palette_ghost", { on, bar: DRAG_BAR }).catch(() => {});
+  };
+
   async function startDrag(item) {
     const channel = new TAURI.core.Channel();
-    channel.onmessage = () => invoke("palette_ghost", { on: false }).catch(() => {});
+    channel.onmessage = () => ghost(false);
     const icon =
       (await invoke("drag_icon", { hash: item.hash, path: item.thumb || item.abs, color: null }).catch(() => null)) ||
       item.thumb ||
       item.abs;
-    invoke("palette_ghost", { on: true }).catch(() => {});
-    invoke("plugin:drag|start_drag", { item: picks(item).map((i) => i.abs), image: icon, onEvent: channel }).catch(() =>
-      invoke("palette_ghost", { on: false }).catch(() => {})
-    );
+    const list = picks(item);
+    ghost.list = list;
+    ghost(true);
+    invoke("plugin:drag|start_drag", { item: list.map((i) => i.abs), image: icon, onEvent: channel }).catch(() => ghost(false));
   }
 
   // ---- Start ----

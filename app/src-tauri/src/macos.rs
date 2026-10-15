@@ -618,13 +618,50 @@ pub unsafe fn panel_hide(window: *mut AnyObject) {
     }
 }
 
-/// Beim Herausziehen: fast unsichtbar und durchklickbar.
-pub unsafe fn panel_ghost(window: *mut AnyObject, on: bool) {
+/// Rahmen des Trays vor dem Zusammenklappen (x, y, Breite, Höhe)
+static GHOST_FRAME: std::sync::Mutex<Option<(f64, f64, f64, f64)>> = std::sync::Mutex::new(None);
+
+/// Beim Herausziehen (0.37.2): Der Tray klappt nach oben auf eine Leiste der
+/// Höhe `bar` zusammen und lässt Klicks durch; danach geht er zurück auf den
+/// gemerkten Rahmen. 0.22 s, mit „Bewegung reduzieren“ ohne Animation.
+pub unsafe fn panel_ghost(window: *mut AnyObject, on: bool, bar: f64) {
     if window.is_null() {
         return;
     }
-    let _: () = msg_send![window, setAlphaValue: if on { 0.06f64 } else { 1.0f64 }];
+    let _: () = msg_send![window, setAlphaValue: 1.0f64];
     let _: () = msg_send![window, setIgnoresMouseEvents: on];
+    let frame: NSRect = msg_send![window, frame];
+    let mut saved = GHOST_FRAME.lock().unwrap_or_else(|e| e.into_inner());
+    let target = if on {
+        if saved.is_none() {
+            *saved = Some((frame.origin.x, frame.origin.y, frame.size.width, frame.size.height));
+        }
+        let h = bar.min(frame.size.height);
+        NSRect::new(NSPoint::new(frame.origin.x, frame.origin.y + frame.size.height - h), NSSize::new(frame.size.width, h))
+    } else {
+        let Some((x, y, w, h)) = saved.take() else { return };
+        NSRect::new(NSPoint::new(x, y), NSSize::new(w, h))
+    };
+    let workspace: *mut AnyObject = msg_send![class!(NSWorkspace), sharedWorkspace];
+    let reduce: Bool = msg_send![workspace, accessibilityDisplayShouldReduceMotion];
+    if reduce.as_bool() {
+        let _: () = msg_send![window, setFrame: target, display: true];
+        return;
+    }
+    let _: () = msg_send![class!(NSAnimationContext), beginGrouping];
+    let ctx: *mut AnyObject = msg_send![class!(NSAnimationContext), currentContext];
+    let _: () = msg_send![ctx, setDuration: 0.22f64];
+    // QuartzCore lädt AppKit mit; trotzdem ohne Panik, falls die Klasse fehlt
+    if let Some(cls) = AnyClass::get(c"CAMediaTimingFunction") {
+        let name = NSString::from_str("easeOut");
+        let timing: *mut AnyObject = msg_send![cls, functionWithName: &*name];
+        if !timing.is_null() {
+            let _: () = msg_send![ctx, setTimingFunction: timing];
+        }
+    }
+    let animator: *mut AnyObject = msg_send![window, animator];
+    let _: () = msg_send![animator, setFrame: target, display: true];
+    let _: () = msg_send![class!(NSAnimationContext), endGrouping];
 }
 
 /// Sichtbarer Bereich (ohne Menüleiste und Dock) des Bildschirms mit dem Zeiger.

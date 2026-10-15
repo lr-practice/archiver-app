@@ -255,16 +255,16 @@ pub fn palette_hide(app: AppHandle) {
     hide_palette(&app);
 }
 
-/// Ziehen aus der Palette beginnt bzw. endet: Palette fast unsichtbar und
-/// durchklickbar, damit das Ziel darunter frei liegt.
+/// Ziehen aus der Palette beginnt bzw. endet: Palette klappt auf die Leiste
+/// oben zusammen (V4, 0.37.2) und lässt Klicks durch, das Ziel liegt frei.
 #[tauri::command]
-pub fn palette_ghost(app: AppHandle, on: bool) {
+pub fn palette_ghost(app: AppHandle, on: bool, bar: Option<f64>) {
     PALETTE_DRAG.store(on, Ordering::Relaxed);
     #[cfg(target_os = "macos")]
     if let Some(win) = app.get_webview_window(PALETTE) {
         let _ = app.run_on_main_thread(move || {
             if let Ok(ns) = win.ns_window() {
-                unsafe { crate::macos::panel_ghost(ns.cast(), on) };
+                unsafe { crate::macos::panel_ghost(ns.cast(), on, bar.unwrap_or(72.0)) };
             }
         });
     }
