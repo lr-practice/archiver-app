@@ -321,6 +321,10 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
 - **Leiste der Lightbox (0.28):** dieselben Maße wie die Navigation (4.2):
   Innenrand `--nav-rim`, Knöpfe `--nav-h`, 13,5 px, Abstand 3 px, Ecke `--r-md`.
   Knopf „Gesichert“ (0.30.1) nur bei Linkkarten mit gesicherter Seite, neben „Quelle“.
+  Feste Breite `min(960px, 100% − 32px)` (0.37.1, vorher 600 px), bei offener
+  Info abzüglich der Info-Spalte; sie springt beim Blättern nicht. Passt der
+  Dateiname nicht, kürzt `fitLbName` ihn in der Mitte („Anfang … Ende.png“),
+  damit Anfang und Endung sichtbar bleiben. Der volle Name steht im Tooltip.
 - **Seitenblatt:** Details von rechts, `--sheet-w` = min(560 px, 46 vw).
 
 ### 4.11a Bildtext (`.card-cap`, `.lb-caption`, 0.29)

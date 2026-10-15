@@ -531,8 +531,14 @@ html.light .lb-bar {
 
 .lb-nav {
   bottom: 22px;
-  /* Feste Breite: springt nicht mit dem Dateinamen, mit Player gleich breit */
-  width: min(600px, calc(100% - 32px));
+  /* Feste Breite: springt nicht mit dem Dateinamen, mit Player gleich breit.
+     0.37.1: 960 statt 600 px, damit lange Dateinamen Platz haben; zu lange
+     kürzt app.js in der Mitte (fitLbName). */
+  width: min(960px, calc(100% - 32px));
+}
+
+.lightbox.info-open .lb-nav {
+  width: min(960px, calc(100% - min(380px, 42vw) - 32px));
 }
 
 .lightbox.info-open .lb-bar {

@@ -1,5 +1,11 @@
 # Changelog
 
+## App 0.37.1 (in Arbeit)
+
+- Lightbox: Die Leiste unten ist 960 statt 600 px breit, lange Dateinamen
+  passen ganz hinein. Ist ein Name noch länger, wird er in der Mitte gekürzt,
+  Anfang und Endung bleiben sichtbar.
+
 ## Extension 3.29.0 (App 0.37.0)
 
 - Bibliothek beim Ziehen wechseln: Gibt es mehrere Bibliotheken, steht beim

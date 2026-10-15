@@ -4334,7 +4334,7 @@
       }
       if (noteEd === ed) {
         ed.status.textContent = t("noteSaved");
-        $("lbName").textContent = item.filename;
+        setLbName(item.filename);
       }
     });
     return true;
@@ -4422,6 +4422,53 @@
   }
 
   // Farbpunkte in der Leiste, nur bei Notizen
+  // Dateiname in der Leiste (0.37.1): passt er nicht, wird er in der Mitte
+  // gekürzt, damit Anfang und Endung sichtbar bleiben. Neu gemessen, sobald
+  // sich die Breite ändert (Fenster, Info, Zoom-Anzeige).
+  function setLbName(name) {
+    const el = $("lbName");
+    el.dataset.full = name;
+    el.title = name;
+    fitLbName();
+  }
+
+  function fitLbName() {
+    const el = $("lbName");
+    const name = el.dataset.full || "";
+    el.textContent = name;
+    // Breite des Textes selbst messen: scrollWidth meldet hier bis zu 30 px zu viel
+    const pad = parseFloat(getComputedStyle(el).paddingLeft) + parseFloat(getComputedStyle(el).paddingRight);
+    const room = el.clientWidth - pad;
+    const range = document.createRange();
+    const fits = () => {
+      range.selectNodeContents(el);
+      return range.getBoundingClientRect().width <= room;
+    };
+    if (fits()) return;
+    const dot = name.lastIndexOf(".");
+    const ext = dot > 0 ? name.length - dot : 0;
+    const cut = (n) => {
+      const tail = Math.min(n - 4, Math.max(ext + 6, Math.round(n * 0.35)));
+      return name.slice(0, n - tail).trimEnd() + " … " + name.slice(name.length - tail).trimStart();
+    };
+    let lo = 8;
+    let hi = name.length - 1;
+    while (lo < hi) {
+      const mid = Math.ceil((lo + hi) / 2);
+      el.textContent = cut(mid);
+      if (fits()) lo = mid;
+      else hi = mid - 1;
+    }
+    el.textContent = cut(lo);
+  }
+
+  new ResizeObserver(() => {
+    if (!$("lightbox").hidden) fitLbName();
+  }).observe($("lbName"));
+  document.fonts.ready.then(() => {
+    if (!$("lightbox").hidden) fitLbName();
+  });
+
   function lbRenderTones(item) {
     const box = $("lbTones");
     box.hidden = !isNote(item);
@@ -4750,8 +4797,7 @@
     if (lb.shown !== item) lbFlipped = false;
     lb.shown = item;
     lb.index = list.indexOf(item);
-    $("lbName").textContent = item.filename;
-    $("lbName").title = item.filename;
+    setLbName(item.filename);
     // Quelle nur, wenn es eine gibt; der blaue Knopf zeigt die Zone
     $("lbSourceBtn").hidden = !item.pageUrl;
     $("lbSourceBtn").title = item.pageUrl || "";
