@@ -3673,11 +3673,49 @@ html.light .pdf-maker {
   color: var(--muted);
 }
 
+/* Knöpfe unten links (K2, 0.37.2): „PDF sichern“ über die ganze Breite mit
+   ⌘↩ rechts, darunter „Abbrechen“ klein in Mono */
 .pdf-actions {
   margin-top: auto;
   display: flex;
-  gap: 8px;
-  justify-content: flex-end;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+}
+
+.pdf-actions .btn.primary {
+  order: -1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 40px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: var(--r-md, 6px);
+  font-size: 14px;
+}
+
+.pdf-actions .btn.primary::after {
+  content: "⌘↩";
+  font-family: "Geist Mono", ui-monospace, monospace;
+  font-size: 11px;
+  opacity: 0.55;
+}
+
+.pdf-actions .btn:not(.primary) {
+  align-self: flex-start;
+  border: 0;
+  padding: 0;
+  background: none;
+  font-family: "Geist Mono", ui-monospace, monospace;
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.pdf-actions .btn:not(.primary):hover {
+  color: var(--text);
 }
 
 .pdf-stage {

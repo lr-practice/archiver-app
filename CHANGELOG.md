@@ -6,6 +6,8 @@
   Bilder ungeschnitten in wechselnden Reihen, Paar zwei pro Reihe. Dazu
   eine Kopfzeile mit Titel, Anzahl, Datum und Seite und ein Feld
   „Beschreibung“ für die erste Seite.
+- PDF-Ersteller: „PDF sichern“ steht unten links über die ganze Breite mit
+  ⌘↩, „Abbrechen“ klein darunter.
 - Tray: mehrere Objekte wählen mit ⌘-Klick, ⇧-Klick oder ⇧ + Pfeilen.
   Ziehen und ⌘C nehmen alle mit.
 - Tray beim Herausziehen: Statt fast unsichtbar zu werden, klappt er nach

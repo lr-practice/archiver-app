@@ -591,6 +591,9 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
 - **Gleich in Vorschau und PDF:** `flowPages` (app.js) rechnet die Felder in
   Punkten, `flow_sheet` (pdf.rs) setzt genau diese Felder.
 - **Nicht:** kein Anschnitt, keine Schrift im Bild, keine Notizen.
+- **Knöpfe unten links (K2, gilt für alle Stile):** „PDF sichern“ über die
+  ganze Breite, 40 px hoch, `--r-md`, ⌘↩ rechts in Mono 11 px (0.55).
+  Darunter „Abbrechen“ als Mono-Etikett 11 px, Großbuchstaben, gedimmt.
 
 ---
 
