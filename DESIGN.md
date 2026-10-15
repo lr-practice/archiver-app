@@ -600,6 +600,13 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
   ganze Breite, 40 px hoch, `--r-md`, ⌘↩ rechts in Mono 11 px (0.55).
   Darunter „Abbrechen“ als Mono-Etikett 11 px, Großbuchstaben, gedimmt.
 
+### 4.22 Name zum Testen (App 0.37.3, Information › App)
+- **Zweck:** Andere Namen statt „Archiver“ ausprobieren, ohne Build.
+- **Form:** Zeile wie „Dein Name“ (Titel, gedimmter Satz, Eingabe rechts,
+  `p-input note-field`), Platzhalter „Archiver“. Greift beim Tippen.
+- **Gilt für:** Navigation (`#navBrand`), Startbild, Sperrbild, Kopf von
+  Information, Fenstertitel. Nicht: Tray, Extension, PDF, Dateinamen.
+
 ---
 
 ## 5. Bekannte Abweichungen

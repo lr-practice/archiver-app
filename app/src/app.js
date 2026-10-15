@@ -2833,10 +2833,23 @@
     invoke("play_startup_sound", { volume: pref("startSoundVolume", 0.35) }).catch(() => {});
   }
 
+  // Name zum Testen (0.37.3): ersetzt den Schriftzug „Archiver“ in der
+  // Navigation, auf Start- und Sperrbild, hier oben und im
+  // Fenstertitel. Nur lokal, leer = Archiver.
+  const brandName = () => String(pref("brandName", "") || "").trim() || "Archiver";
+  function applyBrand() {
+    const name = brandName();
+    document.title = name;
+    for (const node of [$("navBrand"), document.querySelector(".splash-word"), document.querySelector(".p-lock-mark")])
+      if (node) node.textContent = name;
+    const head = document.querySelector(".p-about .p-head-title");
+    if (head) head.textContent = name;
+  }
+
   // Info: Wortmarke mit Claim, dann Zahlen zur Sammlung und das Kleingedruckte
   function renderAbout() {
-    const wrap = el("div", "p-sheet-inner");
-    wrap.appendChild(headline("Archiver", t("aboutClaim")));
+    const wrap = el("div", "p-sheet-inner p-about");
+    wrap.appendChild(headline(brandName(), t("aboutClaim")));
 
     const how = block(t("aboutHow"));
     for (const key of ["Collect", "Library", "Sort", "View", "Share", "Viewer"]) {
@@ -2891,6 +2904,19 @@
       checkUpdate();
     });
     meta.appendChild(blockRow(t("aboutVersion"), version));
+    const brand = el("input", "p-input note-field");
+    brand.value = pref("brandName", "");
+    brand.placeholder = "Archiver";
+    brand.spellcheck = false;
+    brand.addEventListener("input", () => {
+      setPref("brandName", brand.value.trim());
+      applyBrand();
+    });
+    brand.addEventListener("keydown", (e) => {
+      e.stopPropagation();
+      if (e.key === "Enter" || e.key === "Escape") brand.blur();
+    });
+    meta.appendChild(blockRow([el("div", null, t("aboutBrand")), el("div", "p-block-text dim", t("aboutBrandText"))], brand));
     meta.appendChild(blockRow(t("setLibrary"), pathEl(state.root)));
     meta.appendChild(blockRow(t("aboutFont"), "SIL OFL"));
     wrap.appendChild(meta);
@@ -7979,6 +8005,7 @@
   }
 
   async function boot() {
+    applyBrand();
     bindEvents();
     TAURI.event.listen("library-changed", debounce(refresh, 120));
     // Fehler im Hintergrund (Einlesen, Ordner nicht lesbar) und vergessene

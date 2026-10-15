@@ -1,5 +1,11 @@
 # Changelog
 
+## App 0.37.3 (in Arbeit)
+
+- Information › App: Feld „Name (Test)“. Ersetzt den Schriftzug „Archiver“
+  in der Navigation, auf Start- und Sperrbild, oben in Information und im
+  Fenstertitel, nur auf diesem Mac. Leer stellt „Archiver“ zurück.
+
 ## Extension 3.29.3 (App 0.37.2)
 
 - ⌥-Klick auf ein Bild oder Objekt mit Link führt nicht mehr auf die nächste
