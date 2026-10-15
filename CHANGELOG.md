@@ -1,5 +1,10 @@
 # Changelog
 
+## Extension 3.29.2 (App 0.37.2)
+
+- Neues Icon: „Ar“ weiß auf Schwarz, abgerundet, wie das App-Icon. Vorher
+  ein Pfeil im blauen Kreis.
+
 ## Extension 3.29.1 (App 0.37.2, 15.10.2026)
 
 - Mehrere Stellen markieren geht jetzt mit ⌥ statt ⌘: ⌥ + Markieren nimmt
