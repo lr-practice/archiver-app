@@ -1,6 +1,6 @@
 # Changelog
 
-## App 0.37.3 (in Arbeit)
+## App 0.37.3 (Extension 3.29.3)
 
 - Information › App: Feld „Name (Test)“. Ersetzt den Schriftzug „Archiver“
   in der Navigation, auf Start- und Sperrbild, oben in Information und im
