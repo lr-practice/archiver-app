@@ -1,6 +1,6 @@
 # Archiver – Design-System
 
-Stand: App 0.37.1 · Extension 3.29.0
+Stand: App 0.37.2 · Extension 3.29.0
 
 Diese Datei hält fest, wie Archiver aussieht und warum. Sie gilt für die Mac-App
 (`app/src`) und die Chrome-Extension (`extension/`). Wer an der Oberfläche

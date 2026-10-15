@@ -1,6 +1,6 @@
 # Changelog
 
-## App 0.37.2 (in Arbeit)
+## App 0.37.2 (Extension 3.29.0)
 
 - PDF, Plakat: zwei neue Anordnungen neben dem Raster. Index setzt die
   Bilder ungeschnitten in wechselnden Reihen, Paar zwei pro Reihe. Dazu
