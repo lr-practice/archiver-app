@@ -1,10 +1,10 @@
 # Changelog
 
-## Extension 3.29.1 (in Arbeit)
+## Extension 3.29.1 (App 0.37.2)
 
-- ⌘-Klick auf einen Link öffnet wieder einen neuen Tab, auch wenn ein Bild
-  darin liegt. Ein verlinktes Bild nimmt ⌘-Klick erst dazu, wenn schon etwas
-  markiert ist.
+- Mehrere Stellen markieren geht jetzt mit ⌥ statt ⌘: ⌥ + Markieren nimmt
+  Text dazu, ⌥-Klick ein Bild. ⌘-Klick gehört wieder ganz dem Browser und
+  öffnet Links im neuen Tab, auch auf Bildern.
 
 ## App 0.37.2 (Extension 3.29.0)
 

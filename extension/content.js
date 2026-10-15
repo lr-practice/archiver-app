@@ -940,8 +940,8 @@
     return null;
   }
 
-  // ---- Mehrere Stellen markieren (⌘, 3.27.0) ----
-  // Mit gedrückter ⌘-Taste kommen weitere Stellen dazu: Text wie gewohnt
+  // ---- Mehrere Stellen markieren (⌥, seit 3.29.1; vorher ⌘) ----
+  // Mit gedrückter ⌥-Taste kommen weitere Stellen dazu: Text wie gewohnt
   // markieren, Bilder anklicken (nochmal anklicken nimmt sie wieder raus).
   // Chrome kennt nur eine Markierung, deshalb merkt sich Archiver die früheren
   // Stücke selbst: Text bleibt in der Farbe der Markierung (CSS Highlight, die
@@ -950,7 +950,7 @@
   //   nur Text → eine Textkarte, Stücke als Absätze in Markierreihenfolge
   //   Text und Bild → jedes Bild mit allem Text als Bildtext
   //   nur Bilder → jedes Bild einzeln
-  // Klick ohne ⌘ daneben oder Esc hebt alles auf.
+  // Klick ohne ⌥ daneben oder Esc hebt alles auf.
 
   const marks = []; // { range, text } | { img }
   const MIN_MARK_IMG = 80;
@@ -1070,7 +1070,7 @@
   window.addEventListener("scroll", () => hasMarks() && scheduleMarkRings(), true);
   window.addEventListener("resize", () => hasMarks() && scheduleMarkRings());
 
-  // Den Klick nach einer ⌘-Geste schlucken, sonst öffnet ein Link im neuen Tab
+  // Den Klick nach einer ⌥-Geste schlucken, sonst lädt Chrome den Link herunter
   function swallowNextClick() {
     const stop = (c) => {
       c.preventDefault();
@@ -1080,7 +1080,7 @@
     setTimeout(() => window.removeEventListener("click", stop, true), 600);
   }
 
-  let metaMark = null; // { x, y } während einer ⌘-Markierung
+  let metaMark = null; // { x, y } während einer ⌥-Markierung
   window.addEventListener(
     "mousedown",
     (e) => {
@@ -1088,25 +1088,17 @@
       if (e.button !== 0 || manualOpen || textDrag || gone()) return;
       const t = e.target;
       if (t instanceof Element && t.closest("input, textarea, select, [contenteditable=''], [contenteditable='true'], archiver-overlay")) return;
-      if (!e.metaKey) {
+      if (!e.altKey) {
         // Klick daneben hebt alle Stücke auf. Nicht auf einem Stück und nicht auf
         // der laufenden Markierung: von dort zieht das Ziehen unten alle Stücke mit.
         const onLive = !!selectedText() && insideSelection(e.clientX, e.clientY);
         if (hasMarks() && !onLive && !insideMarks(e.clientX, e.clientY)) clearMarks();
         return;
       }
-      // ⌘-Klick auf einen Link öffnet wie gewohnt einen Tab, solange noch nichts
-      // gesammelt wird. Erst wenn schon etwas markiert ist, nimmt er das Bild dazu.
-      const link = t instanceof Element && t.closest("a[href]");
-      const collecting = hasMarks() || !!selectedText();
       keepLiveSelection();
       const img = imageUnder(e.clientX, e.clientY);
-      if (img && (link || img.closest("a[href]")) && !collecting) {
-        paintMarks();
-        return;
-      }
       if (img) {
-        // ⌘-Klick auf ein Bild: dazunehmen oder wieder herausnehmen
+        // ⌥-Klick auf ein Bild: dazunehmen oder wieder herausnehmen
         e.preventDefault();
         e.stopImmediatePropagation();
         const i = marks.findIndex((m) => m.img === img);
@@ -1224,7 +1216,7 @@
     hideSpotlight();
     // Neue Markierung beginnt: neue Farbe, sofort sichtbar. Mit ⌘ oder auf
     // einem gemerkten Stück bleibt die Farbe, alle Stücke werden eine Karte.
-    if (e.button === 0 && !e.metaKey && !(hasMarks() && insideMarks(e.clientX, e.clientY))) {
+    if (e.button === 0 && !e.altKey && !(hasMarks() && insideMarks(e.clientX, e.clientY))) {
       newTone();
       showTone();
     }
@@ -1364,7 +1356,7 @@
     "mousedown",
     (e) => {
       if (!e.isTrusted) return; // nur echte Eingaben, keine von der Seite erzeugten Events
-      if (e.button !== 0 || e.metaKey || manualOpen || textDrag || gone()) return;
+      if (e.button !== 0 || e.altKey || manualOpen || textDrag || gone()) return;
       const text = selectedText();
       const onLive = !!text && insideSelection(e.clientX, e.clientY);
       if (!onLive && !(hasMarks() && insideMarks(e.clientX, e.clientY))) return;
@@ -1424,7 +1416,7 @@
   function armHiddenDrag(e) {
     if (!e.isTrusted) return; // nur echte Eingaben, keine von der Seite erzeugten Events
     clearHiddenDrag();
-    if (e.button !== 0 || e.metaKey || manualOpen || textDrag || gone()) return;
+    if (e.button !== 0 || e.altKey || manualOpen || textDrag || gone()) return;
     if (hasMarks() && insideMarks(e.clientX, e.clientY)) return; // zieht alle Stücke (Mehrfachmarkierung)
     const t = e.target;
     if (!(t instanceof Element)) return;
