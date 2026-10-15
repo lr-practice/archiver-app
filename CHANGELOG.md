@@ -1,5 +1,11 @@
 # Changelog
 
+## Extension 3.28.4 (App 0.37.0)
+
+- Pinterest: Ziehen aus der Übersicht zieht jetzt das Bild statt des Pin-Links,
+  und Pinterest öffnet dabei nicht mehr „Bild zur Suche hochladen“. Dateien aus
+  dem Finder kann man weiter auf Pinterest ziehen.
+
 ## App 0.37.0 · Extension 3.28.3
 
 - ⌘Z wirkt nur noch in der Bibliothek, in der der Schritt passiert ist. Nach

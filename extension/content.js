@@ -1682,6 +1682,42 @@
   // gilt das angezeigte Bild in der größten Variante der Seite (srcset).
   const IG = /(^|\.)instagram\.com$/.test(location.hostname);
   let dragSource = null;
+
+  // ---- Pinterest: Ziehen aus der Übersicht (3.28.4) ----
+  // Jeder Pin ist ein Link um das Bild. Chrome zog darum den Link (Adresse am
+  // Mauszeiger), und Pinterest hielt das Ziehen für einen Upload und öffnete
+  // „Bild zur Suche hochladen“. Jetzt ist es ein Bild-Drag, und solange ein Drag
+  // aus der Seite selbst läuft, bekommt Pinterest die Drag-Ereignisse nicht.
+  // Dateien aus dem Finder (kein dragSource) erreichen die Seite wie bisher.
+  const PIN = /(^|\.)pinterest\.[a-z.]+$/.test(location.hostname);
+  if (PIN) {
+    window.addEventListener(
+      "dragstart",
+      (e) => {
+        if (!e.isTrusted || !e.dataTransfer || hiddenDrag || !(e.target instanceof Element)) return;
+        const img = e.target.tagName === "IMG" ? e.target : e.target.querySelector && e.target.querySelector("img");
+        if (!img || !e.target.closest("a[href]")) return;
+        const url = resolveUrl(fallbackImageUrl || findBestImageUrl(img));
+        if (!url) return;
+        e.dataTransfer.clearData();
+        e.dataTransfer.effectAllowed = "copy";
+        e.dataTransfer.setData("text/uri-list", url);
+        e.dataTransfer.setData("text/plain", url);
+        e.dataTransfer.setData("text/html", `<img src="${url.replace(/"/g, "&quot;")}">`);
+        cappedDragImage(e, img);
+      },
+      true
+    );
+    for (const type of ["dragenter", "dragover", "dragleave", "drop"]) {
+      window.addEventListener(
+        type,
+        (e) => {
+          if (e.isTrusted && dragSource && !manualOpen) e.stopPropagation(); // offenes Overlay: Karten nehmen selbst an
+        },
+        true
+      );
+    }
+  }
   const igMedia = new Map();
   const IG_MEDIA_MAX = 3000;
 
