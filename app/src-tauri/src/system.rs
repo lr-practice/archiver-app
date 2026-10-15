@@ -40,6 +40,10 @@ static DROPBAR_HOLD: AtomicU64 = AtomicU64::new(0);
 /// Hauptfenster beim Öffnen des Trays weggelegt (0.28): kommt beim Schließen
 /// hinter alle Fenster zurück, statt mit Archiver nach vorne zu springen.
 pub static MAIN_TUCKED: AtomicBool = AtomicBool::new(false);
+/// 0.37.1: Wann Archiver zuletzt aus ⌘H zurückkam (ms). Öffnet der Betrachter
+/// ein Bild aus dem Finder, blendet macOS Archiver vorher ein, mit allen
+/// Fenstern; so erkennt der Betrachter, dass das Hauptfenster weg war.
+pub static UNHIDDEN_AT: AtomicU64 = AtomicU64::new(0);
 /// Programm, das vor der Palette vorne war (NSRunningApplication, 0 = keins)
 #[cfg(target_os = "macos")]
 static BEFORE_PALETTE: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
@@ -167,6 +171,14 @@ pub fn toggle_palette(app: &AppHandle) {
                 if crate::macos::panel_visible(ns) {
                     close_palette(&app2, ns);
                 } else {
+                    // Archiver ist mit ⌘H ausgeblendet (0.37.1): nur den Tray einblenden,
+                    // das Hauptfenster bleibt weg, bis man es übers Dock holt
+                    if crate::macos::app_hidden() {
+                        if let Some(Ok(main)) = app2.get_webview_window("main").map(|w| w.ns_window()) {
+                            crate::macos::panel_hide(main.cast());
+                        }
+                        crate::macos::unhide_without_activation();
+                    }
                     // Archiver liegt hinten: das Hauptfenster bleibt dort, auch wenn
                     // der Tray Archiver kurz aktiviert (0.28)
                     if !crate::macos::app_active() {
@@ -339,8 +351,14 @@ fn watch_drags(app: AppHandle) {
         let mut showing = false;
         let mut tall = false;
         let mut released: Option<Instant> = None;
+        let mut was_hidden = false;
         loop {
             std::thread::sleep(Duration::from_millis(50));
+            let hidden = crate::macos::app_hidden();
+            if was_hidden && !hidden {
+                UNHIDDEN_AT.store(crate::library::now_ms() as u64, Ordering::Relaxed);
+            }
+            was_hidden = hidden;
             let (pressed, count) = crate::macos::drag_probe();
             if !pressed {
                 base = Some(count);

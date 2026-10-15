@@ -1695,8 +1695,11 @@ pub fn run() {
             }
             // Klick aufs Dock-Symbol ohne offenes Fenster
             #[cfg(target_os = "macos")]
+            // (0.37.1: auch, wenn nur Betrachter oder Tray offen sind und das
+            // Hauptfenster fehlt)
             tauri::RunEvent::Reopen { has_visible_windows, .. } => {
-                if !has_visible_windows {
+                let main_shown = app.get_webview_window("main").and_then(|w| w.is_visible().ok()).unwrap_or(false);
+                if !has_visible_windows || !main_shown {
                     viewer::show_main(app);
                 }
             }

@@ -57,23 +57,32 @@ pub fn open(app: &AppHandle, path: PathBuf) {
 
 /// Öffnet man ein Bild aus dem Finder, während Archiver im Hintergrund läuft,
 /// holt das Aktivieren alle Fenster nach vorne. Das Hauptfenster geht danach
-/// wieder nach hinten, damit nur der Betrachter vorne steht.
+/// wieder nach hinten, damit nur der Betrachter vorne steht. War Archiver mit
+/// ⌘H ausgeblendet (0.37.1), bleibt das Hauptfenster ganz weg; das Dock holt es.
 fn keep_main_behind(app: &AppHandle) {
     #[cfg(target_os = "macos")]
     {
-        if crate::macos::app_active() {
-            return;
-        }
+        use std::sync::atomic::Ordering;
         let Some(main) = app.get_webview_window("main") else { return };
-        if !main.is_visible().unwrap_or(false) {
-            return;
+        let hidden = crate::macos::app_hidden();
+        if hidden {
+            let _ = main.hide();
         }
+        let active = crate::macos::app_active();
+        let visible = main.is_visible().unwrap_or(false);
+        let opened = crate::library::now_ms() as u64;
         let app = app.clone();
         std::thread::spawn(move || {
             std::thread::sleep(std::time::Duration::from_millis(120));
             let _ = app.run_on_main_thread(move || {
-                if let Ok(ns) = main.ns_window() {
-                    unsafe { crate::macos::send_to_back(ns.cast()) };
+                // macOS hat Archiver für dieses Bild aus ⌘H geholt (vor oder nach dem Öffnen)
+                let unhidden = crate::system::UNHIDDEN_AT.load(Ordering::Relaxed) + 500 >= opened;
+                if hidden || unhidden {
+                    let _ = main.hide();
+                } else if !active && visible {
+                    if let Ok(ns) = main.ns_window() {
+                        unsafe { crate::macos::send_to_back(ns.cast()) };
+                    }
                 }
             });
         });

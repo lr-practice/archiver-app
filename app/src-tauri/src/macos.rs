@@ -710,6 +710,24 @@ pub fn drag_has_files() -> bool {
     })
 }
 
+/// Ist Archiver mit ⌘H ausgeblendet?
+pub fn app_hidden() -> bool {
+    unsafe {
+        let app: *mut AnyObject = msg_send![class!(NSApplication), sharedApplication];
+        !app.is_null() && msg_send![app, isHidden]
+    }
+}
+
+/// Wieder einblenden, ohne Archiver nach vorne zu holen (für den Tray).
+pub fn unhide_without_activation() {
+    unsafe {
+        let app: *mut AnyObject = msg_send![class!(NSApplication), sharedApplication];
+        if !app.is_null() {
+            let _: () = msg_send![app, unhideWithoutActivation];
+        }
+    }
+}
+
 /// Ist Archiver gerade das aktive Programm?
 pub fn app_active() -> bool {
     unsafe {
