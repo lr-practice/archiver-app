@@ -651,6 +651,141 @@ pub fn moodboard(title: &str, meta: &str, board: &Board) -> Vec<u8> {
     finish(objects, &[page])
 }
 
+/// Plakat, Anordnung Index und Paar: ein Feld mit Lage in Punkten (y von oben),
+/// gesetzt von app.js flowPages.
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FlowItem {
+    #[serde(flatten)]
+    pub item: SheetItem,
+    pub x: f64,
+    pub y: f64,
+    pub w: f64,
+    pub h: f64,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Flow {
+    #[serde(default)]
+    pub portrait: bool,
+    #[serde(default = "yes")]
+    pub captions: bool,
+    /// Kopfzeile: Titel, Anzahl, Datum (die Seitenzahl kommt dazu)
+    pub head: Vec<String>,
+    /// Beschreibung, nur auf der ersten Seite
+    #[serde(default)]
+    pub desc: String,
+    #[serde(default)]
+    pub year: String,
+    pub pages: Vec<Vec<FlowItem>>,
+}
+
+/// Index und Paar wie die Vorlagen: oben vier Spalten (Titel, Anzahl, Datum,
+/// Seite), darunter Nummer, Titel, Beschreibung und Jahr. Bilder ungeschnitten
+/// an der Stelle, die der PDF-Ersteller zeigt; Name und Quelle darunter.
+pub fn flow_sheet(flow: &Flow) -> Vec<u8> {
+    const M: f64 = 14.0;
+    const SIZE: f64 = 6.4;
+    const LEAD: f64 = 8.3;
+    let (page_w, page_h) = if flow.portrait { (A4_SHORT, A4_LONG) } else { (A4_LONG, A4_SHORT) };
+    let pages = flow.pages.len().max(1);
+    let col = (page_w - 2.0 * M) / 4.0;
+
+    let mut objects: Vec<Vec<u8>> = Vec::new();
+    objects.push(b"<< /Type /Catalog /Pages 2 0 R >>".to_vec());
+    objects.push(Vec::new());
+    objects.push(b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>".to_vec());
+
+    let mut page_ids = Vec::new();
+    for p in 0..pages {
+        let mut content = b"0 g\n".to_vec();
+        let mut xobjects = String::new();
+        // Kopfzeile
+        let head_y = page_h - 10.0 - SIZE;
+        let page_no = format!("{} / {}", p + 1, pages);
+        for (i, text) in flow.head.iter().take(3).enumerate() {
+            text_op(&mut content, "F1", SIZE, M + i as f64 * col, head_y, &fit(text, SIZE, col - 8.0));
+        }
+        let page_b = fit(&page_no, SIZE, col);
+        text_op(&mut content, "F1", SIZE, page_w - M - text_width(&page_b, SIZE), head_y, &page_b);
+        // Zeile darunter: [01] Titel Beschreibung … Jahr (Spalten wie app.css .pdf-finfo)
+        let info_y = page_h - 34.0 - SIZE;
+        let fr = (page_w - 2.0 * M - 28.0 - 40.0) / 4.0;
+        text_op(&mut content, "F1", SIZE, M, info_y, &fit(&format!("[{:02}]", p + 1), SIZE, 28.0));
+        if let Some(title) = flow.head.first() {
+            text_op(&mut content, "F1", SIZE, M + 28.0, info_y, &fit(title, SIZE, fr - 8.0));
+        }
+        if p == 0 && !flow.desc.trim().is_empty() {
+            let mut y = info_y;
+            for line in wrap(flow.desc.trim(), SIZE, (2.0 * fr).min(230.0), 2) {
+                text_op(&mut content, "F1", SIZE, M + 28.0 + fr, y, &line);
+                y -= LEAD;
+            }
+        }
+        let year_b = fit(&flow.year, SIZE, 40.0);
+        text_op(&mut content, "F1", SIZE, page_w - M - text_width(&year_b, SIZE), info_y, &year_b);
+
+        for f in flow.pages.get(p).map(|v| v.as_slice()).unwrap_or(&[]) {
+            let (x, w, h) = (f.x, f.w.max(1.0), f.h.max(1.0));
+            let bottom = page_h - f.y - h;
+            let item = &f.item;
+            let max = if w.max(h) > 300.0 { 2400 } else { 1200 };
+            let pic = if item.quote.is_some() {
+                None
+            } else {
+                item.file
+                    .as_deref()
+                    .filter(|_| max > 1200)
+                    .and_then(|file| picture(file, max))
+                    .or_else(|| item.thumb.as_deref().and_then(|t| picture(t, 1200)))
+                    .or_else(|| item.file.as_deref().and_then(|file| picture(file, 1200)))
+            };
+            if let Some(pic) = pic {
+                let id = image_object(&mut objects, &mut xobjects, &pic);
+                content.extend_from_slice(format!("q {w:.2} 0 0 {h:.2} {x:.2} {bottom:.2} cm /Im{id} Do Q\n").as_bytes());
+            } else if let Some(quote) = &item.quote {
+                let size = (h / 10.0).clamp(7.0, 16.0);
+                let lead = size * 1.3;
+                let mut y = page_h - f.y - size;
+                for line in wrap(&format!("„{}“", quote.trim()), size, w, (h / lead).floor().max(1.0) as usize) {
+                    text_op(&mut content, "F1", size, x, y, &line);
+                    y -= lead;
+                }
+            } else {
+                content.extend_from_slice(format!("0.93 g {x:.2} {bottom:.2} {w:.2} {h:.2} re f 0 g\n").as_bytes());
+            }
+            if !flow.captions {
+                continue;
+            }
+            let cap_y = bottom - 3.0 - SIZE;
+            let name = item.name.rsplit_once('.').filter(|(stem, ext)| !stem.is_empty() && ext.len() <= 5).map_or(item.name.as_str(), |(stem, _)| stem);
+            let source = item.source.as_deref().filter(|s| !s.is_empty()).map(|s| fit(s, SIZE, w * 0.45)).unwrap_or_default();
+            let source_w = text_width(&source, SIZE);
+            text_op(&mut content, "F1", SIZE, x, cap_y, &fit(name, SIZE, (w - source_w - 6.0).max(12.0)));
+            if !source.is_empty() {
+                content.extend_from_slice(format!("{GREY}\n").as_bytes());
+                text_op(&mut content, "F1", SIZE, x + w - source_w, cap_y, &source);
+                content.extend_from_slice(b"0 g\n");
+            }
+        }
+
+        let mut stream = format!("<< /Length {} >>\nstream\n", content.len()).into_bytes();
+        stream.extend_from_slice(&content);
+        stream.extend_from_slice(b"\nendstream");
+        objects.push(stream);
+        let content_id = objects.len();
+        objects.push(
+            format!(
+                "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 {page_w} {page_h}] /Resources << /Font << /F1 3 0 R >> /XObject << {xobjects}>> >> /Contents {content_id} 0 R >>"
+            )
+            .into_bytes(),
+        );
+        page_ids.push(objects.len());
+    }
+    finish(objects, &page_ids)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -776,6 +911,24 @@ mod tests {
         assert!(text.contains("0.07 g 0 0 842 595 re f"));
         // Bild an der gesetzten Stelle: x = 40 + 0.1 * 762
         assert!(text.contains(" 116.20 "), "x-Position");
+    }
+
+    #[test]
+    fn flow_has_pages_and_header() {
+        let item = |x: f64| FlowItem { item: SheetItem { name: "a.png".into(), label: "PNG".into(), ..Default::default() }, x, y: 58.0, w: 200.0, h: 150.0 };
+        let flow = Flow {
+            portrait: false,
+            captions: true,
+            head: vec!["Herbst".into(), "3 Objekte".into(), "15. Oktober 2026".into()],
+            desc: "Licht und Verlauf".into(),
+            year: "2026".into(),
+            pages: vec![vec![item(14.0), item(220.0)], vec![item(14.0)]],
+        };
+        let pdf = flow_sheet(&flow);
+        let text = String::from_utf8_lossy(&pdf);
+        assert!(text.contains("/Count 2"));
+        assert!(text.contains("(1 / 2)") && text.contains("(2 / 2)"));
+        assert!(text.contains("([01])") && text.contains("(Licht und Verlauf)"));
     }
 
     #[test]

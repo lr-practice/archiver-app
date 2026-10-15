@@ -1,5 +1,16 @@
 # Changelog
 
+## App 0.37.2 (in Arbeit)
+
+- PDF, Plakat: zwei neue Anordnungen neben dem Raster. Index setzt die
+  Bilder ungeschnitten in wechselnden Reihen, Paar zwei pro Reihe. Dazu
+  eine Kopfzeile mit Titel, Anzahl, Datum und Seite und ein Feld
+  „Beschreibung“ für die erste Seite.
+- Tray: mehrere Objekte wählen mit ⌘-Klick, ⇧-Klick oder ⇧ + Pfeilen.
+  Ziehen und ⌘C nehmen alle mit.
+- Tray und Observer holen das Hauptfenster nicht mehr nach vorn, wenn
+  Archiver ausgeblendet war.
+
 ## App 0.37.1 · Extension 3.29.0
 
 - Lightbox: Die Leiste unten ist 960 statt 600 px breit, lange Dateinamen

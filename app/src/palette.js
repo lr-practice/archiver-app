@@ -31,6 +31,7 @@
     objects: [], // sichtbare Objekte
     indesign: false, // aus InDesign geöffnet: ↵ und Doppelklick platzieren dort
     preview: null, // Objekt in der großen Ansicht (Leertaste)
+    picked: new Set(), // 0.37.1: mehrere Objekte (⌘-Klick, ⇧-Klick), leer = nur das gewählte
   };
 
   // Textkarten wie in der App (app.js quoteTone): Grundfarbe, Schrift Ton in Ton
@@ -396,9 +397,24 @@
     const nodes = document.querySelectorAll(state.area === "cards" ? ".pal-card" : ".pal-obj");
     if (!nodes.length) return;
     state.sel = Math.max(0, Math.min(state.sel, nodes.length - 1));
+    // Mehrfachauswahl: jedes gewählte Objekt trägt den Ring (DESIGN.md 4.1)
+    if (state.area === "objects" && state.picked.size)
+      state.objects.forEach((item, i) => state.picked.has(item) && nodes[i] && nodes[i].classList.add("sel"));
     const node = nodes[state.sel];
     node.classList.add("sel");
     node.scrollIntoView({ block: "nearest" });
+  }
+
+  // Gewählte Objekte in Reihenfolge des Rasters; ohne Mehrfachauswahl nur das eine
+  function picks(item) {
+    if (state.picked.size > 1 && (!item || state.picked.has(item))) return state.objects.filter((i) => state.picked.has(i));
+    return item ? [item] : [];
+  }
+
+  function clearPicked() {
+    if (!state.picked.size) return false;
+    state.picked.clear();
+    return true;
   }
 
   // ---- Wechsel ----
@@ -495,8 +511,9 @@
   }
 
   async function copyItem(item) {
+    const list = picks(item);
     try {
-      await invoke("copy_images", { paths: [item.abs], text: item.quote || null });
+      await invoke("copy_images", { paths: list.map((i) => i.abs), text: list.length === 1 ? item.quote || null : null });
       toast(t("palCopied"));
     } catch (e) {
       toast(String(e));
@@ -653,6 +670,7 @@
     }
     if (e.key === "Escape") {
       e.preventDefault();
+      if (clearPicked()) return markSel();
       if (state.view !== "start") return goStart();
       return hide();
     }
@@ -683,7 +701,16 @@
       // ←→ im Suchfeld bewegen den Cursor, solange Text drin ist
       if (q && (e.key === "ArrowLeft" || e.key === "ArrowRight")) return;
       e.preventDefault();
-      return move(...arrows[e.key]);
+      // ⇧ + Pfeil nimmt die Objekte unterwegs dazu, sonst endet die Mehrfachauswahl
+      const from = state.area === "objects" ? state.objects[state.sel] : null;
+      if (e.shiftKey && from) state.picked.add(from);
+      else clearPicked();
+      move(...arrows[e.key]);
+      if (e.shiftKey && state.area === "objects" && state.objects[state.sel]) {
+        state.picked.add(state.objects[state.sel]);
+        markSel();
+      }
+      return;
     }
     if (e.key === "Enter") {
       e.preventDefault();
@@ -702,21 +729,43 @@
   function pressObject(e, item) {
     if (e.button !== 0) return;
     const index = state.objects.indexOf(item);
+    // 0.37.1: ⌘-Klick nimmt dazu oder heraus, ⇧-Klick wählt bis hierher
+    if (index >= 0 && (e.metaKey || e.shiftKey)) {
+      const current = state.area === "objects" ? state.objects[state.sel] : null;
+      if (e.shiftKey && current) {
+        const [a, b] = [state.sel, index].sort((x, y) => x - y);
+        state.objects.slice(a, b + 1).forEach((i) => state.picked.add(i));
+      } else {
+        if (!state.picked.size && current) state.picked.add(current);
+        if (state.picked.has(item) && state.picked.size > 1) state.picked.delete(item);
+        else state.picked.add(item);
+      }
+      state.area = "objects";
+      state.sel = index;
+      markSel();
+      return;
+    }
+    // Klick auf ein Objekt der Auswahl hält sie fürs Ziehen; ohne Ziehen bleibt nur dieses
+    const keep = state.picked.has(item) && state.picked.size > 1;
     if (index >= 0) {
+      if (!keep) clearPicked();
       state.area = "objects";
       state.sel = index;
       markSel();
     }
     const x0 = e.clientX;
     const y0 = e.clientY;
+    let dragged = false;
     const onMove = (m) => {
       if (Math.hypot(m.clientX - x0, m.clientY - y0) < 4) return;
+      dragged = true;
       done();
       startDrag(item);
     };
     const done = () => {
       window.removeEventListener("mousemove", onMove);
       window.removeEventListener("mouseup", done);
+      if (!dragged && keep && clearPicked()) markSel();
     };
     window.addEventListener("mousemove", onMove);
     window.addEventListener("mouseup", done);
@@ -730,7 +779,7 @@
       item.thumb ||
       item.abs;
     invoke("palette_ghost", { on: true }).catch(() => {});
-    invoke("plugin:drag|start_drag", { item: [item.abs], image: icon, onEvent: channel }).catch(() =>
+    invoke("plugin:drag|start_drag", { item: picks(item).map((i) => i.abs), image: icon, onEvent: channel }).catch(() =>
       invoke("palette_ghost", { on: false }).catch(() => {})
     );
   }

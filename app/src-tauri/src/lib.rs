@@ -1229,6 +1229,25 @@ async fn open_url(app: AppHandle, url: String) -> Result<(), String> {
     app.opener().open_url(url, None::<&str>).map_err(|e| e.to_string())
 }
 
+/// Plakat, Index und Paar: Felder wie im PDF-Ersteller gesetzt.
+#[tauri::command]
+async fn export_flow(app: AppHandle, file_name: String, flow: pdf::Flow) -> Result<Option<String>, String> {
+    let mut dialog = app.dialog().file().add_filter("PDF", &["pdf"]).set_file_name(&file_name);
+    if let Some(dir) = dirs::download_dir() {
+        dialog = dialog.set_directory(dir);
+    }
+    let Some(path) = dialog.blocking_save_file().and_then(|p| p.into_path().ok()) else {
+        return Ok(None);
+    };
+    let target = path.clone();
+    tauri::async_runtime::spawn_blocking(move || std::fs::write(&target, pdf::flow_sheet(&flow)))
+        .await
+        .map_err(|e| e.to_string())?
+        .map_err(|e| e.to_string())?;
+    let _ = app.opener().open_path(path.to_string_lossy(), None::<&str>);
+    Ok(Some(path.to_string_lossy().into_owned()))
+}
+
 /// Kontaktbogen: fragt nach dem Speicherort, schreibt das PDF und öffnet es.
 /// Gibt den Pfad zurück, oder None, wenn der Dialog abgebrochen wurde.
 #[tauri::command]
@@ -1626,6 +1645,7 @@ pub fn run() {
             open_file,
             export_pdf,
             export_moodboard,
+            export_flow,
             export_package,
             set_note,
             set_quote,

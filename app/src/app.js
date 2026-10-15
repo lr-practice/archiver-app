@@ -5885,6 +5885,73 @@
     return "board." + h.toString(36);
   }
 
+  // ---- Plakat, Anordnung Index und Paar (0.37.2) ----
+  // Wie die Sort-Office-Vorlagen: Bilder ungeschnitten, oben bündig in einem
+  // 12er-Raster, die Breiten wechseln von Reihe zu Reihe, freie Felder bleiben
+  // frei. Maße in Punkten, y von oben; pdf.rs flow_sheet setzt dieselben Werte.
+  const FLOW = { margin: 14, gap: 6, top: 58, bottom: 26, caption: 12 };
+  const FLOW_ROWS = {
+    index: {
+      land: [[[0, 5], [5, 4], [9, 3]], [[0, 3], [9, 3]], [[0, 4], [4, 3], [7, 5]], [[2, 4], [8, 4]]],
+      port: [[[0, 5], [5, 4], [9, 3]], [[0, 4], [8, 4]], [[0, 3], [3, 5], [8, 4]]],
+    },
+    pair: {
+      land: [[[0, 5], [5, 7]], [[0, 7], [7, 5]]],
+      port: [[[0, 12]], [[0, 7], [7, 5]]],
+    },
+  };
+
+  // Seiten mit gesetzten Feldern: [[{ index, x, y, w, h }]]
+  function flowPages(items, mode, portrait, captions) {
+    const P = PDF_PAGE;
+    const [W, H] = portrait ? [P.short, P.long] : [P.long, P.short];
+    const { margin: M, gap: G, top: TOP, bottom: BOT } = FLOW;
+    const capH = captions ? FLOW.caption : 0;
+    const colW = (W - 2 * M - 11 * G) / 12;
+    const patterns = FLOW_ROWS[mode][portrait ? "port" : "land"];
+    const pages = [];
+    let page = [];
+    let y = TOP;
+    let k = 0;
+    for (let pi = 0; k < items.length; pi++) {
+      const row = [];
+      for (const [c0, n] of patterns[pi % patterns.length]) {
+        if (k >= items.length) break;
+        const w = n * colW + (n - 1) * G;
+        row.push({ index: k, x: M + c0 * (colW + G), w, h: w / boardRatio(items[k]) });
+        k++;
+      }
+      const shrink = (f) => row.forEach((r) => ((r.w *= f), (r.h *= f)));
+      let rowH = Math.max(...row.map((r) => r.h)) + capH;
+      // Reihe passt nicht mehr: auf der Seite schrumpfen, wenn noch genug Platz
+      // ist, sonst auf die nächste Seite (und dort höchstens seitenhoch)
+      const room = H - BOT - y;
+      if (rowH > room) {
+        if (page.length && room < (H - TOP - BOT) * 0.3) {
+          pages.push(page);
+          page = [];
+          y = TOP;
+          shrink(Math.min(1, (H - TOP - BOT - capH) / (rowH - capH)));
+          rowH = Math.max(...row.map((r) => r.h)) + capH;
+        } else {
+          shrink((room - capH) / (rowH - capH));
+          rowH = room;
+        }
+      }
+      // Paar: geschrumpfte Bilder rücken zusammen
+      if (mode === "pair") for (let i = 1; i < row.length; i++) row[i].x = row[i - 1].x + row[i - 1].w + G;
+      row.forEach((r) => page.push({ ...r, y }));
+      y += rowH + G * 2.2;
+      if (y > H - BOT - 40) {
+        pages.push(page);
+        page = [];
+        y = TOP;
+      }
+    }
+    if (page.length || !pages.length) pages.push(page);
+    return pages;
+  }
+
   // Helligkeit unten links im Vorschaubild (wo die Plakat-Beschriftung steht).
   // Klappt nur, wenn das Bild lesbar ist; sonst bleibt die Schrift dunkel.
   function captionTone(img) {
@@ -5918,7 +5985,11 @@
       board: feat("moodboard") && pref("pdfBoard", false),
       notes: pref("pdfNotes", false),
       dark: pref("pdfBoardDark", false),
+      // Plakat: Raster (angeschnitten), Index oder Paar (ungeschnitten)
+      arrange: pref("pdfArrange", "grid"),
+      desc: "",
     };
+    const flowing = () => opts.poster && !opts.board && opts.arrange !== "grid";
     if (preset && preset.poster) opts.board = false;
     // Moodboard: Lage je Objekt (Pfad → x, y, w, h), Reihenfolge der Liste = Stapel
     const saved = pref(boardKey(items), null);
@@ -5933,7 +6004,8 @@
     if (preset && preset.poster && !opts.poster) Object.assign(opts, { poster: true, portrait: true, layout: "16" });
     if (items.length <= 2 && !["1", "2"].includes(opts.layout)) opts.layout = items.length === 1 ? "1" : "2";
     const date = new Date().toLocaleDateString(lang === "de" ? "de-DE" : "en-GB", { day: "numeric", month: "long", year: "numeric" });
-    const meta = () => t(items.length === 1 ? "pdfCount1" : "pdfCount", { n: items.length }) + " · " + date;
+    const countText = () => t(items.length === 1 ? "pdfCount1" : "pdfCount", { n: items.length });
+    const meta = () => countText() + " · " + date;
     const grid = () => {
       const entry = PDF_LAYOUTS.find(([k]) => k === opts.layout) || PDF_LAYOUTS[3];
       const [cols, rows] = opts.portrait ? entry[2] : entry[1];
@@ -5955,9 +6027,21 @@
       renderPages();
     });
     side.appendChild(field(t("pdfTitleLabel"), titleInput));
+    const descInput = el("textarea", "pdf-input pdf-desc");
+    descInput.rows = 4;
+    descInput.spellcheck = false;
+    descInput.addEventListener("input", () => {
+      opts.desc = descInput.value;
+      renderPages();
+    });
+    const descField = field(t("pdfDescLabel"), descInput);
+    side.appendChild(descField);
 
     const styleRow = el("div", "pdf-chips");
     side.appendChild(field(t("pdfStyleLabel"), styleRow));
+    const arrangeRow = el("div", "pdf-chips");
+    const arrangeField = field(t("pdfArrangeLabel"), arrangeRow);
+    side.appendChild(arrangeField);
     const layoutRow = el("div", "pdf-layouts");
     side.appendChild(field(t("pdfLayoutLabel"), layoutRow));
     const formatRow = el("div", "pdf-chips");
@@ -6040,8 +6124,15 @@
             setOpt("board", true, "pdfBoard");
           })
         );
-      layoutField.hidden = opts.board;
+      layoutField.hidden = opts.board || flowing();
       bgField.hidden = !opts.board;
+      arrangeField.hidden = !opts.poster || opts.board;
+      descField.hidden = !flowing();
+      arrangeRow.replaceChildren(
+        ...[["grid", "pdfArrangeGrid"], ["index", "pdfArrangeIndex"], ["pair", "pdfArrangePair"]].map(([key, label]) =>
+          chip("(" + t(label) + ")", opts.arrange === key, () => setOpt("arrange", key, "pdfArrange"))
+        )
+      );
       bgRow.replaceChildren(
         chip("(" + t("pdfBoardLight") + ")", !opts.dark, () => setOpt("dark", false, "pdfBoardDark")),
         chip("(" + t("pdfBoardDark") + ")", opts.dark, () => setOpt("dark", true, "pdfBoardDark")),
@@ -6068,7 +6159,7 @@
       if (!opts.poster) capChips.push(chip("(" + t("pdfCaptionsNotes") + ")", capMode === "note", () => setCaps(true, true)));
       captionRow.replaceChildren(...capChips);
       const { cols, rows } = grid();
-      const pages = opts.board ? 1 : Math.max(1, Math.ceil(items.length / (cols * rows)));
+      const pages = opts.board ? 1 : flowing() ? flowPages(items, opts.arrange, opts.portrait, opts.captions).length : Math.max(1, Math.ceil(items.length / (cols * rows)));
       count.textContent = meta() + " · " + t(pages === 1 ? "pdfPages1" : "pdfPagesN", { n: pages });
       save.disabled = !items.length;
     }
@@ -6086,6 +6177,7 @@
       hint.textContent = t(opts.board ? "pdfBoardHint" : "pdfHint");
       if (opts.board) return renderBoard();
       stage.classList.remove("board");
+      if (flowing()) return renderFlow();
       const { cols, rows } = grid();
       const per = cols * rows;
       const P = PDF_PAGE;
@@ -6134,7 +6226,7 @@
       const name = opts.poster ? s.name.replace(/\.[a-z0-9]{1,5}$/i, "") : s.name;
       cap.append(el("span", null, name), el("span", "dim", s.source || ""));
       if (opts.notes && !opts.poster && s.note) cap.appendChild(el("span", "pdf-note", s.note));
-      if (opts.poster && !item.quote) {
+      if (opts.poster && !flowing() && !item.quote) {
         // Wie im PDF: Schrift hell auf dunklem Grund, sonst dunkel
         const img = box.querySelector("img");
         img.addEventListener("load", () => {
@@ -6183,6 +6275,45 @@
       moving = null;
       root.classList.remove("moving");
       for (const c of stage.querySelectorAll(".lifted")) c.classList.remove("lifted");
+    }
+
+    // Index und Paar: Kopfzeile in vier Spalten, darunter Nummer, Titel,
+    // Beschreibung und Jahr, dann die Reihen aus flowPages
+    function renderFlow() {
+      const P = PDF_PAGE;
+      const [w, h] = opts.portrait ? [P.short, P.long] : [P.long, P.short];
+      const pages = flowPages(items, opts.arrange, opts.portrait, opts.captions);
+      const u = (v) => `calc(var(--u) * ${v})`;
+      stage.replaceChildren(
+        ...pages.map((cells, p) => {
+          const page = el("div", "pdf-page flow" + (opts.captions ? "" : " no-captions"));
+          page.style.aspectRatio = `${w} / ${h}`;
+          const inner = el("div", "pdf-flow");
+          const head = el("div", "pdf-frow pdf-fhead");
+          head.append(el("span", null, opts.title), el("span", null, countText()), el("span", null, date), el("span", null, `${p + 1} / ${pages.length}`));
+          const info = el("div", "pdf-frow pdf-finfo");
+          info.append(
+            el("span", null, `[${String(p + 1).padStart(2, "0")}]`),
+            el("span", null, opts.title),
+            el("span", "pdf-fdesc", p === 0 ? opts.desc : ""),
+            el("span"),
+            el("span", null, String(new Date().getFullYear()))
+          );
+          inner.append(head, info);
+          for (const c of cells) {
+            const cell = pdfCell(items[c.index], c.index);
+            cell.style.left = u(c.x);
+            cell.style.top = u(c.y);
+            cell.style.width = u(c.w);
+            cell.style.setProperty("--h", u(c.h));
+            inner.appendChild(cell);
+          }
+          page.appendChild(inner);
+          return page;
+        })
+      );
+      stage.classList.toggle("portrait", opts.portrait);
+      stage.classList.remove("dense");
     }
 
     function renderAll() {
@@ -6294,8 +6425,9 @@
     }
 
     function onKey(e) {
-      if (e.key === "Escape" && document.activeElement !== titleInput) close();
-      else if (e.key === "Escape") titleInput.blur();
+      const typing = document.activeElement === titleInput || document.activeElement === descInput;
+      if (e.key === "Escape" && !typing) close();
+      else if (e.key === "Escape") document.activeElement.blur();
       else if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) run();
       else return;
       e.preventDefault();
@@ -6315,7 +6447,21 @@
       save.disabled = true;
       save.textContent = t("pdfWorking");
       try {
-        const path = opts.board
+        const path = flowing()
+          ? await invoke("export_flow", {
+              fileName: name,
+              flow: {
+                portrait: opts.portrait,
+                captions: opts.captions,
+                head: [opts.title, countText(), date],
+                desc: opts.desc.trim(),
+                year: String(new Date().getFullYear()),
+                pages: flowPages(items, opts.arrange, opts.portrait, opts.captions).map((cells) =>
+                  cells.map((c) => ({ ...sheetItem(items[c.index]), x: c.x, y: c.y, w: c.w, h: c.h }))
+                ),
+              },
+            })
+          : opts.board
           ? await invoke("export_moodboard", {
               title: opts.title,
               meta: meta(),

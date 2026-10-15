@@ -6887,3 +6887,92 @@ html.light {
     animation: none;
   }
 }
+
+/* PDF-Ersteller, Plakat Index und Paar (0.37.2): Felder frei gesetzt in
+   PDF-Punkten wie pdf.rs flow_sheet, Bilder ungeschnitten, oben bündig */
+.pdf-page.flow {
+  position: relative;
+}
+
+.pdf-flow {
+  position: absolute;
+  inset: 0;
+  font-size: calc(var(--u) * 6.4);
+  line-height: 1.3;
+}
+
+.pdf-frow {
+  position: absolute;
+  left: calc(var(--u) * 14);
+  right: calc(var(--u) * 14);
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  white-space: nowrap;
+}
+
+.pdf-frow > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pdf-frow > :last-child {
+  text-align: right;
+}
+
+.pdf-fhead {
+  top: calc(var(--u) * 10);
+}
+
+.pdf-finfo {
+  top: calc(var(--u) * 34);
+  grid-template-columns: calc(var(--u) * 28) 1fr 2fr 1fr calc(var(--u) * 40);
+}
+
+.pdf-finfo .pdf-fdesc {
+  max-width: calc(var(--u) * 230);
+  white-space: normal;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.pdf-page.flow .pdf-cell {
+  position: absolute;
+  border-radius: 0;
+}
+
+.pdf-page.flow .pdf-box {
+  flex: none;
+  height: var(--h);
+}
+
+.pdf-page.flow .pdf-box img {
+  position: static;
+  display: block;
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  max-height: none;
+}
+
+.pdf-page.flow .pdf-quote {
+  font-size: calc(var(--u) * 9);
+}
+
+.pdf-page.flow .pdf-cap {
+  height: calc(var(--u) * 12);
+  padding-top: calc(var(--u) * 3);
+  flex-direction: row;
+  justify-content: space-between;
+  gap: calc(var(--u) * 6);
+  font-size: calc(var(--u) * 6.4);
+}
+
+.pdf-page.flow .pdf-cell.lifted {
+  outline-offset: calc(var(--u) * 2);
+}
+
+.pdf-desc {
+  resize: none;
+  line-height: 1.4;
+}

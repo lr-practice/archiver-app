@@ -413,6 +413,10 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
 - **⌘C, ⌘V (0.32):** ⌘C kopiert das gewählte Objekt, ⌘V legt die
   Zwischenablage in die offene Zone. Steht etwas im Suchfeld, gehören beide
   dem Suchfeld.
+- **Mehrere Objekte (0.37.2):** ⌘-Klick nimmt einzeln dazu oder heraus,
+  ⇧-Klick und ⇧ + Pfeile wählen einen Bereich. Jedes gewählte Objekt trägt
+  den Ring (4.1). Ziehen und ⌘C nehmen alle gewählten mit, esc hebt die Wahl
+  zuerst auf, ein Pfeil ohne ⇧ ebenso.
 - **Nicht:** Sie aktiviert Archiver nicht und holt das Hauptfenster nicht nach vorne.
   Liegt Archiver hinten, wird das Hauptfenster beim Öffnen weggelegt und beim
   Schließen hinter alle Fenster zurückgelegt (0.28).
@@ -564,6 +568,23 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
   Modifier-Tasten).
 - **Nicht:** Kein ⇧-Zeichen in der Pille, keine Zahlen, keine zweite
   Hervorhebung neben Ring und Füllung. Ablegen auf der Pille legt nichts ab.
+
+### 4.21 PDF-Ersteller, Plakat-Anordnung (App 0.37.2, `.pdf-page.flow`)
+- **Zweck:** Plakat hat drei Anordnungen: Raster (bisher, angeschnitten,
+  Beschriftung im Bild), Index und Paar (nach den Sort-Office-Vorlagen).
+  Feld „(Anordnung)“ erscheint nur beim Stil Plakat; bei Index und Paar
+  fällt „(Pro Seite)“ weg und „(Beschreibung)“ kommt unter den Titel.
+- **Seite:** weiß, 14 pt Rand, Helvetica bzw. Geist 6.4 pt. Kopfzeile in vier
+  gleichen Spalten (Titel · Anzahl · Datum · Seite), darunter Nummer [01],
+  Titel, Beschreibung (nur Seite 1, höchstens 2 Zeilen, 230 pt breit) und Jahr
+  rechts. Bilder ab 58 pt, ungeschnitten, oben bündig, 12er-Raster mit 6 pt
+  Abstand. Index wechselt die Reihen (z. B. 5·4·3, 3·_·3, 4·3·5, _·4·_·4),
+  Paar setzt zwei Bilder (5·7, 7·5; hoch 12, 7·5). Zu hohe Reihen schrumpfen
+  oder gehen auf die nächste Seite. Bildunterschrift 12 pt: Name links, Quelle
+  grau rechts.
+- **Gleich in Vorschau und PDF:** `flowPages` (app.js) rechnet die Felder in
+  Punkten, `flow_sheet` (pdf.rs) setzt genau diese Felder.
+- **Nicht:** kein Anschnitt, keine Schrift im Bild, keine Notizen.
 
 ---
 
