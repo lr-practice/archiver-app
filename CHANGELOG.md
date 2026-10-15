@@ -1,6 +1,6 @@
 # Changelog
 
-## App 0.37.1 (in Arbeit)
+## App 0.37.1 · Extension 3.29.0
 
 - Lightbox: Die Leiste unten ist 960 statt 600 px breit, lange Dateinamen
   passen ganz hinein. Ist ein Name noch länger, wird er in der Mitte gekürzt,
