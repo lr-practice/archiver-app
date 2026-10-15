@@ -503,7 +503,8 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
 ### 4.17 Mehrfachmarkierung (Extension 3.27.0, `content.js`)
 - **Zweck:** Mit ⌥ (seit Extension 3.29.1, vorher ⌘) mehrere Stellen einer
   Seite sammeln und in einem Zug in eine Zone ziehen. ⌘-Klick gehört dem
-  Browser (Link im neuen Tab). ⌥ + Markieren nimmt Text dazu, ⌥-Klick nimmt ein Bild
+  Browser (Link im neuen Tab). ⌥-Klicks bekommt die Seite nicht: kein
+  Weiterspringen, kein Download (3.29.3). ⌥ + Markieren nimmt Text dazu, ⌥-Klick nimmt ein Bild
   (ab 80 px) dazu oder wieder heraus. Klick daneben oder Esc hebt alles auf.
   Liegt das Bild in einem Link, öffnet ⌘-Klick wie gewohnt einen neuen Tab,
   solange noch nichts markiert ist (Extension 3.29.1); erst während einer

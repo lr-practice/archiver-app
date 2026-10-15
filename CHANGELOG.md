@@ -1,5 +1,11 @@
 # Changelog
 
+## Extension 3.29.3 (App 0.37.2)
+
+- ⌥-Klick auf ein Bild oder Objekt mit Link führt nicht mehr auf die nächste
+  Seite: Der Link wird ignoriert, das Bild kommt in die Markierung. Gilt auch
+  für Seiten, die schon beim Drücken weiterspringen.
+
 ## Extension 3.29.2 (App 0.37.2)
 
 - Neues Icon: „Ar“ weiß auf Schwarz, abgerundet, wie das App-Icon. Vorher

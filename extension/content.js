@@ -1081,6 +1081,22 @@
   }
 
   let metaMark = null; // { x, y } während einer ⌥-Markierung
+
+  // Seiten, die schon bei pointerdown/pointerup weiterspringen (Pinterest u. a.),
+  // sehen ⌥-Klicks gar nicht erst. Nur stopPropagation: Archivers eigene
+  // Listener am window laufen weiter, die Textauswahl bleibt möglich.
+  const OWN_FIELDS = "input, textarea, select, [contenteditable=''], [contenteditable='true'], archiver-overlay";
+  for (const type of ["pointerdown", "pointerup", "mouseup"]) {
+    window.addEventListener(
+      type,
+      (e) => {
+        if (!e.isTrusted || !e.altKey || e.button !== 0 || manualOpen || gone()) return;
+        if (e.target instanceof Element && e.target.closest(OWN_FIELDS)) return;
+        e.stopPropagation();
+      },
+      true
+    );
+  }
   window.addEventListener(
     "mousedown",
     (e) => {
@@ -1095,6 +1111,10 @@
         if (hasMarks() && !onLive && !insideMarks(e.clientX, e.clientY)) clearMarks();
         return;
       }
+      // ⌥-Klick gehört der Markierung: Die Seite bekommt ihn nicht, ein Link
+      // führt nicht weiter und Chrome lädt ihn nicht herunter (3.29.3)
+      e.stopPropagation();
+      swallowNextClick();
       keepLiveSelection();
       const img = imageUnder(e.clientX, e.clientY);
       if (img) {
