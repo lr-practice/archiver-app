@@ -1,6 +1,6 @@
 # Archiver – Design-System
 
-Stand: App 0.37.0 · Extension 3.28.4
+Stand: App 0.37.0 · Extension 3.29.0
 
 Diese Datei hält fest, wie Archiver aussieht und warum. Sie gilt für die Mac-App
 (`app/src`) und die Chrome-Extension (`extension/`). Wer an der Oberfläche
@@ -543,6 +543,23 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
 - **Nicht:** Kein Umbenennen ohne Bestätigung im Blatt oder auf „Übernehmen“,
   kein Dienst im Netz: Vorschlag und Schema nutzen nur vorhandene Daten
   (`naming.rs`).
+
+### 4.20 Bibliotheken beim Ziehen (Extension 3.29.0, `.lib-bar`)
+- **Zweck:** Beim Ziehen im Browser die Bibliothek wechseln, ohne ⇧ mehrfach
+  zu drücken. Erscheint nur, wenn es mehr als eine Bibliothek gibt.
+- **Form:** Eine Glas-Pille mittig über der Zonenleiste (4.13), Werte wie die
+  Navigation (4.2): 10 px Rundung, 5 px Innenabstand, Namen 14 px Geist. Die
+  aktive Bibliothek ist gefüllt (ink × 0.1 / schwarz × 0.08). Steht 104 px
+  über dem unteren Rand, solange die Leiste Streifen ist, und rückt mit
+  0.22 s auf `min(30vh, 260px) + 22px`, wenn sie die volle Höhe hat (`.high`).
+- **Ablauf:** Zeiger auf einen Namen → Ring aus 4.1 (`--ring-md`, rx 9, 3 px
+  Abstand). Nach 0.4 s Verweilen wechselt die Bibliothek, die Karten bleiben
+  stehen und tauschen nur ihre Namen. Solange der Zeiger auf der Pille ist,
+  bleibt die Leiste in ihrer Höhe; zurück zum Streifen erst 70 px über der
+  vollen Leiste. ⇧ springt weiter zur nächsten (dragover liest nur
+  Modifier-Tasten).
+- **Nicht:** Kein ⇧-Zeichen in der Pille, keine Zahlen, keine zweite
+  Hervorhebung neben Ring und Füllung. Ablegen auf der Pille legt nichts ab.
 
 ---
 

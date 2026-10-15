@@ -45,7 +45,7 @@ const MANUAL = {
         lead: "Für Chrome, Brave, Edge, Arc und Vivaldi. Mit der App verbunden landet alles direkt im Zonenordner der aktiven Bibliothek, auch wenn die App zu ist.",
         rows: [
           { t: "Ziehen", d: "Bild anfassen, unten erscheinen die Active Zones 01–04. Loslassen sichert in der höchsten verfügbaren Auflösung, samt Quelle." },
-          { t: "Bibliothek wählen", d: "Shift beim Ziehen zeigt die Bibliotheken, abgelegt wird in die gewählte. Mit nur einer Bibliothek geht es in Downloads.", k: ["⇧"] },
+          { t: "Bibliothek wählen", d: "Beim Ziehen im Browser steht über den Zonen eine Leiste mit deinen Bibliotheken. Einen Namen kurz anfahren wechselt dorthin, Shift springt zur nächsten. Mit nur einer Bibliothek legt Shift in Downloads ab.", k: ["⇧"] },
           { t: "Rechtsklick", d: "„Ablegen in“ mit den drei zuletzt genutzten Zonen und allen Zonen samt Ordnern. Geht auch bei Bildern, die sich nicht ziehen lassen." },
           { t: "Ausschnitt", d: "Rahmen auf der Seite aufziehen und Zone wählen.", k: ["⌥⇧S"] },
           { t: "Text", d: "Text markieren und ziehen. Die Markierung zeigt sofort ihre Kartenfarbe, gesichert wird eine Textkarte als .txt." },
@@ -166,7 +166,7 @@ const MANUAL = {
         lead: "For Chrome, Brave, Edge, Arc and Vivaldi. Connected to the app, everything lands straight in the zone folder of the active library, even when the app is closed.",
         rows: [
           { t: "Drag", d: "Pick up an image and the Active Zones 01–04 appear at the bottom. Drop to save it at the highest available resolution, with its source." },
-          { t: "Choose library", d: "Hold Shift while dragging to see your libraries and drop into the chosen one. With a single library it goes to Downloads.", k: ["⇧"] },
+          { t: "Choose library", d: "While dragging in the browser, a bar with your libraries sits above the zones. Rest on a name briefly to switch to it, or press Shift to jump to the next. With a single library, Shift drops into Downloads.", k: ["⇧"] },
           { t: "Right-click", d: "“Move to” with the three zones used last and all zones with their folders. Also works for images that cannot be dragged." },
           { t: "Area", d: "Draw a frame on the page and pick a zone.", k: ["⌥⇧S"] },
           { t: "Text", d: "Select text and drag it. The selection shows its card colour right away, it is saved as a text card (.txt)." },

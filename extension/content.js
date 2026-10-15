@@ -758,6 +758,7 @@
         return zone;
       });
       rootEl.appendChild(zonesBarEl);
+      showLibBar();
       debugLog("Zonen angezeigt:", barZones);
     });
   }
@@ -801,6 +802,7 @@
     zonesBarEl = null;
     zoneEls = [];
     dragCounter = 0;
+    removeLibBar();
     zone.classList.add("active");
     bar.classList.add("leaving");
     setTimeout(() => bar.remove(), 520);
@@ -810,10 +812,14 @@
   // oder volle Höhe, Zielkarte markieren
   function trackZones(x, y) {
     if (!zonesBarEl) return;
+    const onLib = trackLibs(x, y);
     const fromBottom = window.innerHeight - y;
     const strip = zonesBarEl.classList.contains("strip");
+    // über der vollen Leiste sitzt die Bibliotheks-Pille: erst darüber wieder Streifen
+    const above = libBarEl && !libBarEl.hidden ? 70 : 24;
     if (strip && fromBottom < STRIP_PX) zonesBarEl.classList.remove("strip");
-    else if (!strip && fromBottom > barHeight() + 24) zonesBarEl.classList.add("strip");
+    else if (!strip && !onLib && fromBottom > barHeight() + above) zonesBarEl.classList.add("strip");
+    if (libBarEl) libBarEl.classList.toggle("high", !zonesBarEl.classList.contains("strip"));
     const active = getZoneIndex(x, y);
     zoneEls.forEach((el, i) => el.classList.toggle("active", i === active));
   }
@@ -1260,6 +1266,7 @@
       if (Math.hypot(e.clientX - d.x, e.clientY - d.y) < TEXT_DRAG_THRESHOLD) return;
       d.moving = true;
       dragCounter = 1;
+      loadDragLibs();
       showZones();
       ensureOverlay().then(() => {
         if (textDrag !== d) return;
@@ -1608,6 +1615,7 @@
       if (Math.hypot(e.clientX - d.x, e.clientY - d.y) < 6) return;
       d.moving = true;
       dragCounter = 1;
+      loadDragLibs();
       showZones();
       d.ghost = mediaGhost(d);
       document.documentElement.appendChild(d.ghost);
@@ -1906,15 +1914,19 @@
   // Gibt es in der App mehrere Bibliotheken, wechselt ⇧ stattdessen die Bibliothek.
   let shiftDrop = false;
 
-  // ---- ⇧ beim Ziehen: Bibliothek wechseln ----
-  // Jeder Druck auf ⇧ (gelesen aus dragover, Tastenereignisse gibt es während
-  // eines Drags nicht) springt zur nächsten Bibliothek und zeigt ihre Active
-  // Zones. Die Bibliotheks-Leiste ist nur sichtbar, solange ⇧ gedrückt ist.
+  // ---- Bibliothek beim Ziehen wechseln (3.29.0) ----
+  // Gibt es mehrere Bibliotheken, steht beim Ziehen eine Pille über dem
+  // Streifen. Einen Namen anfahren und kurz verweilen wechselt die Bibliothek,
+  // die Zonen zeigen dann ihre Active Zones. ⇧ springt weiter zur nächsten
+  // (gelesen aus dragover, Tastenereignisse gibt es während eines Drags nicht).
+  const LIB_DWELL_MS = 400;
   let dragLibs = []; // [{ name, path, active }]
   let libIdx = -1;
   let shiftHeld = false;
-  let dropLibrary = null; // Pfad der per ⇧ gewählten Bibliothek, null = aktive
+  let dropLibrary = null; // Pfad der gewählten Bibliothek, null = aktive
   let libBarEl = null;
+  let libTarget = -1; // angefahrener Name
+  let libTimer = null;
 
   // Nach einem Update der Extension ist dieses Skript von ihr abgeschnitten:
   // Speichern geht dann ins Leere. Statt still nichts zu tun, sagen wir es (3.24.0).
@@ -1936,17 +1948,21 @@
     dropLibrary = null;
     libIdx = -1;
     shiftHeld = false;
-    chrome.runtime.sendMessage({ type: "library-zones", library: null }, (r) => {
-      if (chrome.runtime.lastError || !r || !r.app) return;
-      dragLibs = Array.isArray(r.libraries) ? r.libraries : [];
-      libIdx = Math.max(0, dragLibs.findIndex((l) => l.active));
-    });
+    setLibTarget(-1);
+    try {
+      chrome.runtime.sendMessage({ type: "library-zones", library: null }, (r) => {
+        if (chrome.runtime.lastError || !r || !r.app) return;
+        dragLibs = Array.isArray(r.libraries) ? r.libraries : [];
+        libIdx = Math.max(0, dragLibs.findIndex((l) => l.active));
+        if (zonesBarEl) showLibBar();
+      });
+    } catch {} // verwaistes Skript nach einem Update: ohne Bibliotheken weiter
   }
 
-  function cycleLibrary() {
-    if (dragLibs.length < 2) return;
-    libIdx = (libIdx + 1) % dragLibs.length;
-    const lib = dragLibs[libIdx];
+  function selectLibrary(i) {
+    if (i < 0 || i >= dragLibs.length || i === libIdx) return;
+    libIdx = i;
+    const lib = dragLibs[i];
     dropLibrary = lib.active ? null : lib.path;
     showLibBar();
     chrome.runtime.sendMessage({ type: "library-zones", library: lib.path }, (r) => {
@@ -1956,26 +1972,61 @@
     });
   }
 
+  function cycleLibrary() {
+    if (dragLibs.length < 2) return;
+    setLibTarget(-1);
+    selectLibrary((libIdx + 1) % dragLibs.length);
+  }
+
   function showLibBar() {
-    if (!rootEl) return;
+    if (!rootEl || !zonesBarEl || dragLibs.length < 2) return;
     if (!libBarEl) {
       libBarEl = UI.el("div", "lib-bar");
+      libBarEl.classList.toggle("high", !zonesBarEl.classList.contains("strip"));
       rootEl.appendChild(libBarEl);
     }
     libBarEl.replaceChildren(
-      ...dragLibs.map((l, i) => UI.el("span", "lib" + (i === libIdx ? " on" : ""), l.name)),
-      UI.el("span", "lib-key", "⇧")
+      ...dragLibs.map((l, i) => UI.el("span", "lib" + (i === libIdx ? " on" : "") + (i === libTarget ? " target" : ""), l.name))
     );
     libBarEl.hidden = false;
   }
 
-  function hideLibBar() {
-    if (libBarEl) libBarEl.hidden = true;
-  }
-
   function removeLibBar() {
+    setLibTarget(-1);
     if (libBarEl) libBarEl.remove();
     libBarEl = null;
+  }
+
+  // Angefahrener Name: Ring, nach LIB_DWELL_MS Wechsel
+  function setLibTarget(i) {
+    if (i === libTarget) return;
+    libTarget = i;
+    clearTimeout(libTimer);
+    libTimer = null;
+    if (libBarEl) [...libBarEl.children].forEach((el, j) => el.classList.toggle("target", j === i));
+    if (i < 0 || i === libIdx) return;
+    libTimer = setTimeout(() => {
+      libTimer = null;
+      if (libTarget !== i) return;
+      libTarget = -1;
+      selectLibrary(i);
+    }, LIB_DWELL_MS);
+  }
+
+  // Zeiger über der Pille? Liefert true, solange er darauf steht.
+  function trackLibs(x, y) {
+    if (!libBarEl || libBarEl.hidden) return false;
+    const box = libBarEl.getBoundingClientRect();
+    if (x < box.left || x > box.right || y < box.top || y > box.bottom) {
+      setLibTarget(-1);
+      return false;
+    }
+    const i = [...libBarEl.children].findIndex((el) => {
+      const r = el.getBoundingClientRect();
+      return x >= r.left && x <= r.right;
+    });
+    setLibTarget(i === libIdx ? -1 : i);
+    return true;
   }
 
   // Karten behalten, nur Namen tauschen (Leiste bleibt ruhig stehen)
@@ -2013,15 +2064,12 @@
       if (!e.dataTransfer || manualOpen) return;
       e.preventDefault(); // notwendig, damit "drop" überhaupt feuert
       e.dataTransfer.dropEffect = "copy";
-      // Mehrere Bibliotheken: ⇧ wechselt die Bibliothek, die Leiste zeigt sich nur bei gedrückter Taste
+      // Mehrere Bibliotheken: jeder Druck auf ⇧ springt zur nächsten
       if (dragLibs.length > 1) {
         if (e.shiftKey && !shiftHeld) {
           shiftHeld = true;
           cycleLibrary();
-        } else if (!e.shiftKey && shiftHeld) {
-          shiftHeld = false;
-          hideLibBar();
-        }
+        } else if (!e.shiftKey) shiftHeld = false;
       } else if (zonesBarEl && zonesBarEl.classList.contains("to-downloads") !== e.shiftKey) {
         // Nur eine Bibliothek: mit Shift geht das Bild am Archiv vorbei in den Download-Ordner
         zonesBarEl.classList.toggle("to-downloads", e.shiftKey);

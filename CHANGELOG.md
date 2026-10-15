@@ -1,5 +1,12 @@
 # Changelog
 
+## Extension 3.29.0 (App 0.37.0)
+
+- Bibliothek beim Ziehen wechseln: Gibt es mehrere Bibliotheken, steht beim
+  Ziehen eine Leiste mit ihren Namen über den Zonen. Namen anfahren, kurz
+  verweilen, und die Zonen zeigen die Ordner dieser Bibliothek. Gilt für
+  Bilder, Text und Instagram. ⇧ springt weiter zur nächsten.
+
 ## Extension 3.28.4 (App 0.37.0)
 
 - Pinterest: Ziehen aus der Übersicht zieht jetzt das Bild statt des Pin-Links,
