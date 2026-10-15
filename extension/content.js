@@ -1095,8 +1095,16 @@
         if (hasMarks() && !onLive && !insideMarks(e.clientX, e.clientY)) clearMarks();
         return;
       }
+      // ⌘-Klick auf einen Link öffnet wie gewohnt einen Tab, solange noch nichts
+      // gesammelt wird. Erst wenn schon etwas markiert ist, nimmt er das Bild dazu.
+      const link = t instanceof Element && t.closest("a[href]");
+      const collecting = hasMarks() || !!selectedText();
       keepLiveSelection();
       const img = imageUnder(e.clientX, e.clientY);
+      if (img && (link || img.closest("a[href]")) && !collecting) {
+        paintMarks();
+        return;
+      }
       if (img) {
         // ⌘-Klick auf ein Bild: dazunehmen oder wieder herausnehmen
         e.preventDefault();

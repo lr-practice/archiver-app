@@ -504,6 +504,9 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
 - **Zweck:** Mit ⌘ mehrere Stellen einer Seite sammeln und in einem Zug in
   eine Zone ziehen. ⌘ + Markieren nimmt Text dazu, ⌘-Klick nimmt ein Bild
   (ab 80 px) dazu oder wieder heraus. Klick daneben oder Esc hebt alles auf.
+  Liegt das Bild in einem Link, öffnet ⌘-Klick wie gewohnt einen neuen Tab,
+  solange noch nichts markiert ist (Extension 3.29.1); erst während einer
+  Sammlung nimmt er das Bild dazu.
 - **Form:** Text behält die Farbe der Markierung, also die Farbe der späteren
   Textkarte (`::highlight(archiver-marks)`, gleiche Werte wie `::selection`).
   Alle Stücke einer Runde teilen eine Farbe. Bilder tragen den Ring aus 4.1:

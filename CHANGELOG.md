@@ -1,5 +1,11 @@
 # Changelog
 
+## Extension 3.29.1 (in Arbeit)
+
+- ⌘-Klick auf einen Link öffnet wieder einen neuen Tab, auch wenn ein Bild
+  darin liegt. Ein verlinktes Bild nimmt ⌘-Klick erst dazu, wenn schon etwas
+  markiert ist.
+
 ## App 0.37.2 (Extension 3.29.0)
 
 - PDF, Plakat: zwei neue Anordnungen neben dem Raster. Index setzt die
