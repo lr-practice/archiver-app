@@ -1,6 +1,6 @@
 # Archiver – Design-System
 
-Stand: App 0.38.0 · Extension 3.29.3
+Stand: App 0.38.1 · Extension 3.29.3
 
 Diese Datei hält fest, wie Archiver aussieht und warum. Sie gilt für die Mac-App
 (`app/src`) und die Chrome-Extension (`extension/`). Wer an der Oberfläche
@@ -611,6 +611,17 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
   `p-input note-field`), Platzhalter „Archiver“. Greift beim Tippen.
 - **Gilt für:** Navigation (`#navBrand`), Startbild, Sperrbild, Kopf von
   Information, Fenstertitel. Nicht: Tray, Extension, PDF, Dateinamen.
+
+### 4.22a Updates (App 0.38.1, Information › Updates)
+- **Zweck:** Kanal wählen (Beta oder Vorab) und jede veröffentlichte Version
+  installieren, auch eine ältere.
+- **Form:** Eigener Block unter „App“. Kanal als `p-choice` (wie alle
+  Schalter), „Version wählen“ mit `p-link` rechts; die Liste darunter sind
+  normale Blockzeilen (Version, Datum gedimmt, rechts „Installieren“ oder
+  gedimmt „installiert“). Vor dem Installieren ein `dialog confirm`, bei
+  älteren Versionen mit Hinweis, dass Späteres dort fehlt.
+- **Sichtbar:** nur mit Vorab-Kanal oder nach ⌥-Klick auf die Versionsnummer.
+- **Kürzel:** ⌘I öffnet Information, auch in Works.
 
 ### 4.23 Works (App 0.38.0, `works.css`, `works.js`)
 - **Zweck:** Laufende Kundenprojekte als eigener Bereich neben der

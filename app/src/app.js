@@ -2633,6 +2633,7 @@
         ["⌘N", t("newZone")],
         ["⌘P", t("pdfExport")],
         ["⌘,", t("settings")],
+        ["⌘I", t("about")],
         ["Esc", t("keyBack")],
       ]) {
         keys.appendChild(blockRow(v, k));
@@ -2929,21 +2930,18 @@
           showVersion(pre);
         })
         .catch(() => {});
-    // ⌥-Klick: Vorabversionen an oder aus (0.37.0). Nur für Lukas' Tests,
-    // darum ohne sichtbaren Schalter; Beta-Tester bekommen nur Freigegebenes.
-    version.addEventListener("click", async (e) => {
+    // ⌥-Klick blendet den Block „Updates“ ein (Kanal, Version wählen, 0.38.1).
+    // Ab Werk sehen ihn nur Macs mit Vorabversionen; Beta-Tester bekommen
+    // nur Freigegebenes, solange sie ihn nicht selbst aufdecken.
+    const updates = block(t("aboutUpdates"));
+    updates.hidden = true;
+    version.addEventListener("click", (e) => {
       if (!e.altKey) return;
-      const pre = !(await invoke("update_channel").catch(() => false));
-      try {
-        await invoke("set_update_channel", { prerelease: pre });
-      } catch (err) {
-        return fail(err);
-      }
-      showVersion(pre);
-      toast(t(pre ? "prereleaseOn" : "prereleaseOff"));
-      checkUpdate();
+      setPref("updatesShown", true);
+      updates.hidden = false;
     });
     meta.appendChild(blockRow(t("aboutVersion"), version));
+    renderUpdates(updates, showVersion);
     const brand = el("input", "p-input note-field");
     brand.value = pref("brandName", "");
     brand.placeholder = "Archiver";
@@ -2960,9 +2958,99 @@
     meta.appendChild(blockRow(t("setLibrary"), pathEl(state.root)));
     meta.appendChild(blockRow(t("aboutFont"), "SIL OFL"));
     wrap.appendChild(meta);
+    wrap.appendChild(updates);
 
     wrap.appendChild(el("div", "p-sheet-foot", "© 2026 Lukas Rudolph"));
     return wrap;
+  }
+
+  // ---- Information › Updates: Kanal Beta/Vorab und Version wählen (0.38.1) ----
+  // Die Liste kommt aus Archiver-Releases (lib.rs: update_versions). Installiert
+  // wird wie bei einem Update, auch rückwärts; vorher fragt ein Dialog.
+  async function renderUpdates(box, showVersion) {
+    const pre = await invoke("update_channel").catch(() => false);
+    box.hidden = !(pre || pref("updatesShown", false));
+    const current = TAURI.app && TAURI.app.getVersion ? await TAURI.app.getVersion().catch(() => "") : "";
+    const head = box.firstChild;
+    box.replaceChildren(head);
+    box.appendChild(
+      blockRow(
+        [el("div", null, t("updChannel")), el("div", "p-block-text dim", t(pre ? "updChannelPreText" : "updChannelBetaText"))],
+        choice([["beta", "Beta"], ["pre", t("aboutPrerelease")]], pre ? "pre" : "beta", async (id) => {
+          const next = id === "pre";
+          if (next === pre) return;
+          try {
+            await invoke("set_update_channel", { prerelease: next });
+          } catch (err) {
+            return fail(err);
+          }
+          setPref("updatesShown", true);
+          showVersion(next);
+          toast(t(next ? "prereleaseOn" : "prereleaseOff"));
+          renderUpdates(box, showVersion);
+          checkUpdate();
+        })
+      )
+    );
+    const list = el("div", "p-upd-list");
+    const load = button("p-link", t("updLoad"), async () => {
+      load.disabled = true;
+      load.textContent = t("updLoading");
+      let versions = [];
+      try {
+        versions = await invoke("update_versions");
+      } catch (err) {
+        load.disabled = false;
+        load.textContent = t("updLoad");
+        return toast(t("updOffline"), false, 4000);
+      }
+      load.remove();
+      list.replaceChildren();
+      if (!versions.length) list.appendChild(blockRow(el("div", "p-block-text dim", t("updNone"))));
+      for (const v of versions.slice(0, 12)) {
+        const name = [el("div", null, v.version + (v.prerelease ? " · " + t("aboutPrerelease") : ""))];
+        if (v.date) name.push(el("div", "p-block-text dim", recentDate(Date.parse(v.date))));
+        const side =
+          v.version === current
+            ? el("span", "dim", t("updCurrent"))
+            : button("p-link", t("updInstallThis"), () => askInstallVersion(v, current));
+        list.appendChild(blockRow(name, side));
+      }
+    });
+    box.appendChild(
+      blockRow([el("div", null, t("updPick")), el("div", "p-block-text dim", t("updPickText"))], load)
+    );
+    box.appendChild(list);
+  }
+
+  function askInstallVersion(v, current) {
+    const older = current && cmpVersion(v.version, current) < 0;
+    const dialog = el("div", "dialog confirm");
+    dialog.appendChild(el("h3", null, t("updAsk", { version: v.version })));
+    dialog.appendChild(el("p", null, t(older ? "updAskOlder" : "updAskNewer")));
+    const foot = el("div", "confirm-foot");
+    const ok = button("btn primary", t("updInstallThis"), go);
+    function go() {
+      ok.disabled = true;
+      ok.textContent = t("updateLoading");
+      invoke("update_install_version", { tag: v.tag }).catch((err) => {
+        closeModal();
+        if (String(err) === "installed") toast(t("updCurrent"));
+        else fail(err);
+      });
+    }
+    foot.appendChild(button("btn", t("cancel"), closeModal));
+    foot.appendChild(ok);
+    dialog.appendChild(foot);
+    openModal(dialog, go);
+    ok.focus();
+  }
+
+  function cmpVersion(a, b) {
+    const pa = String(a).split(".").map(Number);
+    const pb = String(b).split(".").map(Number);
+    for (let i = 0; i < 3; i++) if ((pa[i] || 0) !== (pb[i] || 0)) return (pa[i] || 0) - (pb[i] || 0);
+    return 0;
   }
 
   // ---- Handbuch (manual.js): dieselben Blöcke wie Information ----
@@ -7208,7 +7296,7 @@
     if ((state.libraries || []).some((l) => l.path)) menu.appendChild(el("div", "p-more-rule"));
     item(t("settings"), () => togglePage("settings"), state.page === "settings", "⌘,");
     item(t("manual"), () => togglePage("manual"), state.page === "manual");
-    item(t("about"), () => togglePage("about"), state.page === "about");
+    item(t("about"), () => togglePage("about"), state.page === "about", "⌘I");
     const note = el("div", "p-more-note");
     note.appendChild(el("div", null, state.root.replace(/^\/(Users|home)\/[^/]+/, "~")));
     menu.appendChild(note);
@@ -7450,6 +7538,7 @@
     // Works: eigene Tasten, dazu ⌘, für die Einstellungen und Esc für offene Seiten
     if (state.area === "works") {
       if (mod && e.key === ",") togglePage("settings");
+      else if (mod && (e.key === "i" || e.key === "I")) togglePage("about");
       else if (e.key === "Escape" && state.page) closePage();
       else if (!state.page && window.ArchiverWorks.key(e)) e.preventDefault();
       else return;
@@ -7507,6 +7596,8 @@
       reloadObjects();
     } else if (mod && (e.key === "d" || e.key === "D")) {
       toggleInfo();
+    } else if (mod && (e.key === "i" || e.key === "I")) {
+      togglePage("about"); // Information (0.38.1)
     } else if (mod && e.key === ",") {
       togglePage("settings");
     } else if (mod && (e.key === "z" || e.key === "Z") && !e.shiftKey) {

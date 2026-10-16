@@ -201,10 +201,28 @@ jobs:
           if [ "$CHANNEL" = "vorab" ]; then
             # Ein fester Tag, immer nur die jüngste Vorabversion; nie „latest“
             gh release view vorab -R "$REPO" >/dev/null 2>&1 || gh release create vorab -R "$REPO" --prerelease --latest=false --title "Archiver Vorab" --notes "Nur zum Testen. Freigabe an alle: App macOS mit „freigeben“."
+            # Version wählen (0.38.1): jede Vorabversion bleibt zusätzlich unter
+            # vorab-X.Y.Z liegen, auch die, die hier gleich ersetzt wird.
+            keep() {
+              local v=$1 dir=$2 tag=vorab-$1
+              gh release view "$tag" -R "$REPO" >/dev/null 2>&1 && return 0
+              mkdir -p "keep-$v"
+              cp "$dir/Archiver-$v-mac-arm64.app.tar.gz" "keep-$v/"
+              jq --arg u "https://github.com/$REPO/releases/download/$tag/Archiver-$v-mac-arm64.app.tar.gz" \
+                '.platforms["darwin-aarch64"].url = $u' "$dir/vorab.json" > "keep-$v/vorab.json"
+              gh release create "$tag" -R "$REPO" --prerelease --latest=false --title "Archiver Vorab $v" \
+                --notes "Ältere Vorabversion, in der App unter Information › Updates wählbar." "keep-$v"/*
+            }
+            mkdir -p prev
+            if gh release download vorab -R "$REPO" -D prev -p 'vorab.json' -p '*.app.tar.gz' 2>/dev/null; then
+              PREV=$(jq -r .version prev/vorab.json)
+              [ -n "$PREV" ] && [ "$PREV" != "$VERSION" ] && [ -f "prev/Archiver-$PREV-mac-arm64.app.tar.gz" ] && keep "$PREV" prev || true
+            fi
             OLD=$(gh release view vorab -R "$REPO" --json assets -q '.assets[].name')
             for a in $OLD; do gh release delete-asset vorab "$a" -R "$REPO" -y; done
             gh release upload vorab upd/* -R "$REPO" --clobber
             gh release edit vorab -R "$REPO" --prerelease --latest=false --title "Archiver Vorab $VERSION"
+            keep "$VERSION" upd
           else
             gh release view "$TAG" -R "$REPO" >/dev/null 2>&1 || gh release create "$TAG" -R "$REPO" --title "Archiver $VERSION" --notes-file docs/beta.md --latest
             gh release upload "$TAG" upd/* -R "$REPO" --clobber

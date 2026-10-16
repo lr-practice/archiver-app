@@ -1636,6 +1636,97 @@ async fn update_install(app: AppHandle) -> Result<(), String> {
     app.restart();
 }
 
+// ---- Version wählen (0.38.1) ----
+// Jede Beta-Freigabe liegt in Archiver-Releases unter vX.Y.Z mit latest.json,
+// jede Vorabversion ab 0.38.0 zusätzlich unter vorab-X.Y.Z mit vorab.json.
+// Die Liste kommt über curl (in macOS enthalten) von der GitHub-API; die
+// Installation läuft wie ein Update, nur mit fester Quelle und auch rückwärts.
+
+const RELEASES_API: &str = "https://api.github.com/repos/lr-practice/Archiver-Releases/releases?per_page=60";
+const RELEASES_DL: &str = "https://github.com/lr-practice/Archiver-Releases/releases/download";
+
+#[derive(Serialize, Debug, PartialEq)]
+struct VersionEntry {
+    version: String,
+    tag: String,
+    date: String,
+    prerelease: bool,
+}
+
+/// Versionen aus der Antwort der API, neueste zuerst. Vorabversionen nur, wenn
+/// der Vorab-Kanal an ist; gibt es eine Version auch als Beta, zählt die Beta.
+fn parse_versions(json: &str, with_pre: bool) -> Vec<VersionEntry> {
+    let Ok(serde_json::Value::Array(list)) = serde_json::from_str::<serde_json::Value>(json) else {
+        return Vec::new();
+    };
+    let mut out: Vec<VersionEntry> = Vec::new();
+    for r in &list {
+        let tag = r["tag_name"].as_str().unwrap_or("");
+        let has = |name: &str| r["assets"].as_array().is_some_and(|a| a.iter().any(|x| x["name"] == name));
+        let (version, prerelease) = if let Some(v) = tag.strip_prefix("vorab-") {
+            if !with_pre || !has("vorab.json") {
+                continue;
+            }
+            (v, true)
+        } else if let Some(v) = tag.strip_prefix('v') {
+            if !has("latest.json") {
+                continue;
+            }
+            (v, false)
+        } else {
+            continue;
+        };
+        if semver::Version::parse(version).is_err() {
+            continue;
+        }
+        let date = r["published_at"].as_str().unwrap_or("").chars().take(10).collect();
+        out.push(VersionEntry { version: version.into(), tag: tag.into(), date, prerelease });
+    }
+    out.sort_by(|a, b| {
+        let (va, vb) = (semver::Version::parse(&a.version).unwrap(), semver::Version::parse(&b.version).unwrap());
+        vb.cmp(&va).then(a.prerelease.cmp(&b.prerelease))
+    });
+    out.dedup_by(|b, a| a.version == b.version);
+    out
+}
+
+#[tauri::command]
+async fn update_versions(app: AppHandle) -> Result<Vec<VersionEntry>, String> {
+    let pre = load_settings(&app).prerelease;
+    let body = blocking(|| {
+        let out = std::process::Command::new("/usr/bin/curl")
+            .args(["-fsSL", "--max-time", "15", "-H", "Accept: application/vnd.github+json", RELEASES_API])
+            .output()
+            .map_err(|e| e.to_string())?;
+        if !out.status.success() {
+            return Err("offline".into());
+        }
+        Ok(String::from_utf8_lossy(&out.stdout).into_owned())
+    })
+    .await?;
+    Ok(parse_versions(&body, pre))
+}
+
+#[tauri::command]
+async fn update_install_version(app: AppHandle, tag: String) -> Result<(), String> {
+    use tauri_plugin_updater::UpdaterExt;
+    let feed = if tag.starts_with("vorab-") { "vorab.json" } else { "latest.json" };
+    if tag.is_empty() || !tag.chars().all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '-') {
+        return Err("bad tag".into());
+    }
+    let url = tauri::Url::parse(&format!("{RELEASES_DL}/{tag}/{feed}")).map_err(|e| e.to_string())?;
+    let updater = app
+        .updater_builder()
+        .endpoints(vec![url])
+        .and_then(|b| b.version_comparator(|current, release| release.version != current).build())
+        .map_err(|e| e.to_string())?;
+    let Some(update) = updater.check().await.map_err(|e| e.to_string())? else {
+        return Err("installed".into());
+    };
+    update.download_and_install(|_, _| {}, || {}).await.map_err(|e| e.to_string())?;
+    app.restart();
+}
+
 // ---- Startton ----
 // Standard ist der eingebettete Archiver-Ton (von Lukas, sounds/standard.wav). Eine eigene Datei liegt als Kopie in
 // <Konfiguration>/startton/<Originalname>.
@@ -1865,6 +1956,8 @@ pub fn run() {
             update_channel,
             set_update_channel,
             update_install,
+            update_versions,
+            update_install_version,
             viewer::viewer_state,
             viewer::viewer_siblings,
             viewer::viewer_zones,
@@ -1928,6 +2021,25 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn versions_from_releases() {
+        let json = r#"[
+          {"tag_name":"vorab","published_at":"2026-10-16T08:55:00Z","assets":[{"name":"vorab.json"}]},
+          {"tag_name":"vorab-0.38.0","published_at":"2026-10-16T08:55:00Z","assets":[{"name":"vorab.json"}]},
+          {"tag_name":"vorab-0.37.3","published_at":"2026-10-15T15:44:00Z","assets":[{"name":"vorab.json"}]},
+          {"tag_name":"v0.37.3","published_at":"2026-10-16T08:50:00Z","assets":[{"name":"latest.json"}]},
+          {"tag_name":"v0.9.0","published_at":"2026-09-01T10:00:00Z","assets":[{"name":"latest.json"}]},
+          {"tag_name":"v0.37.0","published_at":"2026-10-14T19:22:00Z","assets":[{"name":"latest.json"}]},
+          {"tag_name":"v0.36.0","published_at":"2026-10-10T10:00:00Z","assets":[{"name":"x.dmg"}]},
+          {"tag_name":"app-latest","published_at":"2026-10-16T08:55:00Z","assets":[]}
+        ]"#;
+        let tags = |pre| parse_versions(json, pre).into_iter().map(|v| v.tag).collect::<Vec<_>>();
+        assert_eq!(tags(false), ["v0.37.3", "v0.37.0", "v0.9.0"]);
+        assert_eq!(tags(true), ["vorab-0.38.0", "v0.37.3", "v0.37.0", "v0.9.0"]);
+        assert_eq!(parse_versions(json, true)[0].date, "2026-10-16");
+        assert!(parse_versions("{\"message\":\"rate limit\"}", true).is_empty());
+    }
 
     #[test]
     fn library_guard() {

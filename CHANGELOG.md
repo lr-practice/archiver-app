@@ -1,5 +1,16 @@
 # Changelog
 
+## App 0.38.1 (Extension 3.29.3, Vorabversion)
+
+- ⌘I öffnet Information, auch in Works; im Menü ≡ steht das Kürzel dahinter.
+- Information › Updates: Kanal Beta oder Vorab als Schalter (bisher nur per
+  ⌥-Klick auf die Versionsnummer) und „Version wählen“: lädt die Liste aus
+  Archiver-Releases und installiert jede Freigabe, auch eine ältere. Vorher
+  fragt ein Dialog. Sichtbar mit Vorab-Kanal oder nach ⌥-Klick auf die Version.
+- Build: Jede Vorabversion bleibt zusätzlich unter `vorab-X.Y.Z` liegen, damit
+  sie später wählbar ist, ab 0.38.0.
+- Works heißt jetzt „Works“ statt „WORKS“.
+
 ## App 0.38.0 (Extension 3.29.3, Vorabversion)
 
 - Neu: Works, ein eigener Bereich für laufende Kundenprojekte, gleich nach
