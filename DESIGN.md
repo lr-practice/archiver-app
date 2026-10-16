@@ -195,10 +195,10 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
   dazu das Menü ≡.
 - **Form:** Eine Glas-Pille oben, auf der Mittellinie der Fensterknöpfe.
   Aktive Knöpfe sind gefüllt.
-- **WORKS (0.38.0):** Ist WORKS an (4.23), steht es als zweiter Bereich gleich
+- **Works (0.38.0):** Ist Works an (4.23), steht es als zweiter Bereich gleich
   nach „Archiver“, im selben Schnitt (600, ohne Gleitfläche beim Hover) und
   aktiv nur auf der Projektliste. Hinter der Trennlinie folgt der Pfad
-  „Kunde › Projekt“; auf der Liste entfällt die Linie. Die Suche ist in WORKS
+  „Kunde › Projekt“; auf der Liste entfällt die Linie. Die Suche ist in Works
   ausgeblendet.
 - **Nicht:** Keine Icons neben Wörtern und keine zweite Leiste.
 
@@ -612,7 +612,7 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
 - **Gilt für:** Navigation (`#navBrand`), Startbild, Sperrbild, Kopf von
   Information, Fenstertitel. Nicht: Tray, Extension, PDF, Dateinamen.
 
-### 4.23 WORKS (App 0.38.0, `works.css`, `works.js`)
+### 4.23 Works (App 0.38.0, `works.css`, `works.js`)
 - **Zweck:** Laufende Kundenprojekte als eigener Bereich neben der
   Bibliothek. Liest eine eigene Wurzel (Kunde/Projekt, Phasenordner 00–05,
   `_Assets` beim Kunden) und verschiebt nie eine Arbeitsdatei. Schalter unter

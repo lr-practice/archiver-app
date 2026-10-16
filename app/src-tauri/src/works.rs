@@ -1,8 +1,8 @@
-// works.rs — WORKS (0.38.0): laufende Kundenprojekte, getrennt von der Bibliothek.
+// works.rs — Works (0.38.0): laufende Kundenprojekte, getrennt von der Bibliothek.
 //
 // Eine eigene Wurzel, darin Kunde/Projekt mit sechs festen Ordnern:
-//   WORKS/<Kunde>/_Assets/…                     gilt für alle Projekte des Kunden
-//   WORKS/<Kunde>/<Projekt>/00 Post, 01 Brief, 02 Recherche, 03 Layout,
+//   Works/<Kunde>/_Assets/…                     gilt für alle Projekte des Kunden
+//   Works/<Kunde>/<Projekt>/00 Post, 01 Brief, 02 Recherche, 03 Layout,
 //                           04 Reinzeichnung, 05 Übergabe
 // Eigene Namen werden am Wort erkannt („Entwurf“ = Layout, „Druckdaten“ =
 // Reinzeichnung …). Die Phase ist der höchste Phasenordner mit Inhalt, Archiver
@@ -28,7 +28,7 @@ pub const BRIEF_FILE: &str = "brief.md";
 const SLOT_DEPTH: usize = 3;
 /// Höchstens so viele Dateien je Phasenordner, damit ein Exportordner die App nicht lähmt
 const SLOT_MAX_FILES: usize = 2000;
-/// Ordner, die WORKS überspringt: InDesign-Pakete, Schriften, Backups
+/// Ordner, die Works überspringt: InDesign-Pakete, Schriften, Backups
 const SKIP_DIRS: &[&str] = &["links", "document fonts", "fonts", "backup", "backups", "__macosx"];
 /// Ab so vielen Tagen gilt eine offene Rechnung als überfällig (Oberfläche färbt rot)
 pub const INVOICE_DUE_DAYS: u64 = 30;
@@ -872,7 +872,7 @@ pub struct Overview {
     pub projects: Vec<Summary>,
 }
 
-/// works.json: was Archiver selbst über WORKS weiß (bezahlte Rechnungen)
+/// works.json: was Archiver selbst über Works weiß (bezahlte Rechnungen)
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct State {
     /// Pfad relativ zur Wurzel → bezahlt am (ms)
@@ -1071,7 +1071,7 @@ pub fn scan(root: &Path) -> Overview {
 }
 
 pub fn project(root: &Path, dir: &Path) -> Result<Project, String> {
-    let client = locate_project(root, dir).ok_or("Kein Projekt in WORKS")?;
+    let client = locate_project(root, dir).ok_or("Kein Projekt in Works")?;
     if !dir.is_dir() {
         return Err("works-missing".into());
     }
@@ -1275,7 +1275,7 @@ pub fn inside(root: &Path, path: &Path) -> Option<PathBuf> {
     Some(p)
 }
 
-/// Betreffen Dateisystem-Ereignisse WORKS? Vorschauen, Lock- und Temp-Dateien nicht.
+/// Betreffen Dateisystem-Ereignisse Works? Vorschauen, Lock- und Temp-Dateien nicht.
 pub fn relevant_change(paths: &[PathBuf]) -> bool {
     paths.iter().any(|p| {
         !p.components().any(|c| c.as_os_str() == META_DIR)

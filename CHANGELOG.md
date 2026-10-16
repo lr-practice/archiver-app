@@ -2,10 +2,10 @@
 
 ## App 0.38.0 (Extension 3.29.3, Vorabversion)
 
-- Neu: WORKS, ein eigener Bereich für laufende Kundenprojekte, gleich nach
-  „Archiver“ in der Navigation. Einstellungen › Studio › WORKS, ab Werk aus
+- Neu: Works, ein eigener Bereich für laufende Kundenprojekte, gleich nach
+  „Archiver“ in der Navigation. Einstellungen › Studio › Works, ab Werk aus
   und nur in Vorabversionen schaltbar. Die Bibliothek bleibt unberührt.
-- WORKS liest einen eigenen Ordner: Kunde, Projekt, darin 00 Post, 01 Brief,
+- Works liest einen eigenen Ordner: Kunde, Projekt, darin 00 Post, 01 Brief,
   02 Recherche, 03 Layout, 04 Reinzeichnung, 05 Übergabe, beim Kunden
   `_Assets`. Eigene Ordnernamen werden am Wort erkannt („Entwurf“, „Druckdaten“).
 - Projektliste mit Phase, Termin und offenen Rechnungen, nach dem nächsten
@@ -18,11 +18,11 @@
   Ordner (N), Vorschau für INDD, AI, PSD und PDF über Quick Look.
 - Post: Mails (.eml, .emlx) mit Betreff, Absender und Datum, Angebote und
   Rechnungen mit Nummer und Betrag aus dem Dateinamen, „offen seit“, Summen,
-  „bezahlt“ per Klick (gemerkt in `WORKS/.archiver/works.json`).
-- Brief: `brief.md` lesen und in WORKS bearbeiten (Termin, Status, nächster
+  „bezahlt“ per Klick (gemerkt in `Works/.archiver/works.json`).
+- Brief: `brief.md` lesen und in Works bearbeiten (Termin, Status, nächster
   Schritt, Ansprechpartner). Neues Projekt legt alle Ordner und den Brief an.
 - Ablegen aus Finder oder Tray kopiert in die Phase des Reiters unter dem
-  Zeiger, ziehen aus WORKS nach Mail oder InDesign geht wie in Archiver.
+  Zeiger, ziehen aus Works nach Mail oder InDesign geht wie in Archiver.
 
 ## App 0.37.3 (Extension 3.29.3)
 

@@ -1,4 +1,4 @@
-/* works.css — WORKS (0.38.0): laufende Projekte als eigener Bereich.
+/* works.css — Works (0.38.0): laufende Projekte als eigener Bereich.
    Baut auf app.css auf: Tokens, Karten (4.4), Chips (4.7), Ring (4.1),
    Menüs (4.9), Leiste der Lightbox (4.11). Neu sind nur Phasenleiste,
    Stände-Reihe, Post-Tabelle und der Vergleich. Siehe DESIGN.md 4.23. */
@@ -11,11 +11,7 @@ body.works #dropbar {
   display: none !important;
 }
 
-.p-nav-works {
-  letter-spacing: 0.02em;
-}
-
-/* In der Projektliste steht hinter „WORKS“ kein Pfad: auch keine Trennlinie */
+/* In der Projektliste steht hinter „Works“ kein Pfad: auch keine Trennlinie */
 .p-nav-rule:has(+ .p-nav-main:empty) {
   display: none;
 }

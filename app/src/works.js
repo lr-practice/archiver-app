@@ -1,4 +1,4 @@
-// works.js — WORKS (0.38.0): laufende Kundenprojekte als eigener Bereich neben
+// works.js — Works (0.38.0): laufende Kundenprojekte als eigener Bereich neben
 // Archiver. Daten aus works.rs; app.js schaltet nur um (Navigation, Tasten,
 // Ziehen) und reicht über window.ArchiverApp ihre Bausteine herein.
 //
@@ -264,9 +264,9 @@
   // Ohne Wurzel: erklären, wählen oder anlegen
   function renderSetup() {
     const wrap = el("div", "p-page w-page w-setup");
-    wrap.appendChild(head("WORKS", t("wSetupText")));
+    wrap.appendChild(head("Works", t("wSetupText")));
     const tree = el("div", "w-tree");
-    tree.appendChild(el("div", "p-mono strong", "WORKS"));
+    tree.appendChild(el("div", "p-mono strong", "Works"));
     tree.appendChild(el("div", "p-mono", "└ " + t("wSetupClient")));
     tree.appendChild(el("div", "p-mono dim", "   ├ _Assets"));
     tree.appendChild(el("div", "p-mono", "   └ " + t("wSetupProject")));
@@ -295,7 +295,7 @@
 
   async function choose(create) {
     try {
-      const root = await A.invoke("works_choose", { create, name: "WORKS" });
+      const root = await A.invoke("works_choose", { create, name: "Works" });
       if (!root) return;
       W.root = root;
       W.rootError = null;
@@ -330,7 +330,7 @@
     const clients = new Set(open.map((p) => p.client).filter(Boolean));
     wrap.appendChild(
       head(
-        "WORKS",
+        "Works",
         all.length ? t(open.length === 1 ? "wListText1" : "wListText", { n: open.length, c: clients.size }) : t("wListEmpty")
       )
     );
@@ -1390,7 +1390,7 @@
     }
   }
 
-  // ---- Tasten (app.js reicht sie durch, solange WORKS offen ist) ----
+  // ---- Tasten (app.js reicht sie durch, solange Works offen ist) ----
 
   function key(e) {
     const mod = e.metaKey || e.ctrlKey;
@@ -1451,7 +1451,7 @@
     return true;
   }
 
-  // ---- Navigation: WORKS › Kunde › Projekt ----
+  // ---- Navigation: Works › Kunde › Projekt ----
 
   function nav(navButton) {
     const out = [];
@@ -1508,7 +1508,7 @@
     });
   }
 
-  // „WORKS“ in der Leiste ist nur auf der Projektliste aktiv, wie „Archiver“ auf der Startseite
+  // „Works“ in der Leiste ist nur auf der Projektliste aktiv, wie „Archiver“ auf der Startseite
   const atHome = () => !W.path && !W.client;
 
   window.ArchiverWorks = { init, enter, render, refresh, key, drop, nav, brandClick, brandMenu, closeLightbox, atHome, isOpen: () => !!W.lb };

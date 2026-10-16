@@ -57,7 +57,7 @@ struct Settings {
     /// geschaltet mit ⌥-Klick auf die Version unter ☰ › Information.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     prerelease: bool,
-    /// WORKS (0.38.0): Wurzel der laufenden Projekte, getrennt von der Bibliothek
+    /// Works (0.38.0): Wurzel der laufenden Projekte, getrennt von der Bibliothek
     #[serde(default, skip_serializing_if = "Option::is_none")]
     works: Option<String>,
 }
@@ -1355,7 +1355,7 @@ async fn open_file(app: AppHandle, state: State<'_, AppState>, path: String) -> 
     app.opener().open_path(abs.to_string_lossy(), None::<&str>).map_err(|e| e.to_string())
 }
 
-// ---- WORKS (0.38.0, works.rs) ----
+// ---- Works (0.38.0, works.rs) ----
 // Eigene Wurzel mit Kunde/Projekt, eigener Watcher, eigene Vorschauen unter
 // <Wurzel>/.archiver. Die Bibliothek bleibt davon unberührt. Jeder Befehl mit
 // Pfad prüft, dass er in der Wurzel liegt.
@@ -1402,7 +1402,7 @@ fn works_activate(app: &AppHandle, root: &Path) {
     }
 }
 
-/// Pfad aus der Oberfläche: muss in der WORKS-Wurzel liegen
+/// Pfad aus der Oberfläche: muss in der Works-Wurzel liegen
 fn works_path(app: &AppHandle, path: &str) -> Result<(PathBuf, PathBuf), String> {
     let root = works_root(app)?;
     let p = works::inside(&root, Path::new(path)).ok_or("works-outside")?;

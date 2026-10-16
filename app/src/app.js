@@ -97,7 +97,7 @@
   // Studio-Funktionen (Einstellungen › Studio): jede einzeln abschaltbar, Standard an.
   // Die geteilte Bibliothek ist kein Schalter hier, sie hängt an der Bibliothek selbst.
   // Schaltbare Studio-Werkzeuge. Moodboard und eigene Reihenfolge sind seit 0.24.6 immer an.
-  // WORKS (0.38.0) ist ab Werk aus und lässt sich nur in Vorabversionen einschalten.
+  // Works (0.38.0) ist ab Werk aus und lässt sich nur in Vorabversionen einschalten.
   const FEATURES = ["rights", "package", "works"]; // „notes“ (Feld Notiz) ist seit 0.30 Teil des Bildtexts
   const FEATURES_OFF = ["works"];
   function feat(id) {
@@ -774,7 +774,7 @@
     $("navWorks").classList.toggle("active", works && !state.page && window.ArchiverWorks.atHome());
     $("navSearch").hidden = works;
     if (works) {
-      // WORKS: eigener Pfad (Kunde › Projekt), keine Suche
+      // Works: eigener Pfad (Kunde › Projekt), keine Suche
       btns.push(...window.ArchiverWorks.nav(navButton));
       if (state.page) {
         if (btns.length) btns.push(el("span", "p-nav-sep", "›"));
@@ -1230,7 +1230,7 @@
   let lastViewKey = "";
 
   function renderZones() {
-    if (state.area === "works") return; // WORKS zeichnet #zones selbst (works.js)
+    if (state.area === "works") return; // Works zeichnet #zones selbst (works.js)
     document.body.classList.toggle("has-selection", state.selection.size > 0);
     const words = queryWords();
     const filtering = filtersActive();
@@ -2664,7 +2664,7 @@
       );
     }
 
-    // WORKS (0.38.0): nur in Vorabversionen schaltbar, ab Werk aus. Ist es an,
+    // Works (0.38.0): nur in Vorabversionen schaltbar, ab Werk aus. Ist es an,
     // bleibt der Schalter sichtbar, damit man es wieder ausschalten kann.
     const worksRow = () =>
       blockRow(
@@ -7337,7 +7337,7 @@
       if (state.focus == null && !state.query) renderZones();
       else setFocus(null);
     });
-    // WORKS steht wie „Archiver“ als eigener Bereich in der Leiste (0.38.0)
+    // Works steht wie „Archiver“ als eigener Bereich in der Leiste (0.38.0)
     $("navWorks").addEventListener("click", () => {
       closePage();
       if (state.area === "works") window.ArchiverWorks.brandClick();
@@ -7447,7 +7447,7 @@
       return;
     }
 
-    // WORKS: eigene Tasten, dazu ⌘, für die Einstellungen und Esc für offene Seiten
+    // Works: eigene Tasten, dazu ⌘, für die Einstellungen und Esc für offene Seiten
     if (state.area === "works") {
       if (mod && e.key === ",") togglePage("settings");
       else if (e.key === "Escape" && state.page) closePage();
@@ -8076,8 +8076,8 @@
     document.body.appendChild(bar);
   }
 
-  // ---- WORKS (0.38.0, works.js): laufende Projekte als eigener Bereich ----
-  // WORKS zeichnet in #zones; renderZones und die Ereignisse der Bibliothek
+  // ---- Works (0.38.0, works.js): laufende Projekte als eigener Bereich ----
+  // Works zeichnet in #zones; renderZones und die Ereignisse der Bibliothek
   // halten still, solange state.area "works" ist.
 
   function enterWorks() {
