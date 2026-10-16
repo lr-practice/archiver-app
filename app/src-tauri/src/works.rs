@@ -1118,6 +1118,66 @@ pub fn create_assets(client_dir: &Path, lang: &str) -> Result<PathBuf, String> {
     Ok(assets)
 }
 
+// ---- Demo (0.38.1) ----
+// Zwei erfundene Kunden zum Ausprobieren, erzeugt mit works-demo/make_demo.py
+// und gepackt mit pack_demo.py: je Datei "<Pfad>\t<Tage alt>\t<Bytes>\n", dann die Bytes.
+
+const DEMO: &[u8] = include_bytes!("../works-demo/works-demo.bin");
+const DEMO_HEAD: &[u8] = b"ARCHIVER-WORKS-DEMO 1\n";
+
+/// Dateien der Demo: relativer Pfad, Alter in Tagen, Inhalt
+fn demo_files(mut rest: &[u8]) -> Result<Vec<(&str, u64, &[u8])>, String> {
+    rest = rest.strip_prefix(DEMO_HEAD).ok_or("works-demo")?;
+    let mut out = Vec::new();
+    while !rest.is_empty() {
+        let nl = rest.iter().position(|&b| b == b'\n').ok_or("works-demo")?;
+        let head = std::str::from_utf8(&rest[..nl]).map_err(|_| "works-demo")?;
+        let mut it = head.split('\t');
+        let (Some(rel), Some(days), Some(len)) = (it.next(), it.next(), it.next()) else {
+            return Err("works-demo".into());
+        };
+        let days: u64 = days.parse().map_err(|_| "works-demo")?;
+        let len: usize = len.parse().map_err(|_| "works-demo")?;
+        let data = rest.get(nl + 1..nl + 1 + len).ok_or("works-demo")?;
+        rest = &rest[nl + 1 + len..];
+        if rel.split('/').any(|c| c.is_empty() || c == "." || c == "..") {
+            return Err("works-demo".into());
+        }
+        out.push((rel, days, data));
+    }
+    Ok(out)
+}
+
+/// Legt die Demo-Kunden in die Wurzel. Kunden, deren Ordner es schon gibt,
+/// bleiben unberührt. Das Änderungsdatum jeder Datei liegt so weit zurück wie
+/// in der Vorlage, damit Verlauf, Termine und „offen seit“ stimmen.
+/// Gibt die Zahl der neu angelegten Kunden zurück.
+pub fn create_demo(root: &Path) -> Result<usize, String> {
+    let files = demo_files(DEMO)?;
+    let mut fresh: BTreeMap<&str, bool> = BTreeMap::new();
+    for (rel, _, _) in &files {
+        let client = rel.split('/').next().unwrap_or(rel);
+        fresh.entry(client).or_insert_with(|| !root.join(client).exists());
+    }
+    let now = std::time::SystemTime::now();
+    for (rel, days, data) in &files {
+        let client = rel.split('/').next().unwrap_or(rel);
+        if !fresh[client] {
+            continue;
+        }
+        let path = root.join(rel);
+        if let Some(dir) = path.parent() {
+            fs::create_dir_all(dir).map_err(|e| e.to_string())?;
+        }
+        fs::write(&path, data).map_err(|e| e.to_string())?;
+        let when = now - std::time::Duration::from_secs(days * 86_400);
+        if let Ok(f) = fs::File::options().write(true).open(&path) {
+            let _ = f.set_modified(when);
+        }
+    }
+    Ok(fresh.values().filter(|&&v| v).count())
+}
+
 /// Freier Name im Ordner: „Name.ext“, sonst „Name 2.ext“, „Name 3.ext“ …
 fn free_name(dir: &Path, name: &str) -> PathBuf {
     let first = dir.join(name);
@@ -1285,6 +1345,20 @@ pub fn relevant_change(paths: &[PathBuf]) -> bool {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn demo_clients() {
+        let root = std::env::temp_dir().join(format!("works-demo-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(root.join("Rösterei Linde")).unwrap();
+        assert_eq!(create_demo(&root).unwrap(), 1);
+        assert!(root.join("Kunstverein Nordhafen/2026-021 Plakat Herbstausstellung/01 Brief/brief.md").exists());
+        assert!(fs::read_dir(root.join("Rösterei Linde")).unwrap().next().is_none());
+        let ov = scan(&root);
+        assert_eq!(ov.projects.len(), 2);
+        assert_eq!(create_demo(&root).unwrap(), 0);
+        let _ = fs::remove_dir_all(&root);
+    }
+
     use super::*;
 
     #[test]

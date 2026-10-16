@@ -1507,6 +1507,12 @@ async fn works_create(app: AppHandle, client: String, name: String, lang: String
 }
 
 #[tauri::command]
+async fn works_demo(app: AppHandle) -> Result<usize, String> {
+    let root = works_root(&app)?;
+    blocking(move || works::create_demo(&root)).await
+}
+
+#[tauri::command]
 async fn works_save_brief(app: AppHandle, project: String, text: String, lang: String) -> Result<String, String> {
     let (_, p) = works_path(&app, &project)?;
     blocking(move || works::save_brief(&p, &text, &lang).map(|d| d.to_string_lossy().into_owned())).await
@@ -1890,6 +1896,7 @@ pub fn run() {
             works_set_paid,
             works_import,
             works_create_assets,
+            works_demo,
             pick_export_file,
             open_library,
             libraries,

@@ -10,6 +10,10 @@
 - Build: Jede Vorabversion bleibt zusätzlich unter `vorab-X.Y.Z` liegen, damit
   sie später wählbar ist, ab 0.38.0.
 - Works heißt jetzt „Works“ statt „WORKS“.
+- Works: „Demo-Kunden anlegen“ (Menü auf „Works“, leere Liste) und „Mit
+  Demo-Kunden starten …“ beim Einrichten. Zwei erfundene Kunden, Kunstverein
+  Nordhafen und Rösterei Linde, mit Ständen, Recherche, Brief, Mails, Angeboten
+  und Rechnungen. Bestehende Kundenordner bleiben unberührt.
 
 ## App 0.38.0 (Extension 3.29.3, Vorabversion)
 

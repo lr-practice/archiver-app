@@ -276,6 +276,7 @@
     const row = el("div", "w-actions");
     row.appendChild(A.button("btn primary", t("wChoose"), () => choose(false)));
     row.appendChild(A.button("btn", t("wCreateRoot"), () => choose(true)));
+    row.appendChild(A.button("btn", t("wDemoStart"), () => choose(true, true)));
     wrap.appendChild(row);
     if (W.rootError) wrap.appendChild(el("p", "w-error", t("wErr_" + W.rootError.replace(/-/g, "_"))));
     return wrap;
@@ -293,7 +294,7 @@
     }[slot];
   }
 
-  async function choose(create) {
+  async function choose(create, demo) {
     try {
       const root = await A.invoke("works_choose", { create, name: "Works" });
       if (!root) return;
@@ -302,10 +303,22 @@
       W.path = null;
       W.project = null;
       thumbs.clear();
-      await refresh();
+      if (demo) await addDemo();
+      else await refresh();
     } catch (e) {
       fail(e);
     }
+  }
+
+  // Zwei erfundene Kunden zum Ausprobieren (works.rs: create_demo, 0.38.1)
+  async function addDemo() {
+    try {
+      const n = await A.invoke("works_demo");
+      A.toast(n ? t(n === 1 ? "wDemoDone1" : "wDemoDone", { n }) : t("wDemoExists"));
+    } catch (e) {
+      fail(e);
+    }
+    await refresh();
   }
 
   // ---- Liste ----
@@ -359,6 +372,11 @@
     for (const p of listed()) grid.appendChild(projectCard(p));
     grid.appendChild(newCard());
     wrap.appendChild(grid);
+    if (!all.length) {
+      const row = el("div", "w-actions");
+      row.appendChild(A.button("btn", t("wDemo"), addDemo));
+      wrap.appendChild(row);
+    }
     return wrap;
   }
 
@@ -1090,6 +1108,7 @@
     menuAt(x, y, [
       [t("wRevealRoot"), () => A.invoke("works_reveal", { path: W.root }).catch(fail)],
       [t("wNewProject") + "…", askNewProject],
+      [t("wDemo"), addDemo],
       null,
       [t("wChangeRoot"), () => choose(false)],
       [t("wForgetRoot"), async () => {
