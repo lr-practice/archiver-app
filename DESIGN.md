@@ -1,6 +1,6 @@
 # Archiver – Design-System
 
-Stand: App 0.38.2 · Extension 3.29.3
+Stand: App 0.39.0 · Extension 3.29.3
 
 Diese Datei hält fest, wie Archiver aussieht und warum. Sie gilt für die Mac-App
 (`app/src`) und die Chrome-Extension (`extension/`). Wer an der Oberfläche
@@ -75,14 +75,16 @@ Bei neuen Regeln gilt:
 | `--menu-bg` | `rgba(40,40,40,.97)` | `rgba(250,250,250,.97)` | Menüs, Zonenglas |
 | `--sheet-bg` | `#1c1c1c` | `#f4f4f4` | Seitenblatt (Details) |
 | `--lightbox-bg` | `rgba(0,0,0,.9)` | `rgba(244,244,244,.98)` | Lightbox |
-| `--accent` / `--accent-rgb` | `#2d5aeb` | dito | Toast, aktive Systemzustände |
+| `--accent` / `--accent-rgb` | `#2d5aeb` | dito | Toast, aktive Systemzustände, Smart Guides und Raster im Board (4.24) |
 | `--glow-rgb` | `91,124,255` | dito | Glühen der Zielkarte beim Ablegen |
 | `--danger` | `#e5484d` | dito | Fehler-Toast, Löschen |
 
 Für die Farbe gilt:
 
 - **Akzent sparsam.** Blau zeigt nur Systemrückmeldung (Toast, Glühen beim
-  Ablegen). Auswahl und Fokus sind nie blau, sondern Ring (Prinzip 5).
+  Ablegen) und seit 0.39.0 die Hilfslinien im Board-Editor (4.24), die nur
+  während des Ziehens stehen. Auswahl und Fokus sind nie blau, sondern Ring
+  (Prinzip 5).
 - **Kein reines Weiß als Fläche.** Hell beginnt bei `#f4f4f4`. Reines Weiß
   bleibt Glas (Navigation, Zonenleiste) und Bildern vorbehalten.
 
@@ -200,6 +202,10 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
   aktiv nur auf der Projektliste. Hinter der Trennlinie folgt der Pfad
   „Kunde › Projekt“; auf der Liste entfällt die Linie. Die Suche ist in Works
   ausgeblendet.
+- **Boards (0.39.0):** Ist Boards an (4.24), steht es als weiterer Bereich
+  nach Works (sonst nach „Archiver“), im selben Schnitt, aktiv nur auf der
+  Übersicht. Im offenen Board folgt hinter der Trennlinie sein Name. Die Suche
+  ist in Boards ausgeblendet.
 - **Nicht:** Keine Icons neben Wörtern und keine zweite Leiste.
 
 ### 4.3 Active-Zones-Leiste (`.p-dropbar`, `.p-hot`)
@@ -661,6 +667,63 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
   1-px-Linie in `--p-text` folgt dem Zeiger, Kennungen oben links und rechts.
 - **Nicht:** Keine Akzentfarbe, keine Icons, kein Verschieben von Dateien,
   keine Suche, kein zweiter Rahmen um Karten.
+
+### 4.24 Boards (App 0.39.0, `boards.css`, `boards.js`)
+- **Zweck:** Präsentationen aus Bildern der Bibliothek, als eigener Bereich.
+  Ein Board ist eine lesbare JSON-Datei `Bibliothek/Boards/Name.board`
+  (`boards.rs`), Bilder darin sind Verweise (Hash, Pfad), keine Kopien. Der
+  Ordner `Boards` ist keine Zone. Schalter unter Einstellungen › Studio, ab
+  Werk aus, nur in Vorabversionen sichtbar.
+- **Übersicht:** Boards als Karten (4.4), Cover 16:10 mit der ersten Folie,
+  darunter Name, Anzahl der Folien (Mono) und Datum 12 px dim. Letzte Karte
+  „Neues Board“ wie in Works (4.23). Rechtsklick: Öffnen, Umbenennen, Im
+  Finder zeigen, Löschen (Papierkorb des Macs, mit Rückfrage).
+- **Aus einer Zone:** Rechtsklick auf die Auswahl › „Aufs Board …“ öffnet ein
+  Menü (4.9) mit den Boards, zuletzt geändert zuerst, und „Neues Board …“.
+  Die Auswahl kommt als neue Folie mit der Vorlage Index ans Ende.
+- **Editor, Grundsatz:** Nur die Folie und eine Leiste unten sind sichtbar
+  (Lukas 16.10.: „more minimal versteckt“). Folien (F), Bilder (B) und
+  Gestalten (E) öffnen sich als Glas (2.4: `--menu-bg`, `--menu-shadow`,
+  `blur(24px) saturate(1.4)`, `--r-lg`) links, unten und rechts, 12 px vom
+  Rand, und blenden in 0.18 s ein. Esc schließt erst alle Flächen, dann die
+  Auswahl.
+- **Leiste unten (`.b-bar`):** Maße der Lightbox-Leiste (4.11): Innenrand
+  `--nav-rim`, Knöpfe `--nav-h`, 13,5 px/500, Abstand 3 px, Ecke `--r-md`.
+  Inhalt: ‹ 02 / 08 › (Mono 11 px dim), Folien, Bilder, Gestalten, + Text,
+  bei Auswahl „Vom Board“, ▶ Präsentieren. Offene Fläche = gefüllter Knopf.
+- **Folie (`.b-slide`):** 1600 × 1000 Einheiten (16:10), per CSS-Transform
+  eingepasst. Eigene Farben und Schrift je Folie (`--s-bg`, `--s-fg`,
+  `--s-dim`, `--s-font`), unabhängig vom Schema der App. Kopf in zwei Zeilen
+  wie Sort Office (Kunde · Board · Folientitel · Seite, darunter [Nr] · Titel
+  · Beschreibung · Stichworte · Jahr), Spalten auf Drittel. Bilder ungeschnitten
+  und oben bündig, solange nichts anderes gewählt ist. `‹…›` in Texten setzt
+  die zweite Farbe. Schriften: Geist, Geist Mono und Mac-Systemschriften
+  (Helvetica Neue, Avenir Next, Futura, Didot, Baskerville), keine aus dem Netz.
+- **Vorlagen:** Index, Paar, Aussage, Raster, Einzel, Farbe, Titel, Streifen,
+  Kontaktbogen, Diptychon, Zitat, Index-Liste. Eine Vorlage ordnet nur die
+  erste Lage; Ziehen schaltet die Folie auf „frei“. Raster und Weißraum
+  (Spalten 4–24, Rand 0–160, Abstand 0–80) ordnen eine Folie mit Vorlage
+  beim Schieben der Regler neu.
+- **Auswahl:** Ring aus 4.1 (`--ring-0`, 6 px Abstand) in Text- oder
+  Flächenfarbe der Folie (`--s-ring`, je nach Helligkeit), Griff unten rechts
+  14 px. Keine zweite Hervorhebung.
+- **Smart Guides (`.b-guide`):** 2 px in `--accent`, nur während des Ziehens,
+  an Kanten, Mitten, Spalten und Rand. Eingeblendetes Raster (G) als Spalten
+  in `--accent-rgb` × 0.07. Das ist die einzige Akzentstelle im Editor; sie
+  zeigt Hilfslinien, keinen Zustand (Prinzip 5 bleibt beim Ring).
+- **Inspektor:** Reiter wie Chips (4.7, Mono 11 px, faint → dim → text).
+  Abschnitte mit Label in Mono, Zeilen Label 12 px dim links, Regler mit
+  `accent-color: --p-text`, Werte in Mono rechts. Felder ink × 0.055,
+  `--r-sm`. Farbfelder 24 px, gewählt mit `--ring-lg`. Knöpfe `.btn` (4.8).
+- **Bilder:** Suchfeld, Zonen als Chips, darunter ein Streifen 88 px hoch,
+  neueste zuerst. Klick legt auf die Folie, Ziehen legt an die Stelle; am
+  Zeiger hängt das Motiv (4.18, höchstens 120 px).
+- **Präsentieren (P):** Vollbild auf `--present-bg` (`#0b0b0b`, in beiden
+  Schemata), Fuß in Mono 11 px `--present-ink` (`#777777`): „esc · zurück zum
+  Board“ links, Nummer rechts. ← → und Klick links/rechts blättern.
+- **Nicht:** Kein Export im Editor (PDF und Bild folgen), keine Icons, keine
+  Akzentfarbe außer den Hilfslinien, keine zweite Leiste, keine Kopien der
+  Bilder.
 
 ---
 

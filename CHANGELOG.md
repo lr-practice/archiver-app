@@ -1,5 +1,29 @@
 # Changelog
 
+## App 0.39.0 (Extension 3.29.3, Vorabversion)
+
+- Neu: Boards, ein eigener Bereich für Präsentationen aus Bildern der
+  Bibliothek, in der Navigation nach Works. Einstellungen › Studio › Boards,
+  ab Werk aus und nur in Vorabversionen schaltbar.
+- Ein Board ist eine lesbare Datei `Boards/Name.board` in der Bibliothek,
+  sichtbar im Finder. Bilder darin sind Verweise (Hash und Pfad), keine
+  Kopien. Der Ordner `Boards` erscheint nicht als Zone.
+- Übersicht mit allen Boards als Karten (erste Folie als Vorschau), „Neues
+  Board“, Rechtsklick für Umbenennen, Im Finder zeigen und Löschen
+  (Papierkorb).
+- Aus einer Zone: Auswahl, Rechtsklick › „Aufs Board …“ legt die Bilder als
+  neue Folie auf ein bestehendes oder neues Board.
+- Editor: nur die Folie und unten eine Leiste. Folien (F), Bilder (B) und
+  Gestalten (E) öffnen sich als Glas, Esc schließt sie. Zwölf Vorlagen
+  (Index, Paar, Aussage, Raster, Einzel, Farbe, Titel, Streifen,
+  Kontaktbogen, Diptychon, Zitat, Index-Liste), Raster mit Spalten, Rand und
+  Abstand, Schrift, Farbe je Folie, Palette aus den Bildern, Kopfzeile wie
+  Sort Office, Text direkt auf der Folie (T), Farbfelder. Ziehen und
+  Skalieren mit Smart Guides, ⌥ hält sie an. ⌘Z, ⌘⇧Z, ⌘D, ⌫, Pfeiltasten.
+- Präsentieren (P): Folien im Vollbild, ← → blättern, esc zurück.
+- Noch nicht drin: Ausgabe als PDF oder Bild, Ziehen aus dem Finder oder
+  Browser direkt aufs Board, Ausschnitt.
+
 ## App 0.38.2 (Extension 3.29.3, Vorabversion)
 
 - Bibliothek und Works lassen sich nicht mehr verwechseln: Ein Works-Ordner

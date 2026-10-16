@@ -1377,6 +1377,10 @@ impl Library {
                 if count == 0 && path != default && !offline.contains(&path) && !dir_is_empty(&dir) {
                     return None;
                 }
+                // Boards/ (0.39.0) hält nur Board-Dateien: auch leer keine Zone
+                if count == 0 && path.eq_ignore_ascii_case(crate::boards::DIR) {
+                    return None;
+                }
                 Some(Zone { count, name: path.clone(), path })
             })
             .collect();

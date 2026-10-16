@@ -97,9 +97,9 @@
   // Studio-Funktionen (Einstellungen › Studio): jede einzeln abschaltbar, Standard an.
   // Die geteilte Bibliothek ist kein Schalter hier, sie hängt an der Bibliothek selbst.
   // Schaltbare Studio-Werkzeuge. Moodboard und eigene Reihenfolge sind seit 0.24.6 immer an.
-  // Works (0.38.0) ist ab Werk aus und lässt sich nur in Vorabversionen einschalten.
-  const FEATURES = ["rights", "package", "works"]; // „notes“ (Feld Notiz) ist seit 0.30 Teil des Bildtexts
-  const FEATURES_OFF = ["works"];
+  // Works (0.38.0) und Boards (0.39.0) sind ab Werk aus und lassen sich nur in Vorabversionen einschalten.
+  const FEATURES = ["rights", "package", "works", "boards"]; // „notes“ (Feld Notiz) ist seit 0.30 Teil des Bildtexts
+  const FEATURES_OFF = ["works", "boards"];
   function feat(id) {
     if (!FEATURES.includes(id)) return true;
     return pref("feat." + id, !FEATURES_OFF.includes(id)) !== false;
@@ -160,7 +160,7 @@
     // Pfad der allein gezeigten Zone, sonst null (alte Seiten-Werte "\u0000…" verwerfen)
     focus: null, // jeder Start beginnt auf der Startseite (Zonen als Karten)
     page: null, // Seite, die von rechts hereingleitet: null | "settings" | "about" | "manual"
-    area: "library", // "library" | "works" (0.38.0, works.js)
+    area: "library", // "library" | "works" (0.38.0, works.js) | "boards" (0.39.0, boards.js)
     home: "overview", // Startseite: "overview" | "index" | "preview" | "cards"; jeder Start beginnt mit der Übersicht
     hover: null, // Zone in der Vorschau (Layout "preview")
     // Bildgröße auf der Startseite, Stufe 0–3, je Ansicht getrennt
@@ -455,6 +455,7 @@
     // Offenes Menü nicht unter der Maus wegzeichnen (z. B. während „Wirklich löschen?“)
     if (document.querySelector(".zone-menu")) pendingRender = true;
     else render();
+    if (state.area === "boards") window.ArchiverBoards.refresh();
   }
 
   let pendingRender = false;
@@ -770,12 +771,15 @@
     const main = $("navMain");
     const btns = [];
     const works = state.area === "works";
+    const boards = state.area === "boards";
     $("navWorks").hidden = !feat("works");
     $("navWorks").classList.toggle("active", works && !state.page && window.ArchiverWorks.atHome());
-    $("navSearch").hidden = works;
-    if (works) {
-      // Works: eigener Pfad (Kunde › Projekt), keine Suche
-      btns.push(...window.ArchiverWorks.nav(navButton));
+    $("navBoards").hidden = !feat("boards") || !window.ArchiverBoards;
+    $("navBoards").classList.toggle("active", boards && !state.page && window.ArchiverBoards.atHome());
+    $("navSearch").hidden = works || boards;
+    if (works || boards) {
+      // Works: eigener Pfad (Kunde › Projekt), Boards: Name des offenen Boards; keine Suche
+      btns.push(...(works ? window.ArchiverWorks : window.ArchiverBoards).nav(navButton));
       if (state.page) {
         if (btns.length) btns.push(el("span", "p-nav-sep", "›"));
         btns.push(navButton(t(state.page), true, closePage));
@@ -1230,7 +1234,7 @@
   let lastViewKey = "";
 
   function renderZones() {
-    if (state.area === "works") return; // Works zeichnet #zones selbst (works.js)
+    if (state.area !== "library") return; // Works und Boards zeichnen #zones selbst (works.js, boards.js)
     document.body.classList.toggle("has-selection", state.selection.size > 0);
     const words = queryWords();
     const filtering = filtersActive();
@@ -2677,11 +2681,25 @@
           renderToolbar();
         })
       );
+    // Boards (0.39.0): genauso, nur in Vorabversionen schaltbar, ab Werk aus
+    const boardsRow = () =>
+      blockRow(
+        [el("div", null, t("featBoards")), el("div", "p-block-text dim", t("featBoardsText"))],
+        choice([["on", t("setOn")], ["off", t("setOff")]], feat("boards") ? "on" : "off", (v) => {
+          setPref("feat.boards", v === "on");
+          if (v !== "on") leaveBoards();
+          rerender();
+          renderToolbar();
+        })
+      );
     if (feat("works")) tools.appendChild(worksRow());
-    else
+    if (feat("boards")) tools.appendChild(boardsRow());
+    if (!feat("works") || !feat("boards"))
       invoke("update_channel")
         .then((pre) => {
-          if (pre && tools.isConnected) tools.appendChild(worksRow());
+          if (!pre || !tools.isConnected) return;
+          if (!feat("works")) tools.appendChild(worksRow());
+          if (!feat("boards")) tools.appendChild(boardsRow());
         })
         .catch(() => {});
 
@@ -3778,7 +3796,7 @@
   }
 
   function setFocus(path) {
-    leaveWorks(false);
+    leaveArea();
     // Zone verlassen: was darin neu von anderen war, gilt als gesehen
     if (path !== state.focus && isZone(state.focus) && state.shared) markSeen(zoneItems(state.focus));
     if (path !== state.focus) {
@@ -5847,6 +5865,7 @@
   function onDragDrop(event) {
     if (!isUnlocked()) return;
     const p = event.payload;
+    if (state.area === "boards") return; // Boards nimmt keine Dateien von außen an
     if (state.area === "works") {
       const ratio = isMac ? 1 : window.devicePixelRatio || 1;
       return window.ArchiverWorks.drop(p, p.position ? p.position.x / ratio : -1, p.position ? p.position.y / ratio : -1);
@@ -6743,6 +6762,7 @@
     entry(menu, t("ctxCopy"), () => copyImages(items), "⌘C");
     if (one) entry(menu, t("reveal"), () => invoke("reveal", { path: one.abs }).catch(fail));
     entry(menu, t("pdfExport"), exportPdf, "⌘P");
+    if (feat("boards") && window.ArchiverBoards) entry(menu, t("bToBoard") + " …", () => window.ArchiverBoards.pickFor(items, x, y));
     rule();
     entry(menu, t("trash"), trashSelection, "⌫", " danger");
     document.body.appendChild(menu);
@@ -7315,7 +7335,7 @@
     const zones = $("zones");
 
     zones.addEventListener("mousedown", (e) => {
-      if (state.area === "works") return;
+      if (state.area !== "library") return;
       if (e.button !== 0) return;
       const card = e.target.closest(".card:not(.del)");
       suppressClick = false;
@@ -7343,7 +7363,7 @@
     });
 
     zones.addEventListener("click", (e) => {
-      if (state.area === "works") return;
+      if (state.area !== "library") return;
       if (suppressClick) {
         suppressClick = false;
         return;
@@ -7357,7 +7377,7 @@
     }, { passive: true, capture: true });
 
     zones.addEventListener("contextmenu", (e) => {
-      if (state.area === "works") return;
+      if (state.area !== "library") return;
       const zoneEl = e.target.closest(".p-home [data-zone]");
       if (zoneEl && !e.target.closest(".card:not(.del)")) {
         e.preventDefault();
@@ -7379,14 +7399,14 @@
     });
 
     zones.addEventListener("dblclick", (e) => {
-      if (state.area === "works") return;
+      if (state.area !== "library") return;
       const card = e.target.closest(".card:not(.del)");
       if (card) openLightbox(state.byPath.get(card.dataset.path));
     });
 
     // 0.27: Video beim Hover als kurze Vorschau aus wenigen Bildern
     zones.addEventListener("pointerover", (e) => {
-      if (state.area === "works") return;
+      if (state.area !== "library") return;
       const card = e.target.closest(".card:not(.del)");
       if (card && !card.contains(e.relatedTarget)) videoScrub(card);
     });
@@ -7419,7 +7439,7 @@
     setupNavGlide();
     // „Archiver“ in der Leiste führt immer zum Start: Zonen als Karten.
     $("navBrand").addEventListener("click", () => {
-      leaveWorks(false);
+      leaveArea();
       closePage();
       state.home = "cards";
       if (state.focus == null && !state.query) renderZones();
@@ -7433,6 +7453,13 @@
     });
     $("navWorks").addEventListener("contextmenu", (e) => {
       if (state.area === "works") window.ArchiverWorks.brandMenu(e);
+    });
+    // Boards (0.39.0): eigener Bereich wie Works
+    $("navBoards").addEventListener("click", () => {
+      closePage();
+      if (state.area === "boards") window.ArchiverBoards.brandClick();
+      else enterBoards();
+      renderToolbar();
     });
     $("navMore").textContent = "≡";
     $("navMore").title = t("navMore");
@@ -7459,7 +7486,7 @@
     // 0.29: ⌘V mit Text auf ein gewähltes Bild (oder in der Lightbox) setzt den Bildtext.
     // 0.32: sonst kommt die Zwischenablage in die offene Zone (Dateien, Bild, Text).
     document.addEventListener("paste", (e) => {
-      if (state.area === "works") return;
+      if (state.area !== "library") return;
       if (e.target.closest && e.target.closest("input, textarea, [contenteditable]")) return;
       if (!$("modal").hidden) return;
       const text = (e.clipboardData && e.clipboardData.getData("text/plain") || "").trim();
@@ -7482,7 +7509,7 @@
     window.addEventListener(
       "resize",
       debounce(() => {
-        if (state.area === "works") return;
+        if (state.area !== "library") return;
         if (document.body.classList.contains("at-home") && (state.home === "cards" || state.home === "overview")) renderZones();
         else layoutMasonry(false);
       }, 120)
@@ -7532,6 +7559,19 @@
         moveCursor("right");
         e.preventDefault();
       }
+      return;
+    }
+
+    // Boards: eigene Tasten (boards.js), dazu ⌘, und ⌘I wie in Works
+    if (state.area === "boards") {
+      if (mod && e.key === ",") togglePage("settings");
+      else if (mod && (e.key === "i" || e.key === "I")) togglePage("about");
+      else if (e.key === "Escape" && state.page) closePage();
+      else if (!state.page && $("modal").hidden && window.ArchiverBoards.key(e)) {
+        e.preventDefault();
+        renderToolbar();
+      } else return;
+      e.preventDefault();
       return;
     }
 
@@ -7716,6 +7756,7 @@
   }
 
   function afterLibrarySwitch() {
+    leaveArea(false);
     undoStack.length = 0;
     state.focus = null;
     state.selection = new Set();
@@ -8173,6 +8214,7 @@
 
   function enterWorks() {
     if (!feat("works") || !window.ArchiverWorks || state.area === "works") return;
+    leaveBoards(false);
     closeMenus();
     closeMoreMenu();
     if (state.lightbox) closeLightbox();
@@ -8193,6 +8235,35 @@
     else renderToolbar();
   }
 
+  // ---- Boards (0.39.0, boards.js): Präsentationen als eigener Bereich ----
+
+  function enterBoards() {
+    if (!feat("boards") || !window.ArchiverBoards || state.area === "boards") return;
+    leaveWorks(false);
+    closeMenus();
+    closeMoreMenu();
+    if (state.lightbox) closeLightbox();
+    state.area = "boards";
+    document.body.classList.remove("at-home", "has-selection");
+    window.ArchiverBoards.enter().then(renderToolbar);
+    renderToolbar();
+  }
+
+  function leaveBoards(rerender = true) {
+    if (state.area !== "boards") return;
+    window.ArchiverBoards.leave();
+    state.area = "library";
+    $("zones").replaceChildren();
+    if (rerender) render();
+    else renderToolbar();
+  }
+
+  // Zurück in die Bibliothek, egal aus welchem Bereich
+  function leaveArea(rerender = false) {
+    leaveWorks(rerender);
+    leaveBoards(rerender);
+  }
+
   function openModal(dialog, onEnter) {
     const modal = $("modal");
     modal.replaceChildren(dialog);
@@ -8204,6 +8275,14 @@
     window.ArchiverWorks.init({
       el, button, chip, invoke, fileSrc, toast, fail, recentDate, navButton, renderToolbar, closeMenus, closeMoreMenu,
       openModal, closeModal,
+    });
+
+  if (window.ArchiverBoards)
+    window.ArchiverBoards.init({
+      el, button, chip, invoke, fileSrc, thumbSrc, kindOf, toast, fail, recentDate, renderToolbar, closeMenus, closeMoreMenu,
+      openModal, closeModal,
+      items: () => state.items,
+      zones: () => state.zones,
     });
 
   async function boot() {

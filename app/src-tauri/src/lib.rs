@@ -6,6 +6,7 @@
 //   "library-changed"  Bestand hat sich geändert → Oberfläche lädt neu
 //   "thumbs-ready"     [{ hash, thumb }] neue Vorschaubilder
 
+pub mod boards;
 pub mod bridge;
 pub mod library;
 pub mod log;
@@ -1243,6 +1244,49 @@ async fn drag_icon(state: State<'_, AppState>, hash: String, path: String, color
     })
 }
 
+// ---- Boards (0.39.0, boards.rs): Präsentationen als Datei in Boards/ ----
+
+#[tauri::command]
+async fn boards_list(state: State<'_, AppState>) -> Result<Vec<boards::BoardInfo>, String> {
+    let lib = current(&state)?;
+    blocking(move || boards::list(&lib.root)).await
+}
+
+#[tauri::command]
+async fn board_read(state: State<'_, AppState>, name: String) -> Result<String, String> {
+    let lib = current(&state)?;
+    blocking(move || boards::read(&lib.root, &name)).await
+}
+
+#[tauri::command]
+async fn board_write(state: State<'_, AppState>, name: String, data: String) -> Result<(), String> {
+    let lib = current(&state)?;
+    blocking(move || boards::write(&lib.root, &name, &data)).await
+}
+
+#[tauri::command]
+async fn board_create(state: State<'_, AppState>, name: String, data: String) -> Result<String, String> {
+    let lib = current(&state)?;
+    blocking(move || boards::create(&lib.root, &name, &data)).await
+}
+
+#[tauri::command]
+async fn board_rename(state: State<'_, AppState>, from: String, to: String) -> Result<String, String> {
+    let lib = current(&state)?;
+    blocking(move || boards::rename(&lib.root, &from, &to)).await
+}
+
+#[tauri::command]
+async fn board_delete(state: State<'_, AppState>, name: String) -> Result<(), String> {
+    let lib = current(&state)?;
+    blocking(move || boards::delete(&lib.root, &name)).await
+}
+
+#[tauri::command]
+async fn board_palette(path: String) -> Result<Vec<String>, String> {
+    blocking(move || boards::palette(std::path::Path::new(&path))).await
+}
+
 #[tauri::command]
 async fn reveal(app: AppHandle, path: String) -> Result<(), String> {
     app.opener().reveal_item_in_dir(path).map_err(|e| e.to_string())
@@ -1903,6 +1947,13 @@ pub fn run() {
             }
         })
         .invoke_handler(tauri::generate_handler![
+            boards_list,
+            board_read,
+            board_write,
+            board_create,
+            board_rename,
+            board_delete,
+            board_palette,
             start_info,
             bridge_browsers,
             extension_status,
