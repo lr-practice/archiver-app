@@ -1,6 +1,6 @@
 # Archiver – Design-System
 
-Stand: App 0.37.3 · Extension 3.29.3
+Stand: App 0.38.0 · Extension 3.29.3
 
 Diese Datei hält fest, wie Archiver aussieht und warum. Sie gilt für die Mac-App
 (`app/src`) und die Chrome-Extension (`extension/`). Wer an der Oberfläche
@@ -195,6 +195,11 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
   dazu das Menü ≡.
 - **Form:** Eine Glas-Pille oben, auf der Mittellinie der Fensterknöpfe.
   Aktive Knöpfe sind gefüllt.
+- **WORKS (0.38.0):** Ist WORKS an (4.23), steht es als zweiter Bereich gleich
+  nach „Archiver“, im selben Schnitt (600, ohne Gleitfläche beim Hover) und
+  aktiv nur auf der Projektliste. Hinter der Trennlinie folgt der Pfad
+  „Kunde › Projekt“; auf der Liste entfällt die Linie. Die Suche ist in WORKS
+  ausgeblendet.
 - **Nicht:** Keine Icons neben Wörtern und keine zweite Leiste.
 
 ### 4.3 Active-Zones-Leiste (`.p-dropbar`, `.p-hot`)
@@ -606,6 +611,45 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
   `p-input note-field`), Platzhalter „Archiver“. Greift beim Tippen.
 - **Gilt für:** Navigation (`#navBrand`), Startbild, Sperrbild, Kopf von
   Information, Fenstertitel. Nicht: Tray, Extension, PDF, Dateinamen.
+
+### 4.23 WORKS (App 0.38.0, `works.css`, `works.js`)
+- **Zweck:** Laufende Kundenprojekte als eigener Bereich neben der
+  Bibliothek. Liest eine eigene Wurzel (Kunde/Projekt, Phasenordner 00–05,
+  `_Assets` beim Kunden) und verschiebt nie eine Arbeitsdatei. Schalter unter
+  Einstellungen › Studio, ab Werk aus, nur in Vorabversionen sichtbar.
+- **Liste:** Projekte als Karten (4.4) mit Cover 3:2 (neuester Stand, sonst
+  Recherche), darunter die Phasenleiste, dann Name mit Termin rechts (Mono,
+  ≤ 3 Tage `--p-text`, überfällig `--danger`) und Kunde · Phase. Letzte Karte
+  „Neues Projekt“: Fläche ink × 0.03 (Hover 0.055), Text faint → dim. Chips
+  filtern nach Laufend/Abgeschlossen/Alle und nach Kunde.
+- **Phasenleiste (`.w-phasebar`, `.w-phase`):** Fünf Striche, 2 px, Abstand
+  2–3 px: offen `--p-rule`, erledigt `--p-rule-strong`, aktuell `--p-text`.
+  Im Projekt sind die Striche zugleich die Reiter, Beschriftung als Label
+  (faint, aktuelle Phase dim, gewählter Reiter text). Übersicht, Post und
+  Assets sind Chips daneben.
+- **Kopf:** Kunde als Label über dem Titel (Klick filtert die Liste), Titel
+  wie `.p-head` mit dem nächsten Schritt als gedimmtem Satz (aus `brief.md`,
+  sonst offene Rechnung oder Korrektur), rechts Termin und ⋯.
+- **Stände-Reihe (`.w-stand`):** Je Arbeit (Ordner + Stamm des Namens) eine
+  Zeile, alt → neu. Bilder in ihrer eigenen Form, alle gleich hoch (200 px,
+  der neueste 320 px; Übersicht 280, Recherche 200, Leiste 110). Darunter
+  Kennung als Label (KORR in `--p-text`) und Datum 12 px dim. Ohne Vorschau
+  steht die Endung als Label auf `--thumb-bg`.
+- **Auswahl und Ablegen:** Ring (4.1): Kachel und Zeile `--ring-0`, die
+  Fläche beim Ablegen `--ring-lg` mit 12 px Abstand, ein Phasen-Reiter unter
+  dem Zeiger `--ring-0`. Ablegen kopiert in den Phasenordner, nie verschieben.
+- **Post:** Summen (Angeboten, Offen, Bezahlt) als Label über 22 px/500,
+  darunter eine Tabelle mit Linien `--p-rule` wie die Liste (4.6). Status
+  einer Rechnung ist ein Chip „(offen n T.)“, ab 30 Tagen `--danger`, Klick
+  schaltet „(bezahlt)“.
+- **Brief:** Eckdaten als Zeilen (Label links, Wert rechts), darunter der
+  Text 13,5 px/1,6, höchstens 68 Zeichen breit. Bearbeiten in einer Fläche
+  ink × 0.055, `--r-md`, Geist Mono 12 px; ⌘S sichert, Esc verwirft.
+- **Groß ansehen (`.w-lb`):** wie die Lightbox (4.11) mit `--lightbox-bg`
+  und Unschärfe, Leiste `.lb-bar`. Vergleich: zwei Stände übereinander, eine
+  1-px-Linie in `--p-text` folgt dem Zeiger, Kennungen oben links und rechts.
+- **Nicht:** Keine Akzentfarbe, keine Icons, kein Verschieben von Dateien,
+  keine Suche, kein zweiter Rahmen um Karten.
 
 ---
 

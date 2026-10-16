@@ -12,6 +12,7 @@ pub mod log;
 pub mod naming;
 pub mod pdf;
 pub mod studio;
+pub mod works;
 mod system;
 mod viewer;
 #[cfg(target_os = "macos")]
@@ -56,6 +57,9 @@ struct Settings {
     /// geschaltet mit ⌥-Klick auf die Version unter ☰ › Information.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     prerelease: bool,
+    /// WORKS (0.38.0): Wurzel der laufenden Projekte, getrennt von der Bibliothek
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    works: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Default, Clone)]
@@ -1351,6 +1355,186 @@ async fn open_file(app: AppHandle, state: State<'_, AppState>, path: String) -> 
     app.opener().open_path(abs.to_string_lossy(), None::<&str>).map_err(|e| e.to_string())
 }
 
+// ---- WORKS (0.38.0, works.rs) ----
+// Eigene Wurzel mit Kunde/Projekt, eigener Watcher, eigene Vorschauen unter
+// <Wurzel>/.archiver. Die Bibliothek bleibt davon unberührt. Jeder Befehl mit
+// Pfad prüft, dass er in der Wurzel liegt.
+
+static WORKS_WATCH: Mutex<Option<(PathBuf, Watcher)>> = Mutex::new(None);
+
+fn works_root(app: &AppHandle) -> Result<PathBuf, String> {
+    let root = load_settings(app).works.map(PathBuf::from).ok_or("works-none")?;
+    if !root.is_dir() {
+        return Err("works-missing".into());
+    }
+    works_activate(app, &root);
+    Ok(root)
+}
+
+/// Asset-Protokoll freigeben und den Watcher starten (einmal je Wurzel)
+fn works_activate(app: &AppHandle, root: &Path) {
+    let mut watch = WORKS_WATCH.lock().unwrap_or_else(|e| e.into_inner());
+    if watch.as_ref().is_some_and(|(r, _)| r == root) {
+        return;
+    }
+    *watch = None;
+    let _ = app.asset_protocol_scope().allow_directory(root, true);
+    let emit = app.clone();
+    let debouncer = notify_debouncer_full::new_debouncer(
+        Duration::from_millis(600),
+        None,
+        move |res: notify_debouncer_full::DebounceEventResult| {
+            if let Ok(events) = res {
+                if events.iter().any(|ev| works::relevant_change(&ev.paths)) {
+                    let _ = emit.emit("works-changed", ());
+                }
+            }
+        },
+    );
+    match debouncer {
+        Ok(mut d) => {
+            if let Err(e) = d.watch(root, notify::RecursiveMode::Recursive) {
+                log::error("works", e);
+            }
+            *watch = Some((root.to_path_buf(), d));
+        }
+        Err(e) => log::error("works", e),
+    }
+}
+
+/// Pfad aus der Oberfläche: muss in der WORKS-Wurzel liegen
+fn works_path(app: &AppHandle, path: &str) -> Result<(PathBuf, PathBuf), String> {
+    let root = works_root(app)?;
+    let p = works::inside(&root, Path::new(path)).ok_or("works-outside")?;
+    Ok((root.canonicalize().map_err(|e| e.to_string())?, p))
+}
+
+/// Die eingestellte Wurzel, None ohne oder wenn der Ordner fehlt
+#[tauri::command]
+async fn works_get(app: AppHandle) -> Result<Option<String>, String> {
+    match works_root(&app) {
+        Ok(root) => Ok(Some(root.to_string_lossy().into_owned())),
+        Err(e) if e == "works-none" => Ok(None),
+        Err(e) => Err(e),
+    }
+}
+
+/// Wurzel wählen (create = neuen Ordner im Sichern-Dialog anlegen)
+#[tauri::command]
+async fn works_choose(app: AppHandle, state: State<'_, AppState>, create: bool, name: String) -> Result<Option<String>, String> {
+    let dialog = app.dialog().file();
+    let picked = if create {
+        let mut d = dialog.set_file_name(name.trim());
+        if let Some(dir) = dirs::document_dir() {
+            d = d.set_directory(dir);
+        }
+        d.blocking_save_file()
+    } else {
+        dialog.blocking_pick_folder()
+    };
+    let Some(path) = picked.and_then(|p| p.into_path().ok()) else { return Ok(None) };
+    if create {
+        if path.exists() && !path.is_dir() {
+            return Err("library-file".into());
+        }
+        std::fs::create_dir_all(&path).map_err(|e| e.to_string())?;
+    }
+    let root = path.canonicalize().map_err(|e| e.to_string())?;
+    check_folder(&root, false)?;
+    if let Some(lib) = state.library.lock().unwrap().clone() {
+        let lib_root = lib.root.canonicalize().unwrap_or(lib.root.clone());
+        if root.starts_with(&lib_root) || lib_root.starts_with(&root) {
+            return Err("works-library".into());
+        }
+    }
+    let p = root.to_string_lossy().into_owned();
+    update_settings(&app, |s| s.works = Some(p.clone()))?;
+    works_activate(&app, &root);
+    Ok(Some(p))
+}
+
+#[tauri::command]
+async fn works_forget(app: AppHandle) -> Result<(), String> {
+    *WORKS_WATCH.lock().unwrap_or_else(|e| e.into_inner()) = None;
+    update_settings(&app, |s| s.works = None)
+}
+
+#[tauri::command]
+async fn works_scan(app: AppHandle) -> Result<works::Overview, String> {
+    let root = works_root(&app)?;
+    blocking(move || Ok(works::scan(&root.canonicalize().map_err(|e| e.to_string())?))).await
+}
+
+#[tauri::command]
+async fn works_project(app: AppHandle, path: String) -> Result<works::Project, String> {
+    let (root, p) = works_path(&app, &path)?;
+    blocking(move || works::project(&root, &p)).await
+}
+
+#[tauri::command]
+async fn works_thumb(app: AppHandle, path: String, size: u32) -> Result<Option<String>, String> {
+    let (root, p) = works_path(&app, &path)?;
+    blocking(move || Ok(works::thumb(&root, &p, size).map(|t| t.to_string_lossy().into_owned()))).await
+}
+
+#[tauri::command]
+async fn works_open(app: AppHandle, path: String) -> Result<(), String> {
+    let (_, p) = works_path(&app, &path)?;
+    // Nur Dateien und Ordner öffnen, nie ein Programm oder Skript aus dem Projekt
+    let ext = p.extension().and_then(|e| e.to_str()).unwrap_or("").to_lowercase();
+    if ["app", "command", "sh", "tool", "terminal", "workflow", "scpt", "pkg", "dmg"].contains(&ext.as_str()) {
+        return Err("works-open".into());
+    }
+    app.opener().open_path(p.to_string_lossy(), None::<&str>).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn works_reveal(app: AppHandle, path: String) -> Result<(), String> {
+    let (_, p) = works_path(&app, &path)?;
+    app.opener().reveal_item_in_dir(p).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn works_new_version(app: AppHandle, path: String) -> Result<String, String> {
+    let (_, p) = works_path(&app, &path)?;
+    blocking(move || works::new_version(&p).map(|d| d.to_string_lossy().into_owned())).await
+}
+
+#[tauri::command]
+async fn works_create(app: AppHandle, client: String, name: String, lang: String) -> Result<String, String> {
+    let root = works_root(&app)?;
+    blocking(move || works::create_project(&root, &client, &name, &lang).map(|d| d.to_string_lossy().into_owned())).await
+}
+
+#[tauri::command]
+async fn works_save_brief(app: AppHandle, project: String, text: String, lang: String) -> Result<String, String> {
+    let (_, p) = works_path(&app, &project)?;
+    blocking(move || works::save_brief(&p, &text, &lang).map(|d| d.to_string_lossy().into_owned())).await
+}
+
+#[tauri::command]
+async fn works_set_paid(app: AppHandle, path: String, paid: bool) -> Result<(), String> {
+    let (root, p) = works_path(&app, &path)?;
+    let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis() as u64).unwrap_or(0);
+    blocking(move || works::set_paid(&root, &p, paid, now)).await
+}
+
+/// _Assets beim Kunden eines Projekts anlegen
+#[tauri::command]
+async fn works_create_assets(app: AppHandle, project: String, lang: String) -> Result<String, String> {
+    let (root, p) = works_path(&app, &project)?;
+    let client = p.parent().filter(|c| *c != root.as_path()).ok_or("works-name")?.to_path_buf();
+    blocking(move || works::create_assets(&client, &lang).map(|d| d.to_string_lossy().into_owned())).await
+}
+
+/// Dateien von außen (Finder, Archiver) in einen Phasenordner kopieren
+#[tauri::command]
+async fn works_import(app: AppHandle, project: String, slot: works::Slot, paths: Vec<String>, lang: String) -> Result<usize, String> {
+    let (_, p) = works_path(&app, &project)?;
+    let paths: Vec<PathBuf> = paths.into_iter().map(PathBuf::from).collect();
+    blocking(move || works::import(&p, slot, &paths, &lang)).await
+}
+
 // ---- Updates ----
 // Die App fragt beim Start im öffentlichen Repo Archiver-Releases nach
 // latest.json. Gibt es eine neuere Version, zeigt die Oberfläche einen Hinweis;
@@ -1601,6 +1785,20 @@ pub fn run() {
             bridge_browsers,
             extension_status,
             pick_folder,
+            works_get,
+            works_choose,
+            works_forget,
+            works_scan,
+            works_project,
+            works_thumb,
+            works_open,
+            works_reveal,
+            works_new_version,
+            works_create,
+            works_save_brief,
+            works_set_paid,
+            works_import,
+            works_create_assets,
             pick_export_file,
             open_library,
             libraries,
