@@ -173,7 +173,7 @@ pub fn version_of(filename: &str) -> Version {
     let mut tags: Vec<String> = Vec::new();
     loop {
         // Datum am Ende („Flyer_2026-10-14“) als ein Wort, obwohl es Bindestriche hat
-        if stem.len() > 11 && stem.is_char_boundary(stem.len() - 11) {
+        if stem.len() > 11 && stem.is_char_boundary(stem.len() - 11) && stem.is_char_boundary(stem.len() - 10) {
             let (head, date) = stem.split_at(stem.len() - 10);
             if is_tag_word(date) && head.ends_with([' ', '_', '-', '.']) {
                 tags.insert(0, date.to_string());
@@ -1350,6 +1350,11 @@ mod tests {
         assert_eq!((v.stem.as_str(), v.tag.as_str()), ("Plakat_A1", "V3 KORR"));
         assert_eq!(version_of("Plakat_A1_V1.indd").key, version_of("Plakat A1 RZ.pdf").key);
         assert_eq!(version_of("Plakat A1.indd").tag, "");
+        // Sonderzeichen kurz vor dem Ende brachten den Scan zum Absturz (0.38.2)
+        assert_eq!(version_of("Erscheinungsbild – Auftrag.eml").stem, "Erscheinungsbild – Auftrag");
+        for n in ["Angebot – Auftrag.eml", "Plakat_Eröffnung.pdf", "Café_Übergabe_V2.indd", "Notiz ✓ fertig.txt"] {
+            let _ = version_of(n);
+        }
         assert_eq!(version_of("Katalog Version 4.pdf").tag, "V4");
         assert_eq!(version_of("Katalog Version 4.pdf").stem, "Katalog");
         assert_eq!(version_of("Flyer_2026-10-14.pdf").tag, "2026-10-14");
@@ -1503,3 +1508,4 @@ mod tests {
         assert!(relevant_change(&[PathBuf::from("/w/K/P/03 Layout/Plakat_V2.indd")]));
     }
 }
+

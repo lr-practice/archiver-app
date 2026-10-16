@@ -7,6 +7,9 @@
   Bibliothek, eine Bibliothek nicht als Works-Ordner, auch keine der anderen
   Bibliotheksplätze. Vorher landete ein Works-Ordner als Bibliothek auf dem
   aktiven Platz und verdrängte die eigentliche Bibliothek aus der Liste.
+- Works: Ein Sonderzeichen kurz vor dem Ende eines Dateinamens (etwa „–“ in
+  „Angebot – Auftrag.eml“) brachte den Scan zum Absturz, die Projektliste
+  blieb leer.
 
 ## App 0.38.1 (Extension 3.29.3, Vorabversion)
 
