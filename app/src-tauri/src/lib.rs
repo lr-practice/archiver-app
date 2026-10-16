@@ -119,6 +119,22 @@ fn check_library_open(root: &Path) -> Result<(), String> {
     check_folder(root, !root.join(library::META_DIR).is_dir())
 }
 
+/// Bibliothek und Works nicht verwechseln (0.38.2): weder die Works-Wurzel
+/// noch ein Ordner darin oder darüber, noch ein Ordner, der nach Works aussieht.
+fn check_not_works(app: &AppHandle, path: &Path) -> Result<(), String> {
+    let p = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+    if let Some(w) = load_settings(app).works.map(PathBuf::from) {
+        let w = w.canonicalize().unwrap_or(w);
+        if p.starts_with(&w) || w.starts_with(&p) {
+            return Err("library-works".into());
+        }
+    }
+    if !p.join(library::META_DIR).join("library.db").is_file() && works::looks_like_root(&p) {
+        return Err("library-works".into());
+    }
+    Ok(())
+}
+
 fn check_folder(root: &Path, count_files: bool) -> Result<(), String> {
     let root = root.canonicalize().map_err(|e| e.to_string())?;
     if !root.is_dir() {
@@ -498,6 +514,7 @@ async fn open_library(app: AppHandle, path: String) -> Result<(), String> {
     let worker = app.clone();
     tauri::async_runtime::spawn_blocking(move || {
         check_library_open(Path::new(&path))?;
+        check_not_works(&worker, Path::new(&path))?;
         activate(&worker, Path::new(&path))?;
         update_settings(&worker, |settings| {
             let mut slots = library_slots(settings);
@@ -545,7 +562,13 @@ async fn set_library_slot(app: AppHandle, index: usize, name: Option<String>, pa
         return Err("Unbekannter Platz".into());
     }
     if let Some(p) = path.clone() {
-        tauri::async_runtime::spawn_blocking(move || check_library_open(Path::new(&p))).await.map_err(|e| e.to_string())??;
+        let a = app.clone();
+        tauri::async_runtime::spawn_blocking(move || {
+            check_library_open(Path::new(&p))?;
+            check_not_works(&a, Path::new(&p))
+        })
+        .await
+        .map_err(|e| e.to_string())??;
     }
     update_settings(&app, |settings| {
         let mut slots = library_slots(settings);
@@ -1441,8 +1464,16 @@ async fn works_choose(app: AppHandle, state: State<'_, AppState>, create: bool, 
     }
     let root = path.canonicalize().map_err(|e| e.to_string())?;
     check_folder(&root, false)?;
+    // Keine Bibliothek als Works-Ordner, auch keine der anderen Plätze (0.38.2)
+    if root.join(library::META_DIR).join("library.db").is_file() {
+        return Err("works-library".into());
+    }
+    let mut libs: Vec<PathBuf> = library_slots(&load_settings(&app)).into_iter().filter_map(|l| l.path.map(PathBuf::from)).collect();
     if let Some(lib) = state.library.lock().unwrap().clone() {
-        let lib_root = lib.root.canonicalize().unwrap_or(lib.root.clone());
+        libs.push(lib.root.clone());
+    }
+    for lib_root in libs {
+        let lib_root = lib_root.canonicalize().unwrap_or(lib_root);
         if root.starts_with(&lib_root) || lib_root.starts_with(&root) {
             return Err("works-library".into());
         }

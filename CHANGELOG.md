@@ -1,5 +1,13 @@
 # Changelog
 
+## App 0.38.2 (Extension 3.29.3, Vorabversion)
+
+- Bibliothek und Works lassen sich nicht mehr verwechseln: Ein Works-Ordner
+  (oder einer, in dem Projekte mit `brief.md` liegen) öffnet sich nicht als
+  Bibliothek, eine Bibliothek nicht als Works-Ordner, auch keine der anderen
+  Bibliotheksplätze. Vorher landete ein Works-Ordner als Bibliothek auf dem
+  aktiven Platz und verdrängte die eigentliche Bibliothek aus der Liste.
+
 ## App 0.38.1 (Extension 3.29.3, Vorabversion)
 
 - ⌘I öffnet Information, auch in Works; im Menü ≡ steht das Kürzel dahinter.

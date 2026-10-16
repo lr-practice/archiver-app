@@ -800,6 +800,27 @@ pub fn project_slots(project: &Path) -> (Vec<(Slot, PathBuf)>, Vec<PathBuf>) {
 }
 
 /// Sieht ein Ordner aus wie ein Projekt? (zwei Phasenordner oder ein brief.md)
+/// Sieht der Ordner wie eine Works-Wurzel aus? Streng: irgendwo auf Ebene
+/// Projekt oder Kunde/Projekt liegt ein brief.md (direkt oder in „01 Brief“).
+/// Damit lehnt Archiver ihn als Bibliothek ab (0.38.2).
+pub fn looks_like_root(root: &Path) -> bool {
+    let subdirs = |d: &Path| -> Vec<PathBuf> {
+        fs::read_dir(d)
+            .into_iter()
+            .flatten()
+            .filter_map(|e| e.ok())
+            .filter(|e| e.file_type().map(|t| t.is_dir()).unwrap_or(false))
+            .map(|e| e.path())
+            .filter(|p| p.file_name().is_some_and(|n| !n.to_string_lossy().starts_with('.')))
+            .take(400)
+            .collect()
+    };
+    let has_brief = |p: &Path| {
+        p.join(BRIEF_FILE).is_file() || subdirs(p).iter().any(|d| slot_of_folder(&d.file_name().unwrap_or_default().to_string_lossy()) == Some(Slot::Brief) && d.join(BRIEF_FILE).is_file())
+    };
+    subdirs(root).iter().any(|a| has_brief(a) || subdirs(a).iter().any(|b| has_brief(b)))
+}
+
 pub fn looks_like_project(dir: &Path) -> bool {
     if dir.join(BRIEF_FILE).is_file() {
         return true;
@@ -1285,6 +1306,18 @@ pub fn relevant_change(paths: &[PathBuf]) -> bool {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn root_detection() {
+        let root = std::env::temp_dir().join(format!("works-root-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(root.join("Design/Plakate")).unwrap();
+        fs::write(root.join("Design/Plakate/a.jpg"), b"x").unwrap();
+        assert!(!looks_like_root(&root));
+        create_project(&root, "Via", "Website", "de").unwrap();
+        assert!(looks_like_root(&root));
+        let _ = fs::remove_dir_all(&root);
+    }
+
     use super::*;
 
     #[test]

@@ -7710,7 +7710,7 @@
   // Fehler des Ordner-Schutzes (lib.rs: check_library) verständlich machen
   function libraryFail(e) {
     const msg = String(e && e.message ? e.message : e);
-    const key = { "library-system": "libSystem", "library-large": "libLarge", "library-slow": "libSlow", "library-active": "libActive", "library-missing": "libMissing", "library-file": "libFile" }[msg];
+    const key = { "library-system": "libSystem", "library-large": "libLarge", "library-slow": "libSlow", "library-active": "libActive", "library-missing": "libMissing", "library-file": "libFile", "library-works": "libWorks" }[msg];
     if (key) toast(t(key), false, 5200);
     else fail(e);
   }
