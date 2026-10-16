@@ -662,10 +662,6 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
 - **Nicht:** Keine Akzentfarbe, keine Icons, kein Verschieben von Dateien,
   keine Suche, kein zweiter Rahmen um Karten.
 
-- **Demo (0.38.1):** „Demo-Kunden anlegen“ steht im Menü auf „Works“ und als
-  `btn` unter einer leeren Liste, „Mit Demo-Kunden starten …“ als dritter
-  Knopf beim Einrichten. Kein eigenes Aussehen, nur bestehende Bausteine.
-
 ---
 
 ## 5. Bekannte Abweichungen
