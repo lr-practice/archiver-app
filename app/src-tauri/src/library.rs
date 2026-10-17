@@ -60,6 +60,10 @@ pub struct Zone {
     pub path: String,
     pub name: String,
     pub count: usize,
+    /// Liegt in einem verknüpften Ordner außerhalb der Bibliothek (0.39.1):
+    /// lässt sich nur trennen, nie löschen
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub external: bool,
 }
 
 #[derive(Serialize, Clone, Debug)]
@@ -1381,7 +1385,8 @@ impl Library {
                 if count == 0 && path.eq_ignore_ascii_case(crate::boards::DIR) {
                     return None;
                 }
-                Some(Zone { count, name: path.clone(), path })
+                let external = links.iter().any(|(z, _, _)| path == *z || path.starts_with(&format!("{z}/")));
+                Some(Zone { count, name: path.clone(), path, external })
             })
             .collect();
         zones.sort_by(|a, b| {
@@ -1390,7 +1395,7 @@ impl Library {
         });
         if let Some(&count) = counts.get("") {
             let name = self.root.file_name().and_then(|n| n.to_str()).unwrap_or("Archiver").to_string();
-            zones.insert(1.min(zones.len()), Zone { path: String::new(), name, count });
+            zones.insert(1.min(zones.len()), Zone { path: String::new(), name, count, external: false });
         }
         Ok(zones)
     }
@@ -2137,6 +2142,13 @@ impl Library {
         }
     }
 
+    /// Liegt `rel` in einer externen Zone (die Verknüpfung selbst ausgenommen)?
+    pub fn in_external(&self, rel: &str) -> bool {
+        let mut parts = rel.split('/');
+        let (Some(top), Some(_)) = (parts.next(), parts.next()) else { return false };
+        is_link(&self.root.join(top))
+    }
+
     /// Verknüpfung lösen: die Zone verschwindet, der Ordner draußen bleibt.
     pub fn unlink_folder(&self, zone: &str) -> Result<()> {
         let link = safe_join(&self.root, zone)?;
@@ -2177,6 +2189,10 @@ impl Library {
         // Externe Zone: nur die Verknüpfung lösen, der Ordner draußen bleibt unberührt
         if is_link(&dir) {
             return self.unlink_folder(zone);
+        }
+        // Ordner in einer externen Zone gehören nicht der Bibliothek: nie löschen (0.39.1)
+        if self.in_external(zone) {
+            return Err("external-folder".into());
         }
         let stamp = self.deleted_stamp()?;
         let hashes: HashMap<String, String> = {

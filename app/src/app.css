@@ -1685,6 +1685,59 @@ body.sorting * {
   color: var(--p-text);
 }
 
+/* Plus der Neue-Zone-Karte (0.39.1): ein Viertel der Kartenhöhe, 1 px wie die Outline */
+.p-card.p-new {
+  position: relative;
+}
+
+.p-new-plus {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  height: 25%;
+  aspect-ratio: 1;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+.p-new-plus::before,
+.p-new-plus::after {
+  content: "";
+  position: absolute;
+  background: var(--dash);
+  transition: background 0.12s ease;
+}
+
+.p-new-plus::before {
+  left: 0;
+  right: 0;
+  top: calc(50% - 0.5px);
+  height: 1px;
+}
+
+.p-new-plus::after {
+  top: 0;
+  bottom: 0;
+  left: calc(50% - 0.5px);
+  width: 1px;
+}
+
+.p-card.p-new:hover .p-new-plus::before,
+.p-card.p-new:hover .p-new-plus::after {
+  background: currentColor;
+}
+
+.p-card.p-new.editing .p-new-plus {
+  display: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .p-new-plus::before,
+  .p-new-plus::after {
+    transition: none;
+  }
+}
+
 /* ---- Zonenansicht (G), Alle Bilder, Suche ---- */
 
 .p-section.zone-card {
@@ -2427,6 +2480,11 @@ body.lightbox-open .p-dropbar {
 .p-zone-del.armed {
   color: #ff6b5e;
   font-size: 13px;
+}
+
+/* Externe Zone (0.39.1): Trennen ist kein Löschen, also nicht rot */
+.p-zone-del.unlink.armed {
+  color: var(--p-text);
 }
 
 /* ---- Auswahl: gestrichelt in Weiß, der Rest tritt zurück ----

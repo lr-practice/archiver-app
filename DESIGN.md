@@ -254,7 +254,9 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
   legt den Ordner hinein (gleiches Anheben wie 4.4, Ziel mit Ring).
 - **Titel:** Steht oben im Kopf (`align-self: start`) und springt nicht, wenn
   sich die Zahl der Karten beim Wechsel der Ebene ändert.
-- **Abschnitte als Ablageziel (0.35):** In „(Abschnitte)“ ist jeder Abschnitt
+- **Segmente (0.39.1):** Rechts im Kopf steht nur noch ein Chip „(Segmente)“,
+  der an- und ausgeklickt wird; aus ist das Mosaik. Das Wort „Mosaik“ entfällt.
+- **Segmente als Ablageziel (0.35):** In „(Segmente)“ ist jeder Abschnitt
   (`.p-folder-section`) Ziel für seinen Ordner, auch im Unterordner; der Abschnitt
   der losen Objekte legt direkt in die offene Ebene. Ziel zeigt den Ring (4.1,
   `--ring-lg`, 8 px Abstand) ohne Fläche, der eigene Abschnitt ist kein Ziel.

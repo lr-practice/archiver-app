@@ -1131,6 +1131,8 @@
       closeMenus();
       invoke("reveal_zone", { zone: rel }).catch(fail);
     }));
+    // Ordner in einer externen Zone gehören nicht der Bibliothek: kein Löschen (0.39.1)
+    if (insideExternal(rel)) return menu;
     const del = button("zone-menu-item danger", t("trashZone"));
     let armed = false;
     del.addEventListener("click", async () => {
@@ -1642,14 +1644,23 @@
     return card;
   }
 
+  // Neue-Zone-Karte (0.39.1): nur ein Plus in der Mitte, ein Viertel der
+  // Kartenhöhe, Linien so stark wie die Outline. Der Name steht im Tooltip.
+  function newZonePlus(card) {
+    card.title = t("newZone");
+    card.setAttribute("aria-label", t("newZone"));
+    card.appendChild(el("span", "p-new-plus"));
+  }
+
   // Freier Platz (weniger als vier Zonen): neue Zone anlegen
   function hotSlot(i) {
     const card = el("article", "p-card p-hot-card p-hot-free p-new");
     card.appendChild(el("div", "p-card-cover empty"));
     card.appendChild(hotKey(i));
     const body = el("div", "p-card-body");
-    body.appendChild(el("div", "zone-card-name", "+ " + t("newZone")));
+    body.appendChild(el("div", "zone-card-name", "\u00a0"));
     card.appendChild(body);
+    newZonePlus(card);
     card.addEventListener("click", startNewZone);
     return card;
   }
@@ -1805,10 +1816,11 @@
     add.appendChild(el("div", "p-card-cover empty"));
     const addBody = el("div", "p-card-body");
     const addText = el("div");
-    addText.appendChild(el("div", "zone-card-name", "+ " + t("newZone")));
+    addText.appendChild(el("div", "zone-card-name", "\u00a0"));
     addText.appendChild(el("div", "p-card-meta", "\u00a0"));
     addBody.appendChild(addText);
     add.appendChild(addBody);
+    newZonePlus(add);
     add.addEventListener("click", startNewZone);
     cards.push(add);
 
@@ -2223,26 +2235,20 @@
       row.append(el("span", "p-zone-main"), el("span", "p-block-side"));
       row.firstChild.append(handle, name);
       // Löschen in zwei Schritten: erst fragen, dann in den Papierkorb
-      const del = button("p-arrow p-zone-del", "✕");
-      del.title = t("trashZone");
-      if (!canEdit(zone.path)) del.style.visibility = "hidden";
+      const unlink = externalTop(zone.path);
+      const del = button("p-arrow p-zone-del" + (unlink ? " unlink" : ""), "✕");
+      del.title = t(unlink ? "unlinkZone" : "trashZone");
+      if (!canEdit(zone.path) || insideExternal(zone.path)) del.style.visibility = "hidden";
       let armed = false;
       del.addEventListener("click", async () => {
         if (!armed) {
           armed = true;
-          const other = await invoke("zone_other_files", { zone: zone.path }).catch(() => 0);
-          del.textContent = t("trashZoneConfirm", { count: zoneCountText(zone, other) });
+          const other = unlink ? 0 : await invoke("zone_other_files", { zone: zone.path }).catch(() => 0);
+          del.textContent = unlink ? t("unlinkZoneConfirm") : t("trashZoneConfirm", { count: zoneCountText(zone, other) });
           del.classList.add("armed");
           return;
         }
-        try {
-          await invoke("trash_zone", { zone: zone.path });
-          if (state.focus === zone.path) state.focus = null;
-          await refresh();
-          toast(t("zoneTrashed", { zone: zoneLabel(zone.path) }));
-        } catch (e) {
-          fail(e);
-        }
+        await trashZone(zone);
         renderPage(true);
       });
       del.addEventListener("blur", () => {
@@ -3189,8 +3195,9 @@
       }
     }
     if (single && shown[0] && hasFolders) {
-      for (const l of ["mosaic", "sections"])
-        bar.appendChild(chip("(" + t(l === "mosaic" ? "layoutMosaic" : "layoutSections") + ")", zoneLayout(shown[0].path) === l, () => setZoneLayout(shown[0].path, l)));
+      // Ein Chip zum An- und Ausklicken: aus ist das Mosaik (0.39.1)
+      const seg = zoneLayout(shown[0].path) === "sections";
+      bar.appendChild(chip("(" + t("layoutSections") + ")", seg, () => setZoneLayout(shown[0].path, seg ? "mosaic" : "sections")));
       bar.appendChild(el("span", "p-filter-gap"));
     }
     for (const v of ["grid", "original", "list"]) {
@@ -3510,13 +3517,14 @@
         })
       );
     }
-    if (canEdit(zone.path)) {
-      const del = button("zone-menu-item danger", t("trashZone"));
+    if (canEdit(zone.path) && !insideExternal(zone.path)) {
+      const unlink = externalTop(zone.path);
+      const del = button("zone-menu-item" + (unlink ? "" : " danger"), t(unlink ? "unlinkZone" : "trashZone"));
       let armed = false;
       del.addEventListener("click", async () => {
         if (!armed) {
           armed = true;
-          del.textContent = t("trashZoneConfirm", { count: zone.count === 1 ? t("countImage") : t("countImages", { n: zone.count }) });
+          del.textContent = unlink ? t("unlinkZoneConfirm") : t("trashZoneConfirm", { count: zone.count === 1 ? t("countImage") : t("countImages", { n: zone.count }) });
           del.classList.add("armed");
           return;
         }
@@ -3560,14 +3568,26 @@
     menu.style.top = Math.max(8, Math.min(window.innerHeight - h - 8, y)) + "px";
   }
 
+  // Externe Zonen (0.39.1): die Verknüpfung selbst lässt sich nur trennen,
+  // Ordner darin gar nicht löschen. Der Ordner auf dem Mac bleibt immer.
+  function externalTop(path) {
+    return !!path && state.zones.some((z) => z.path === path && z.external) && !path.includes("/");
+  }
+  function insideExternal(path) {
+    const top = (path || "").split("/")[0];
+    return path !== top && state.zones.some((z) => z.external && (z.path === top || z.path.startsWith(top + "/")));
+  }
+
   async function trashZone(zone) {
+    const unlink = externalTop(zone.path);
     try {
       await invoke("trash_zone", { zone: zone.path });
-      if (state.focus === zone.path) state.focus = null;
+      if (state.focus === zone.path || (state.focus || "").startsWith(zone.path + "/")) state.focus = null;
       await refresh();
-      toast(t("zoneTrashed", { zone: zoneLabel(zone.path) }));
+      toast(t(unlink ? "zoneUnlinked" : "zoneTrashed", { zone: zoneLabel(zone.path) }));
     } catch (e) {
-      fail(e);
+      if (String(e && e.message ? e.message : e) === "external-folder") toast(t("externalFolder"), false, 5200);
+      else fail(e);
     }
   }
 
@@ -3582,13 +3602,14 @@
   // ⌫ auf der Startseite: gewählte oder überfahrene Zone löschen, nach Rückfrage.
   function askTrashZone(path) {
     const zone = state.zones.find((z) => z.path === path);
-    if (!zone || !canEdit(zone.path)) return false;
+    if (!zone || !canEdit(zone.path) || insideExternal(zone.path)) return false;
+    const unlink = externalTop(zone.path);
     const dialog = el("div", "dialog confirm");
-    dialog.appendChild(el("h3", null, t("trashZoneAsk", { zone: zoneLabel(zone.path) })));
-    const text = el("p", null, zone.count ? t("trashZoneAskText", { count: zoneCountText(zone, 0) }) : t("trashZoneAskEmpty"));
+    dialog.appendChild(el("h3", null, t(unlink ? "unlinkZoneAsk" : "trashZoneAsk", { zone: zoneLabel(zone.path) })));
+    const text = el("p", null, unlink ? t("unlinkZoneAskText") : zone.count ? t("trashZoneAskText", { count: zoneCountText(zone, 0) }) : t("trashZoneAskEmpty"));
     dialog.appendChild(text);
     // Dateien ohne Vorschau (PSD, AI, ZIP …) wandern mit, also nennen
-    invoke("zone_other_files", { zone: zone.path })
+    if (!unlink) invoke("zone_other_files", { zone: zone.path })
       .then((other) => {
         if (other) text.textContent = t("trashZoneAskText", { count: zoneCountText(zone, other) });
       })
@@ -3599,7 +3620,7 @@
       trashZone(zone);
     };
     foot.appendChild(button("btn", t("cancel"), closeModal));
-    const ok = button("btn danger-fill", t("trashZoneDo"), go);
+    const ok = button(unlink ? "btn primary" : "btn danger-fill", t(unlink ? "unlinkZone" : "trashZoneDo"), go);
     foot.appendChild(ok);
     dialog.appendChild(foot);
     const modal = $("modal");
