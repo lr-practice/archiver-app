@@ -4,37 +4,12 @@ use objc2::runtime::AnyObject;
 use objc2::{class, msg_send};
 use objc2_foundation::NSString;
 
-// ---- Papierkorb ----
-
-/// Legt eine Datei in den Papierkorb und gibt zurück, wo sie dort liegt
-/// (für ⌘Z). Der Finder benennt bei Namensgleichheit um, darum fragen.
-pub fn trash_with_location(path: &std::path::Path) -> Result<Option<String>, String> {
-    unsafe {
-        let ns_path = NSString::from_str(&path.to_string_lossy());
-        let url: *mut AnyObject = msg_send![class!(NSURL), fileURLWithPath: &*ns_path];
-        let fm: *mut AnyObject = msg_send![class!(NSFileManager), defaultManager];
-        let mut out: *mut AnyObject = std::ptr::null_mut();
-        let out_ptr: *mut *mut AnyObject = &mut out;
-        let no_error: *mut *mut AnyObject = std::ptr::null_mut();
-        let ok: bool = msg_send![fm, trashItemAtURL: url, resultingItemURL: out_ptr, error: no_error];
-        if !ok {
-            return Err(format!("Papierkorb: {}", path.display()));
-        }
-        if out.is_null() {
-            return Ok(None);
-        }
-        let p: *mut AnyObject = msg_send![out, path];
-        if p.is_null() {
-            return Ok(None);
-        }
-        let s: *const std::os::raw::c_char = msg_send![p, UTF8String];
-        Ok(Some(std::ffi::CStr::from_ptr(s).to_string_lossy().into_owned()))
-    }
-}
-
 // ---- Zwischenablage ----
 
 /// Bilddateien als Bilder in die Zwischenablage (TIFF/PNG je nach Ziel-App).
+/// Bei mehreren Objekten (0.36.2) kommen die Dateien selbst dazu: ⌘V liest aus
+/// der Zwischenablage sonst nur das erste Bild (read_pasteboard), und Videos
+/// fielen ganz heraus. Finder und Archiver nehmen dann alle Dateien.
 pub fn copy_images(paths: &[String]) -> bool {
     unsafe {
         let images: *mut AnyObject = msg_send![class!(NSMutableArray), array];
@@ -50,6 +25,16 @@ pub fn copy_images(paths: &[String]) -> bool {
             let _: () = msg_send![image, release];
             count += 1;
         }
+        if paths.len() > 1 {
+            for path in paths {
+                let path = NSString::from_str(path);
+                let url: *mut AnyObject = msg_send![class!(NSURL), fileURLWithPath: &*path];
+                if !url.is_null() {
+                    let _: () = msg_send![images, addObject: url];
+                    count += 1;
+                }
+            }
+        }
         if count == 0 {
             return false;
         }
@@ -57,6 +42,55 @@ pub fn copy_images(paths: &[String]) -> bool {
         let _: isize = msg_send![board, clearContents];
         msg_send![board, writeObjects: images]
     }
+}
+
+/// ⌘V (0.32): Dateien aus dem Finder (Pfade), sonst Bilddaten (PNG vor TIFF),
+/// sonst Text. Kopiert der Finder Dateien, liegen auch ihr Symbol und ihr Name
+/// in der Zwischenablage; die Dateien gehen deshalb vor (library.rs paste_into).
+pub fn read_pasteboard() -> (Vec<String>, Option<Vec<u8>>, Option<String>) {
+    objc2::rc::autoreleasepool(|_| unsafe {
+        let board: *mut AnyObject = msg_send![class!(NSPasteboard), generalPasteboard];
+        let mut files = Vec::new();
+        let items: *mut AnyObject = msg_send![board, pasteboardItems];
+        if !items.is_null() {
+            let ty = NSString::from_str("public.file-url");
+            let n: usize = msg_send![items, count];
+            for i in 0..n {
+                let item: *mut AnyObject = msg_send![items, objectAtIndex: i];
+                let s: *mut AnyObject = msg_send![item, stringForType: &*ty];
+                if s.is_null() {
+                    continue;
+                }
+                let url: *mut AnyObject = msg_send![class!(NSURL), URLWithString: s];
+                if url.is_null() {
+                    continue;
+                }
+                let path: *mut AnyObject = msg_send![url, path];
+                let path = rust_string(path);
+                if !path.is_empty() {
+                    files.push(path);
+                }
+            }
+        }
+        let mut image = None;
+        for t in ["public.png", "public.tiff"] {
+            let ty = NSString::from_str(t);
+            let data: *mut AnyObject = msg_send![board, dataForType: &*ty];
+            if data.is_null() {
+                continue;
+            }
+            let len: usize = msg_send![data, length];
+            let ptr: *const std::ffi::c_void = msg_send![data, bytes];
+            if !ptr.is_null() && len > 0 {
+                image = Some(std::slice::from_raw_parts(ptr as *const u8, len).to_vec());
+                break;
+            }
+        }
+        let ty = NSString::from_str("public.utf8-plain-text");
+        let s: *mut AnyObject = msg_send![board, stringForType: &*ty];
+        let text = Some(rust_string(s)).filter(|t| !t.trim().is_empty());
+        (files, image, text)
+    })
 }
 
 /// Textkarte: Text und Bild als ein Eintrag. Texteditoren nehmen den Text,
@@ -114,6 +148,23 @@ unsafe fn rust_string(ns: *mut AnyObject) -> String {
     std::ffi::CStr::from_ptr(ptr).to_string_lossy().into_owned()
 }
 
+/// Sicherheit und Höhe (Anteil am Bild) aller Treffer einer Erkennung
+unsafe fn observations(request: *mut AnyObject) -> Vec<(f32, f64)> {
+    let results: *mut AnyObject = msg_send![request, results];
+    if results.is_null() {
+        return Vec::new();
+    }
+    let n: usize = msg_send![results, count];
+    (0..n)
+        .map(|i| {
+            let obs: *mut AnyObject = msg_send![results, objectAtIndex: i];
+            let c: f32 = msg_send![obs, confidence];
+            let r: objc2_foundation::NSRect = msg_send![obs, boundingBox];
+            (c, r.size.height)
+        })
+        .collect()
+}
+
 /// Erkennt, was auf einem Bild ist (englische Begriffe von Vision) und welcher
 /// Text darin steht. Leere Ergebnisse, wenn Vision nichts liefert.
 pub fn analyze_image(path: &std::path::Path) -> (Vec<String>, String) {
@@ -131,11 +182,20 @@ pub fn analyze_image(path: &std::path::Path) -> (Vec<String>, String) {
         let classify: *mut AnyObject = msg_send![classify, init];
         let ocr: *mut AnyObject = msg_send![class!(VNRecognizeTextRequest), alloc];
         let ocr: *mut AnyObject = msg_send![ocr, init];
+        // Gesichter und Personen eigens (0.31.2): die Klassifikation erkennt
+        // Menschen auf Plakaten, in Grafiken und Ausschnitten oft gar nicht.
+        let faces: *mut AnyObject = msg_send![class!(VNDetectFaceRectanglesRequest), alloc];
+        let faces: *mut AnyObject = msg_send![faces, init];
+        let humans: *mut AnyObject = msg_send![class!(VNDetectHumanRectanglesRequest), alloc];
+        let humans: *mut AnyObject = msg_send![humans, init];
+        // Tiere (Katze, Hund, Vogel, Pferd …): die Klassifikation nennt sie oft nur allgemein
+        let animals: *mut AnyObject = msg_send![class!(VNRecognizeAnimalsRequest), alloc];
+        let animals: *mut AnyObject = msg_send![animals, init];
         // VNRequestTextRecognitionLevelAccurate
         let _: () = msg_send![ocr, setRecognitionLevel: 0isize];
         let _: () = msg_send![ocr, setUsesLanguageCorrection: true];
         let langs: *mut AnyObject = msg_send![class!(NSMutableArray), array];
-        for l in ["de-DE", "en-US"] {
+        for l in ["de-DE", "en-US", "fr-FR", "it-IT", "es-ES"] {
             let s = NSString::from_str(l);
             let _: () = msg_send![langs, addObject: &*s];
         }
@@ -144,10 +204,13 @@ pub fn analyze_image(path: &std::path::Path) -> (Vec<String>, String) {
         let requests: *mut AnyObject = msg_send![class!(NSMutableArray), array];
         let _: () = msg_send![requests, addObject: classify];
         let _: () = msg_send![requests, addObject: ocr];
+        let _: () = msg_send![requests, addObject: faces];
+        let _: () = msg_send![requests, addObject: humans];
+        let _: () = msg_send![requests, addObject: animals];
         let ok: bool = msg_send![handler, performRequests: requests, error: std::ptr::null_mut::<*mut AnyObject>()];
 
         let mut labels = Vec::new();
-        let mut text = Vec::new();
+        let mut text: Vec<(f64, String)> = Vec::new();
         if ok {
             let results: *mut AnyObject = msg_send![classify, results];
             if !results.is_null() {
@@ -171,7 +234,62 @@ pub fn analyze_image(path: &std::path::Path) -> (Vec<String>, String) {
                     if count > 0 {
                         let cand: *mut AnyObject = msg_send![top, objectAtIndex: 0usize];
                         let s: *mut AnyObject = msg_send![cand, string];
-                        text.push(rust_string(s));
+                        let r: objc2_foundation::NSRect = msg_send![obs, boundingBox];
+                        text.push((r.size.height, rust_string(s)));
+                    }
+                }
+            }
+        }
+        // Ein winziges Gesicht im Hintergrund zählt nicht, ein großes macht ein Porträt
+        let mut face = 0f32;
+        let mut face_h = 0f64;
+        let mut faces_n = 0usize;
+        let mut person = 0f32;
+        if ok {
+            for (c, h) in observations(faces) {
+                if h >= 0.04 {
+                    face = face.max(c);
+                    face_h = face_h.max(h);
+                    faces_n += 1;
+                }
+            }
+            for (c, h) in observations(humans) {
+                if h >= 0.15 {
+                    person = person.max(c);
+                }
+            }
+        }
+        let mut add = |name: &str, c: f32| {
+            if c < 0.3 {
+                return;
+            }
+            match labels.iter_mut().find(|(n, _)| n == name) {
+                Some(l) => l.1 = l.1.max(c),
+                None => labels.push((name.to_string(), c)),
+            }
+        };
+        add("face", face);
+        add("people", face.max(person));
+        if face_h >= 0.3 {
+            add("portrait", face);
+        }
+        // Drei und mehr Gesichter: eine Gruppe
+        if faces_n >= 3 {
+            add("group", face);
+        }
+        if ok {
+            let results: *mut AnyObject = msg_send![animals, results];
+            if !results.is_null() {
+                let n: usize = msg_send![results, count];
+                for i in 0..n {
+                    let obs: *mut AnyObject = msg_send![results, objectAtIndex: i];
+                    let found: *mut AnyObject = msg_send![obs, labels];
+                    let count: usize = if found.is_null() { 0 } else { msg_send![found, count] };
+                    if count > 0 {
+                        let top: *mut AnyObject = msg_send![found, objectAtIndex: 0usize];
+                        let c: f32 = msg_send![top, confidence];
+                        let id: *mut AnyObject = msg_send![top, identifier];
+                        add(&rust_string(id).to_lowercase(), c);
                     }
                 }
             }
@@ -179,10 +297,16 @@ pub fn analyze_image(path: &std::path::Path) -> (Vec<String>, String) {
         let _: () = msg_send![handler, release];
         let _: () = msg_send![classify, release];
         let _: () = msg_send![ocr, release];
+        let _: () = msg_send![faces, release];
+        let _: () = msg_send![humans, release];
+        let _: () = msg_send![animals, release];
 
         labels.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
-        let labels = labels.into_iter().take(16).map(|(l, _)| l.replace('_', " ")).collect();
-        (labels, text.join(" "))
+        // Mit Sicherheit („poster:0.92“), damit die Suche unsichere Motive auslassen kann (0.31.1)
+        let labels = labels.into_iter().take(24).map(|(l, c)| format!("{}:{c:.2}", l.replace('_', " "))).collect();
+        // Größte Zeilen zuerst (0.36.2): Titel vor Kleingedrucktem, für Namensvorschläge
+        text.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
+        (labels, text.into_iter().map(|(_, t)| t).collect::<Vec<_>>().join(" "))
     })
 }
 
@@ -376,4 +500,357 @@ pub fn audio_artwork(path: &std::path::Path) -> Option<Vec<u8>> {
         }
         None
     })
+}
+
+// ---- Schwebende Fenster am ganzen Mac (system.rs) ----
+// Palette und Zonenleiste werden zu NSPanel ohne Aktivierung: Sie erscheinen
+// über jedem Programm, auch im Vollbild, ohne dass Archiver nach vorne kommt.
+
+use objc2::runtime::{AnyClass, Bool, ClassBuilder, Sel};
+use objc2::sel;
+use objc2_foundation::{NSPoint, NSRect, NSSize};
+
+extern "C-unwind" fn panel_yes(_this: &AnyObject, _cmd: Sel) -> Bool {
+    Bool::YES
+}
+
+extern "C-unwind" fn panel_no(_this: &AnyObject, _cmd: Sel) -> Bool {
+    Bool::NO
+}
+
+/// NSPanel-Unterklasse, die ohne Titelleiste Tastatureingaben annimmt.
+fn panel_class() -> &'static AnyClass {
+    static CLASS: std::sync::OnceLock<&'static AnyClass> = std::sync::OnceLock::new();
+    CLASS.get_or_init(|| {
+        if let Some(cls) = AnyClass::get(c"ArchiverPanel") {
+            return cls;
+        }
+        let mut builder = ClassBuilder::new(c"ArchiverPanel", class!(NSPanel)).expect("ArchiverPanel");
+        unsafe {
+            builder.add_method(sel!(canBecomeKeyWindow), panel_yes as extern "C-unwind" fn(_, _) -> _);
+            builder.add_method(sel!(canBecomeMainWindow), panel_no as extern "C-unwind" fn(_, _) -> _);
+        }
+        builder.register()
+    })
+}
+
+/// Macht aus einem Tauri-Fenster ein schwebendes Panel auf `level`
+/// (3 = schwebend, 25 = Statusebene).
+pub unsafe fn make_panel(window: *mut AnyObject, level: isize) {
+    if window.is_null() {
+        return;
+    }
+    objc2::ffi::object_setClass(window, panel_class());
+    // NSWindowStyleMaskNonactivatingPanel
+    let mask: usize = msg_send![window, styleMask];
+    let _: () = msg_send![window, setStyleMask: mask | (1 << 7)];
+    let _: () = msg_send![window, setLevel: level];
+    // auf allen Spaces (1), neben Vollbild-Programmen (1 << 8), nicht im ⌘`-Wechsel (1 << 6)
+    let _: () = msg_send![window, setCollectionBehavior: (1usize) | (1 << 8) | (1 << 6)];
+    let _: () = msg_send![window, setFloatingPanel: true];
+    let _: () = msg_send![window, setHidesOnDeactivate: false];
+    // Die Maske nachträglich gesetzt aktiviert das Programm sonst trotzdem (0.28)
+    let sel = sel!(_setPreventsActivation:);
+    let responds: bool = msg_send![window, respondsToSelector: sel];
+    if responds {
+        let _: () = msg_send![window, _setPreventsActivation: true];
+    }
+}
+
+pub unsafe fn panel_visible(window: *mut AnyObject) -> bool {
+    !window.is_null() && msg_send![window, isVisible]
+}
+
+/// Einblenden ohne Archiver zu aktivieren; `key`: nimmt Tastatureingaben an.
+pub unsafe fn panel_show(window: *mut AnyObject, key: bool) {
+    if window.is_null() {
+        return;
+    }
+    let _: () = msg_send![window, setAlphaValue: 1.0f64];
+    let _: () = msg_send![window, setIgnoresMouseEvents: false];
+    if key {
+        let none: *mut AnyObject = std::ptr::null_mut();
+        let _: () = msg_send![window, makeKeyAndOrderFront: none];
+        // Tastatur direkt ins Suchfeld: die Webansicht wird Ersthelfer
+        let content: *mut AnyObject = msg_send![window, contentView];
+        let web = find_webview(content);
+        if !web.is_null() {
+            let _: bool = msg_send![window, makeFirstResponder: web];
+        }
+    } else {
+        let _: () = msg_send![window, orderFrontRegardless];
+    }
+}
+
+/// Sucht die WKWebView unter einer Ansicht (Tiefensuche).
+unsafe fn find_webview(view: *mut AnyObject) -> *mut AnyObject {
+    if view.is_null() {
+        return view;
+    }
+    let is_web: bool = msg_send![view, isKindOfClass: class!(WKWebView)];
+    if is_web {
+        return view;
+    }
+    let subs: *mut AnyObject = msg_send![view, subviews];
+    let n: usize = if subs.is_null() { 0 } else { msg_send![subs, count] };
+    for i in 0..n {
+        let sub: *mut AnyObject = msg_send![subs, objectAtIndex: i];
+        let found = find_webview(sub);
+        if !found.is_null() {
+            return found;
+        }
+    }
+    std::ptr::null_mut()
+}
+
+/// Hinter alle Fenster legen, ohne Archiver zu aktivieren
+pub unsafe fn order_back(window: *mut AnyObject) {
+    if !window.is_null() {
+        let none: *mut AnyObject = std::ptr::null_mut();
+        let _: () = msg_send![window, orderBack: none];
+    }
+}
+
+pub unsafe fn panel_hide(window: *mut AnyObject) {
+    if !window.is_null() {
+        let none: *mut AnyObject = std::ptr::null_mut();
+        let _: () = msg_send![window, orderOut: none];
+    }
+}
+
+/// Rahmen des Trays vor dem Zusammenklappen (x, y, Breite, Höhe)
+static GHOST_FRAME: std::sync::Mutex<Option<(f64, f64, f64, f64)>> = std::sync::Mutex::new(None);
+
+/// Beim Herausziehen (0.37.2): Der Tray klappt nach oben auf eine Leiste der
+/// Höhe `bar` zusammen und lässt Klicks durch; danach geht er zurück auf den
+/// gemerkten Rahmen. 0.22 s, mit „Bewegung reduzieren“ ohne Animation.
+pub unsafe fn panel_ghost(window: *mut AnyObject, on: bool, bar: f64) {
+    if window.is_null() {
+        return;
+    }
+    let _: () = msg_send![window, setAlphaValue: 1.0f64];
+    let _: () = msg_send![window, setIgnoresMouseEvents: on];
+    let frame: NSRect = msg_send![window, frame];
+    let mut saved = GHOST_FRAME.lock().unwrap_or_else(|e| e.into_inner());
+    let target = if on {
+        if saved.is_none() {
+            *saved = Some((frame.origin.x, frame.origin.y, frame.size.width, frame.size.height));
+        }
+        let h = bar.min(frame.size.height);
+        NSRect::new(NSPoint::new(frame.origin.x, frame.origin.y + frame.size.height - h), NSSize::new(frame.size.width, h))
+    } else {
+        let Some((x, y, w, h)) = saved.take() else { return };
+        NSRect::new(NSPoint::new(x, y), NSSize::new(w, h))
+    };
+    let workspace: *mut AnyObject = msg_send![class!(NSWorkspace), sharedWorkspace];
+    let reduce: Bool = msg_send![workspace, accessibilityDisplayShouldReduceMotion];
+    if reduce.as_bool() {
+        let _: () = msg_send![window, setFrame: target, display: true];
+        return;
+    }
+    let _: () = msg_send![class!(NSAnimationContext), beginGrouping];
+    let ctx: *mut AnyObject = msg_send![class!(NSAnimationContext), currentContext];
+    let _: () = msg_send![ctx, setDuration: 0.22f64];
+    // QuartzCore lädt AppKit mit; trotzdem ohne Panik, falls die Klasse fehlt
+    if let Some(cls) = AnyClass::get(c"CAMediaTimingFunction") {
+        let name = NSString::from_str("easeOut");
+        let timing: *mut AnyObject = msg_send![cls, functionWithName: &*name];
+        if !timing.is_null() {
+            let _: () = msg_send![ctx, setTimingFunction: timing];
+        }
+    }
+    let animator: *mut AnyObject = msg_send![window, animator];
+    let _: () = msg_send![animator, setFrame: target, display: true];
+    let _: () = msg_send![class!(NSAnimationContext), endGrouping];
+}
+
+/// Sichtbarer Bereich (ohne Menüleiste und Dock) des Bildschirms mit dem Zeiger.
+unsafe fn mouse_screen_frame() -> Option<NSRect> {
+    let mouse: NSPoint = msg_send![class!(NSEvent), mouseLocation];
+    let screens: *mut AnyObject = msg_send![class!(NSScreen), screens];
+    if screens.is_null() {
+        return None;
+    }
+    let n: usize = msg_send![screens, count];
+    let mut fallback = None;
+    for i in 0..n {
+        let screen: *mut AnyObject = msg_send![screens, objectAtIndex: i];
+        let frame: NSRect = msg_send![screen, frame];
+        let visible: NSRect = msg_send![screen, visibleFrame];
+        if fallback.is_none() {
+            fallback = Some(visible);
+        }
+        let inside = mouse.x >= frame.origin.x
+            && mouse.x <= frame.origin.x + frame.size.width
+            && mouse.y >= frame.origin.y
+            && mouse.y <= frame.origin.y + frame.size.height;
+        if inside {
+            return Some(visible);
+        }
+    }
+    fallback
+}
+
+/// Palette mittig, etwas über der Mitte, auf dem Bildschirm mit dem Zeiger.
+pub unsafe fn panel_center_on_mouse_screen(window: *mut AnyObject) {
+    let Some(vf) = mouse_screen_frame() else { return };
+    let frame: NSRect = msg_send![window, frame];
+    let x = vf.origin.x + ((vf.size.width - frame.size.width) / 2.0).round();
+    // Oberkante bei etwa einem Sechstel der Höhe von oben, wie Spotlight
+    let top = vf.origin.y + vf.size.height - (vf.size.height / 6.0).round();
+    let y = (top - frame.size.height).max(vf.origin.y);
+    let rect = NSRect::new(NSPoint::new(x, y), frame.size);
+    let _: () = msg_send![window, setFrame: rect, display: false];
+}
+
+/// Zonenleiste: volle Breite unten auf dem Bildschirm mit dem Zeiger.
+pub unsafe fn panel_bottom_of_mouse_screen(window: *mut AnyObject, height: f64, animate: bool) {
+    let Some(vf) = mouse_screen_frame() else { return };
+    let rect = NSRect::new(vf.origin, NSSize::new(vf.size.width, height.min(vf.size.height)));
+    let _: () = msg_send![window, setFrame: rect, display: true, animate: animate];
+}
+
+/// Höhe des Zeigers über der Unterkante des sichtbaren Bildschirms (über dem
+/// Dock); negativ, wenn er im Dock steht (Zonenleiste als Streifen, 0.32)
+pub fn mouse_above_bottom() -> Option<f64> {
+    unsafe {
+        let mouse: NSPoint = msg_send![class!(NSEvent), mouseLocation];
+        mouse_screen_frame().map(|vf| mouse.y - vf.origin.y)
+    }
+}
+
+/// Linke Maustaste gedrückt? Und der Zähler der Drag-Zwischenablage.
+pub fn drag_probe() -> (bool, isize) {
+    objc2::rc::autoreleasepool(|_| unsafe {
+        let buttons: usize = msg_send![class!(NSEvent), pressedMouseButtons];
+        let name = NSString::from_str("Apple CFPasteboard drag");
+        let board: *mut AnyObject = msg_send![class!(NSPasteboard), pasteboardWithName: &*name];
+        let count: isize = if board.is_null() { 0 } else { msg_send![board, changeCount] };
+        (buttons & 1 == 1, count)
+    })
+}
+
+/// Werden gerade Dateien gezogen (nicht nur Text oder ein Link)?
+pub fn drag_has_files() -> bool {
+    objc2::rc::autoreleasepool(|_| unsafe {
+        let name = NSString::from_str("Apple CFPasteboard drag");
+        let board: *mut AnyObject = msg_send![class!(NSPasteboard), pasteboardWithName: &*name];
+        if board.is_null() {
+            return false;
+        }
+        let types: *mut AnyObject = msg_send![board, types];
+        if types.is_null() {
+            return false;
+        }
+        let file = NSString::from_str("public.file-url");
+        msg_send![types, containsObject: &*file]
+    })
+}
+
+/// Ist Archiver mit ⌘H ausgeblendet?
+pub fn app_hidden() -> bool {
+    unsafe {
+        let app: *mut AnyObject = msg_send![class!(NSApplication), sharedApplication];
+        !app.is_null() && msg_send![app, isHidden]
+    }
+}
+
+/// Wieder einblenden, ohne Archiver nach vorne zu holen (für den Tray).
+pub fn unhide_without_activation() {
+    unsafe {
+        let app: *mut AnyObject = msg_send![class!(NSApplication), sharedApplication];
+        if !app.is_null() {
+            let _: () = msg_send![app, unhideWithoutActivation];
+        }
+    }
+}
+
+/// Ist Archiver gerade das aktive Programm?
+pub fn app_active() -> bool {
+    unsafe {
+        let me: *mut AnyObject = msg_send![class!(NSRunningApplication), currentApplication];
+        !me.is_null() && msg_send![me, isActive]
+    }
+}
+
+/// Programm, das gerade vorne ist (nicht Archiver selbst), gehalten bis
+/// `activate_app` es wieder nach vorne holt. 0 = keins.
+pub fn frontmost_other_app() -> usize {
+    unsafe {
+        let ws: *mut AnyObject = msg_send![class!(NSWorkspace), sharedWorkspace];
+        let app: *mut AnyObject = msg_send![ws, frontmostApplication];
+        let me: *mut AnyObject = msg_send![class!(NSRunningApplication), currentApplication];
+        if app.is_null() {
+            return 0;
+        }
+        let pid: i32 = msg_send![app, processIdentifier];
+        let my_pid: i32 = if me.is_null() { -1 } else { msg_send![me, processIdentifier] };
+        if pid == my_pid {
+            return 0;
+        }
+        let _: *mut AnyObject = msg_send![app, retain];
+        app as usize
+    }
+}
+
+/// Holt ein mit `frontmost_other_app` gemerktes Programm nach vorne und gibt es frei.
+pub fn activate_app(app: usize) {
+    if app == 0 {
+        return;
+    }
+    unsafe {
+        let app = app as *mut AnyObject;
+        let _: bool = msg_send![app, activateWithOptions: 0usize];
+        let _: () = msg_send![app, release];
+    }
+}
+
+/// Gibt ein gemerktes Programm frei, ohne es zu aktivieren.
+pub fn release_app(app: usize) {
+    if app != 0 {
+        unsafe {
+            let _: () = msg_send![app as *mut AnyObject, release];
+        }
+    }
+}
+
+// ---- Start über „Öffnen mit“ ----
+
+/// Wurde Archiver gestartet, um Dateien zu öffnen (Finder-Doppelklick,
+/// „Öffnen mit“)? Beim Start liegt dann das Apple Event 'odoc' an statt 'oapp'.
+/// Nur während des Starts (RunEvent::Ready) aussagekräftig.
+pub fn launched_with_documents() -> bool {
+    unsafe {
+        let mgr: *mut AnyObject = msg_send![class!(NSAppleEventManager), sharedAppleEventManager];
+        if mgr.is_null() {
+            return false;
+        }
+        let event: *mut AnyObject = msg_send![mgr, currentAppleEvent];
+        if event.is_null() {
+            return false;
+        }
+        let id: u32 = msg_send![event, eventID];
+        id == u32::from_be_bytes(*b"odoc")
+    }
+}
+
+/// Schiebt ein Fenster hinter alle anderen seiner Ebene, ohne es zu schließen
+/// (Hauptfenster, wenn nur der Betrachter nach vorne soll).
+pub unsafe fn send_to_back(window: *mut AnyObject) {
+    if !window.is_null() {
+        // NSWindowBelow = -1, relativeTo 0: unter alle Fenster
+        let _: () = msg_send![window, orderWindow: -1isize, relativeTo: 0isize];
+    }
+}
+
+/// Bundle-ID eines mit `frontmost_other_app` gemerkten Programms.
+pub fn app_bundle_id(app: usize) -> Option<String> {
+    if app == 0 {
+        return None;
+    }
+    unsafe {
+        let id: *mut AnyObject = msg_send![app as *mut AnyObject, bundleIdentifier];
+        let s = rust_string(id);
+        (!s.is_empty()).then_some(s)
+    }
 }

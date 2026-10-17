@@ -1,11 +1,35 @@
 # Baut die Archiver-App für den Mac (Apple Silicon) und legt sie als
-# Vorabversion "app-latest" unter Releases ab. Noch ohne Apple-Signatur
-# (kommt in Phase 4), deshalb nur ad-hoc signiert.
+# Vorabversion "app-latest" unter Releases ab.
+#
+# Apple-Signatur und Notarisierung laufen, sobald diese Secrets gesetzt sind:
+#   APPLE_CERTIFICATE           Developer-ID-Application-Zertifikat als .p12, base64
+#   APPLE_CERTIFICATE_PASSWORD  Passwort der .p12
+#   APPLE_ID                    Apple-ID des Developer-Kontos
+#   APPLE_PASSWORD              App-spezifisches Passwort (appleid.apple.com)
+#   APPLE_TEAM_ID               Team-ID (10 Zeichen, developer.apple.com › Membership)
+# Ohne sie bleibt alles wie bisher: ad-hoc signiert, erster Start über „Trotzdem öffnen“.
 name: App macOS
 
 # Nur von Hand: Mac-Minuten zählen bei GitHub zehnfach, daher kein Build bei jedem Push.
+# Ausspielen (0.37.0):
+#   nein   nur bauen, DMG als Artefakt und unter „app-latest“ in diesem Repo
+#   vorab  Auto-Update nur für Macs mit eingeschalteten Vorabversionen (Lukas):
+#          Tag „vorab“ in Archiver-Releases, vorab.json, nicht „latest“
+#   beta   Auto-Update an alle Tester (latest.json), wie bisher „publish“
+#   freigeben  kein Build: die geprüfte Vorabversion geht unverändert an alle
+#          (dieselben Dateien, die Signatur bleibt gültig). Version angeben.
 on:
   workflow_dispatch:
+    inputs:
+      ausspielen:
+        description: "Ausspielen: nein, vorab (nur Lukas) oder beta (alle Tester)"
+        type: choice
+        options: [nein, vorab, beta, freigeben]
+        default: nein
+      version:
+        description: "Nur bei freigeben: Version unter „vorab“, z. B. 0.37.0"
+        type: string
+        default: ""
 
 permissions:
   contents: write
@@ -16,19 +40,23 @@ concurrency:
 
 jobs:
   build:
+    if: inputs.ausspielen != 'freigeben'
     runs-on: macos-14
     env:
-      PUBLISH_UPDATE: ${{ secrets.RELEASES_TOKEN != '' && secrets.TAURI_SIGNING_PRIVATE_KEY != '' }}
+      CHANNEL: ${{ inputs.ausspielen }}
+      HAS_RELEASE_SECRETS: ${{ secrets.RELEASES_TOKEN != '' && secrets.TAURI_SIGNING_PRIVATE_KEY != '' }}
+      APPLE_SIGN: ${{ secrets.APPLE_CERTIFICATE != '' }}
+      APPLE_NOTARIZE: ${{ secrets.APPLE_CERTIFICATE != '' && secrets.APPLE_ID != '' && secrets.APPLE_PASSWORD != '' && secrets.APPLE_TEAM_ID != '' }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@686976e191b89faba57d3206551f0f330d8cb249 # stable
 
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
         with:
           workspaces: app/src-tauri
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 22
 
@@ -40,18 +68,68 @@ jobs:
         working-directory: app/src-tauri
         run: cargo test --lib
 
+      # Zertifikat in einen eigenen Schlüsselbund, damit codesign es findet.
+      - name: Apple-Zertifikat
+        id: cert
+        if: env.APPLE_SIGN == 'true'
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+        run: |
+          KC="$RUNNER_TEMP/archiver.keychain-db"; KP=$(uuidgen)
+          echo "$APPLE_CERTIFICATE" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security create-keychain -p "$KP" "$KC"
+          security set-keychain-settings -lut 21600 "$KC"
+          security unlock-keychain -p "$KP" "$KC"
+          security import "$RUNNER_TEMP/cert.p12" -k "$KC" -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple: -k "$KP" "$KC" >/dev/null
+          security list-keychains -d user -s "$KC" $(security list-keychains -d user | tr -d '"')
+          rm "$RUNNER_TEMP/cert.p12"
+          ID=$(security find-identity -v -p codesigning "$KC" | grep -o '"Developer ID Application:[^"]*"' | head -1 | tr -d '"')
+          if [ -z "$ID" ]; then echo "Kein Developer-ID-Application-Zertifikat in APPLE_CERTIFICATE"; exit 1; fi
+          echo "identity=$ID" >> "$GITHUB_OUTPUT"
+
       - name: App bauen
         working-directory: app
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          IDENTITY: ${{ steps.cert.outputs.identity }}
+          # Tauri notarisiert und heftet das Ticket an, wenn diese drei gesetzt sind.
+          APPLE_ID: ${{ env.APPLE_NOTARIZE == 'true' && secrets.APPLE_ID || '' }}
+          APPLE_PASSWORD: ${{ env.APPLE_NOTARIZE == 'true' && secrets.APPLE_PASSWORD || '' }}
+          APPLE_TEAM_ID: ${{ env.APPLE_NOTARIZE == 'true' && secrets.APPLE_TEAM_ID || '' }}
         run: |
-          # Ohne Schlüssel keine Update-Pakete, die App baut trotzdem.
+          # Ohne Update-Schlüssel keine Update-Pakete, ohne Zertifikat ad-hoc signiert.
+          CONFIG='{}'
           if [ -z "$TAURI_SIGNING_PRIVATE_KEY" ]; then
-            npx tauri build --bundles app,dmg --config '{"bundle":{"createUpdaterArtifacts":false}}'
-          else
-            npx tauri build --bundles app,dmg
+            CONFIG=$(echo "$CONFIG" | jq -c '.bundle.createUpdaterArtifacts=false')
           fi
+          if [ -n "$IDENTITY" ]; then
+            CONFIG=$(echo "$CONFIG" | jq -c --arg id "$IDENTITY" '.bundle.macOS.signingIdentity=$id')
+          fi
+          for v in APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID; do [ -z "${!v}" ] && unset $v; done
+          npx tauri build --bundles app,dmg --config "$CONFIG"
+
+      # Das DMG selbst signieren, notarisieren und das Ticket anheften,
+      # damit schon das Öffnen des Downloads ohne Warnung klappt.
+      - name: DMG signieren und notarisieren
+        if: env.APPLE_NOTARIZE == 'true'
+        env:
+          IDENTITY: ${{ steps.cert.outputs.identity }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          BUNDLE=app/src-tauri/target/release/bundle
+          DMG=$(ls "$BUNDLE"/dmg/*.dmg | head -1)
+          APP=$(ls -d "$BUNDLE"/macos/*.app | head -1)
+          codesign --verify --deep --strict "$APP"
+          xcrun stapler validate "$APP"
+          codesign --force --timestamp --sign "$IDENTITY" "$DMG"
+          xcrun notarytool submit "$DMG" --apple-id "$APPLE_ID" --password "$APPLE_PASSWORD" --team-id "$APPLE_TEAM_ID" --wait
+          xcrun stapler staple "$DMG"
+          spctl --assess --type open --context context:primary-signature -v "$DMG"
 
       - name: Dateien einsammeln
         id: out
@@ -66,7 +144,7 @@ jobs:
           ls -la dist
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: archiver-mac
           path: dist/*
@@ -76,21 +154,33 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           TAG=app-latest; TITLE="Archiver App (Testversion)"
-          NOTES="Testversion ${{ steps.out.outputs.version }} aus ${GITHUB_REF_NAME} (${GITHUB_SHA::7}). Nicht von Apple signiert: beim ersten Start unter Systemeinstellungen → Datenschutz & Sicherheit auf „Trotzdem öffnen“ klicken."
+          if [ "$APPLE_NOTARIZE" = "true" ]; then
+            NOTES="Testversion ${{ steps.out.outputs.version }} aus ${GITHUB_REF_NAME} (${GITHUB_SHA::7}). Von Apple signiert und notarisiert."
+          else
+            NOTES="Testversion ${{ steps.out.outputs.version }} aus ${GITHUB_REF_NAME} (${GITHUB_SHA::7}). Nicht von Apple signiert: beim ersten Start unter Systemeinstellungen → Datenschutz & Sicherheit auf „Trotzdem öffnen“ klicken."
+          fi
           gh release view "$TAG" >/dev/null 2>&1 || gh release create "$TAG" --prerelease --title "$TITLE" --notes "$NOTES" --target "$GITHUB_SHA"
           gh release edit "$TAG" --notes "$NOTES"
           gh release upload "$TAG" dist/* --clobber
 
-      # Auto-Update: Paket, Signatur und latest.json ins öffentliche
-      # Repository Archiver-Releases. Nur mit beiden Secrets.
+      # Ohne Secrets kein Update: dann laut scheitern statt still nichts tun
+      - name: Secrets prüfen
+        if: env.CHANNEL != 'nein' && env.HAS_RELEASE_SECRETS != 'true'
+        run: |
+          echo "::error::RELEASES_TOKEN oder TAURI_SIGNING_PRIVATE_KEY fehlt, nichts veröffentlicht"
+          exit 1
+
+      # Auto-Update: Paket, Signatur und Feed ins öffentliche Repository
+      # Archiver-Releases. vorab → Tag „vorab“ + vorab.json (nur Lukas),
+      # beta → Tag vX.Y.Z + latest.json (alle Tester).
       - name: Update veröffentlichen
         env:
           GH_TOKEN: ${{ secrets.RELEASES_TOKEN }}
-        if: env.PUBLISH_UPDATE == 'true'
+        if: env.CHANNEL != 'nein'
         run: |
           VERSION=${{ steps.out.outputs.version }}
           REPO=lr-practice/Archiver-Releases
-          TAG=v$VERSION
+          if [ "$CHANNEL" = "vorab" ]; then TAG=vorab; FEED=vorab.json; else TAG=v$VERSION; FEED=latest.json; fi
           BUNDLE=app/src-tauri/target/release/bundle/macos
           TGZ=$(ls "$BUNDLE"/*.app.tar.gz | head -1)
           mkdir -p upd
@@ -101,13 +191,76 @@ jobs:
           SIG=$(cat "$TGZ.sig")
           URL="https://github.com/$REPO/releases/download/$TAG/Archiver-$VERSION-mac-arm64.app.tar.gz"
           jq -n --arg v "$VERSION" --arg s "$SIG" --arg u "$URL" --arg d "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-            '{version:$v, notes:"", pub_date:$d, platforms:{"darwin-aarch64":{signature:$s, url:$u}}}' > upd/latest.json
-          cat upd/latest.json
+            '{version:$v, notes:"", pub_date:$d, platforms:{"darwin-aarch64":{signature:$s, url:$u}}}' > "upd/$FEED"
+          cat "upd/$FEED"
           # Leeres Repository: erst eine README anlegen, sonst gibt es keine Releases.
           if ! gh api "repos/$REPO/commits?per_page=1" >/dev/null 2>&1; then
             printf '# Archiver Releases\n\nUpdates für die Archiver-App (signiert, automatisch geladen).\n' > README.md
             gh api -X PUT "repos/$REPO/contents/README.md" -f message="README" -f content="$(base64 < README.md | tr -d '\n')"
           fi
+          if [ "$CHANNEL" = "vorab" ]; then
+            # Ein fester Tag, immer nur die jüngste Vorabversion; nie „latest“
+            gh release view vorab -R "$REPO" >/dev/null 2>&1 || gh release create vorab -R "$REPO" --prerelease --latest=false --title "Archiver Vorab" --notes "Nur zum Testen. Freigabe an alle: App macOS mit „freigeben“."
+            # Version wählen (0.38.1): jede Vorabversion bleibt zusätzlich unter
+            # vorab-X.Y.Z liegen, auch die, die hier gleich ersetzt wird.
+            keep() {
+              local v=$1 dir=$2 tag=vorab-$1
+              gh release view "$tag" -R "$REPO" >/dev/null 2>&1 && return 0
+              mkdir -p "keep-$v"
+              cp "$dir/Archiver-$v-mac-arm64.app.tar.gz" "keep-$v/"
+              jq --arg u "https://github.com/$REPO/releases/download/$tag/Archiver-$v-mac-arm64.app.tar.gz" \
+                '.platforms["darwin-aarch64"].url = $u' "$dir/vorab.json" > "keep-$v/vorab.json"
+              gh release create "$tag" -R "$REPO" --prerelease --latest=false --title "Archiver Vorab $v" \
+                --notes "Ältere Vorabversion, in der App unter Information › Updates wählbar." "keep-$v"/*
+            }
+            mkdir -p prev
+            if gh release download vorab -R "$REPO" -D prev -p 'vorab.json' -p '*.app.tar.gz' 2>/dev/null; then
+              PREV=$(jq -r .version prev/vorab.json)
+              [ -n "$PREV" ] && [ "$PREV" != "$VERSION" ] && [ -f "prev/Archiver-$PREV-mac-arm64.app.tar.gz" ] && keep "$PREV" prev || true
+            fi
+            OLD=$(gh release view vorab -R "$REPO" --json assets -q '.assets[].name')
+            for a in $OLD; do gh release delete-asset vorab "$a" -R "$REPO" -y; done
+            gh release upload vorab upd/* -R "$REPO" --clobber
+            gh release edit vorab -R "$REPO" --prerelease --latest=false --title "Archiver Vorab $VERSION"
+            keep "$VERSION" upd
+          else
+            gh release view "$TAG" -R "$REPO" >/dev/null 2>&1 || gh release create "$TAG" -R "$REPO" --title "Archiver $VERSION" --notes-file docs/beta.md --latest
+            gh release upload "$TAG" upd/* -R "$REPO" --clobber
+            gh release edit "$TAG" -R "$REPO" --latest --notes-file docs/beta.md
+          fi
+
+  # Vorabversion an alle freigeben, ohne neuen Build
+  promote:
+    if: inputs.ausspielen == 'freigeben'
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.RELEASES_TOKEN }}
+      REPO: lr-practice/Archiver-Releases
+      VERSION: ${{ inputs.version }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Vorabversion holen
+        run: |
+          if [ -z "$GH_TOKEN" ]; then echo "::error::RELEASES_TOKEN fehlt"; exit 1; fi
+          mkdir upd
+          gh release download vorab -R "$REPO" -D upd
+          ls -la upd
+          GOT=$(jq -r .version upd/vorab.json)
+          if [ "$GOT" != "$VERSION" ]; then
+            echo "::error::Unter „vorab“ liegt $GOT, nicht $VERSION"
+            exit 1
+          fi
+
+      - name: An alle freigeben
+        run: |
+          TAG=v$VERSION
+          PKG="Archiver-$VERSION-mac-arm64.app.tar.gz"
+          URL="https://github.com/$REPO/releases/download/$TAG/$PKG"
+          jq --arg u "$URL" --arg d "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            '.platforms["darwin-aarch64"].url = $u | .pub_date = $d' upd/vorab.json > upd/latest.json
+          rm upd/vorab.json
+          cat upd/latest.json
           gh release view "$TAG" -R "$REPO" >/dev/null 2>&1 || gh release create "$TAG" -R "$REPO" --title "Archiver $VERSION" --notes-file docs/beta.md --latest
           gh release upload "$TAG" upd/* -R "$REPO" --clobber
           gh release edit "$TAG" -R "$REPO" --latest --notes-file docs/beta.md

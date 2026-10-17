@@ -1,0 +1,207 @@
+/* cloud.css — Wolke (0.39.1): Referenzen um das offene Objekt, per Physik.
+   Baut auf app.css auf: Lightbox-Grund und -Leiste (4.11), Ring (4.1),
+   Glas (2.4), Chips (4.7). Siehe DESIGN.md 4.25. */
+
+.cloud {
+  position: fixed;
+  inset: 0;
+  z-index: 25;
+  background: var(--lightbox-bg);
+  -webkit-backdrop-filter: blur(24px);
+  backdrop-filter: blur(24px);
+  animation: cl-in 0.18s ease;
+}
+
+@keyframes cl-in {
+  from {
+    opacity: 0;
+  }
+}
+
+.cl-stage {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.cl-links {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.cl-links line {
+  stroke: var(--dash);
+  stroke-width: 1;
+  stroke-dasharray: 4 4;
+}
+
+/* Objekte bleiben rechteckig wie das Original (2.3) */
+.cl-ref {
+  position: absolute;
+  left: 0;
+  top: 0;
+  background: var(--thumb-bg);
+  cursor: grab;
+  will-change: transform;
+  transition: width 0.18s ease, height 0.18s ease;
+}
+
+.cl-ref:active {
+  cursor: grabbing;
+}
+
+.cl-ref img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  pointer-events: none;
+}
+
+.cl-ref.new {
+  animation: cl-pop 0.28s cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
+@keyframes cl-pop {
+  from {
+    opacity: 0;
+    scale: 0.6;
+  }
+}
+
+/* Auswahl: Ring (4.1), eckig, 4 px Abstand */
+.cl-ref.selected::after {
+  content: "";
+  position: absolute;
+  inset: -4px;
+  pointer-events: none;
+  background: var(--p-text, var(--ink));
+  -webkit-mask: var(--ring-0) 0 0 / 100% 100% no-repeat;
+  mask: var(--ring-0) 0 0 / 100% 100% no-repeat;
+}
+
+/* ---- Leisten: wie die Lightbox-Leiste ---- */
+
+.cl-top {
+  top: 22px;
+}
+
+.cl-nav {
+  bottom: 22px;
+  width: min(960px, calc(100% - 32px));
+}
+
+.cl-label,
+.cl-count {
+  padding: 0 6px 0 8px;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--p-faint);
+  white-space: nowrap;
+}
+
+.cl-count {
+  color: var(--p-dim);
+}
+
+.cl-flex {
+  flex: 1;
+}
+
+/* ---- Referenz hinzufügen: Glas über der Leiste ---- */
+
+.cl-picker {
+  position: absolute;
+  left: 50%;
+  bottom: 82px;
+  transform: translateX(-50%);
+  z-index: 3;
+  width: min(960px, calc(100% - 32px));
+  display: grid;
+  gap: 10px;
+  padding: 10px;
+  border-radius: var(--r-lg);
+  background: var(--menu-bg);
+  box-shadow: var(--menu-shadow);
+  -webkit-backdrop-filter: blur(24px) saturate(1.4);
+  backdrop-filter: blur(24px) saturate(1.4);
+  animation: cl-in 0.18s ease;
+}
+
+.cl-search {
+  height: 30px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: rgba(var(--ink-rgb), 0.055);
+  color: var(--p-text);
+  font: inherit;
+  font-size: 13px;
+  outline: none;
+}
+
+.cl-strip {
+  display: flex;
+  gap: 6px;
+  height: 88px;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.cl-thumb {
+  flex: 0 0 auto;
+  height: 88px;
+  padding: 0;
+  border: 0;
+  background: var(--thumb-bg);
+  cursor: pointer;
+  opacity: 0.85;
+  transition: opacity 0.12s ease;
+}
+
+.cl-thumb:hover {
+  opacity: 1;
+}
+
+.cl-thumb img {
+  display: block;
+  height: 100%;
+  width: auto;
+  max-width: 180px;
+  object-fit: cover;
+  pointer-events: none;
+}
+
+.cl-empty {
+  align-self: center;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--p-faint);
+}
+
+body.cloud-open .lb-nav,
+body.cloud-open .lb-zones {
+  visibility: hidden;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cloud,
+  .cl-picker,
+  .cl-ref.new {
+    animation: none;
+  }
+  .cl-ref,
+  .cl-thumb {
+    transition: none;
+  }
+}

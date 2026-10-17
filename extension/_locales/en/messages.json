@@ -165,6 +165,17 @@
   "appSaveFailed": {
     "message": "Could not hand the image to the app"
   },
+  "appOfflineSaved": {
+    "message": "Archiver is not responding. Saved in $FOLDER$ instead of the library",
+    "placeholders": {
+      "folder": {
+        "content": "$1"
+      }
+    }
+  },
+  "extensionReloaded": {
+    "message": "Archiver was updated. Please reload the page."
+  },
   "appZoneFailed": {
     "message": "Could not create the zone"
   },
@@ -186,7 +197,7 @@
     "message": "1 image"
   },
   "aboutClaim": {
-    "message": "A visual library for creatives. Collect, sort and look at your references, in zones instead of folders."
+    "message": "A visual library for creative research. Collect, sort and look at your references, in zones instead of folders."
   },
   "settingsLead": {
     "message": "Zones, keyboard shortcut and the connection to the app."
@@ -235,9 +246,6 @@
   },
   "infoKeyBack": {
     "message": "Back and close"
-  },
-  "importBoard": {
-    "message": "Import board"
   },
   "more": {
     "message": "More"
