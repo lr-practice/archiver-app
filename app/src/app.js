@@ -3227,16 +3227,26 @@
       bar.appendChild(chip("(" + t("layoutSections") + ")", seg, () => setZoneLayout(shown[0].path, seg ? "mosaic" : "sections")));
       bar.appendChild(el("span", "p-filter-gap"));
     }
-    for (const v of ["grid", "original", "list"]) {
-      const c = chip("(" + t({ grid: "viewGrid", original: "viewOriginal", list: "viewList" }[v]) + ")", state.view === v, () => {
+    const views = window.ArchiverForms ? ["grid", "original", "list", "form"] : ["grid", "original", "list"];
+    for (const v of views) {
+      const c = chip("(" + t({ grid: "viewGrid", original: "viewOriginal", list: "viewList", form: "viewForm" }[v]) + ")", state.view === v, () => {
         state.view = v;
         setPref("view", v);
         render();
       });
-      c.title = t({ grid: "viewGridTitle", original: "viewOriginalTitle", list: "viewListTitle" }[v]);
+      c.title = t({ grid: "viewGridTitle", original: "viewOriginalTitle", list: "viewListTitle", form: "viewFormTitle" }[v]);
       bar.appendChild(c);
     }
-    bar.appendChild(sizeChips(Math.max(0, SIZES.indexOf(state.size)), SIZES.length, (step) => {
+    // Form (0.39.2): statt der Größe die Wahl der Figur
+    if (state.view === "form" && window.ArchiverForms) {
+      bar.appendChild(el("span", "p-filter-gap"));
+      const cur = formShape();
+      for (const f of window.ArchiverForms.SHAPES)
+        bar.appendChild(chip("(" + t("form_" + f) + ")", cur === f, () => {
+          setPref("formShape", f);
+          renderZones();
+        }));
+    } else bar.appendChild(sizeChips(Math.max(0, SIZES.indexOf(state.size)), SIZES.length, (step) => {
       state.size = SIZES[step];
       setPref("size", state.size);
       renderToolbar();
@@ -3244,6 +3254,23 @@
     }));
     wrap.appendChild(bar);
     if (filtersShown()) wrap.insertBefore(filterBar(), bar);
+
+    // Form (0.39.2): alle gezeigten Objekte als eine Figur
+    if (state.view === "form" && window.ArchiverForms) {
+      const list = state.found || shown.flatMap((z) => state.lists.get(z.path) || []);
+      const title = state.found ? t("foundLabel") : single && shown[0] ? zoneLabel(shown[0].path) : t("allZonesLabel");
+      wrap.appendChild(
+        window.ArchiverForms.render(list, {
+          shape: formShape(),
+          title,
+          countText: countText(list.length),
+          moreText: (a, b) => t("formMore", { a, b }),
+          thumbSrc,
+          open: openLightbox,
+        })
+      );
+      return wrap;
+    }
 
     // Suche oder Filter: eine Liste nach Relevanz statt nach Zonen
     if (state.found) {
@@ -3298,6 +3325,10 @@
   // absteigend, dann wieder die Reihenfolge der Zone. Maße, Größe und Datum
   // beginnen mit dem Größten bzw. Neuesten.
   const LIST_COLS = [["name", "listName"], ["kind", "viewerFormat"], ["dims", "viewerSize"], ["bytes", "listBytes"], ["src", "source"], ["date", "listDate"]];
+  const formShape = () => {
+    const f = pref("formShape", "ring");
+    return window.ArchiverForms && window.ArchiverForms.SHAPES.includes(f) ? f : "ring";
+  };
   const listSort = () => (state.view === "list" && pref("listSort", null)) || null;
 
   function listHead(sortable = true) {

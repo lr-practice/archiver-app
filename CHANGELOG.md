@@ -1,5 +1,12 @@
 # Changelog
 
+## App 0.39.2 (Extension 3.29.3, Vorabversion)
+
+- Neu: Ansicht „(Form)“ neben Raster, Original und Liste. Die Objekte einer
+  Zone (oder einer Suche) bilden eine Figur: Ring mit dem Namen in der Mitte,
+  Sonnenblume, Karussell (dreht langsam) oder Fächer. Klick öffnet die
+  Lightbox.
+
 ## App 0.39.1 (Extension 3.29.3, Vorabversion)
 
 - Neu zum Ausprobieren: die Wolke. In der Lightbox „Wolke“ oder W. Am
