@@ -1,0 +1,726 @@
+/* projects.css — Projekte (0.40.0): leichtes Projektmanagement als eigener Bereich.
+   Baut auf app.css auf: Tokens, Karten und Neue-Karte (4.4), Chips (4.7),
+   Ring (4.1), Menüs (4.9), Leiste der Lightbox (4.11). Neu sind Phasenleiste,
+   Ordnerspalte und das Projektblatt. Siehe DESIGN.md 4.23. */
+
+/* ---- Bereich: was zur Bibliothek gehört, tritt zurück ---- */
+
+body.projects #info,
+body.projects #libTab,
+body.projects #dropbar {
+  display: none !important;
+}
+
+.pj-page {
+  --pj-gap: 10px;
+}
+
+/* ---- Vorschaufläche: Bild, solange es lädt die Endung als Label ---- */
+
+.pj-media {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  background: var(--thumb-bg);
+}
+
+.pj-media img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  opacity: 0;
+  transition: opacity 0.18s ease;
+  -webkit-user-drag: none;
+}
+
+.pj-media.pj-loaded img {
+  opacity: 1;
+}
+
+.pj-media.pj-loaded .pj-ext {
+  visibility: hidden;
+}
+
+.pj-ext {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--p-mono);
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--p-faint);
+}
+
+/* ---- Übersicht ---- */
+
+.pj-bar {
+  flex-wrap: wrap;
+}
+
+.pj-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: var(--pj-gap);
+}
+
+.pj-card {
+  display: flex;
+  flex-direction: column;
+  cursor: default;
+}
+
+.pj-card.pj-archived .pj-cover {
+  opacity: 0.55;
+}
+
+/* Mosaik: ein Bild füllt, zwei teilen, drei = eins groß links, zwei rechts */
+.pj-cover {
+  position: relative;
+  aspect-ratio: 3 / 2;
+  width: 100%;
+  display: grid;
+  gap: 2px;
+  background: var(--thumb-bg);
+}
+
+.pj-cover-2 {
+  grid-template-columns: 1fr 1fr;
+}
+
+.pj-cover-3 {
+  grid-template-columns: 2fr 1fr;
+  grid-template-rows: 1fr 1fr;
+}
+
+.pj-cover-3 .pj-media:first-child {
+  grid-row: 1 / 3;
+}
+
+.pj-cover .pj-media {
+  min-width: 0;
+  min-height: 0;
+}
+
+.pj-cover .pj-media img {
+  object-fit: cover;
+}
+
+.pj-cover-code {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--p-faint);
+}
+
+.pj-card-body {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 14px 16px 16px;
+}
+
+.pj-card-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.pj-card-top .zone-card-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pj-card-top .p-mono {
+  flex: none;
+}
+
+.pj-card-phase {
+  color: var(--p-faint);
+}
+
+.pj-late,
+.p-mono.pj-late,
+.p-head-text.pj-late {
+  color: var(--danger);
+}
+
+/* Neues Projekt: gestrichelte Neue-Karte mit Plus (4.4), Text darunter */
+.pj-new {
+  min-height: 220px;
+  border: none;
+  font: inherit;
+  text-align: center;
+}
+
+.pj-new .p-new-plus {
+  top: 44%;
+  height: 18%;
+}
+
+.pj-new-text {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(44% + 14%);
+  font-family: var(--p-mono);
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+/* ---- Phasenleiste: fünf Striche, erledigt / aktuell / offen ---- */
+
+.pj-phasebar {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 2px;
+  height: 2px;
+}
+
+.pj-phasebar span,
+.pj-phase-line {
+  background: var(--p-rule);
+}
+
+.pj-phasebar span.done,
+.pj-phase.done .pj-phase-line {
+  background: var(--p-rule-strong);
+}
+
+.pj-phasebar span.current,
+.pj-phase.current .pj-phase-line {
+  background: var(--p-text);
+}
+
+/* ---- Projekt: Kopf und Phasen ---- */
+
+.pj-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 24px;
+}
+
+.pj-head-main {
+  min-width: 0;
+}
+
+.pj-client {
+  margin-bottom: 10px;
+  color: var(--p-dim);
+}
+
+.pj-head-side {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-top: 4px;
+}
+
+.pj-phases {
+  margin-top: 40px;
+  max-width: 760px;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 3px;
+}
+
+.pj-phase {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  padding: 2px 0 0;
+  border: none;
+  background: none;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+}
+
+.pj-phase-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--p-mono);
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--p-faint);
+  transition: color 0.12s ease;
+}
+
+.pj-phase:hover .pj-phase-label {
+  color: var(--p-dim);
+}
+
+.pj-phase.current .pj-phase-label {
+  color: var(--p-text);
+}
+
+.pj-phase-line {
+  height: 2px;
+}
+
+/* ---- Projekt: Ordner | Inhalt | Blatt ---- */
+
+.pj-layout {
+  margin-top: 36px;
+  display: grid;
+  grid-template-columns: 190px minmax(0, 1fr) 280px;
+  gap: 40px;
+  align-items: start;
+}
+
+@media (max-width: 1100px) {
+  .pj-layout {
+    grid-template-columns: 170px minmax(0, 1fr);
+  }
+  .pj-sheet {
+    grid-column: 1 / -1;
+  }
+}
+
+.pj-folders {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+
+.pj-folder {
+  position: relative;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 6px 0;
+  border: none;
+  border-top: 1px solid var(--p-rule);
+  background: none;
+  font: inherit;
+  text-align: left;
+  color: var(--p-dim);
+  transition: color 0.12s ease;
+}
+
+.pj-folder.sub {
+  padding-left: 14px;
+  border-top: none;
+  color: var(--p-faint);
+}
+
+.pj-folder:hover,
+.pj-folder.active {
+  color: var(--p-text);
+}
+
+.pj-folder-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pj-folder-count {
+  color: var(--p-faint);
+}
+
+.pj-content {
+  position: relative;
+  min-width: 0;
+  min-height: 200px;
+}
+
+.pj-note {
+  margin: 0;
+  max-width: 62ch;
+  color: var(--p-dim);
+  line-height: 1.5;
+}
+
+/* Bilder: alle gleich hoch, jedes in seiner Form */
+.pj-tiles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px var(--pj-gap);
+  --pj-h: 180px;
+}
+
+.pj-tile {
+  position: relative;
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  min-width: 0;
+  cursor: default;
+}
+
+.pj-tile .pj-media {
+  height: var(--pj-h);
+  background: none;
+}
+
+.pj-tile .pj-media:not(.pj-loaded) {
+  width: calc(var(--pj-h) * 0.75);
+  background: var(--thumb-bg);
+}
+
+.pj-tile .pj-media img {
+  position: static;
+  width: auto;
+  height: 100%;
+  max-width: none;
+}
+
+.pj-tile figcaption {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  width: 0;
+  min-width: 100%;
+  padding-top: 6px;
+}
+
+.pj-tile-name,
+.pj-tile-dir {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pj-tile-dir {
+  font-size: 12px;
+  color: var(--p-faint);
+}
+
+/* Liste: Endung, Name, Unterordner, Größe, Datum */
+.pj-line {
+  position: relative;
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--p-rule);
+  cursor: default;
+}
+
+.pj-line-kind {
+  flex: 0 0 56px;
+}
+
+.pj-line-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: color 0.12s ease;
+}
+
+.pj-line:hover .pj-line-name {
+  color: var(--p-text);
+}
+
+.pj-line-meta {
+  font-size: 12px;
+  color: var(--p-dim);
+  white-space: nowrap;
+}
+
+.pj-line-date {
+  flex: 0 0 64px;
+  text-align: right;
+}
+
+/* ---- Projektblatt ---- */
+
+.pj-sheet {
+  display: flex;
+  flex-direction: column;
+}
+
+.pj-field {
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr);
+  gap: 10px;
+  align-items: baseline;
+  padding: 8px 0;
+  border-top: 1px solid var(--p-rule);
+}
+
+.pj-field-block {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
+}
+
+.pj-field-label {
+  color: var(--p-faint);
+}
+
+.pj-field-value {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 10px;
+  min-width: 0;
+}
+
+.pj-input {
+  color: var(--p-text);
+}
+
+.pj-input[type="date"] {
+  width: auto;
+  font-variant-numeric: tabular-nums;
+}
+
+.pj-next-label {
+  flex: 1 1 100px;
+}
+
+.pj-todos {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+}
+
+.pj-todo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 3px 0;
+}
+
+.pj-check {
+  flex: none;
+  width: 11px;
+  height: 11px;
+  padding: 0;
+  border: 1px solid var(--p-rule-strong);
+  background: none;
+  transition: background 0.12s ease, border-color 0.12s ease;
+}
+
+.pj-check:hover {
+  border-color: var(--p-text);
+}
+
+.pj-todo.done .pj-check {
+  border-color: var(--p-text);
+  background: var(--p-text);
+}
+
+.pj-todo.done .pj-todo-text {
+  color: var(--p-faint);
+  text-decoration: line-through;
+}
+
+.pj-todo-del {
+  flex: none;
+  padding: 0 2px;
+  border: none;
+  background: none;
+  font: inherit;
+  color: var(--p-faint);
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+
+.pj-todo:hover .pj-todo-del,
+.pj-todo-del:focus-visible {
+  opacity: 1;
+}
+
+.pj-todo-del:hover {
+  color: var(--p-text);
+}
+
+.pj-todo-add {
+  margin-top: 4px;
+  padding-left: 21px;
+}
+
+.pj-note-field {
+  display: block;
+  width: 100%;
+  resize: vertical;
+  line-height: 1.5;
+  color: var(--p-text);
+}
+
+/* ---- Einrichten ---- */
+
+.pj-tree {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 36px 0 24px;
+}
+
+.pj-tree .p-mono {
+  white-space: pre;
+}
+
+.pj-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 20px;
+}
+
+.pj-error {
+  margin-top: 16px;
+  color: var(--danger);
+}
+
+/* ---- Dialog „Neues Projekt“ ---- */
+
+.pj-dialog {
+  width: 400px;
+}
+
+.pj-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0 0 20px;
+}
+
+.pj-fields .pj-input {
+  padding: 8px 0;
+  border-bottom-color: var(--p-rule);
+}
+
+/* Ordnername wie im Finder: Groß- und Kleinschreibung bleiben */
+.pj-preview {
+  margin-top: 10px;
+  text-transform: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ---- Menü ---- */
+
+.pj-menu-sep {
+  height: 1px;
+  margin: 4px 8px;
+  background: var(--p-rule);
+}
+
+/* ---- Ring: Auswahl und Ablageziel (4.1) ---- */
+
+.pj-tile.selected,
+.pj-line.selected,
+.pj-content.pj-drop,
+.pj-folder.pj-drop {
+  --ring: var(--ring-0);
+  --ring-gap: 4px;
+}
+
+.pj-line.selected,
+.pj-folder.pj-drop {
+  --ring-gap: 0px;
+}
+
+.pj-content.pj-drop {
+  --ring: var(--ring-lg);
+  --ring-gap: 12px;
+}
+
+.pj-tile.selected::after,
+.pj-line.selected::after,
+.pj-content.pj-drop::after,
+.pj-folder.pj-drop::after {
+  content: "";
+  position: absolute;
+  inset: calc(-1 * var(--ring-gap));
+  z-index: 4;
+  pointer-events: none;
+  background: var(--p-text, var(--ink));
+  -webkit-mask: var(--ring) 0 0 / 100% 100% no-repeat;
+  mask: var(--ring) 0 0 / 100% 100% no-repeat;
+}
+
+/* ---- Groß ansehen ---- */
+
+/* Über der Navigation wie die Lightbox der Bibliothek */
+body.pj-lb-open .p-top {
+  visibility: hidden;
+}
+
+.pj-lb {
+  position: fixed;
+  inset: 0;
+  z-index: 35;
+  background: var(--lightbox-bg);
+  -webkit-backdrop-filter: blur(24px);
+  backdrop-filter: blur(24px);
+  animation: pj-fade 0.18s ease-out;
+}
+
+@keyframes pj-fade {
+  from {
+    opacity: 0;
+  }
+}
+
+.pj-lb-stage {
+  position: absolute;
+  inset: 0 0 76px;
+}
+
+.pj-lb-layer {
+  position: absolute;
+  inset: 48px 40px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.pj-lb-layer img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  -webkit-user-drag: none;
+}
+
+.pj-ext.big {
+  font-size: 14px;
+}
+
+.pj-lb-bar {
+  bottom: 22px;
+  width: min(960px, calc(100% - 32px));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pj-lb {
+    animation: none;
+  }
+  .pj-media img,
+  .pj-phase-label,
+  .pj-folder,
+  .pj-line-name,
+  .pj-check,
+  .pj-todo-del {
+    transition: none;
+  }
+}

@@ -1,7 +1,15 @@
 # Changelog
 
-## App 0.39.2 (Extension 3.29.3, Vorabversion)
+## App 0.40.0 (Extension 3.29.3, Vorabversion)
 
+- Neu: Projekte ersetzt Works. Ein eigener Ordner „Projekte“, jedes Projekt
+  mit der Vorlage 01_Briefing bis 08_Admin. Übersicht mit Phase und nächster
+  Frist, im Projekt links die Ordner, in der Mitte der Inhalt, rechts das
+  Projektblatt mit Kunde, Kürzel, Start, Frist, Abgabe, offenen Punkten und
+  Notiz. „Abschließen“ verschiebt das Projekt nach Archiv/Jahr, „Wieder
+  öffnen“ holt es zurück. Dateien von außen hineinziehen kopiert sie in den
+  Ordner. Einschalten unter Einstellungen › Studio.
+- Works ist entfernt. Bestehende Works-Ordner bleiben unberührt.
 - Neu: Ansicht „(Form)“ neben Raster, Original und Liste. Die Objekte einer
   Zone (oder einer Suche) bilden eine Figur: Ring mit dem Namen in der Mitte,
   Sonnenblume, Karussell (dreht langsam) oder Fächer. Klick öffnet die

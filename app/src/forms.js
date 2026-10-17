@@ -1,4 +1,4 @@
-// forms.js — Ansicht „Form“ (0.39.2): die Objekte einer Zone als eine Figur.
+// forms.js — Ansicht „Form“ (0.40.0): die Objekte einer Zone als eine Figur.
 // Vier Formen nach Lukas' Wahl (17.10.): Ring (Name in der Mitte), Sonnenblume
 // (goldener Winkel, erstes Objekt groß in der Mitte), Karussell (gekippter
 // Ring, dreht langsam) und Fächer (bis 30 Objekte, Drehpunkt unten).

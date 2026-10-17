@@ -1,6 +1,6 @@
 # Archiver – Design-System
 
-Stand: App 0.39.2 · Extension 3.29.3
+Stand: App 0.40.0 · Extension 3.29.3
 
 Diese Datei hält fest, wie Archiver aussieht und warum. Sie gilt für die Mac-App
 (`app/src`) und die Chrome-Extension (`extension/`). Wer an der Oberfläche
@@ -197,13 +197,13 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
   dazu das Menü ≡.
 - **Form:** Eine Glas-Pille oben, auf der Mittellinie der Fensterknöpfe.
   Aktive Knöpfe sind gefüllt.
-- **Works (0.38.0):** Ist Works an (4.23), steht es als zweiter Bereich gleich
-  nach „Archiver“, im selben Schnitt (600, ohne Gleitfläche beim Hover) und
-  aktiv nur auf der Projektliste. Hinter der Trennlinie folgt der Pfad
-  „Kunde › Projekt“; auf der Liste entfällt die Linie. Die Suche ist in Works
-  ausgeblendet.
+- **Projekte (0.40.0):** Ist Projekte an (4.23), steht es als zweiter Bereich
+  gleich nach „Archiver“, im selben Schnitt (600, ohne Gleitfläche beim
+  Hover) und aktiv nur auf der Übersicht. Im offenen Projekt folgt hinter der
+  Trennlinie sein Name; auf der Übersicht entfällt die Linie. Die Suche ist in
+  Projekte ausgeblendet.
 - **Boards (0.39.0):** Ist Boards an (4.24), steht es als weiterer Bereich
-  nach Works (sonst nach „Archiver“), im selben Schnitt, aktiv nur auf der
+  nach Projekte (sonst nach „Archiver“), im selben Schnitt, aktiv nur auf der
   Übersicht. Im offenen Board folgt hinter der Trennlinie sein Name. Die Suche
   ist in Boards ausgeblendet.
 - **Nicht:** Keine Icons neben Wörtern und keine zweite Leiste.
@@ -645,46 +645,58 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
   gedimmt „installiert“). Vor dem Installieren ein `dialog confirm`, bei
   älteren Versionen mit Hinweis, dass Späteres dort fehlt.
 - **Sichtbar:** nur mit Vorab-Kanal oder nach ⌥-Klick auf die Versionsnummer.
-- **Kürzel:** ⌘I öffnet Information, auch in Works.
+- **Kürzel:** ⌘I öffnet Information, auch in Projekte und Boards.
 
-### 4.23 Works (App 0.38.0, `works.css`, `works.js`)
-- **Zweck:** Laufende Kundenprojekte als eigener Bereich neben der
-  Bibliothek. Liest eine eigene Wurzel (Kunde/Projekt, Phasenordner 00–05,
-  `_Assets` beim Kunden) und verschiebt nie eine Arbeitsdatei. Schalter unter
+### 4.23 Projekte (App 0.40.0, `projects.css`, `projects.js`)
+- **Zweck:** Leichtes Projektmanagement als eigener Bereich, ersetzt Works.
+  Eine eigene Wurzel „Projekte“, getrennt von der Bibliothek. Jedes Projekt
+  ist ein Ordner `JJJJ-MM_Kunde_Name_Kürzel` mit der Vorlage 01_Briefing,
+  02_Recherche (Moodboard, Typografie, Farbe-Material, Wettbewerb),
+  03_Entwurf (Skizzen, Varianten, Praesentationen), 04_Arbeitsdateien,
+  05_Assets (Logos, Fonts, Fotos, Icons, Sound, Texturen), 06_Reinzeichnung
+  (Druck, Web, Motion), 07_Ausgabe, 08_Admin. Abgeschlossene liegen unter
+  `Archiv/<Jahr>`. Kunde, Kürzel, Phase, Fristen, offene Punkte und Notiz
+  stehen lesbar in `.archiver/projekt.json` (`projects.rs`). Schalter unter
   Einstellungen › Studio, ab Werk aus, nur in Vorabversionen sichtbar.
-- **Liste:** Projekte als Karten (4.4) mit Cover 3:2 (neuester Stand, sonst
-  Recherche), darunter die Phasenleiste, dann Name mit Termin rechts (Mono,
-  ≤ 3 Tage `--p-text`, überfällig `--danger`) und Kunde · Phase. Letzte Karte
-  „Neues Projekt“: Fläche ink × 0.03 (Hover 0.055), Text faint → dim. Chips
-  filtern nach Laufend/Abgeschlossen/Alle und nach Kunde.
-- **Phasenleiste (`.w-phasebar`, `.w-phase`):** Fünf Striche, 2 px, Abstand
+- **Übersicht:** Projekte als Karten (4.4), Cover 3:2 als Mosaik aus bis zu
+  drei Bildern (Recherche, sonst Entwurf, Assets; 1 füllt, 2 teilen, 3 = eins
+  groß links), 2 px Fuge. Darunter die Phasenleiste, dann Name mit der
+  nächsten Frist rechts (Mono, ≤ 3 Tage `--p-text`, überfällig `--danger`),
+  Kunde · Kürzel, und gedimmt Phase · Fristname · „n offen“. Abgeschlossene
+  mit Cover bei 0.55. Laufende nach nächster Frist sortiert. Letzte Karte
+  „Neues Projekt“ wie die Neue-Zone-Karte (4.4): gestrichelt mit Plus, darunter
+  das Label. Chips: Laufend, Archiv, Alle.
+- **Phasenleiste (`.pj-phasebar`, `.pj-phase`):** Fünf Striche, 2 px, Abstand
   2–3 px: offen `--p-rule`, erledigt `--p-rule-strong`, aktuell `--p-text`.
-  Im Projekt sind die Striche zugleich die Reiter, Beschriftung als Label
-  (faint, aktuelle Phase dim, gewählter Reiter text). Übersicht, Post und
-  Assets sind Chips daneben.
-- **Kopf:** Kunde als Label über dem Titel (Klick filtert die Liste), Titel
-  wie `.p-head` mit dem nächsten Schritt als gedimmtem Satz (aus `brief.md`,
-  sonst offene Rechnung oder Korrektur), rechts Termin und ⋯.
-- **Stände-Reihe (`.w-stand`):** Je Arbeit (Ordner + Stamm des Namens) eine
-  Zeile, alt → neu. Bilder in ihrer eigenen Form, alle gleich hoch (200 px,
-  der neueste 320 px; Übersicht 280, Recherche 200, Leiste 110). Darunter
-  Kennung als Label (KORR in `--p-text`) und Datum 12 px dim. Ohne Vorschau
-  steht die Endung als Label auf `--thumb-bg`.
+  Im Projekt höchstens 760 px breit, Beschriftung als Label darüber (faint,
+  Hover dim, aktuelle Phase text); Klick setzt die Phase.
+- **Projekt:** Kopf mit Kunde · Kürzel als Label über dem Titel (`.p-head`),
+  dahinter gedimmt die nächste Frist (überfällig `--danger`); rechts „Im
+  Finder zeigen“ und „Abschließen“/„Wieder öffnen“ als `btn`. Darunter drei
+  Spalten: Ordner 190 px | Inhalt | Blatt 280 px, Abstand 40 px; unter
+  1100 px rutscht das Blatt unter beide.
+- **Ordner (`.pj-folder`):** Liste mit Linien `--p-rule` oben, Name dim
+  (aktiv und Hover text), Anzahl als Label rechts. Unterordner nur unter dem
+  offenen Hauptordner, 14 px eingerückt, faint, ohne Linie. Beim Öffnen steht
+  der Ordner der aktuellen Phase offen (01, 02, 03, 06, 07).
+- **Inhalt:** 02, 03 und 05 als Bilder in ihrer eigenen Form, alle 180 px
+  hoch, darunter Name und Unterordner 12 px faint. Alle anderen als Liste
+  wie 4.6: Endung als Label, Name, Unterordner, Größe, Datum 12 px dim.
+  Ohne Vorschau steht die Endung als Label auf `--thumb-bg`.
+- **Blatt (`.pj-sheet`):** Zeilen mit Linie `--p-rule` oben, Label links
+  (96 px, faint), Wert als ruhiges Feld (`.note-field`): Kunde, Kürzel, Start,
+  Nächste Frist (Datum und wofür), Abgabe. „Offen“ als Liste: Kästchen 11 px,
+  Rand `--p-rule-strong`, erledigt gefüllt `--p-text` und der Text faint
+  durchgestrichen, × erst beim Hover. Darunter Notiz. Speichert beim Tippen.
 - **Auswahl und Ablegen:** Ring (4.1): Kachel und Zeile `--ring-0`, die
-  Fläche beim Ablegen `--ring-lg` mit 12 px Abstand, ein Phasen-Reiter unter
-  dem Zeiger `--ring-0`. Ablegen kopiert in den Phasenordner, nie verschieben.
-- **Post:** Summen (Angeboten, Offen, Bezahlt) als Label über 22 px/500,
-  darunter eine Tabelle mit Linien `--p-rule` wie die Liste (4.6). Status
-  einer Rechnung ist ein Chip „(offen n T.)“, ab 30 Tagen `--danger`, Klick
-  schaltet „(bezahlt)“.
-- **Brief:** Eckdaten als Zeilen (Label links, Wert rechts), darunter der
-  Text 13,5 px/1,6, höchstens 68 Zeichen breit. Bearbeiten in einer Fläche
-  ink × 0.055, `--r-md`, Geist Mono 12 px; ⌘S sichert, Esc verwirft.
-- **Groß ansehen (`.w-lb`):** wie die Lightbox (4.11) mit `--lightbox-bg`
-  und Unschärfe, Leiste `.lb-bar`. Vergleich: zwei Stände übereinander, eine
-  1-px-Linie in `--p-text` folgt dem Zeiger, Kennungen oben links und rechts.
-- **Nicht:** Keine Akzentfarbe, keine Icons, kein Verschieben von Dateien,
-  keine Suche, kein zweiter Rahmen um Karten.
+  Inhaltsfläche beim Ablegen `--ring-lg` mit 12 px Abstand, ein Ordner links
+  unter dem Zeiger `--ring-0`. Ablegen kopiert in den Ordner, nie verschieben.
+- **Neues Projekt:** `dialog confirm` mit Name, Kunde (Vorschläge aus den
+  Projekten), Kürzel; darunter der Ordnername als Label in echter Schreibung.
+- **Groß ansehen (`.pj-lb`):** wie die Lightbox (4.11) mit `--lightbox-bg`
+  und Unschärfe, Leiste `.lb-bar`.
+- **Nicht:** Keine Akzentfarbe, keine Icons, kein Verschieben oder Umbenennen
+  von Arbeitsdateien, keine Suche, kein zweiter Rahmen um Karten.
 
 ### 4.24 Boards (App 0.39.0, `boards.css`, `boards.js`)
 - **Zweck:** Präsentationen aus Bildern der Bibliothek, als eigener Bereich.
@@ -694,7 +706,7 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
   Werk aus, nur in Vorabversionen sichtbar.
 - **Übersicht:** Boards als Karten (4.4), Cover 16:10 mit der ersten Folie,
   darunter Name, Anzahl der Folien (Mono) und Datum 12 px dim. Letzte Karte
-  „Neues Board“ wie in Works (4.23). Rechtsklick: Öffnen, Umbenennen, Im
+  „Neues Board“ wie in Projekte (4.23). Rechtsklick: Öffnen, Umbenennen, Im
   Finder zeigen, Löschen (Papierkorb des Macs, mit Rückfrage).
 - **Aus einer Zone:** Rechtsklick auf die Auswahl › „Aufs Board …“ öffnet ein
   Menü (4.9) mit den Boards, zuletzt geändert zuerst, und „Neues Board …“.
@@ -774,7 +786,7 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
 - **Nicht:** Keine Rundung an Objekten, keine Akzentfarbe, keine Schatten an
   den Objekten. Die Extension kennt die Wolke nicht.
 
-### 4.26 Form (App 0.39.2, `forms.css`, `forms.js`)
+### 4.26 Form (App 0.40.0, `forms.css`, `forms.js`)
 - **Zweck:** Alle gezeigten Objekte einer Zone, Suche oder Übersicht als
   eine Figur, zum Zeigen und Werben (Lukas 17.10., Vorbild Whispers-Kreis).
   Vierter Ansichts-Chip „(Form)“ neben Raster, Original, Liste; statt der
