@@ -199,7 +199,7 @@
   }
 
   function defaultFolder(p) {
-    const tops = p.folders.filter((f) => f.depth === 0);
+    const tops = p.folders.filter((f) => f.depth === 0 && !/^08/.test(f.name));
     const want = PHASE_FOLDER[p.summary.meta.phase] || "01";
     const hit = tops.find((f) => f.name.startsWith(want));
     return hit ? hit.rel : tops[0] ? tops[0].rel : "";
@@ -542,6 +542,8 @@
       nav.appendChild(b);
     };
     for (const f of p.folders) {
+      // 08_Admin (Rechnungen, Verträge) bleibt im Finder
+      if (/^08/.test(f.rel)) continue;
       // Unterordner nur unter dem offenen Hauptordner
       if (f.depth && !(P.folder === f.rel.split("/")[0] || (P.folder || "").startsWith(f.rel.split("/")[0] + "/"))) continue;
       add(f.rel, f.name, f.count, f.depth);
@@ -1066,8 +1068,8 @@
       select(all[next]);
       const node = [...host().querySelectorAll("[data-path]")].find((n) => n.dataset.path === all[next]);
       if (node) node.scrollIntoView({ block: "nearest" });
-    } else if (/^[1-8]$/.test(e.key)) {
-      // 1–8: Hauptordner 01–08
+    } else if (/^[1-7]$/.test(e.key)) {
+      // 1–7: Hauptordner 01–07
       const top = P.project.folders.find((f) => !f.depth && f.name.startsWith("0" + e.key));
       if (!top) return false;
       setFolder(top.rel);

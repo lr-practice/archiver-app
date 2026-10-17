@@ -678,7 +678,8 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
 - **Ordner (`.pj-folder`):** Liste mit Linien `--p-rule` oben, Name dim
   (aktiv und Hover text), Anzahl als Label rechts. Unterordner nur unter dem
   offenen Hauptordner, 14 px eingerückt, faint, ohne Linie. Beim Öffnen steht
-  der Ordner der aktuellen Phase offen (01, 02, 03, 06, 07).
+  der Ordner der aktuellen Phase offen (01, 02, 03, 06, 07). 08_Admin steht
+  nicht in der Liste, nur im Finder.
 - **Inhalt:** 02, 03 und 05 als Bilder in ihrer eigenen Form, alle 180 px
   hoch, darunter Name und Unterordner 12 px faint. Alle anderen als Liste
   wie 4.6: Endung als Label, Name, Unterordner, Größe, Datum 12 px dim.
