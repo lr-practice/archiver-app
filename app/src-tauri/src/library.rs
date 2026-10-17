@@ -2997,6 +2997,13 @@ mod tests {
         assert!(!lib.scan().unwrap(), "nichts geändert");
         assert_eq!(paths(&lib).len(), 3);
 
+        // Ordner in der externen Zone löscht Archiver nie, die Zone selbst wird nur getrennt (0.39.1)
+        assert!(lib.zones().unwrap().iter().any(|z| z.path == "Projekt" && z.external));
+        assert!(lib.in_external("Projekt/Entwurf"));
+        assert!(!lib.in_external("Projekt") && !lib.in_external("Typo/x"));
+        assert_eq!(lib.trash_zone("Projekt/Entwurf").unwrap_err(), "external-folder");
+        assert!(outside.join("Entwurf/y.png").exists());
+
         // Lösen entfernt nur die Verknüpfung
         lib.unlink_folder("Projekt").unwrap();
         assert!(outside.join("x.png").exists());

@@ -1347,6 +1347,47 @@ body {
   min-width: 0;
 }
 
+/* 0.39.1 Filter C: „Mehr“ als Tabelle unter der ersten Zeile, gesetzte Filter als Pillen */
+.p-filter-table {
+  display: grid;
+  gap: 8px;
+  padding-top: 4px;
+}
+
+.p-filters .p-facet-chips {
+  align-items: center;
+}
+
+.p-filter-pill {
+  padding: 2px 7px;
+  margin-left: 4px;
+  border: 0;
+  border-radius: var(--r-md);
+  background: rgba(var(--ink-rgb), 0.08);
+  color: var(--p-text);
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: background 0.12s ease;
+}
+
+.p-filter-pill::after {
+  content: " \00d7";
+  color: var(--p-dim);
+}
+
+.p-filter-pill:hover {
+  background: rgba(var(--ink-rgb), 0.14);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .p-filter-pill {
+    transition: none;
+  }
+}
+
 .p-find .p-find-facets + .p-bar {
   margin-top: 28px;
 }

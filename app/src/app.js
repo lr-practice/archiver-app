@@ -606,14 +606,20 @@
     renderZones();
   }
 
-  function filterRow() {
+  const NO_FILTERS = { kind: null, color: null, orient: null, format: null, period: null, dup: false, label: null, site: null, by: null, fresh: false };
+
+  // 0.39.1 (Variante C): Art, Farbe und Zeit stehen immer in einer Zeile.
+  // „(Mehr)“ öffnet darunter Form, Format, Doppelt, Motive, Quellen als Tabelle;
+  // ist sie zu, stehen dort gesetzte Filter als Pillen in der ersten Zeile.
+  function filterRow(more, hidden) {
     const f = state.filters;
     const bar = el("div", "p-bar p-filters");
     bar.appendChild(mono("(" + t("filterTitle") + ")", "dim p-facet-title"));
+    const chips = el("span", "p-facet-chips");
     // Art zuerst: Bilder, Tracks, Video, PDF, Notizen
     for (const k of ["image", "audio", "video", "pdf", "note"])
-      bar.appendChild(chip("(" + t("kind_" + k) + ")", f.kind === k, () => setFilter("kind", k)));
-    bar.appendChild(el("span", "p-filter-gap"));
+      chips.appendChild(chip("(" + t("kind_" + k) + ")", f.kind === k, () => setFilter("kind", k)));
+    chips.appendChild(el("span", "p-filter-gap"));
     const dots = el("span", "p-colors");
     for (const [name, hex] of COLORS) {
       const b = button("p-color" + (f.color === name ? " active" : ""), "", () => setFilter("color", name));
@@ -621,39 +627,46 @@
       b.title = t("color_" + name);
       dots.appendChild(b);
     }
-    bar.appendChild(dots);
-    bar.appendChild(el("span", "p-filter-gap"));
-    for (const o of ["landscape", "portrait", "square"])
-      bar.appendChild(chip("(" + t("orient_" + o) + ")", f.orient === o, () => setFilter("orient", o)));
-    bar.appendChild(el("span", "p-filter-gap"));
-    const formats = [...new Set(state.items.map(formatKey))].filter(Boolean).sort();
-    for (const fmt of formats) bar.appendChild(chip("(" + fmt + ")", f.format === fmt, () => setFilter("format", fmt)));
-    bar.appendChild(el("span", "p-filter-gap"));
+    chips.appendChild(dots);
+    chips.appendChild(el("span", "p-filter-gap"));
     for (const p of Object.keys(PERIODS))
-      bar.appendChild(chip("(" + t("period_" + p) + ")", f.period === p, () => setFilter("period", p)));
-    bar.appendChild(el("span", "p-filter-gap"));
-    bar.appendChild(chip("(" + t("filterDup") + ")", f.dup, () => setFilter("dup", true)));
+      chips.appendChild(chip("(" + t("period_" + p) + ")", f.period === p, () => setFilter("period", p)));
     if (state.shared) {
       const fresh = state.items.filter(isFresh).length;
       if (fresh || f.fresh) {
-        bar.appendChild(el("span", "p-filter-gap"));
-        bar.appendChild(chip("(" + t("filterFresh") + " " + fresh + ")", f.fresh, () => setFilter("fresh", true)));
+        chips.appendChild(el("span", "p-filter-gap"));
+        chips.appendChild(chip("(" + t("filterFresh") + " " + fresh + ")", f.fresh, () => setFilter("fresh", true)));
       }
+    }
+    chips.appendChild(el("span", "p-filter-gap"));
+    const toggle = chip("(" + t(more ? "filterLess" : "filterMore") + ")", false, () => {
+      setPref("filtersMore", !more);
+      renderZones();
+    });
+    toggle.classList.add("p-filter-more-btn");
+    toggle.setAttribute("aria-expanded", String(more));
+    chips.appendChild(toggle);
+    // Gesetzte Filter aus „Mehr“, solange es zu ist
+    for (const [key, label] of hidden) {
+      const pill = button("p-filter-pill", label, () => setFilter(key, state.filters[key]));
+      pill.title = t("filterRemove");
+      chips.appendChild(pill);
     }
     // Bilderkennung läuft im Hintergrund; bis sie durch ist, finden Motive weniger (0.31.2)
     if (analysisLeft()) {
-      bar.appendChild(el("span", "p-filter-gap"));
-      bar.appendChild(mono(analysisText(), "dim p-analysis"));
+      chips.appendChild(el("span", "p-filter-gap"));
+      chips.appendChild(mono(analysisText(), "dim p-analysis"));
     }
     if (filtersActive()) {
-      bar.appendChild(el("span", "p-flex"));
-      bar.appendChild(
+      chips.appendChild(el("span", "p-flex"));
+      chips.appendChild(
         chip("(" + t("filterReset") + ")", false, () => {
-          state.filters = { kind: null, color: null, orient: null, format: null, period: null, dup: false, label: null, site: null, by: null, fresh: false };
+          state.filters = { ...NO_FILTERS };
           renderZones();
         })
       );
     }
+    bar.appendChild(chips);
     return bar;
   }
 
@@ -686,22 +699,36 @@
   }
 
   function filterBar() {
+    const f = state.filters;
+    const more = pref("filtersMore", false) === true;
     const wrap = el("div", "p-find-facets");
-    wrap.appendChild(filterRow());
     const words = queryWords();
     const { labels, sites } = facetCounts(words);
     const motif = (l) => (lang === "de" && LABEL_DE[l] ? LABEL_DE[l][0].toUpperCase() + LABEL_DE[l].slice(1) : l);
-    if (labels.length || state.filters.label) wrap.appendChild(facetRow("facetMotif", labels, "label", motif));
-    if (sites.length || state.filters.site) wrap.appendChild(facetRow("facetSource", sites, "site", (x) => x));
-    // Geteilte Bibliothek: „Von: JP“, wer abgelegt hat
-    if (state.shared) {
-      const people = new Map();
-      for (const item of state.items) if (item.addedBy && matches(item, words)) people.set(item.addedBy, (people.get(item.addedBy) || 0) + 1);
-      if (people.size > 1 || state.filters.by) {
-        const list = [...people].sort((a, b) => b[1] - a[1]);
-        wrap.appendChild(facetRow("facetBy", list, "by", (x) => (x === state.user ? t("byMe") : byInitials(x))));
-      }
+    const people = new Map();
+    if (state.shared) for (const item of state.items) if (item.addedBy && matches(item, words)) people.set(item.addedBy, (people.get(item.addedBy) || 0) + 1);
+    const byLabel = (x) => (x === state.user ? t("byMe") : byInitials(x));
+    const hidden = [];
+    if (!more) {
+      if (f.orient) hidden.push(["orient", t("orient_" + f.orient)]);
+      if (f.format) hidden.push(["format", f.format]);
+      if (f.dup) hidden.push(["dup", t("filterDup")]);
+      if (f.label) hidden.push(["label", motif(f.label)]);
+      if (f.site) hidden.push(["site", f.site]);
+      if (f.by) hidden.push(["by", byLabel(f.by)]);
     }
+    wrap.appendChild(filterRow(more, hidden));
+    if (!more) return wrap;
+    const table = el("div", "p-filter-table");
+    table.appendChild(facetRow("facetForm", ["landscape", "portrait", "square"].map((o) => [o, 0]), "orient", (o) => t("orient_" + o)));
+    const formats = [...new Set(state.items.map(formatKey))].filter(Boolean).sort();
+    if (formats.length || f.format) table.appendChild(facetRow("facetFormat", formats.map((x) => [x, 0]), "format", (x) => x));
+    table.appendChild(facetRow("facetDup", [[true, 0]], "dup", () => t("filterDupOnly")));
+    if (labels.length || f.label) table.appendChild(facetRow("facetMotif", labels, "label", motif));
+    if (sites.length || f.site) table.appendChild(facetRow("facetSource", sites, "site", (x) => x));
+    // Geteilte Bibliothek: „Von: JP“, wer abgelegt hat
+    if (state.shared && (people.size > 1 || f.by)) table.appendChild(facetRow("facetBy", [...people].sort((a, b) => b[1] - a[1]), "by", byLabel));
+    wrap.appendChild(table);
     return wrap;
   }
 
@@ -5011,6 +5038,7 @@
     $("lightbox").classList.toggle("is-deleted", gone);
     $("lbAction").hidden = gone;
     $("lbInfoBtn").hidden = gone;
+    $("lbCloudBtn").hidden = gone || !window.ArchiverCloud;
     $("lbRestoreBtn").hidden = !gone;
     $("lbRemoveBtn").hidden = !gone;
     if (gone && lbInfoOpen) lbToggleInfo();
@@ -5429,6 +5457,12 @@
     showLightboxItem();
   }
 
+  // Wolke (0.39.1): weitere Referenzen um das offene Objekt sammeln (cloud.js)
+  function openCloud() {
+    const item = lightboxItem();
+    if (item && window.ArchiverCloud) window.ArchiverCloud.open(item);
+  }
+
   function closeLightbox() {
     closeMenus();
     noteLeave();
@@ -5461,6 +5495,9 @@
     $("lightboxZoom").addEventListener("click", () => lbToggleZoom());
     $("lbInfoBtn").textContent = t("viewerInfo");
     $("lbInfoBtn").addEventListener("click", lbToggleInfo);
+    $("lbCloudBtn").textContent = t("cloud");
+    $("lbCloudBtn").title = t("cloudTitle");
+    $("lbCloudBtn").addEventListener("click", openCloud);
     $("lbTextBtn").textContent = t("captionChip");
     $("lbTextBtn").title = t("captionLbTitle");
     $("lbTextBtn").addEventListener("click", lbToggleText);
@@ -5639,6 +5676,7 @@
     else if (lbMode === "pdf" && lbPdf && e.key === "Escape" && !lbPdf.fitted() && $("lbZones").hidden) lbPdf.setZoom(1);
     else if (e.key === "ArrowRight") stepLightbox(1);
     else if (e.key === "ArrowLeft") stepLightbox(-1);
+    else if ((e.key === "w" || e.key === "W") && !$("lbCloudBtn").hidden) openCloud();
     else if (e.key === "z" || e.key === "Z") lbToggleZoom();
     else if (e.key === "i" || e.key === "I") lbToggleInfo();
     else if ((e.key === "t" || e.key === "T") && hasCaption(lightboxItem())) lbToggleText();
@@ -7553,6 +7591,12 @@
       return;
     }
 
+    // Wolke (0.39.1) liegt über der Lightbox
+    if (window.ArchiverCloud && window.ArchiverCloud.isOpen()) {
+      if (window.ArchiverCloud.key(e, mod)) e.preventDefault();
+      return;
+    }
+
     if (state.lightbox) {
       if (lightboxKey(e, mod)) e.preventDefault();
       return;
@@ -8305,6 +8349,8 @@
       items: () => state.items,
       zones: () => state.zones,
     });
+
+  if (window.ArchiverCloud) window.ArchiverCloud.init({ el, button, thumbSrc, kindOf, items: () => state.items });
 
   async function boot() {
     applyBrand();

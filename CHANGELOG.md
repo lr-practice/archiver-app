@@ -1,5 +1,24 @@
 # Changelog
 
+## App 0.39.1 (Extension 3.29.3, Vorabversion)
+
+- Neu zum Ausprobieren: die Wolke. In der Lightbox „Wolke“ oder W. Am
+  offenen Objekt lassen sich weitere Referenzen andocken („+ Referenz“ mit
+  Suche, „+5 ähnliche“), die sich per Physik anziehen und Abstand halten.
+  Sechs Modi: Wolke, Orbit, Strang, Farbe, Konstellation, Raster. Abstand
+  Eng, Mittel, Weit. Jedes Objekt in vier Größen (S M L XL, 1–4, − +).
+  Ziehen wirft, ⌫ entfernt, Doppelklick öffnet die Wolke der Referenz.
+  Die Wolke merkt sich ihre Mitglieder je Objekt.
+- Verknüpfte Ordner außerhalb der Bibliothek lassen sich nur noch trennen.
+  Ordner und Unterzonen darin bieten kein Löschen mehr, und Archiver löscht
+  dort nichts.
+- Neue-Zone-Karte: ein großes Plus in der Mitte statt „+ Neue Zone“.
+- Alle Objekte: Art, Farbe und Zeit stehen in einer Zeile, „(Mehr)“ öffnet
+  Form, Format, Doppelt, Motive und Quellen als Tabelle. Gesetzte Filter
+  daraus stehen als Pille in der ersten Zeile, solange „Mehr“ zu ist.
+- Zonen mit Unterordnern: Statt „(Mosaik) (Abschnitte)“ gibt es einen Chip
+  „(Segmente)“ zum An- und Ausklicken.
+
 ## App 0.39.0 (Extension 3.29.3, Vorabversion)
 
 - Neu: Boards, ein eigener Bereich für Präsentationen aus Bildern der

@@ -1,6 +1,6 @@
 # Archiver – Design-System
 
-Stand: App 0.39.0 · Extension 3.29.3
+Stand: App 0.39.1 · Extension 3.29.3
 
 Diese Datei hält fest, wie Archiver aussieht und warum. Sie gilt für die Mac-App
 (`app/src`) und die Chrome-Extension (`extension/`). Wer an der Oberfläche
@@ -230,12 +230,19 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
 - **Form:** 2:1, `--r-lg`, Fläche ink × 0.055, beim Hover × 0.08.
   Umsortieren hebt die Karte an (Schatten, 85 %).
 - **Nicht:** Keine Rahmenlinie. Die Karte setzt sich nur über die Fläche ab.
+- **Neue Zone (0.39.1):** Die Karte zum Anlegen (Index und freier Platz bei den
+  Active Zones) zeigt nur ein Plus in der Mitte, ein Viertel der Kartenhöhe,
+  Linien 1 px in `--dash` wie die gestrichelte Outline, beim Hover in
+  Textfarbe. Kein Text; „Neue Zone“ steht im Tooltip.
 - **Bibliotheken (0.36.0):** vier Plätze in Einstellungen › Bibliothek, ⌘1–4.
   Ein leerer Platz bietet „Ordner wählen…“ und „Neue Bibliothek…“ (Ort und Name
   im Sichern-Dialog des Finders, der Ordner wird angelegt und gleich geöffnet).
 - **Externe Zone (0.30.1):** Ordner außerhalb der Bibliothek, angelegt nur in
   Einstellungen › Bibliothek (Verknüpfung im Bibliotheksordner). Sieht aus wie
-  jede Zone; ✕ löst nur die Verknüpfung. Seit 0.31.0 gelten dieselben Schranken
+  jede Zone; ✕ löst nur die Verknüpfung. Seit 0.39.1 heißt das überall
+  „Trennen“ (⋯-Menü, Einstellungen, Rückfrage mit `.btn primary` statt rot),
+  und Ordner oder Unterzonen in einer externen Zone haben kein Löschen: Archiver
+  löscht nie etwas außerhalb der Bibliothek. Seit 0.31.0 gelten dieselben Schranken
   wie für eine Bibliothek (kein Benutzer- oder Systemordner, höchstens 20.000
   Dateien), und verschachtelte Ziele werden abgelehnt. Ist das Ziel nicht
   erreichbar, bleibt die Zone mit ihren Vorschauen stehen; in den Einstellungen
@@ -308,6 +315,13 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
 - **Hinweis in der Filterzeile (0.31.2):** Solange die Bilderkennung läuft,
   steht am Ende der Filterzeile „(Bilderkennung: noch n von m)“ als Mono-Text in
   dim, ohne Klick. Er zählt mit und verschwindet, wenn alles erkannt ist.
+- **Filter in Alle Objekte (0.39.1, Variante C):** Eine Zeile mit Art, Farbe
+  und Zeit, dahinter „(Mehr)“. Das öffnet darunter eine Tabelle (Label 96 px
+  in Mono dim, Chips rechts) mit Form, Format, Doppelt, Motive, Quellen und
+  bei geteilten Bibliotheken Von. Der Zustand bleibt (`archiver.filtersMore`).
+  Ist sie zu, stehen gesetzte Filter daraus als Pille in der ersten Zeile:
+  Mono 11 px, Fläche ink × 0.08 (Hover 0.14), `--r-md`, „×“ in dim, Klick
+  entfernt den Filter. „(Zurücksetzen)“ steht rechts außen.
 
 ### 4.8 Knopf (`.btn`)
 - **Zweck:** Handlungen in Dialogen und Einstellungen.
@@ -339,6 +353,8 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
   Dateiname nicht, kürzt `fitLbName` ihn in der Mitte („Anfang … Ende.png“),
   damit Anfang und Endung sichtbar bleiben. Der volle Name steht im Tooltip.
 - **Seitenblatt:** Details von rechts, `--sheet-w` = min(560 px, 46 vw).
+- **Wolke (0.39.1):** Knopf „Wolke“ in der Leiste und Taste W öffnen die
+  Wolke (4.25) über der Lightbox.
 
 ### 4.11a Bildtext (`.card-cap`, `.lb-caption`, 0.29)
 - **Zweck:** Credits oder Unterschrift zu einem Bild, wie unter einem Bild im
@@ -726,6 +742,37 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
 - **Nicht:** Kein Export im Editor (PDF und Bild folgen), keine Icons, keine
   Akzentfarbe außer den Hilfslinien, keine zweite Leiste, keine Kopien der
   Bilder.
+
+### 4.25 Wolke (App 0.39.1, `cloud.css`, `cloud.js`)
+- **Zweck:** Am offenen Objekt weitere Referenzen andocken. Sie ziehen sich
+  per Physik an und bilden ein Moodboard für genau dieses Objekt (Lukas
+  17.10.: „eine Wolke an Referenzen, die als Mood-Strang agieren“). Zum
+  Ausprobieren, Vorabversion.
+- **Fläche:** wie die Lightbox (`--lightbox-bg`, `blur(24px)`), darüber
+  zwei Leisten im Maß der Lightbox-Leiste (4.11): oben die Modi und der
+  Abstand, unten „+ Referenz“, „+5 ähnliche“, Größe S M L XL, Anzahl,
+  Entfernen und Schließen. Aktiv = gefüllter Knopf (ink × 0.15).
+- **Modi:** Wolke (alles zur Mitte), Orbit (Nähe nach Farbähnlichkeit, kreist
+  langsam), Strang (jede Referenz hängt an der gewählten, Fäden gestrichelt
+  in `--dash`), Farbe (gruppiert nach Farbanteilen der Bildanalyse),
+  Konstellation (gewähltes Objekt wird Anker, Fäden zwischen Unterwolken),
+  Raster (Plätze in einem unsichtbaren Raster). Tab wechselt.
+- **Abstand:** Eng 12, Mittel 26, Weit 44 px. Kein Objekt überlappt ein
+  anderes, auch nicht beim Ändern der Größe.
+- **Größe:** vier Stufen (0.62, 1, 1.45, 2.05 × Grundmaß = kürzere
+  Fensterseite / 8, 56–140 px), Fläche je Seitenverhältnis gleich. Klick
+  wählt (Ring 4.1, `--ring-0`, 4 px Abstand), 1–4 oder − + ändern die Größe;
+  ohne Auswahl gilt sie für das offene Objekt.
+- **Hinzufügen:** Glas über der Leiste (2.4) mit Suchfeld und Streifen 88 px,
+  ähnlichste Bilder zuerst (Farbanteile, gleiche Zone). Klick dockt an.
+  Doppelklick auf eine Referenz macht sie zur Mitte ihrer eigenen Wolke.
+- **Bewegung:** Federn mit Dämpfung, Ziehen wirft. Bei
+  `prefers-reduced-motion` ist die Lage sofort fertig, Orbit kreist nicht,
+  Ein- und Aufpoppen entfallen.
+- **Speichern:** nur Mitglieder, Größe und Anker je Objekt, lokal unter
+  `archiver.clouds` (höchstens 300 Wolken). Keine Datei, keine Kopien.
+- **Nicht:** Keine Rundung an Objekten, keine Akzentfarbe, keine Schatten an
+  den Objekten. Die Extension kennt die Wolke nicht.
 
 ---
 
