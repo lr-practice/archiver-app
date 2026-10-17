@@ -1,5 +1,10 @@
 # Changelog
 
+## App 0.40.1 (Extension 3.29.3, Vorabversion)
+
+- Die Ansicht „(Form)“ (Ring, Sonnenblume, Karussell, Fächer) ist wieder
+  entfernt. Wer sie gewählt hatte, landet im Raster.
+
 ## App 0.40.0 (Extension 3.29.3, Vorabversion)
 
 - Neu: Projekte ersetzt Works. Ein eigener Ordner „Projekte“, jedes Projekt

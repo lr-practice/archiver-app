@@ -1,6 +1,6 @@
 # Archiver – Design-System
 
-Stand: App 0.40.0 · Extension 3.29.3
+Stand: App 0.40.1 · Extension 3.29.3
 
 Diese Datei hält fest, wie Archiver aussieht und warum. Sie gilt für die Mac-App
 (`app/src`) und die Chrome-Extension (`extension/`). Wer an der Oberfläche
@@ -786,29 +786,6 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
   `archiver.clouds` (höchstens 300 Wolken). Keine Datei, keine Kopien.
 - **Nicht:** Keine Rundung an Objekten, keine Akzentfarbe, keine Schatten an
   den Objekten. Die Extension kennt die Wolke nicht.
-
-### 4.26 Form (App 0.40.0, `forms.css`, `forms.js`)
-- **Zweck:** Alle gezeigten Objekte einer Zone, Suche oder Übersicht als
-  eine Figur, zum Zeigen und Werben (Lukas 17.10., Vorbild Whispers-Kreis).
-  Vierter Ansichts-Chip „(Form)“ neben Raster, Original, Liste; statt der
-  Größe stehen dann die Figuren als Chips: Ring, Sonnenblume, Karussell,
-  Fächer (`archiver.formShape`).
-- **Ring:** Kreis mit Radius 41 % der kürzeren Seite, Objekte so groß, dass
-  sie sich nicht berühren (höchstens 9 %). In der Mitte Zonenname 22 px/600
-  und Anzahl als Label. Höchstens 160 Objekte.
-- **Sonnenblume:** goldener Winkel, das erste Objekt 20 % groß in der Mitte,
-  nach außen kleiner. Höchstens 400.
-- **Karussell:** gekippter Ring (Höhe halb so groß wie die Breite), hinten
-  kleiner und blasser (Deckkraft 0.4–1). Dreht langsam, hält beim Überfahren
-  an, steht bei `prefers-reduced-motion`. Höchstens 72.
-- **Fächer:** bis 30 Objekte, Drehpunkt unten, Spreizung bis 140°.
-- **Objekte:** rechteckig, Format aus dem Original (0.5–2), Fläche
-  `--thumb-bg`. Überfahren vergrößert 1,5-fach (0.18 s), Klick öffnet die
-  Lightbox, Tastaturfokus mit `--ring-0`. Sind es mehr als die Figur fasst,
-  steht unten „n von m gezeigt“ als Label in faint.
-- **Nicht:** keine Rundung, keine Schatten, keine Akzentfarbe.
-
----
 
 ## 5. Bekannte Abweichungen
 
