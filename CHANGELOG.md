@@ -1,6 +1,6 @@
 # Changelog
 
-## Unveröffentlicht (Feedback aus der Fensterkarte, 18.10.)
+## App 0.40.2 (Extension 3.29.3, Vorabversion)
 
 - Rückfragen (Löschen, Installieren, Neues Board, Umbenennen, Neues Projekt)
   folgen jetzt der Rundung aus Einstellungen › Aussehen, statt fest rund mit
