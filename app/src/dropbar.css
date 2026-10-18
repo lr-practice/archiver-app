@@ -16,8 +16,8 @@ html.light {
   position: fixed;
   inset: 0;
   display: flex;
-  gap: 10px;
-  padding: 4px 14px 14px; /* oben Platz für den Ring */
+  gap: 8px;
+  padding: 4px 10px 10px; /* oben Platz für den Ring */
 }
 
 .db-hot {
@@ -114,7 +114,7 @@ html.light .db-hot {
    eines Chats). Dieselbe Karte, unten bündig, ohne Hinweis. Fährt der Zeiger
    hinein, wird das Fenster 280 px hoch (system.rs, dropbar-tall). */
 .db-bar.strip {
-  padding: 4px 14px 0;
+  padding: 4px 10px 0;
 }
 
 .db-bar.strip .db-hot {

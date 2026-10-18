@@ -1,5 +1,16 @@
 # Changelog
 
+## Unveröffentlicht (Feedback aus der Fensterkarte, 18.10.)
+
+- Rückfragen (Löschen, Installieren, Neues Board, Umbenennen, Neues Projekt)
+  folgen jetzt der Rundung aus Einstellungen › Aussehen, statt fest rund mit
+  Pillen-Knöpfen.
+- Das ≡-Menü ist so breit wie sein Inhalt und nicht mehr so breit wie die
+  Navigation.
+- Board-Editor: In der Leiste unten heißt „Bilder“ jetzt „Objekte“.
+- Zonenleiste beim Ziehen (App, am ganzen Mac, Extension): etwas weniger
+  Abstand zum Rand und zwischen den Zonen.
+
 ## App 0.40.1 (Extension 3.29.3, Vorabversion)
 
 - Die Ansicht „(Form)“ (Ring, Sonnenblume, Karussell, Fächer) ist wieder

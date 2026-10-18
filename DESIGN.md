@@ -330,10 +330,24 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
   - Primär: Fläche `--ink` mit Text `--ink-inverse`.
 - **Nicht:** Höchstens ein Primärknopf pro Dialog.
 
+### 4.8a Rückfrage (`.dialog.confirm`)
+- **Zweck:** Kleine Dialoge über der Fläche: Löschen, Installieren, Neues
+  Board, Umbenennen, Neues Projekt.
+- **Form (18.10.):** Glas wie Menüs (2.4: `--menu-bg`, `--menu-shadow`,
+  `blur(24px) saturate(1.4)`, hell `blur(28px) saturate(0)`), Ecke `--r-lg`,
+  Knöpfe `--r-md`. Beide folgen der Rundung aus Einstellungen › Aussehen.
+  Eingabefelder haben 20 px Luft zu den Knöpfen.
+- **Nicht:** Keine feste Rundung und keine Pillen-Knöpfe (bis 0.40.1 waren es
+  14 px und 999 px, Lukas 18.10.: „rundungen passen nicht mit den
+  einstellungen“).
+
 ### 4.9 Menü (`.p-more-menu`)
 - **Zweck:** Kontextmenüs, ≡-Menü und Zonenwahl.
 - **Form:** `--menu-bg`, `--menu-shadow`, `--r-md`. Zonen erscheinen als
   Kästchen in zwei Spalten.
+- **≡-Menü (18.10.):** hängt bündig an der Kante der Navigation, ist aber so
+  breit wie sein Inhalt (mindestens 240 px, höchstens 360 px) und richtet sich
+  nicht nach der Breite der Leiste.
 
 ### 4.10 Toast (`.toast`)
 - **Zweck:** Kurze Rückmeldung, etwa „gesichert“ oder „verschoben“.
@@ -459,7 +473,9 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
 ### 4.13 Zonenleiste am ganzen Mac (`dropbar.css`)
 - **Zweck:** Wie 4.3, aber beim Ziehen von Dateien in jedem Programm.
 - **Form:** Volle Breite unten auf dem Bildschirm mit dem Zeiger, 280 px hoch,
-  dieselben vier Glaskarten, Ring und Glühen wie 4.3.
+  dieselben vier Glaskarten, Ring und Glühen wie 4.3. Rand 10 px zu den
+  Bildschirmkanten, 8 px zwischen den Karten (18.10., vorher 14 und 10),
+  gleich in der App (4.3) und der Extension.
 - **Streifen (0.32, 90 px seit 0.32.1 / 3.25.2):** Beim Ziehen ragen die
   Karten erst nur 90 px herein (`.strip`): dieselbe Karte, oben gerundet, unten
   bündig, ohne Hinweis. Darüber
@@ -713,14 +729,14 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
   Menü (4.9) mit den Boards, zuletzt geändert zuerst, und „Neues Board …“.
   Die Auswahl kommt als neue Folie mit der Vorlage Index ans Ende.
 - **Editor, Grundsatz:** Nur die Folie und eine Leiste unten sind sichtbar
-  (Lukas 16.10.: „more minimal versteckt“). Folien (F), Bilder (B) und
+  (Lukas 16.10.: „more minimal versteckt“). Folien (F), Objekte (B) und
   Gestalten (E) öffnen sich als Glas (2.4: `--menu-bg`, `--menu-shadow`,
   `blur(24px) saturate(1.4)`, `--r-lg`) links, unten und rechts, 12 px vom
   Rand, und blenden in 0.18 s ein. Esc schließt erst alle Flächen, dann die
   Auswahl.
 - **Leiste unten (`.b-bar`):** Maße der Lightbox-Leiste (4.11): Innenrand
   `--nav-rim`, Knöpfe `--nav-h`, 13,5 px/500, Abstand 3 px, Ecke `--r-md`.
-  Inhalt: ‹ 02 / 08 › (Mono 11 px dim), Folien, Bilder, Gestalten, + Text,
+  Inhalt: ‹ 02 / 08 › (Mono 11 px dim), Folien, Objekte, Gestalten, + Text,
   bei Auswahl „Vom Board“, ▶ Präsentieren. Offene Fläche = gefüllter Knopf.
 - **Folie (`.b-slide`):** 1600 × 1000 Einheiten (16:10), per CSS-Transform
   eingepasst. Eigene Farben und Schrift je Folie (`--s-bg`, `--s-fg`,

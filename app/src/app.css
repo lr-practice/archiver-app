@@ -858,12 +858,12 @@ html.light .lb-bar {
 .dialog.confirm {
   width: 340px;
   outline: none;
-  border-radius: 14px;
+  border-radius: var(--r-lg);
   padding: 22px 22px 18px;
   background: var(--menu-bg);
   box-shadow: var(--menu-shadow);
-  -webkit-backdrop-filter: blur(24px);
-  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px) saturate(1.4);
+  backdrop-filter: blur(24px) saturate(1.4);
   animation: confirm-in 0.18s cubic-bezier(0.2, 0.7, 0.2, 1);
 }
 
@@ -888,7 +888,7 @@ html.light .lb-bar {
 }
 
 .confirm-foot .btn {
-  border-radius: 999px;
+  border-radius: var(--r-md);
   padding: 7px 16px;
   border-color: rgba(var(--ink-rgb), 0.18);
 }
@@ -914,6 +914,11 @@ html.light .lb-bar {
 
 .modal:has(.confirm) {
   background: rgba(0, 0, 0, 0.35);
+}
+
+html.light .dialog.confirm {
+  -webkit-backdrop-filter: blur(28px) saturate(0);
+  backdrop-filter: blur(28px) saturate(0);
 }
 
 /* ---- Toasts ---- */
@@ -2867,8 +2872,8 @@ body.lightbox-open .p-top {
   display: flex;
   flex-wrap: nowrap;
   align-items: stretch;
-  gap: 10px;
-  padding: 0 14px 14px;
+  gap: 8px;
+  padding: 0 10px 10px;
   border-radius: 0;
   background: none;
   -webkit-backdrop-filter: none;
@@ -2889,7 +2894,7 @@ body.lightbox-open .p-top {
 
 .p-dropbar.strip {
   height: 90px;
-  padding: 0 14px;
+  padding: 0 10px;
 }
 
 .p-dropbar.strip .p-hot {
@@ -5324,7 +5329,8 @@ body.lightbox-open .p-lib-tab,
   padding: 0 14px;
 }
 
-/* ≡-Menü: hängt an der ganzen Leiste, bündig mit ihrer Kante, so breit wie sie */
+/* ≡-Menü: hängt an der Leiste, bündig mit ihrer Kante, so breit wie sein Inhalt
+   (Lukas 18.10.: nicht an der Breite der Leiste ausrichten) */
 .p-nav-more {
   position: static;
 }
@@ -5334,7 +5340,9 @@ body.lightbox-open .p-lib-tab,
   bottom: auto;
   left: 0;
   right: auto;
-  min-width: max(100%, 240px);
+  width: max-content;
+  min-width: 240px;
+  max-width: min(360px, calc(100vw - 32px));
 }
 
 html[data-nav$="r"] .p-more-menu.zone-menu {

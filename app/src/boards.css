@@ -120,7 +120,7 @@ html body.b-editing #zones {
 
 .b-input {
   width: 100%;
-  margin-top: 4px;
+  margin: 4px 0 20px; /* Luft zu den Knöpfen wie bei „Neues Projekt“ */
 }
 
 /* ---- Editor: nur die Folie, alles andere schwebt als Glas ---- */

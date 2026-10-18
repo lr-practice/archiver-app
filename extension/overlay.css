@@ -47,8 +47,8 @@ input {
   max-height: 260px;
   z-index: 2;
   display: flex;
-  gap: 10px;
-  padding: 0 14px 14px;
+  gap: 8px;
+  padding: 0 10px 10px;
   /* Nimmt den Zeiger an (3.25.1): sonst scrollt Chrome die Seite darunter,
      sobald man beim Ziehen an den unteren Rand kommt, und Ablagen der Seite
      unter der Leiste (Chat-Felder) greifen mit. */
@@ -175,7 +175,7 @@ input {
    unten herein, darüber bleibt die Seite frei. Dieselbe Karte, unten bündig. */
 .zones-bar.strip {
   height: 90px;
-  padding: 0 14px;
+  padding: 0 10px;
 }
 
 .zones-bar.strip .zone {
