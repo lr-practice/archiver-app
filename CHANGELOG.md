@@ -1,5 +1,10 @@
 # Changelog
 
+## Extension 3.29.4
+
+- Zonenleiste beim Ziehen: Rand 10 px statt 14 px, 8 px statt 10 px zwischen den
+  Zonen, gleich wie in der App 0.40.2.
+
 ## App 0.40.2 (Extension 3.29.3, Vorabversion)
 
 - Rückfragen (Löschen, Installieren, Neues Board, Umbenennen, Neues Projekt)
