@@ -6994,7 +6994,7 @@
     const foot = el("div", "rn-foot");
     const summary = el("span", "sp");
     foot.append(summary, button("no", t("cancel"), close), confirmBtn);
-    const head = el("div", "rn-h", t("renameTitle", { n: items.length }));
+    const head = el("div", "rn-h", items.length === 1 ? t("renameTitleOne") : t("renameTitle", { n: items.length }));
     const sub = el("div", "rn-sub", t("renameText"));
     const schemeRow = el("div", "rn-scheme");
     schemeRow.appendChild(document.createTextNode(t("nameScheme") + " "));

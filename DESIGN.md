@@ -328,11 +328,17 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
 - **Form:**
   - Standard: 1 px Linie `--dash`, beim Hover `--ink`.
   - Primär: Fläche `--ink` mit Text `--ink-inverse`.
+  - Ecke `--r-md` überall (18.10., vorher eckig), folgt also der Rundung
+    aus Einstellungen › Aussehen. Das gilt auch für Sperrbild (Feld und
+    „Freischalten“) und die Felder im PDF-Ersteller.
 - **Nicht:** Höchstens ein Primärknopf pro Dialog.
 
 ### 4.8a Rückfrage (`.dialog.confirm`)
 - **Zweck:** Kleine Dialoge über der Fläche: Löschen, Installieren, Neues
-  Board, Umbenennen, Neues Projekt.
+  Board, Umbenennen, Neues Projekt. Dieselbe Form haben Importieren
+  (`.dialog`), die Willkommen-Schritte (`.welcome-inner`), Schritt 3
+  (`.onb-drop`) und die Tour-Karten (18.10., vorher gestrichelte, eckige
+  Rahmen).
 - **Form (18.10.):** Glas wie Menüs (2.4: `--menu-bg`, `--menu-shadow`,
   `blur(24px) saturate(1.4)`, hell `blur(28px) saturate(0)`), Ecke `--r-lg`,
   Knöpfe `--r-md`. Beide folgen der Rundung aus Einstellungen › Aussehen.

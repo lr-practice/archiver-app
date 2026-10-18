@@ -8,6 +8,10 @@
 - Das ≡-Menü ist so breit wie sein Inhalt und nicht mehr so breit wie die
   Navigation.
 - Board-Editor: In der Leiste unten heißt „Bilder“ jetzt „Objekte“.
+- Alle Knöpfe, Importieren, die Willkommen-Schritte, Schritt 3, Tour, Sperrbild
+  und die Felder im PDF-Ersteller folgen ebenfalls der Rundung; die alten
+  gestrichelten Rahmen sind weg.
+- „1 Objekt umbenennen“ statt „1 Objekte umbenennen“.
 - Zonenleiste beim Ziehen (App, am ganzen Mac, Extension): etwas weniger
   Abstand zum Rand und zwischen den Zonen.
 
