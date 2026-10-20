@@ -861,7 +861,7 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
 ### 4.25a Einstellungen (App 0.40.8, `.p-settings-nav`)
 - **Aufbau:** Seitenkopf, darunter die Konto-Liste (4.26), darunter fünf
   Bereiche als ruhige Liste: Bibliothek, Darstellung, Mac & Browser (ohne Mac
-  nur „Extension“), Studio, App. Rechts je eine Zusammenfassung in
+  nur „Extension“), Studio, App, Labor (4.24b). Rechts je eine Zusammenfassung in
   `--p-dim` und ›.
 - **Bereiche:** Bibliothek = Plätze, verknüpfte Ordner, Standardzone,
   Struktur, Zonen, Dateinamen. Darstellung = Ansicht, Aussehen, Glas, Start,
