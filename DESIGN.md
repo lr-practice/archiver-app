@@ -821,6 +821,16 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
 - **Nicht:** Keine Rundung an Objekten, keine Akzentfarbe, keine Schatten an
   den Objekten. Die Extension kennt die Wolke nicht.
 
+### 4.24a Übersicht mit Plakat-Kopf (App 0.40.9, `.p-home-hero`)
+- **Kopf:** „Übersicht.“ in voller Farbe, darunter auf eigener Zeile die
+  Zahlen („709 Objekte in 7 Zonen.“) in `--p-dim`. 48–128 px (7.2vw),
+  Zeilenhöhe 1, −0.045em. Kein „seit …“.
+- **Raum:** Der Kopf wächst (`fitHomeHero`), bis die erste Reihe, die vier
+  Active Zones, mit 40 px Abstand am unteren Fensterrand steht. Alle weiteren
+  Zonen kommen erst beim Scrollen. Viel Weißraum ist Absicht.
+- **Spalten:** Active Zones vierspaltig ab 200 px Kartenbreite, sonst zwei.
+  Karten bleiben 2:1.
+
 ### 4.25a Einstellungen (App 0.40.8, `.p-settings-nav`)
 - **Aufbau:** Seitenkopf, darunter die Konto-Liste (4.26), darunter fünf
   Bereiche als ruhige Liste: Bibliothek, Darstellung, Mac & Browser (ohne Mac

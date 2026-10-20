@@ -7533,3 +7533,26 @@ button.p-list:hover {
     animation: none;
   }
 }
+
+/* ---- 0.40.9: Übersicht mit Plakat-Kopf ----
+   „Übersicht.“ in voller Farbe, darunter die Zahlen gedimmt, groß und eng.
+   Der Kopf wächst per JS (fitHomeHero), bis die Active Zones am unteren
+   Fensterrand stehen; die übrigen Zonen kommen beim Scrollen. */
+.p-home-hero {
+  display: flex;
+  flex-direction: column;
+  padding-top: clamp(24px, 6vh, 72px);
+}
+
+.p-page .p-home-hero .p-head {
+  max-width: none;
+  margin: 0;
+  font-size: clamp(48px, 7.2vw, 128px);
+  line-height: 1;
+  letter-spacing: -0.045em;
+}
+
+.p-home-hero .p-head-title,
+.p-home-hero .p-head-text {
+  display: block;
+}

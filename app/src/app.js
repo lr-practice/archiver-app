@@ -1488,11 +1488,10 @@
       );
       wrap.appendChild(read);
     } else wrap.appendChild(
-      // 0.40.9: „Übersicht.“ weiß, danach eine Zeile mit den Zahlen (ohne „seit“)
-      headline(
-        t("headHomeTitle"),
-        state.items.length ? t("headHome", { zones: zonesText(state.zones.length), images: countText(state.items.length) }) : t("headHomeEmpty")
-      )
+      // 0.40.9: Plakat-Kopf. „Übersicht.“ in voller Farbe, darunter die Zahlen
+      // gedimmt, groß. Der Raum darunter wächst, bis die Active Zones am
+      // unteren Rand stehen (fitHomeHero); alles Weitere kommt beim Scrollen.
+      homeHero()
     );
 
     const bar = el("div", "p-bar");
@@ -1553,6 +1552,33 @@
     }
     return wrap;
   }
+
+  function homeHero() {
+    const hero = el("div", "p-home-hero");
+    hero.appendChild(
+      headline(
+        t("headHomeTitle"),
+        state.items.length ? t("headHome", { zones: zonesText(state.zones.length), images: countText(state.items.length) }) : t("headHomeEmpty")
+      )
+    );
+    requestAnimationFrame(fitHomeHero);
+    return hero;
+  }
+
+  // Kopf so hoch ziehen, dass die erste Reihe (Active Zones) gerade noch ganz im Fenster steht
+  function fitHomeHero() {
+    const hero = document.querySelector(".p-home-hero");
+    const scroller = $("zones");
+    if (!hero || !scroller) return;
+    hero.style.minHeight = "";
+    const first = hero.parentElement.querySelector(".p-hotrow, .p-split, .p-index");
+    if (!first) return;
+    const box = scroller.getBoundingClientRect();
+    const end = first.classList.contains("p-hotrow") ? first.getBoundingClientRect().bottom : first.getBoundingClientRect().top + 160;
+    const free = box.bottom - 40 - end;
+    if (free > 0) hero.style.minHeight = hero.offsetHeight + free + "px";
+  }
+  window.addEventListener("resize", () => requestAnimationFrame(fitHomeHero));
 
   // ---- Startseite per Tastatur: ← → wählen Zonen nacheinander, ↑ ↓ nach
   // Lage auf dem Bildschirm, Enter öffnet, Esc in der Zone kehrt zurück. ----
@@ -1751,7 +1777,8 @@
   function hotRow() {
     const row = el("div", "p-hotrow");
     const width = $("zones").clientWidth - 80;
-    row.style.setProperty("--hot-cols", Math.floor((width + 10) / 280) >= 4 ? "4" : "2");
+    // 0.40.9: vier Spalten schon ab 200 px Kartenbreite
+    row.style.setProperty("--hot-cols", Math.floor((width + 10) / 210) >= 4 ? "4" : "2");
     for (let i = 0; i < HOT_ZONES; i++) row.appendChild(state.zones[i] ? hotCard(state.zones[i], i) : hotSlot(i));
     return row;
   }
