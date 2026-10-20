@@ -836,7 +836,7 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
 - **Sperre (Anmelden, 0.40.7):** Eine Spalte von höchstens 560 px in der
   Mitte: Satz „Dein Archiv. Melde dich an, um weiterzumachen.“, Mono-Zeile
   „(Anmelden) (Beta)“, Liste. Schritt 1: E-Mail, Weg, Beta, Knopf „Code
-  senden“. Schritt 2: E-Mail mit „(Ändern)“, Code (6 Ziffern aus der Mail),
+  senden“. Schritt 2: E-Mail mit „(Ändern)“, Code (6 bis 8 Ziffern aus der Mail),
   Knopf „Anmelden“. Daneben „(Beta-Code)“ für den alten Freischalt-Code.
   Felder sind der Wert ihrer Zeile (`.p-lock-input`, kein Rahmen, keine
   Fläche). Unter der Liste links Mono-Links und die Meldung (`.p-lock-msg`,

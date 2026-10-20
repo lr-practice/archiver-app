@@ -223,14 +223,15 @@
     if (step === "code") {
       const code = field("text", "123456");
       code.inputMode = "numeric";
-      code.maxLength = 6;
+      code.maxLength = 10;
       row(t("lockRowMail"), lockState.email, swap(t("lockChange"), "mail"));
       row(t("lockRowCode"), code);
       go.textContent = t("lockSignInGo");
       form.onsubmit = async (e) => {
         e.preventDefault();
         const token = code.value.replace(/\D/g, "");
-        if (token.length !== 6) return fail(t("lockCodeShort"));
+        // Supabase verschickt je nach Projekt 6 oder 8 Ziffern
+        if (token.length < 6 || token.length > 8) return fail(t("lockCodeShort"));
         go.disabled = true;
         status.textContent = t("lockChecking");
         try {
@@ -239,8 +240,10 @@
           applyLock();
           if (state.page) renderPage(true);
           toast(t("lockWelcome", { email: lockState.email }));
-        } catch {
-          fail(t("lockWrongCode"));
+        } catch (err) {
+          // abgelaufen/falsch → eigene Meldung, alles andere mit dem Grund von Supabase
+          const why = String(err && err.message || "");
+          fail(/expired|invalid/i.test(why) || !why ? t("lockWrongCode") : why);
         }
       };
       const again = button("p-lock-end", "(" + t("lockResend") + ")", async () => {
