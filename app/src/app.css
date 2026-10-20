@@ -1581,34 +1581,7 @@ body {
   color: var(--ink) !important;
 }
 
-/* ---- Index + Vorschau (E) ---- */
-
-.p-split {
-  display: grid;
-  grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.25fr);
-  gap: 40px;
-  align-items: start;
-}
-
-.p-preview {
-  position: sticky;
-  top: 20px;
-  margin-top: -2px;
-}
-
-.p-preview-head {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  height: 28px;
-  padding-bottom: 8px;
-  font-size: 13px;
-  font-weight: 500;
-}
-
-.p-preview-title .p-head-text {
-  font-weight: 400;
-}
+/* ---- Index ---- */
 
 .p-link {
   padding: 0;
@@ -1620,33 +1593,6 @@ body {
 
 .p-link:hover {
   color: var(--p-text);
-}
-
-.p-mosaic {
-  display: grid;
-  grid-template-columns: repeat(var(--mosaic-cols, 4), minmax(0, 1fr));
-  gap: 4px;
-  border-top: 1px solid var(--p-rule);
-  padding-top: 10px;
-}
-
-.p-mosaic-cell {
-  aspect-ratio: 1 / 1;
-  background: var(--thumb-bg);
-  overflow: hidden;
-}
-
-.p-mosaic-cell:first-child {
-  grid-column: span 2;
-  grid-row: span 2;
-  aspect-ratio: auto;
-}
-
-.p-mosaic-cell img {
-  width: 100%;
-  height: 100%;
-  display: block;
-  object-fit: cover;
 }
 
 .p-empty {
@@ -2102,10 +2048,6 @@ body.sorting * {
   .p-index.compact .p-row > :nth-child(5) {
     display: initial;
   }
-  .p-split {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-    gap: 24px;
-  }
 }
 
 /* ---- Runde 2: Pfad, Größenstufen, höhere Navigation ---- */
@@ -2215,13 +2157,6 @@ button.p-crumb:hover {
 body.lightbox-open .p-nav,
 body.lightbox-open .p-dropbar {
   display: none;
-}
-
-/* Große Stufen: alle Bilder gleich groß statt eines Aufmacherbilds */
-.p-mosaic.even .p-mosaic-cell:first-child {
-  grid-column: auto;
-  grid-row: auto;
-  aspect-ratio: 1 / 1;
 }
 
 /* ---- Runde 3: Pfad in der Navigation, Bibliothek als Home ---- */
@@ -7536,11 +7471,12 @@ button.p-list:hover {
   }
 }
 
-/* ---- 0.40.10: Übersicht als Kontaktbogen (Variante E) ----
-   Kopf in zwei Zeilen, 56 px. Darunter je Zone eine Zeile: links 180 px Name
-   und Mono-Zahl, rechts die Bilder klein und dicht wie auf einem Kontaktabzug.
+/* ---- 0.40.11: Übersicht mit Kontaktbogen (Variante E) ----
+   Kopf in zwei Zeilen. Oben die Active Zones als Karten, darunter je übrige
+   Zone eine Zeile: links 180 px Name und Mono-Zahl, rechts die Bilder klein
+   und dicht wie auf einem Kontaktabzug.
    Gleicher Kopf auf allen Seiten (Übersicht, Zone, Alle, Suche, Gelöscht):
-   gleicher Abstand oben und unten, 56 px, Titel weiß, Satz gedimmt darunter. */
+   gleicher Abstand oben und unten, 28–42 px, Titel weiß, Satz gedimmt darunter. */
 .p-page > .p-home-hero,
 .p-page > .p-head,
 .p-page > .p-head-row {
@@ -7551,11 +7487,11 @@ button.p-list:hover {
 .p-page > .p-home-hero > .p-head,
 .p-page > .p-head,
 .p-page > .p-head-row > .p-head {
-  max-width: 18em;
+  max-width: 20em;
   margin: 0;
-  font-size: clamp(34px, 4vw, 56px);
-  line-height: 1.05;
-  letter-spacing: -0.04em;
+  font-size: clamp(28px, 3vw, 42px);
+  line-height: 1.1;
+  letter-spacing: -0.01em;
 }
 
 .p-page > .p-home-hero .p-head-text,

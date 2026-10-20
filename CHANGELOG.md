@@ -1,5 +1,13 @@
 # Changelog
 
+## App 0.40.11 (Vorabversion)
+
+- Übersicht: oben wieder immer die vier Active Zones als Karten, darunter die
+  übrigen Zonen als Kontaktbogen.
+- Die Ansicht „Vorschau“ auf der Startseite ist entfernt. Es bleiben Übersicht,
+  Karten und Index.
+- Seitenköpfe etwas kleiner (28 bis 42 px) und nicht mehr so eng gesetzt.
+
 ## App 0.40.10 (Vorabversion)
 
 - Übersicht als Kontaktbogen: je Zone eine Zeile, links Name und Anzahl,

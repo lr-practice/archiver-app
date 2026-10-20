@@ -1,6 +1,6 @@
 # Archiver – Design-System
 
-Stand: App 0.40.10 · Extension 3.29.6
+Stand: App 0.40.11 · Extension 3.29.6
 
 Diese Datei hält fest, wie Archiver aussieht und warum. Sie gilt für die Mac-App
 (`app/src`) und die Chrome-Extension (`extension/`). Wer an der Oberfläche
@@ -96,7 +96,7 @@ Für die Farbe gilt:
 | Meta | Melange | 12 px | 400 | 0 | Datum, Quelle |
 | UI | Melange | 13–13.5 px | 500 | 0 | Navigation, Menüs |
 | Karten-Titel | Melange | 15 px | 500 | −0.01em | Zonenname auf der Karte |
-| Seitenkopf | Melange | 34–56 px (4vw) / 1.05 | 500 | −0.04em | Übersicht, Zone, Alle Objekte, Suche, Zuletzt gelöscht (`.p-page > .p-head`, seit 0.40.10): Titel und Satz je eigene Zeile |
+| Seitenkopf | Melange | 28–42 px (3vw) / 1.1 | 500 | −0.01em | Übersicht, Zone, Alle Objekte, Suche, Zuletzt gelöscht (`.p-page > .p-head`, seit 0.40.10): Titel und Satz je eigene Zeile |
 | Satz | Melange | 34 px / 1.14 | 500 | −0.025em | Konto, Sperre, Lese-Modus (`.p-say`) |
 | Überschrift | Melange | 22–24 px | 600 | −0.02em | Kopf in Einstellungen und Handbuch (`.p-sheet`), Onboarding |
 
@@ -822,18 +822,23 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
 - **Nicht:** Keine Rundung an Objekten, keine Akzentfarbe, keine Schatten an
   den Objekten. Die Extension kennt die Wolke nicht.
 
-### 4.24a Übersicht als Kontaktbogen, ein Kopf für alle Seiten (App 0.40.10, `.p-sheetlist`, `.p-home-hero`)
+### 4.24a Übersicht mit Kontaktbogen, ein Kopf für alle Seiten (App 0.40.11, `.p-sheetlist`, `.p-home-hero`)
 - **Kopf (alle Seiten):** Übersicht, Zone, Alle Objekte, Suche und Zuletzt
   gelöscht tragen denselben Kopf. Titel in voller Farbe, darunter auf eigener
-  Zeile der Satz in `--p-dim`. 34–56 px (4vw), Zeilenhöhe 1.05, −0.04em,
-  höchstens 18em breit. Oben 24–72 px (6vh), unten 40–96 px (9vh) Raum. In
-  der Übersicht ohne Punkt und ohne „seit …“. Ordnerkarten einer Zone stehen
-  rechts oben neben dem Kopf.
-- **Kontaktbogen:** Je Zone eine Zeile. Links 180 px Name und Mono-Zeile
-  (● Nummer der Active Zone, Anzahl), rechts die Bilder klein und dicht wie
-  auf einem Kontaktabzug: Höhe der Zeilen-Miniatur (mind. 40 px), 13:10,
-  4 px Abstand, Rundung `--r-sm`. Höchstens 24, danach „+N“ in Mono, das die
-  Zone öffnet. Klick auf den Namen öffnet die Zone, auf ein Bild die Lightbox.
+  Zeile der Satz in `--p-dim`. 28–42 px (3vw), Zeilenhöhe 1.1, −0.01em
+  (kaum gesperrt, nicht eng), höchstens 20em breit. Oben 24–72 px (6vh),
+  unten 40–96 px (9vh) Raum. In der Übersicht ohne Punkt und ohne „seit …“.
+  Ordnerkarten einer Zone stehen rechts oben neben dem Kopf.
+- **Übersicht:** Oben immer die vier Active Zones als Karten (2:1, vierspaltig
+  ab 200 px Kartenbreite, sonst 2 × 2). Darunter „Index (N)“ und die übrigen
+  Zonen als Kontaktbogen.
+- **Kontaktbogen:** Je Zone eine Zeile. Links 180 px Name und Mono-Anzahl,
+  rechts die Bilder klein und dicht wie auf einem Kontaktabzug: Höhe der
+  Zeilen-Miniatur (mind. 40 px), 13:10, 4 px Abstand, Rundung `--r-sm`.
+  Höchstens 24, danach „+N“ in Mono, das die Zone öffnet. Klick auf den Namen
+  öffnet die Zone, auf ein Bild die Lightbox.
+- **Ansichten der Startseite:** Übersicht, Karten, Index. Die geteilte
+  Vorschau-Ansicht (Liste links, Mosaik rechts) ist seit 0.40.11 entfernt.
 - **Fokus:** Ring (4.1), keine Farbe.
 - **Schmal (< 700 px):** Name über den Bildern, eine Spalte.
 

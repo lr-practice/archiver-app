@@ -282,10 +282,9 @@
     focus: null, // jeder Start beginnt auf der Startseite (Zonen als Karten)
     page: null, // Seite, die von rechts hereingleitet: null | "settings" | "about" | "manual"
     area: "library", // "library" | "projects" (0.40.0, projects.js) | "boards" (0.39.0, boards.js)
-    home: "overview", // Startseite: "overview" | "index" | "preview" | "cards"; jeder Start beginnt mit der Übersicht
-    hover: null, // Zone in der Vorschau (Layout "preview")
+    home: "overview", // Startseite: "overview" | "index" | "cards"; jeder Start beginnt mit der Übersicht
     // Bildgröße auf der Startseite, Stufe 0–3, je Ansicht getrennt
-    homeSizes: pref("homeSizes", null) || { index: pref("homeSize", 1), preview: pref("homeSize", 1), cards: pref("homeSize", 1) },
+    homeSizes: pref("homeSizes", null) || { index: pref("homeSize", 1), cards: pref("homeSize", 1) },
     // (Übersicht: Größe wie die Karten, solange nichts eigenes gespeichert ist)
     query: "",
     filters: { kind: null, color: null, orient: null, format: null, period: null, dup: false, label: null, site: null, by: null, fresh: false },
@@ -1506,7 +1505,6 @@
     for (const [id, label] of [
       ["overview", "layoutOverview"],
       ["cards", "layoutCards"],
-      ["preview", "layoutPreview"],
       ["index", "layoutIndex"],
     ]) {
       bar.appendChild(
@@ -1532,16 +1530,6 @@
       wrap.appendChild(hotRow());
       wrap.appendChild(restBar(state.zones.length - HOT_ZONES));
       wrap.appendChild(cardsLayout());
-    } else if (state.home === "preview") {
-      const split = el("div", "p-split");
-      const lists = el("div", "p-split-lists");
-      lists.appendChild(hotLabel());
-      lists.appendChild(hotList(true));
-      lists.appendChild(restBar(state.zones.length - HOT_ZONES));
-      lists.appendChild(indexList(true, state.zones.slice(HOT_ZONES), HOT_ZONES));
-      split.appendChild(lists);
-      split.appendChild(previewPanel());
-      wrap.appendChild(split);
     } else {
       wrap.appendChild(hotLabel());
       wrap.appendChild(hotList(false));
@@ -1653,7 +1641,6 @@
     head.appendChild(el("span"));
     list.appendChild(head);
 
-    const current = compact ? previewZone() : null;
     zones.forEach((zone, i) => {
       const index = offset + i;
       const row = el("div", "p-row p-zone");
@@ -1663,7 +1650,6 @@
         row.dataset.swap = zone.path;
         row.addEventListener("pointerdown", (e) => dragSwap(e, row));
       }
-      if (compact && zone.path === current) row.classList.add("current");
       const no = mono(String(index + 1).padStart(2, "0"), "dim");
       if (index < HOT_ZONES) no.title = t("keyHint", { n: index + 1 });
       row.appendChild(no);
@@ -1687,15 +1673,6 @@
         if (cardDragged || e.target.closest(".zone-menu-btn, .zone-menu, input")) return;
         setFocus(zone.path);
       });
-      if (compact) {
-        row.addEventListener("mouseenter", () => {
-          if (state.hover === zone.path) return;
-          state.hover = zone.path;
-          for (const r of list.querySelectorAll(".p-zone")) r.classList.toggle("current", r === row);
-          const old = document.querySelector(".p-preview");
-          if (old) old.replaceWith(previewPanel());
-        });
-      }
       if (canEdit(zone.path)) {
         name.title = t("renameHint");
         name.addEventListener("dblclick", (e) => {
@@ -1765,19 +1742,22 @@
     return row;
   }
 
-  // Übersicht als Kontaktbogen (0.40.10, Variante E): je Zone eine Zeile, links
-  // Name und Zahl (Active Zones mit ● und Nummer), rechts klein die Bilder wie
-  // auf einem Kontaktabzug. Bildhöhe folgt den Größen-Chips (--row-thumb).
+  // Übersicht (0.40.11): oben die vier Active Zones als Karten, darunter die
+  // übrigen Zonen als Kontaktbogen (Variante E): je Zone eine Zeile, links Name
+  // und Zahl, rechts klein die Bilder. Bildhöhe folgt den Größen-Chips (--row-thumb).
   const SHEET_MAX = 24;
   function overviewLayout() {
+    const wrap = el("div", "p-overview");
+    wrap.appendChild(hotRow());
+    wrap.appendChild(restBar(state.zones.length - HOT_ZONES));
     const sheet = el("div", "p-sheetlist");
-    state.zones.forEach((zone, i) => {
+    for (const zone of state.zones.slice(HOT_ZONES)) {
       const items = orderedItems(zone.path);
       const head = el("div", "p-sheet-zone");
       head.dataset.zone = zone.path;
       const name = zoneNameEl(zone);
       head.appendChild(name);
-      head.appendChild(mono((i < HOT_ZONES ? "● " + String(i + 1).padStart(2, "0") + " · " : "") + cardMeta(zone), "dim"));
+      head.appendChild(mono(cardMeta(zone), "dim"));
       head.addEventListener("click", (e) => {
         if (e.target.closest("input")) return;
         setFocus(zone.path);
@@ -1797,8 +1777,9 @@
         thumbs.appendChild(button("p-sheet-more p-mono", "+" + (items.length - SHEET_MAX), () => setFocus(zone.path)));
       if (!items.length) thumbs.appendChild(mono(t("emptyShort"), "dim"));
       sheet.append(head, thumbs);
-    });
-    return sheet;
+    }
+    wrap.appendChild(sheet);
+    return wrap;
   }
 
   function hotKey(i) {
@@ -1955,41 +1936,6 @@
     window.addEventListener("pointercancel", onUp);
   }
 
-
-  function previewZone() {
-    if (state.hover && state.zones.some((z) => z.path === state.hover)) return state.hover;
-    let best = state.zones[0];
-    for (const z of state.zones) if (lastSaved(z.path) > lastSaved(best.path)) best = z;
-    return best ? best.path : null;
-  }
-
-  function previewPanel() {
-    const path = previewZone();
-    const panel = el("section", "p-preview");
-    if (path == null) return panel;
-    panel.dataset.zone = path;
-    const items = orderedItems(path);
-    const head = el("div", "p-preview-head");
-    const title = el("div", "p-preview-title");
-    title.appendChild(document.createTextNode(lastSegment(path)));
-    const latest = lastSaved(path);
-    title.appendChild(
-      el("span", "p-head-text", " · " + countText(items.length) + (latest ? " · " + t("lastSaved", { date: recentDate(latest) }) : ""))
-    );
-    head.appendChild(title);
-    head.appendChild(button("p-link", t("openZoneArrow"), () => setFocus(path)));
-    panel.appendChild(head);
-    const mosaic = el("div", "p-mosaic" + (HOME_SIZES[homeStep()].cols < 4 ? " even" : ""));
-    for (const item of items.slice(0, 9)) {
-      const cell = el("div", "p-mosaic-cell");
-      cell.appendChild(previewImg(item));
-      cell.addEventListener("dblclick", () => openLightbox(item));
-      mosaic.appendChild(cell);
-    }
-    if (!items.length) mosaic.appendChild(el("div", "p-empty", t("headZoneEmpty")));
-    panel.appendChild(mosaic);
-    return panel;
-  }
 
   // Karten: Zonen ohne Unterzonen als Karte mit Titelbild, Unterzonen
   // (z. B. Kunden / Studio B) gesammelt in einer Karte als Liste.
