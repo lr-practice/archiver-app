@@ -94,6 +94,19 @@
     } catch {}
   }
 
+  // Labor (Einstellungen › Labor, 0.40.12): Varianten zum Ausprobieren, nur auf
+  // diesem Mac. card = wie eine Active-Zone-Karte ihren Inhalt zeigt (A–H, siehe
+  // DESIGN 4.24b), video = Vorschau eines Videos beim Darüberfahren.
+  const LAB_CARDS = ["A", "B", "C", "D", "E", "F", "G", "H"];
+  const LAB_VIDEO = ["flip", "skim", "play", "off"];
+  function lab() {
+    const v = pref("lab", null) || {};
+    return { card: LAB_CARDS.includes(v.card) ? v.card : "A", video: LAB_VIDEO.includes(v.video) ? v.video : "flip" };
+  }
+  function setLab(patch) {
+    setPref("lab", { ...lab(), ...patch });
+  }
+
   // Studio-Funktionen (Einstellungen › Studio): jede einzeln abschaltbar, Standard an.
   // Die geteilte Bibliothek ist kein Schalter hier, sie hängt an der Bibliothek selbst.
   // Schaltbare Studio-Werkzeuge. Moodboard und eigene Reihenfolge sind seit 0.24.6 immer an.
@@ -1795,8 +1808,13 @@
     card.dataset.swap = zone.path;
     card.title = t("keyHint", { n: i + 1 });
     const items = orderedItems(zone.path);
-    const cover = el("div", "p-card-cover" + (items.length >= 3 ? " trio" : "") + (items.length ? "" : " empty"));
-    for (const item of items.slice(0, items.length >= 3 ? 3 : 1)) cover.appendChild(previewImg(item));
+    const mode = lab().card;
+    let cover;
+    if (mode !== "A" && items.length > 1) cover = labCover(card, items, mode, zone);
+    else {
+      cover = el("div", "p-card-cover" + (items.length >= 3 ? " trio" : "") + (items.length ? "" : " empty"));
+      for (const item of items.slice(0, items.length >= 3 ? 3 : 1)) cover.appendChild(previewImg(item));
+    }
     card.appendChild(cover);
     card.appendChild(hotKey(i));
     const body = el("div", "p-card-body");
@@ -1822,6 +1840,69 @@
     card.addEventListener("pointerdown", (e) => dragSwap(e, card));
     card.addEventListener("dragstart", (e) => e.preventDefault());
     return card;
+  }
+
+  // Labor-Varianten der Kartenfläche (B–H). A ist die normale Karte oben.
+  function labCover(card, items, mode, zone) {
+    const cover = el("div", "p-card-cover p-lab-cover p-lab-" + mode);
+    const imgs = (n) => items.slice(0, n).map((item) => previewImg(item));
+    const still = matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (mode === "B") {
+      // Skim: die Maus fährt waagerecht durch die Zone, unten Striche
+      const list = imgs(12);
+      const ticks = el("div", "p-lab-ticks");
+      list.forEach(() => ticks.appendChild(el("b")));
+      const show = (n) => {
+        list.forEach((img, j) => img.classList.toggle("on", j === n));
+        [...ticks.children].forEach((b, j) => b.classList.toggle("on", j === n));
+      };
+      cover.append(...list, ticks);
+      show(0);
+      cover.addEventListener("pointermove", (e) => {
+        const r = cover.getBoundingClientRect();
+        show(Math.min(list.length - 1, Math.max(0, Math.floor(((e.clientX - r.left) / r.width) * list.length))));
+      });
+      cover.addEventListener("pointerleave", () => show(0));
+    } else if (mode === "C") cover.append(...imgs(5));
+    else if (mode === "D") {
+      cover.append(...imgs(31));
+      if (items.length > 31) cover.appendChild(el("span", "p-lab-more p-mono", "+" + (items.length - 31)));
+    } else if (mode === "E") cover.append(...imgs(3));
+    else if (mode === "F") {
+      const top = el("div", "p-lab-top");
+      top.append(...imgs(1));
+      const under = el("div", "p-lab-under");
+      under.append(...items.slice(1, 7).map((item) => previewImg(item)));
+      cover.append(under, top);
+    } else if (mode === "G") {
+      const list = imgs(6);
+      list[0].classList.add("on");
+      cover.append(...list);
+      cover.appendChild(el("span", "p-lab-count p-mono", String(items.length)));
+      if (!still && list.length > 1) {
+        let n = 0;
+        const timer = setInterval(() => {
+          if (!cover.isConnected) return clearInterval(timer);
+          list[n].classList.remove("on");
+          n = (n + 1) % list.length;
+          list[n].classList.add("on");
+        }, 2600);
+      }
+    } else if (mode === "H") {
+      const track = el("div", "p-lab-track");
+      track.append(...imgs(9));
+      const nav = el("div", "p-lab-arrows");
+      for (const [label, dir] of [["‹", -1], ["›", 1]]) {
+        const b = button("p-lab-arrow", label, (e) => {
+          e.stopPropagation();
+          track.scrollBy({ left: (dir * track.clientWidth) / 2, behavior: still ? "auto" : "smooth" });
+        });
+        b.addEventListener("pointerdown", (e) => e.stopPropagation());
+        nav.appendChild(b);
+      }
+      cover.append(track, nav);
+    }
+    return cover;
   }
 
   // Neue-Zone-Karte (0.39.1): nur ein Plus in der Mitte, ein Viertel der
@@ -2435,10 +2516,10 @@
   // Zeile am Griff ziehen: wandert live mit, beim Loslassen wird gespeichert
   // Einstellungen: oben das Konto, darunter eine ruhige Liste der Bereiche, jeder öffnet sein Untermenü.
   // 0.40.8: aus zehn Bereichen werden fünf, Version und Updates stehen unter „App“
-  const SETTINGS_SECTIONS = ["library", "display", "mac", "studio", "app"];
+  const SETTINGS_SECTIONS = ["library", "display", "mac", "studio", "app", "lab"];
 
   function sectionTitle(id) {
-    return t({ account: "setAccount", library: "setLibrary", display: "setSecDisplay", mac: isMac ? "setSecMac" : "setExtension", studio: "setStudio", app: "setSecApp" }[id]);
+    return t({ account: "setAccount", library: "setLibrary", display: "setSecDisplay", mac: isMac ? "setSecMac" : "setExtension", studio: "setStudio", app: "setSecApp", lab: "setSecLab" }[id]);
   }
 
   function sectionSummary(id) {
@@ -2462,6 +2543,10 @@
     if (id === "studio") {
       const on = FEATURES.filter(feat).length;
       return on + " / " + FEATURES.length + (state.shared ? " · " + t("featSharedOn") : "");
+    }
+    if (id === "lab") {
+      const l = lab();
+      return t("labCard") + " " + l.card + " · " + t("labVideo_" + l.video);
     }
     return (state.appVersion ? state.appVersion + " · " : "") + (lang === "de" ? "Deutsch" : "English");
   }
@@ -2752,6 +2837,31 @@
     }
 
     if (sub === "studio") renderStudioSettings(wrap, rerender);
+
+    // Labor: Varianten umschalten und gleich in der App ansehen
+    if (sub === "lab") {
+      wrap.appendChild(el("p", "p-block-hint p-studio-lead", t("labText")));
+      const cur = lab();
+      const cards = block(t("labCards"));
+      cards.appendChild(blockRow(el("div", "p-block-text", t("labCardsText"))));
+      cards.appendChild(
+        blockRow(t("labCard"), choice(LAB_CARDS.map((id) => [id, id]), cur.card, (id) => {
+          setLab({ card: id });
+          rerender();
+        }))
+      );
+      cards.appendChild(blockRow(el("div", "p-block-text", cur.card + " · " + t("labCard_" + cur.card))));
+      wrap.appendChild(cards);
+      const video = block(t("labVideos"));
+      video.appendChild(blockRow(el("div", "p-block-text", t("labVideosText"))));
+      video.appendChild(
+        blockRow(t("labVideo"), choice(LAB_VIDEO.map((id) => [id, t("labVideo_" + id)]), cur.video, (id) => {
+          setLab({ video: id });
+          rerender();
+        }))
+      );
+      wrap.appendChild(video);
+    }
 
     // App: Version und Updates, Sprache, Feedback, Tasten
     if (sub === "app") {
@@ -4015,16 +4125,27 @@
   // (wie ein Daumenkino), solange der Zeiger auf der Karte liegt. Ohne Ton.
   const SCRUB_FRAMES = 8;
   const SCRUB_MS = 320;
+  // Labor: „skim“ folgt der Maus waagerecht durch den Clip, „play“ spielt ihn stumm ab.
   function videoScrub(card) {
     const item = state.byPath.get(card.dataset.path);
     if (!item || kindOf(item) !== "video" || card.querySelector(".card-scrub")) return;
-    if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const mode = lab().video;
+    if (mode === "off") return;
+    if (mode !== "skim" && matchMedia("(prefers-reduced-motion: reduce)").matches) return;
     let timer = 0;
     let video = null;
+    let lastX = 0.5;
+    const track = (e) => {
+      const r = card.getBoundingClientRect();
+      lastX = Math.min(0.999, Math.max(0, (e.clientX - r.left) / r.width));
+      if (video && isFinite(video.duration) && video.duration > 0) video.currentTime = lastX * video.duration;
+    };
+    if (mode === "skim") card.addEventListener("pointermove", track);
     const stop = () => {
       clearTimeout(timer);
       clearInterval(timer);
       card.removeEventListener("pointerleave", stop);
+      card.removeEventListener("pointermove", track);
       if (video) {
         video.removeAttribute("src");
         video.load();
@@ -4050,13 +4171,23 @@
       video.addEventListener("loadedmetadata", () => {
         const d = video.duration;
         if (!isFinite(d) || d <= 0) return stop();
+        if (mode === "skim") {
+          video.currentTime = lastX * d;
+          return;
+        }
+        if (mode === "play") {
+          video.loop = true;
+          video.addEventListener("playing", () => video.classList.add("on"), { once: true });
+          video.play().catch(stop);
+          return;
+        }
         at = Array.from({ length: SCRUB_FRAMES }, (_, i) => ((i + 0.5) / SCRUB_FRAMES) * d);
         step();
         timer = setInterval(step, SCRUB_MS);
       });
       video.addEventListener("seeked", () => video.classList.add("on"), { once: true });
       video.addEventListener("error", stop);
-    }, 250);
+    }, mode === "skim" ? 0 : 250);
   }
 
   function setFocus(path) {

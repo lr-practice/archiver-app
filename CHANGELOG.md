@@ -1,5 +1,12 @@
 # Changelog
 
+## App 0.40.12 (Vorabversion)
+
+- Neuer Bereich Einstellungen › Labor zum Ausprobieren. Dort lässt sich
+  umschalten, wie die Active-Zone-Karten ihren Inhalt zeigen (A bis H: Heute,
+  Skim, Streifen, Kontaktbogen, Stapel, Aufklappen, Lauf, Blättern) und wie
+  Videos beim Darüberfahren vorschauen (Daumenkino, Skim, Abspielen, Aus).
+
 ## App 0.40.11 (Vorabversion)
 
 - Übersicht: oben wieder immer die vier Active Zones als Karten, darunter die

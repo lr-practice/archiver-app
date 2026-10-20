@@ -1,6 +1,6 @@
 # Archiver – Design-System
 
-Stand: App 0.40.11 · Extension 3.29.6
+Stand: App 0.40.12 · Extension 3.29.6
 
 Diese Datei hält fest, wie Archiver aussieht und warum. Sie gilt für die Mac-App
 (`app/src`) und die Chrome-Extension (`extension/`). Wer an der Oberfläche
@@ -841,6 +841,22 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
   Vorschau-Ansicht (Liste links, Mosaik rechts) ist seit 0.40.11 entfernt.
 - **Fokus:** Ring (4.1), keine Farbe.
 - **Schmal (< 700 px):** Name über den Bildern, eine Spalte.
+
+### 4.24b Labor (App 0.40.12, Einstellungen › Labor, `.p-lab-*`)
+- **Zweck:** Varianten ausprobieren, bevor sie Regel werden. Gespeichert nur
+  lokal (`archiver.lab`), an der Bibliothek ändert sich nichts.
+- **Active-Zone-Karte A–H:** A Heute (1 groß, 2 klein), B Skim (Zeiger
+  waagerecht durch bis zu 12 Bilder, unten Striche), C Streifen (5 Bilder),
+  D Kontaktbogen (8 × 4, „+N“), E Stapel (3 Bilder, fächern beim Hover auf),
+  F Aufklappen (Titelbild rutscht 34 % hoch, 6 Bilder darunter), G Lauf
+  (Überblendung alle 2,6 s, Anzahl unten rechts), H Blättern (seitlich
+  scrollen, Pfeile beim Hover). Eine Zone mit nur einem Bild bleibt A.
+- **Video-Vorschau:** Daumenkino (Standard, 8 Standbilder), Skim (Zeiger
+  waagerecht = Zeit im Clip), Abspielen (stumm, Schleife), Aus.
+- **Bewegung:** Bei `prefers-reduced-motion` laufen G, Daumenkino und
+  Abspielen nicht. Skim bleibt, weil es der Hand folgt.
+- **Regel:** Eine Variante, die bleibt, wandert aus dem Labor in die normale
+  Darstellung und bekommt hier ihren eigenen Abschnitt.
 
 ### 4.25a Einstellungen (App 0.40.8, `.p-settings-nav`)
 - **Aufbau:** Seitenkopf, darunter die Konto-Liste (4.26), darunter fünf
