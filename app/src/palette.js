@@ -839,7 +839,7 @@
   // 0.28: Aussehen aus der App (Hell/Dunkel, Ecken) gilt auch im Tray, samt Fensterecke
   const TRAY_RADIUS = { square: 0, soft: 6, round: 12, xl: 18 };
   function applyLook() {
-    const id = pref("radius", "round");
+    const id = pref("radius", "soft");
     const root = document.documentElement;
     if (id && id !== "round") root.dataset.radius = id;
     else delete root.dataset.radius;

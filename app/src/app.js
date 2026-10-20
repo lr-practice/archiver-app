@@ -146,7 +146,7 @@
     { thumb: 96, cols: 2, cover: 320 },
   ]; // state.focus für „Alle Bilder“
 
-  applyRadius(pref("radius", "round"));
+  applyRadius(pref("radius", "soft"));
   applyTopFade(pref("topFade", "fade"));
   applyFocusAnim(pref("focusAnim", false));
   applyWinAlpha();
@@ -1355,7 +1355,13 @@
     const since = first
       ? new Date(first).toLocaleDateString(lang === "de" ? "de-DE" : "en-GB", { month: "long", year: "numeric" })
       : "";
-    wrap.appendChild(
+    // Vorschau Lese-Modus (Einstellungen › Konto): eigener Kopf mit Highlight, sonst unverändert
+    const reading = pref("readPreview", false);
+    if (reading) {
+      const h = el("h1", "p-head p-head-read");
+      h.append(highlight(t("readTitle"), "red"), el("span", "p-head-text", " " + t("readText")));
+      wrap.appendChild(h);
+    } else wrap.appendChild(
       headline(
         null,
         state.items.length
@@ -1366,6 +1372,14 @@
 
     const bar = el("div", "p-bar");
     bar.appendChild(mono(t("allZonesLabel") + " (" + state.zones.length + ")", "strong"));
+    if (reading)
+      bar.appendChild(
+        chip("(" + t("readEnd") + ")", false, () => {
+          setPref("readPreview", false);
+          renderZones();
+          if (state.page === "settings") renderPage(true);
+        })
+      );
     bar.appendChild(el("span", "p-flex"));
     for (const [id, label] of [
       ["overview", "layoutOverview"],
@@ -2324,7 +2338,7 @@
   );
 
   function sectionTitle(id) {
-    return t({ library: "setLibrary", names: "setSecNames", view: "setSecView", look: "setLook", start: "setSecStart", tray: "setTray", observer: "setViewer", extension: "setExtension", studio: "setStudio", general: "setGeneral" }[id]);
+    return t({ account: "setAccount", library: "setLibrary", names: "setSecNames", view: "setSecView", look: "setLook", start: "setSecStart", tray: "setTray", observer: "setViewer", extension: "setExtension", studio: "setStudio", general: "setGeneral" }[id]);
   }
 
   function sectionSummary(id) {
@@ -2427,6 +2441,7 @@
           })
           .catch(() => {});
       wrap.appendChild(headline(t("settings"), t("settingsText")));
+      wrap.appendChild(accountCard());
       const list = el("section", "p-block p-settings-nav");
       for (const id of SETTINGS_SECTIONS) {
         const row = button("p-settings-link", null, () => openSettingsSection(id));
@@ -2453,6 +2468,8 @@
       wrap.appendChild(renderStructure());
       wrap.appendChild(renderZoneSettings());
     }
+
+    if (sub === "account") wrap.appendChild(renderAccount());
 
     if (sub === "names") wrap.appendChild(renderNamingSettings());
 
@@ -2530,7 +2547,7 @@
           t("setRadius"),
           choice(
             [["square", t("radiusSquare")], ["soft", t("radiusSoft")], ["round", t("radiusRound")], ["xl", t("radiusXl")]],
-            pref("radius", "round"),
+            pref("radius", "soft"),
             (id) => {
               setPref("radius", id);
               applyRadius(id);
@@ -2822,6 +2839,46 @@
     const frag = document.createDocumentFragment();
     frag.appendChild(glassSlider("setGlass", "setGlassText", 40, I.glass, I.setGlass, () => (document.documentElement.classList.contains("light") ? 0.78 : 0.72)));
     frag.appendChild(glassSlider("setZoneGlass", "setZoneGlassText", 30, I.zoneGlass, I.setZoneGlass, () => 0.97, previewDropbar));
+    return frag;
+  }
+
+  // ---- Konto (0.40.4): Karte oben in den Einstellungen. Konten gibt es noch nicht,
+  // die Karte zeigt den Beta-Bonus, das Untermenü erklärt den Plan und hat die
+  // Vorschau des Lese-Modus (nur Ansicht, es wird nichts gesperrt). ----
+
+  // Highlight: ein Wort als farbiger Block in den Tönen der Textkarten (4.26)
+  function highlight(text, tone) {
+    return el("span", "p-hl " + tone, text);
+  }
+
+  function accountCard() {
+    const card = button("p-account", null, () => openSettingsSection("account"));
+    const top = el("span", "p-account-top");
+    top.append(el("span", null, "(" + t("setAccount") + ")"), el("span", null, "(Beta) ›"));
+    const line = el("span", "p-account-line");
+    line.append(highlight(t("accountBonus"), "violet"), el("span", "p-account-text", " " + t("accountBonusText")));
+    card.append(top, line);
+    return card;
+  }
+
+  function renderAccount() {
+    const frag = document.createDocumentFragment();
+    const plan = block(null);
+    plan.appendChild(el("div", "p-block-text p-account-plan", t("accountText")));
+    frag.appendChild(plan);
+    const preview = block(t("accountPreview"));
+    preview.appendChild(
+      blockRow(
+        t("accountReadMode"),
+        choice([["on", t("setOn")], ["off", t("setOff")]], pref("readPreview", false) ? "on" : "off", (id) => {
+          setPref("readPreview", id === "on");
+          renderZones();
+          renderPage(true);
+        })
+      )
+    );
+    preview.appendChild(el("p", "p-block-hint", t("accountReadModeText")));
+    frag.appendChild(preview);
     return frag;
   }
 
@@ -7388,7 +7445,7 @@
   // ---- Ereignisse ----
 
   function bindEvents() {
-    $("lockText").textContent = t("lockText");
+    for (const id of ["lockTitle", "lockText", "lockNote", "lockLabel"]) $(id).textContent = t(id);
     $("libTabBtn").addEventListener("click", (e) => {
       e.stopPropagation();
       openLibMenu();
@@ -8111,7 +8168,7 @@
   // Ecken und Glas an die Bibliothek melden: Die Extension zeigt dieselben Werte
   function lookToLibrary() {
     const I = window.ArchiverI18n;
-    invoke("set_look", { radius: pref("radius", "round"), alpha: I.zoneGlass() }).catch(() => {});
+    invoke("set_look", { radius: pref("radius", "soft"), alpha: I.zoneGlass() }).catch(() => {});
   }
 
   function showApp() {

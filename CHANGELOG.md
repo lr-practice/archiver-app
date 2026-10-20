@@ -1,5 +1,15 @@
 # Changelog
 
+## App 0.40.4 (Vorabversion)
+
+- Die Sperre ist jetzt ein Titelblatt: „Dein Archiv.“ groß und farbig markiert,
+  darunter der Beta-Hinweis und das Feld für den Code.
+- Oben in den Einstellungen steht eine Konto-Karte mit dem Beta-Bonus. Sie
+  öffnet Einstellungen › Konto mit dem Plan für 1.0 und einer Vorschau des
+  Lese-Modus (nur zum Ansehen, es wird nichts pausiert).
+- Ecken sind ab Werk „Weich“ (4 px) statt „Rund“. Wer selbst gewählt hat,
+  behält seine Wahl.
+
 ## App 0.40.3 (Extension 3.29.6, Vorabversion)
 
 - Grundschrift ist jetzt KMR Melange Grotesk in App, Tray, Observer,

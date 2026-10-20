@@ -1,6 +1,6 @@
 # Archiver – Design-System
 
-Stand: App 0.40.3 · Extension 3.29.6
+Stand: App 0.40.4 · Extension 3.29.6
 
 Diese Datei hält fest, wie Archiver aussieht und warum. Sie gilt für die Mac-App
 (`app/src`) und die Chrome-Extension (`extension/`). Wer an der Oberfläche
@@ -120,7 +120,7 @@ Für die Typografie gilt:
 | Token | Wert | Zweck |
 |---|---|---|
 | `--r-lg` / `--r-md` / `--r-sm` | 8 / 6 / 5 px | Karten, Menüs, kleine Flächen |
-| Rundung „Eckig“ / „Weich“ / „Rund“ / „Sehr rund“ | `--r-lg` 0 / 4 / 8 / 14 px (`data-radius`) | Einstellung, keine weiteren Stufen. Gilt seit 0.30 auch in Tray, Zonenleiste und Extension (über die Bibliothek gemeldet) |
+| Rundung „Eckig“ / „Weich“ / „Rund“ / „Sehr rund“ | `--r-lg` 0 / 4 / 8 / 14 px (`data-radius`) | Einstellung, keine weiteren Stufen. Gilt seit 0.30 auch in Tray, Zonenleiste und Extension (über die Bibliothek gemeldet). Ab Werk „Weich“ (0.40.4, vorher „Rund“); neue Entwürfe werden mit „Weich“ gestaltet (4 / 3 / 3 px) |
 | Pille | 999 px | Navigation, Pillen |
 | Objekt (Bild) | 0 | Bilder bleiben rechteckig, wie das Original |
 | `--p-pad` | 40 px | Seitenrand |
@@ -819,6 +819,33 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
 - **Nicht:** Keine Rundung an Objekten, keine Akzentfarbe, keine Schatten an
   den Objekten. Die Extension kennt die Wolke nicht.
 
+### 4.26 Highlight, Konto und Sperre (App 0.40.4, `.p-hl`, `.p-account`, `.p-lock-*`)
+- **Highlight (`.p-hl`):** Ein kurzes Wort als Block in den Tönen der
+  Textkarten (Tokens `--hl-cyan`, `--hl-violet`, `--hl-red` mit `-ink`, gleich
+  in Dunkel und Hell). `inline-block`, `nowrap`, Innenabstand
+  0.04 / 0.12 / 0.1 em. Es läuft nie über zwei Zeilen.
+- **Zeilenhöhe:** Steht ein Highlight in einem Satz, hat der ganze Block die
+  Zeilenhöhe 1.14 (Höhe des Highlights), damit alle Zeilen gleich weit
+  auseinander liegen. Kein Extra-Abstand nur unter dem Highlight.
+- **Wo (Lukas 20.10.: „nur Dein Archiv, Beta-Bonus und Lese-Modus“):**
+  - Sperre: „Dein Archiv.“ in Cyan.
+  - Einstellungen › Konto-Karte: „Beta-Bonus“ in Violett.
+  - Lese-Modus: „Lese-Modus.“ in Rot.
+- **Sperre:** Titelblatt statt kleinem Hinweis. Oben Mono-Zeile „(Archiver)
+  (Beta)“, in der Mitte der Satz in clamp(48 px, 7.6 vw, 92 px), 500,
+  −0.045em, Rest in `--p-faint`. Unten über einer Linie links der Beta-Hinweis,
+  rechts das Feld für den Freischalt-Code (Spalten 1–4 und 6–12 von 12).
+- **Konto-Karte:** Oben in den Einstellungen über der Liste, Fläche ink × 0.08
+  (Hover 0.11), `--r-lg`, Mono-Zeile „(Konto) (Beta) ›“, darunter 24 px / 500.
+  Klick öffnet Einstellungen › Konto mit dem Plan und der Vorschau des
+  Lese-Modus.
+- **Lese-Modus (Vorschau):** Solange es keine Konten gibt, nur zum Ansehen
+  (`archiver.readPreview`). Der Kopf der Startseite wird zu „Lese-Modus.“ und
+  dem Satz in dim, in der Filterzeile steht „(Vorschau beenden)“. Es wird
+  nichts gesperrt.
+- **Nicht:** Kein zweites Highlight auf derselben Fläche, keine Preise oder
+  Zahlen im Highlight und kein Highlight als Zustand (dafür gibt es den Ring).
+
 ## 5. Bekannte Abweichungen
 
 Diese Punkte stehen hier, damit niemand sie für Absicht hält. Behoben werden
@@ -850,7 +877,10 @@ sie nur auf ausdrückliches Go.
 - [ ] Die neue Regel nutzt Tokens und keine festen Farben, Dauern oder Radien
       außerhalb der Stufen.
 - [ ] Sie funktioniert in Dunkel und Hell sowie mit und ohne `html.mac`.
-- [ ] Hervorhebungen laufen über den Ring (4.1) und nicht über Farbe.
+- [ ] Hervorhebungen laufen über den Ring (4.1) und nicht über Farbe. Ausnahme
+      ist das Highlight (4.26): höchstens eins pro Fläche, nur an den dort
+      genannten Stellen.
+- [ ] Entwürfe und neue Flächen sind mit der Rundung „Weich“ gestaltet.
 - [ ] Wenn die Komponente auch in der Extension vorkommt, ist sie dort gleich
       oder als Abweichung in Abschnitt 5 notiert.
 - [ ] `prefers-reduced-motion` wird respektiert.
