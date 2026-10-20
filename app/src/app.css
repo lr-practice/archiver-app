@@ -7351,7 +7351,51 @@ button.p-list:hover {
 
 .p-lock-foot {
   display: flex;
-  justify-content: flex-end;
+  align-items: center;
+  gap: 16px;
+}
+
+.p-lock-foot .p-unlock-go {
+  margin-left: auto;
+}
+
+.p-lock-foot .p-lock-end,
+.p-list-row .p-lock-end {
+  font-family: var(--p-mono);
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.p-lock-msg {
+  color: var(--p-dim);
+}
+
+.p-list.wrong + .p-lock-foot .p-lock-msg {
+  color: var(--danger);
+}
+
+/* Eingabe als Wert der Zeile: kein Rahmen, keine Fläche (4.26) */
+.p-lock-input {
+  min-width: 0;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  outline: none;
+}
+
+.p-lock-input::placeholder {
+  color: var(--p-faint);
+}
+
+.p-list.wrong .p-lock-input {
+  animation: unlock-shake 0.36s;
+}
+
+.p-unlock-go:disabled {
+  opacity: 0.5;
 }
 
 .p-lock .p-unlock-go {

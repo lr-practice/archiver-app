@@ -111,7 +111,36 @@
   const UNLOCK_HASHES = ["12004fa6495855edcff5595961e8da1e62e9eed6502338060283a8bb0efa5646", "4ffbc1224a6cd30617b443e4665695d19c63d76ba51f6b16bdcdc8b28a2d1e13"];
 
   function isUnlocked() {
-    return UNLOCK_HASHES.includes(pref("unlock", null));
+    return UNLOCK_HASHES.includes(pref("unlock", null)) || !!account();
+  }
+
+  // ---- Konto (0.40.7): Anmelden mit E-Mail und 6-stelligem Code über Supabase ----
+  // Öffentliche Projekt-URL und publishable key, dürfen im Code stehen (Zugriff regelt RLS)
+  const SUPABASE = "https://azaslhrsoziwasehynoe.supabase.co";
+  const SUPABASE_KEY = "sb_publishable_wvcS4mzs6mqEC2Nc0wnNcQ_NPBlECfw";
+
+  // Angemeldet: { email, id, refresh, at } oder null
+  function account() {
+    const a = pref("account", null);
+    return a && a.email ? a : null;
+  }
+
+  async function auth(path, body) {
+    const res = await fetch(SUPABASE + "/auth/v1/" + path, {
+      method: "POST",
+      headers: { apikey: SUPABASE_KEY, "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.msg || data.error_description || data.message || "HTTP " + res.status);
+    return data;
+  }
+
+  const sendCode = (email) => auth("otp", { email, create_user: true });
+
+  async function verifyCode(email, token) {
+    const data = await auth("verify", { type: "email", email, token });
+    setPref("account", { email: data.user?.email || email, id: data.user?.id || null, refresh: data.refresh_token || null, at: Date.now() });
   }
 
   async function unlockHash(code) {
@@ -128,16 +157,127 @@
     $("lockEnd").hidden = !preview;
     document.body.classList.toggle("locked", locked);
     $("lock").hidden = !locked;
-    if (locked && !$("lockForm").firstChild) {
-      // Das Feld ist der Wert der Zeile „Code“, der Knopf steht unter der Liste
-      const form = unlockForm();
-      form.id = "lockUnlock";
-      const go = form.querySelector(".p-unlock-go");
-      go.setAttribute("form", form.id);
-      $("lockForm").appendChild(form);
-      $("lockGo").appendChild(go);
-      setTimeout(() => $("lockForm").querySelector("input")?.focus(), 60);
+    if (locked && !$("lockList").firstChild) renderLockForm("mail");
+  }
+
+  // Sperre als Liste: "mail" (E-Mail eingeben), "code" (Code aus der Mail), "beta" (Freischalt-Code)
+  const lockState = { email: "" };
+  function renderLockForm(step) {
+    const form = $("lockList");
+    const foot = $("lockGo");
+    form.replaceChildren();
+    foot.replaceChildren();
+    form.onsubmit = null;
+    const row = (key, value, side) => {
+      const r = el("div", "p-list-row");
+      r.append(el("span", "p-list-key", key), value instanceof Node ? value : el("span", "p-list-value", value));
+      if (side) r.appendChild(side);
+      form.appendChild(r);
+    };
+    const field = (type, placeholder, value) => {
+      const input = el("input", "p-list-value p-lock-input");
+      input.type = type;
+      input.placeholder = placeholder;
+      input.value = value || "";
+      input.spellcheck = false;
+      input.autocomplete = type === "email" ? "email" : "one-time-code";
+      input.addEventListener("keydown", (e) => e.stopPropagation());
+      input.addEventListener("input", () => form.classList.remove("wrong"));
+      return input;
+    };
+    const status = el("span", "p-lock-msg");
+    const go = el("button", "p-unlock-go", "");
+    go.type = "submit";
+    go.setAttribute("form", "lockList");
+    const swap = (label, next) => button("p-lock-end", "(" + label + ")", () => renderLockForm(next));
+    const fail = (text) => {
+      status.textContent = text;
+      form.classList.remove("wrong");
+      void form.offsetWidth;
+      form.classList.add("wrong");
+      go.disabled = false;
+    };
+
+    if (step === "beta") {
+      $("lockGroup").textContent = "(" + t("unlockTitle") + ")";
+      const code = field("text", t("unlockPlaceholder"));
+      code.setAttribute("autocapitalize", "characters");
+      row(t("lockRowCode"), code);
+      row("Beta", t("lockBeta"));
+      go.textContent = t("unlockButton");
+      form.onsubmit = async (e) => {
+        e.preventDefault();
+        const hash = await unlockHash(code.value);
+        if (!UNLOCK_HASHES.includes(hash)) return fail(t("lockWrongCode"));
+        setPref("unlock", hash);
+        applyLock();
+        if (state.page) renderPage(true);
+        toast(t("unlockOk"));
+      };
+      foot.append(swap(t("lockUseMail"), "mail"), status, go);
+      setTimeout(() => code.focus(), 60);
+      return;
     }
+
+    $("lockGroup").textContent = "(" + t("lockSignIn") + ")";
+    if (step === "code") {
+      const code = field("text", "123456");
+      code.inputMode = "numeric";
+      code.maxLength = 6;
+      row(t("lockRowMail"), lockState.email, swap(t("lockChange"), "mail"));
+      row(t("lockRowCode"), code);
+      go.textContent = t("lockSignInGo");
+      form.onsubmit = async (e) => {
+        e.preventDefault();
+        const token = code.value.replace(/\D/g, "");
+        if (token.length !== 6) return fail(t("lockCodeShort"));
+        go.disabled = true;
+        status.textContent = t("lockChecking");
+        try {
+          await verifyCode(lockState.email, token);
+          setPref("accountPreview", "beta");
+          applyLock();
+          if (state.page) renderPage(true);
+          toast(t("lockWelcome", { email: lockState.email }));
+        } catch {
+          fail(t("lockWrongCode"));
+        }
+      };
+      const again = button("p-lock-end", "(" + t("lockResend") + ")", async () => {
+        status.textContent = t("lockSending");
+        try {
+          await sendCode(lockState.email);
+          status.textContent = t("lockSent");
+        } catch (err) {
+          fail(String(err.message || err));
+        }
+      });
+      foot.append(again, status, go);
+      setTimeout(() => code.focus(), 60);
+      return;
+    }
+
+    const mail = field("email", "du@studio.de", lockState.email);
+    row(t("lockRowMail"), mail);
+    row(t("lockRowHow"), t("lockHow"));
+    row("Beta", t("lockBeta"));
+    go.textContent = t("lockSendCode");
+    form.onsubmit = async (e) => {
+      e.preventDefault();
+      const email = mail.value.trim();
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return fail(t("lockBadMail"));
+      go.disabled = true;
+      status.textContent = t("lockSending");
+      try {
+        await sendCode(email);
+        lockState.email = email;
+        renderLockForm("code");
+      } catch (err) {
+        fail(String(err.message || err));
+      }
+    };
+    foot.append(swap(t("lockUseBeta"), "beta"), status, go);
+    setTimeout(() => mail.focus(), 60);
   }
 
   // ---- Zustand ----
@@ -2911,7 +3051,7 @@
       read: [[t("accountStatus"), t("accountNone"), "›"], [t("accountAfter"), t("accountReadMode")]],
     }[view];
     const card = el("div", "p-group p-account");
-    card.append(groupLabel("(" + t("setAccount") + ")"), list(rows, open));
+    card.append(groupLabel("(" + t("setAccount") + ")", account()?.email), list(rows, open));
     return card;
   }
 
@@ -2928,6 +3068,14 @@
     const plan = block(null);
     plan.appendChild(el("div", "p-block-text p-account-plan", t("accountText")));
     frag.appendChild(plan);
+    const acc = account();
+    if (acc) {
+      const me = block(t("setAccount"));
+      const since = new Date(acc.at).toLocaleDateString(lang === "de" ? "de-DE" : "en-GB", { day: "numeric", month: "long", year: "numeric" });
+      me.appendChild(blockRow(t("accountMail"), acc.email));
+      me.appendChild(blockRow(t("accountSince"), since));
+      frag.appendChild(me);
+    }
     if (accountView() === "subscriber") {
       const sub = block(t("accountSub"));
       const now = new Date().toLocaleTimeString(lang === "de" ? "de-DE" : "en-GB", { hour: "2-digit", minute: "2-digit" });
@@ -2959,7 +3107,10 @@
     if (isUnlocked()) {
       const out = button("p-link p-account-out", t("accountSignOut"), () => {
         setPref("unlock", null);
+        setPref("account", null);
         setPref("accountPreview", "beta");
+        lockState.email = "";
+        $("lockList").replaceChildren();
         state.settingsSub = null;
         closePage();
         applyLock();
@@ -7534,8 +7685,7 @@
   // ---- Ereignisse ----
 
   function bindEvents() {
-    for (const id of ["lockTitle", "lockText", "lockRowCode", "lockRowAfter", "lockBeta", "lockAfter"]) $(id).textContent = t(id);
-    $("lockGroup").textContent = "(" + t("unlockTitle") + ")";
+    for (const id of ["lockTitle", "lockText"]) $(id).textContent = t(id);
     $("lockEnd").textContent = "(" + t("readEnd") + ")";
     $("lockEnd").addEventListener("click", () => {
       setPref("accountPreview", "beta");

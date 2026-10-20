@@ -1,5 +1,14 @@
 # Changelog
 
+## App 0.40.7 (Vorabversion)
+
+- Anmelden mit Konto: E-Mail eingeben, den 6-stelligen Code aus der Mail
+  eintippen, fertig. Dasselbe Konto wie auf archiver-app.com. Ein Passwort gibt
+  es nicht.
+- Der Beta-Code funktioniert weiter, über „(Beta-Code)“ im Anmelde-Fenster.
+- Einstellungen › Konto zeigt die angemeldete E-Mail. Abmelden meldet das Konto
+  auf diesem Mac ab.
+
 ## App 0.40.6 (Vorabversion)
 
 - Anmelde-Fenster, Konto und Lese-Modus sind jetzt ruhig wie die
