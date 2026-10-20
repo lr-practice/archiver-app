@@ -6,6 +6,8 @@
   umschalten, wie die Active-Zone-Karten ihren Inhalt zeigen (A bis H: Heute,
   Skim, Streifen, Kontaktbogen, Stapel, Aufklappen, Lauf, Blättern) und wie
   Videos beim Darüberfahren vorschauen (Daumenkino, Skim, Abspielen, Aus).
+- Übersicht: jede Index-Zeile ist jetzt eine Karte mit eigener Fläche und ein
+  einziges Klickziel. Die Bilder beginnen auf der Kante der zweiten Active Zone.
 
 ## App 0.40.11 (Vorabversion)
 

@@ -1764,17 +1764,17 @@
     wrap.appendChild(hotRow());
     wrap.appendChild(restBar(state.zones.length - HOT_ZONES));
     const sheet = el("div", "p-sheetlist");
+    // 0.40.13: jede Zeile ist eine Karte, ein Klickziel; Bilder beginnen auf der Kante der zweiten Active-Karte
+    sheet.style.setProperty("--hot-cols", wrap.querySelector(".p-hotrow").style.getPropertyValue("--hot-cols") || "4");
     for (const zone of state.zones.slice(HOT_ZONES)) {
       const items = orderedItems(zone.path);
+      const row = el("article", "p-card p-sheet-row");
+      row.dataset.zone = zone.path;
+      row.dataset.swap = zone.path;
       const head = el("div", "p-sheet-zone");
-      head.dataset.zone = zone.path;
       const name = zoneNameEl(zone);
       head.appendChild(name);
       head.appendChild(mono(cardMeta(zone), "dim"));
-      head.addEventListener("click", (e) => {
-        if (e.target.closest("input")) return;
-        setFocus(zone.path);
-      });
       if (canEdit(zone.path))
         name.addEventListener("dblclick", (e) => {
           e.stopPropagation();
@@ -1782,14 +1782,20 @@
         });
       const thumbs = el("div", "p-sheet-thumbs");
       for (const item of items.slice(0, SHEET_MAX)) {
-        const cell = button("p-sheet-thumb", null, () => openLightbox(item));
+        const cell = el("span", "p-sheet-thumb");
         cell.appendChild(previewImg(item));
         thumbs.appendChild(cell);
       }
-      if (items.length > SHEET_MAX)
-        thumbs.appendChild(button("p-sheet-more p-mono", "+" + (items.length - SHEET_MAX), () => setFocus(zone.path)));
+      if (items.length > SHEET_MAX) thumbs.appendChild(mono("+" + (items.length - SHEET_MAX), "p-sheet-more"));
       if (!items.length) thumbs.appendChild(mono(t("emptyShort"), "dim"));
-      sheet.append(head, thumbs);
+      row.append(head, thumbs);
+      row.addEventListener("click", (e) => {
+        if (cardDragged || e.target.closest("input")) return;
+        setFocus(zone.path);
+      });
+      row.addEventListener("pointerdown", (e) => dragSwap(e, row));
+      row.addEventListener("dragstart", (e) => e.preventDefault());
+      sheet.appendChild(row);
     }
     wrap.appendChild(sheet);
     return wrap;

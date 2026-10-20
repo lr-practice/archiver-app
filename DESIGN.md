@@ -832,14 +832,17 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
 - **Übersicht:** Oben immer die vier Active Zones als Karten (2:1, vierspaltig
   ab 200 px Kartenbreite, sonst 2 × 2). Darunter „Index (N)“ und die übrigen
   Zonen als Kontaktbogen.
-- **Kontaktbogen:** Je Zone eine Zeile. Links 180 px Name und Mono-Anzahl,
-  rechts die Bilder klein und dicht wie auf einem Kontaktabzug: Höhe der
-  Zeilen-Miniatur (mind. 40 px), 13:10, 4 px Abstand, Rundung `--r-sm`.
-  Höchstens 24, danach „+N“ in Mono, das die Zone öffnet. Klick auf den Namen
-  öffnet die Zone, auf ein Bild die Lightbox.
+- **Kontaktbogen:** Je übrige Zone eine Zeile als Karte (`.p-card`, gleiche
+  Fläche wie die Active Zones, 10 px Abstand). Die Zeile ist ein einziges
+  Klickziel: Klick öffnet die Zone, Ziehen tauscht mit einer Active Zone,
+  Fokus legt den Ring um die ganze Zeile. Einzelne Bilder sind nicht
+  anklickbar. Die Zeile nutzt das Raster der Active Zones: Name und
+  Mono-Anzahl in Spalte 1, die Bilder beginnen genau auf der linken Kante der
+  zweiten Active-Karte. Bilder in Höhe der Zeilen-Miniatur (mind. 40 px),
+  13:10, 4 px Abstand, Rundung `--r-sm`, höchstens 24, danach „+N“ in Mono.
 - **Ansichten der Startseite:** Übersicht, Karten, Index. Die geteilte
   Vorschau-Ansicht (Liste links, Mosaik rechts) ist seit 0.40.11 entfernt.
-- **Fokus:** Ring (4.1), keine Farbe.
+- **Fokus:** Ring (4.1) um die ganze Zeile, keine Farbe.
 - **Schmal (< 700 px):** Name über den Bildern, eine Spalte.
 
 ### 4.24b Labor (App 0.40.12, Einstellungen › Labor, `.p-lab-*`)

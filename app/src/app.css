@@ -5690,8 +5690,7 @@ html.light .p-hot {
 .p-hot-card.swap-target,
 .p-row.swap-target,
 .p-card.drop-target,
-.p-dropbar .p-hot.drop-active,
-.p-sheet-thumb:focus-visible {
+.p-dropbar .p-hot.drop-active {
   --ring: var(--ring-lg);
   --ring-gap: 3px;
   position: relative;
@@ -5722,8 +5721,7 @@ html.light .p-hot {
 .p-hot-card.swap-target::after,
 .p-row.swap-target::after,
 .p-card.drop-target::after,
-.p-dropbar .p-hot.drop-active::after,
-.p-sheet-thumb:focus-visible::after {
+.p-dropbar .p-hot.drop-active::after {
   content: "";
   position: absolute;
   inset: calc(-1 * var(--ring-gap));
@@ -7501,10 +7499,21 @@ button.p-list:hover {
 }
 
 .p-sheetlist {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+/* Zeile als Karte: Raster wie .p-hotrow, Name in Spalte 1, Bilder ab Spalte 2 */
+.p-sheet-row {
   display: grid;
-  grid-template-columns: 180px minmax(0, 1fr);
-  gap: 28px 24px;
-  margin-top: 24px;
+  grid-template-columns: repeat(var(--hot-cols, 4), minmax(0, 1fr));
+  column-gap: 10px;
+  align-items: start;
+  padding: 14px 0;
+  cursor: pointer;
+  touch-action: none;
 }
 
 .p-sheet-zone {
@@ -7512,9 +7521,8 @@ button.p-list:hover {
   flex-direction: column;
   gap: 4px;
   min-width: 0;
-  padding-top: 2px;
+  padding: 2px 0 0 16px;
   font-weight: 500;
-  cursor: pointer;
 }
 
 .p-sheet-zone .p-mono {
@@ -7522,6 +7530,8 @@ button.p-list:hover {
 }
 
 .p-sheet-thumbs {
+  grid-column: 2 / -1;
+  padding-right: 14px;
   display: flex;
   flex-wrap: wrap;
   align-items: flex-start;
@@ -7531,14 +7541,12 @@ button.p-list:hover {
 
 .p-sheet-thumb {
   position: relative;
-  height: max(40px, calc(var(--row-thumb, 40px) * 1.0));
+  display: block;
+  height: max(40px, var(--row-thumb, 40px));
   aspect-ratio: 13 / 10;
-  padding: 0;
-  border: none;
   border-radius: var(--r-sm);
   overflow: hidden;
   background: rgba(var(--ink-rgb), 0.055);
-  cursor: pointer;
 }
 
 .p-sheet-thumb img,
@@ -7553,24 +7561,24 @@ button.p-list:hover {
 .p-sheet-more {
   align-self: center;
   padding: 0 8px;
-  border: none;
-  background: none;
   color: var(--p-dim);
-  cursor: pointer;
-}
-
-.p-sheet-more:hover {
-  color: var(--p-text);
 }
 
 @media (max-width: 700px) {
-  .p-sheetlist {
+  .p-sheet-row {
     grid-template-columns: minmax(0, 1fr);
-    gap: 8px;
+    row-gap: 12px;
+    padding-left: 14px;
+    padding-right: 14px;
+  }
+
+  .p-sheet-zone {
+    padding-left: 2px;
   }
 
   .p-sheet-thumbs {
-    margin-bottom: 20px;
+    grid-column: 1;
+    padding-right: 0;
   }
 }
 
