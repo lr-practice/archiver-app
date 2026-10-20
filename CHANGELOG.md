@@ -1,5 +1,11 @@
 # Changelog
 
+## App 0.40.13 (Vorabversion)
+
+- Labor › Schrift: Kopfgröße der Seiten in vier Stufen (S, M, L, XL) und
+  Schnitt Medium oder Regular, für Seitenköpfe und die Sätze in Konto und
+  Anmelden.
+
 ## App 0.40.12 (Vorabversion)
 
 - Neuer Bereich Einstellungen › Labor zum Ausprobieren. Dort lässt sich

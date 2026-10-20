@@ -1,6 +1,6 @@
 # Archiver – Design-System
 
-Stand: App 0.40.12 · Extension 3.29.6
+Stand: App 0.40.13 · Extension 3.29.6
 
 Diese Datei hält fest, wie Archiver aussieht und warum. Sie gilt für die Mac-App
 (`app/src`) und die Chrome-Extension (`extension/`). Wer an der Oberfläche
@@ -856,6 +856,9 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
   scrollen, Pfeile beim Hover). Eine Zone mit nur einem Bild bleibt A.
 - **Video-Vorschau:** Daumenkino (Standard, 8 Standbilder), Skim (Zeiger
   waagerecht = Zeit im Clip), Abspielen (stumm, Schleife), Aus.
+- **Schrift (0.40.13):** Kopfgröße S 22–30 px, M 28–42 px (Standard), L
+  34–56 px, XL 44–80 px (`--head-size`, `data-head-size`), Schnitt Medium
+  500 (Standard) oder Regular 400 (`--head-weight`, gilt auch für `.p-say`).
 - **Bewegung:** Bei `prefers-reduced-motion` laufen G, Daumenkino und
   Abspielen nicht. Skim bleibt, weil es der Hand folgt.
 - **Regel:** Eine Variante, die bleibt, wandert aus dem Labor in die normale
