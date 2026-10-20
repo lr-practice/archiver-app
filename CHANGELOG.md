@@ -5,7 +5,7 @@
 - Anmelden neu: ein Satz, darunter ein einziges Feld in Satzgröße auf einer
   Linie, rechts ein runder Pfeil. Die Zeilen „Weg“ und „Beta“ sind weg. Beim
   Code nennt der Satz die Adresse, darunter „(Neuer Code)“ und „(Andere E-Mail)“.
-- Übersicht mit Plakat-Kopf: „Übersicht.“ groß in voller Farbe, darunter die
+- Übersicht mit Plakat-Kopf: „Übersicht“ groß in voller Farbe, darunter die
   Zahlen gedimmt. Viel Raum darunter, die vier Active Zones stehen am unteren
   Fensterrand, der Rest kommt beim Scrollen. „seit …“ ist weg.
 - Active Zones schon ab mittlerer Fensterbreite vierspaltig.

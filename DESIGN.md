@@ -822,8 +822,8 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
   den Objekten. Die Extension kennt die Wolke nicht.
 
 ### 4.24a Übersicht mit Plakat-Kopf (App 0.40.9, `.p-home-hero`)
-- **Kopf:** „Übersicht.“ in voller Farbe, darunter auf eigener Zeile die
-  Zahlen („709 Objekte in 7 Zonen.“) in `--p-dim`. 48–128 px (7.2vw),
+- **Kopf:** „Übersicht“ in voller Farbe, darunter auf eigener Zeile die
+  Zahlen („709 Objekte in 7 Zonen“) in `--p-dim`, beides ohne Punkt. 48–128 px (7.2vw),
   Zeilenhöhe 1, −0.045em. Kein „seit …“.
 - **Raum:** Der Kopf wächst (`fitHomeHero`), bis die erste Reihe, die vier
   Active Zones, mit 40 px Abstand am unteren Fensterrand steht. Alle weiteren
