@@ -1,6 +1,6 @@
 # Archiver – Design-System
 
-Stand: App 0.40.4 · Extension 3.29.6
+Stand: App 0.40.5 · Extension 3.29.6
 
 Diese Datei hält fest, wie Archiver aussieht und warum. Sie gilt für die Mac-App
 (`app/src`) und die Chrome-Extension (`extension/`). Wer an der Oberfläche
@@ -839,8 +839,12 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
   (Hover 0.11), `--r-lg`, Mono-Zeile „(Konto) (Beta) ›“, darunter 24 px / 500.
   Klick öffnet Einstellungen › Konto mit dem Plan und der Vorschau des
   Lese-Modus.
-- **Lese-Modus (Vorschau):** Solange es keine Konten gibt, nur zum Ansehen
-  (`archiver.readPreview`). Der Kopf der Startseite wird zu „Lese-Modus.“ und
+- **Vorschau (0.40.5):** Solange es keine Konten gibt, wählt Einstellungen ›
+  Konto › Ansicht zwischen Beta, Abonnent und Lese-Modus
+  (`archiver.accountPreview`, vorher `readPreview`). Abonnent: Karte „(Jahr)“,
+  „Jahr, aktiv.“ und dim „Läuft bis …“ ohne Highlight, im Untermenü ein Block
+  Abo mit Abo, Geräte, Zahlung und Zuletzt geprüft. Es wird nichts gebucht.
+- **Lese-Modus (Vorschau):** Nur zum Ansehen. Der Kopf der Startseite wird zu „Lese-Modus.“ und
   dem Satz in dim, in der Filterzeile steht „(Vorschau beenden)“. Es wird
   nichts gesperrt.
 - **Nicht:** Kein zweites Highlight auf derselben Fläche, keine Preise oder

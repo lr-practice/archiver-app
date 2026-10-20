@@ -1,5 +1,11 @@
 # Changelog
 
+## App 0.40.5 (Vorabversion)
+
+- Einstellungen › Konto › Ansicht: Vorschau als Beta, als Abonnent (Jahresabo
+  aktiv, mit Abo, Geräten und Zahlung) oder im Lese-Modus. Es wird nichts
+  gebucht oder gesperrt.
+
 ## App 0.40.4 (Vorabversion)
 
 - Die Sperre ist jetzt ein Titelblatt: „Dein Archiv.“ groß und farbig markiert,

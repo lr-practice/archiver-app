@@ -1356,7 +1356,7 @@
       ? new Date(first).toLocaleDateString(lang === "de" ? "de-DE" : "en-GB", { month: "long", year: "numeric" })
       : "";
     // Vorschau Lese-Modus (Einstellungen › Konto): eigener Kopf mit Highlight, sonst unverändert
-    const reading = pref("readPreview", false);
+    const reading = accountView() === "read";
     if (reading) {
       const h = el("h1", "p-head p-head-read");
       h.append(highlight(t("readTitle"), "red"), el("span", "p-head-text", " " + t("readText")));
@@ -1375,7 +1375,7 @@
     if (reading)
       bar.appendChild(
         chip("(" + t("readEnd") + ")", false, () => {
-          setPref("readPreview", false);
+          setPref("accountPreview", "beta");
           renderZones();
           if (state.page === "settings") renderPage(true);
         })
@@ -2851,12 +2851,29 @@
     return el("span", "p-hl " + tone, text);
   }
 
+  // Vorschau: "beta" (heute), "subscriber" (Jahresabo aktiv) oder "read" (ohne Abo)
+  function accountView() {
+    const v = pref("accountPreview", null);
+    if (["beta", "subscriber", "read"].includes(v)) return v;
+    return pref("readPreview", false) ? "read" : "beta"; // 0.40.4 kannte nur den Lese-Modus
+  }
+
+  function accountUntil() {
+    const d = new Date();
+    d.setFullYear(d.getFullYear() + 1);
+    return d.toLocaleDateString(lang === "de" ? "de-DE" : "en-GB", { day: "numeric", month: "long", year: "numeric" });
+  }
+
   function accountCard() {
+    const view = accountView();
     const card = button("p-account", null, () => openSettingsSection("account"));
     const top = el("span", "p-account-top");
-    top.append(el("span", null, "(" + t("setAccount") + ")"), el("span", null, "(Beta) ›"));
+    const tag = { beta: "(Beta) ›", subscriber: "(" + t("accountYearly") + ") ›", read: "(" + t("accountNone") + ") ›" }[view];
+    top.append(el("span", null, "(" + t("setAccount") + ")"), el("span", null, tag));
     const line = el("span", "p-account-line");
-    line.append(highlight(t("accountBonus"), "violet"), el("span", "p-account-text", " " + t("accountBonusText")));
+    if (view === "beta") line.append(highlight(t("accountBonus"), "violet"), el("span", "p-account-text", " " + t("accountBonusText")));
+    else if (view === "subscriber") line.append(el("span", null, t("accountActive")), el("span", "p-account-text", " " + t("accountUntil", { date: accountUntil() })));
+    else line.append(el("span", null, t("accountNoneTitle")), el("span", "p-account-text", " " + t("readText")));
     card.append(top, line);
     return card;
   }
@@ -2866,15 +2883,28 @@
     const plan = block(null);
     plan.appendChild(el("div", "p-block-text p-account-plan", t("accountText")));
     frag.appendChild(plan);
+    if (accountView() === "subscriber") {
+      const sub = block(t("accountSub"));
+      const now = new Date().toLocaleTimeString(lang === "de" ? "de-DE" : "en-GB", { hour: "2-digit", minute: "2-digit" });
+      sub.appendChild(blockRow(t("accountPlan"), t("accountPlanYear")));
+      sub.appendChild(blockRow(t("accountDevices"), t("accountDevicesValue")));
+      sub.appendChild(blockRow(t("accountBilling"), t("accountBillingValue")));
+      sub.appendChild(blockRow(t("accountChecked"), t("accountCheckedValue", { time: now })));
+      frag.appendChild(sub);
+    }
     const preview = block(t("accountPreview"));
     preview.appendChild(
       blockRow(
-        t("accountReadMode"),
-        choice([["on", t("setOn")], ["off", t("setOff")]], pref("readPreview", false) ? "on" : "off", (id) => {
-          setPref("readPreview", id === "on");
-          renderZones();
-          renderPage(true);
-        })
+        t("accountView"),
+        choice(
+          [["beta", "Beta"], ["subscriber", t("accountViewSub")], ["read", t("accountReadMode")]],
+          accountView(),
+          (id) => {
+            setPref("accountPreview", id);
+            renderZones();
+            renderPage(true);
+          }
+        )
       )
     );
     preview.appendChild(el("p", "p-block-hint", t("accountReadModeText")));
