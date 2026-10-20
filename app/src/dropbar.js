@@ -46,7 +46,7 @@
   }
 
   async function load() {
-    // Ecken wie in der App (Einstellungen › Aussehen), Werte aus palette.css
+    // Ecken wie in der App (Einstellungen › Darstellung), Werte aus palette.css
     const radius = pref("radius", "soft");
     if (radius && radius !== "round") document.documentElement.dataset.radius = radius;
     else delete document.documentElement.dataset.radius;

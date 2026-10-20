@@ -1,5 +1,17 @@
 # Changelog
 
+## App 0.40.8 (Vorabversion)
+
+- Einstellungen aufgeräumt: oben das Konto, darunter fünf statt zehn Bereiche.
+  Bibliothek (mit Dateinamen), Darstellung (Ansicht, Aussehen, Glas, Start und
+  Ton), Mac & Browser (Extension, Tray, Zonenleiste, Vorschau-Formate), Studio
+  und App.
+- Version und Updates stehen jetzt unter Einstellungen › App, mit „Nach Updates
+  suchen“. Information (⌘I) zeigt nur noch die App und deine Sammlung.
+- Der alte Beta-Code lässt sich nicht mehr eingeben. Wer schon freigeschaltet
+  ist, bleibt es, bis er sich mit E-Mail anmeldet oder abmeldet.
+- Anmelden nimmt Codes mit 6 bis 8 Ziffern und nennt bei Fehlern den Grund.
+
 ## App 0.40.7 (Vorabversion)
 
 - Anmelden mit Konto: E-Mail eingeben, den 6-stelligen Code aus der Mail

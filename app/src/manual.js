@@ -32,7 +32,7 @@ const MANUAL = {
           { t: "Lightbox", d: "Objekt groß, mit Zoom, Player für Audio und Video und PDF seitenweise. Unten Zähler, Zoom, Info, Quelle und „Ablegen in“. Klick neben das Objekt schließt.", k: ["Space", "←", "→", "Z", "T"] },
           { t: "Details", d: "Seitenblatt mit Name, Maßen, Format, Quelle, Zone, Bildtext und Rechten.", k: ["⌘D", "I"] },
           { t: "Zuletzt gelöscht", d: "Gelöschtes bleibt 7 Tage in der Bibliothek und lässt sich wiederherstellen. Auch was 7 Tage in Unsorted liegt, kommt hierher, in jedem Ordner namens Unsorted, auch selbst angelegt (an oder aus unter Einstellungen › Bibliothek); die letzten zwei Tage zeigt das Objekt „noch n T.“. Danach geht es in den Papierkorb des Macs. Letzte Zeile im Index und im ≡-Menü.", k: ["⌫"] },
-          { t: "Dateinamen", d: "Einstellungen › Dateinamen: ein Schema für einheitliche Namen, etwa Datum_Zone_Nr oder ein eigenes aus Bausteinen. Ab Werk bleibt jeder Name, wie er ist. Umbenannt wird nur, wenn du es selbst auslöst, nie beim Sichern. Auswahl, Rechtsklick „Umbenennen …“ (auch in der Lightbox und in geteilten Libraries), Liste alt → neu prüfen, einzelne Namen ändern, bestätigen. Uneinheitliche Namen wie IMG_… sind markiert. In den Details schlägt Archiver aus Seitentitel, Motiv und Farbe einen Namen vor; er gilt erst, wenn du ihn übernimmst." },
+          { t: "Dateinamen", d: "Einstellungen › Bibliothek › Dateinamen: ein Schema für einheitliche Namen, etwa Datum_Zone_Nr oder ein eigenes aus Bausteinen. Ab Werk bleibt jeder Name, wie er ist. Umbenannt wird nur, wenn du es selbst auslöst, nie beim Sichern. Auswahl, Rechtsklick „Umbenennen …“ (auch in der Lightbox und in geteilten Libraries), Liste alt → neu prüfen, einzelne Namen ändern, bestätigen. Uneinheitliche Namen wie IMG_… sind markiert. In den Details schlägt Archiver aus Seitentitel, Motiv und Farbe einen Namen vor; er gilt erst, wenn du ihn übernimmst." },
           { t: "PDF", d: "Auswahl, Zone oder Suche als Kontaktbogen, Plakat oder Moodboard. 1 bis 16 pro Seite, A4 quer oder hoch.", k: ["⌘P"] },
           { t: "Kopieren und ziehen", d: "`⌘C` legt Bilddaten in die Zwischenablage, bei Textkarten Text und Bild. Objekte lassen sich aus Raster und Lightbox in jedes Programm ziehen.", k: ["⌘C"] },
           { t: "Einfügen", d: "`⌘V` legt die Zwischenablage in die offene Zone: Dateien aus dem Finder, kopierte Bilder und Screenshots, Text als Textkarte. Auf der Startseite landet es in Unsorted. Geht auch im Tray, wenn eine Zone offen ist.", k: ["⌘V"] },
@@ -53,7 +53,7 @@ const MANUAL = {
           { t: "Mehrere Stellen", d: "Mit gedrückter `⌥` weiteren Text markieren oder Bilder anklicken, nochmal anklicken nimmt sie raus. Ein Zug in eine Zone sichert alles. Klick daneben oder `esc` hebt die Markierung auf. `⌘`-Klick bleibt beim Browser und öffnet Links im neuen Tab.", k: ["⌥"] },
           { t: "Links und Medien", d: "Links und Seiten werden Karten, PDF-, Video- und Audio-Links Dateien. YouTube und Vimeo als Video-Karte, Instagram-Karussells und Reels im Original. Die Adresse der offenen Seite in eine Zone gezogen sichert die ganze Seite offline hinter der Karte; „Gesichert“ in der Lightbox öffnet sie." },
           { t: "Overlay", d: "Die Active Zones auf jeder Seite. „Archiver öffnen ↗“ führt in die App.", k: ["⌥⇧A"] },
-          { t: "Version", d: "Fehlt die Extension oder ist sie älter, als die App sie braucht, steht oben rechts ein Hinweis mit „(Laden)“. Den Stand zeigt Einstellungen › Extension." },
+          { t: "Version", d: "Fehlt die Extension oder ist sie älter, als die App sie braucht, steht oben rechts ein Hinweis mit „(Laden)“. Den Stand zeigt Einstellungen › Mac & Browser." },
         ],
       },
       {
@@ -64,7 +64,7 @@ const MANUAL = {
           { t: "Ansehen", d: "Blättert durch den Ordner. Zoom per Trackpad, `⌘` und Scrollen oder Doppelklick.", k: ["←", "→", "⌘0"] },
           { t: "Sichern", d: "„● Archiver“ ist grau, solange die Datei nicht in der Bibliothek liegt. Klick öffnet „Ablegen in“. Blau heißt gesichert, Klick zeigt sie in der App.", k: ["1–4"] },
           { t: "Info", d: "Maße, Größe, Format, Datum, Ordner und Zone.", k: ["I"] },
-          { t: "Formate", d: "Bilder, PDF, Video und Audio. Unter Einstellungen › Observer je Format als Standard festlegen." },
+          { t: "Formate", d: "Bilder, PDF, Video und Audio. Unter Einstellungen › Mac & Browser je Format als Standard festlegen." },
         ],
       },
       {
@@ -72,12 +72,12 @@ const MANUAL = {
         title: "Tray",
         lead: "Archiver in jedem Programm, auch wenn das Fenster zu ist. `esc` bringt dich ins vorige Programm zurück.",
         rows: [
-          { t: "Öffnen", d: "Kürzel unter Einstellungen › Tray: `⌥ Space`, `⌃⌥ Space`, `⇧⌥ Space` oder aus.", k: ["⌥ Space"] },
+          { t: "Öffnen", d: "Kürzel unter Einstellungen › Mac & Browser: `⌥ Space`, `⌃⌥ Space`, `⇧⌥ Space` oder aus.", k: ["⌥ Space"] },
           { t: "Finden", d: "Active Zones als Karten, Suche über Zonen und Objekte.", k: ["1–4", "⌘1–4"] },
           { t: "Herausziehen", d: "Objekt direkt in InDesign, Figma, Mail oder den Finder ziehen. Der Tray wird dabei fast unsichtbar." },
           { t: "Kopieren und zeigen", d: "`↵` kopiert, `⌘↵` zeigt im Finder, die Leertaste zeigt das Objekt groß.", k: ["↵", "⌘↵", "Space"] },
           { t: "InDesign", d: "Rahmen markieren, Tray öffnen, Doppelklick oder `↵` auf ein Bild: Es landet verknüpft im Rahmen, proportional gefüllt und zentriert." },
-          { t: "Zonenleiste", d: "Wer irgendwo auf dem Mac Dateien zieht, sieht unten die Active Zones. Loslassen sichert. Ab Werk aus, einschalten unter Einstellungen › Tray." },
+          { t: "Zonenleiste", d: "Wer irgendwo auf dem Mac Dateien zieht, sieht unten die Active Zones. Loslassen sichert. Ab Werk aus, einschalten unter Einstellungen › Mac & Browser." },
         ],
       },
       {
@@ -86,7 +86,7 @@ const MANUAL = {
         rows: [
           { t: "Textkarten", d: "Zitate aus dem Web als farbige Karte. Farbe in den Details änderbar: Rot, Grün, Violett, Cyan, Gelb, Weiß oder Schwarz, dieselbe Reihe wie bei Notizen. Liegen als .txt im Zonenordner." },
           { t: "Notizen", d: "Rechtsklick in eine Zone. In der Lightbox schreibst du direkt auf das Blatt, gesichert wird von selbst. Liegen als .md im Zonenordner. Links neben dem Blatt stehen verknüpfte Objekte.", k: ["⌘⇧N"] },
-          { t: "Bildtext", d: "Beim Sichern markierter Text wird zum Bildtext. Er ist durchsuchbar und wahlweise im PDF. Im Raster zeigt ein Punkt unten rechts in der Kartenfarbe an, dass ein Bild Text hat; die Farbe ist in den Details (`⌘D`) wählbar. In der Lightbox steht er auf einer farbigen Karte: als Rückseite, die `T` oder das Eselsohr unten rechts aufdeckt, oder als Doppelseite neben dem Bild (Einstellungen › Aussehen). Auf der Karte direkt editierbar, ebenso Textkarten. `⌘V` mit Text auf ein Bild setzt ihn.", k: ["⌘V", "T"] },
+          { t: "Bildtext", d: "Beim Sichern markierter Text wird zum Bildtext. Er ist durchsuchbar und wahlweise im PDF. Im Raster zeigt ein Punkt unten rechts in der Kartenfarbe an, dass ein Bild Text hat; die Farbe ist in den Details (`⌘D`) wählbar. In der Lightbox steht er auf einer farbigen Karte: als Rückseite, die `T` oder das Eselsohr unten rechts aufdeckt, oder als Doppelseite neben dem Bild (Einstellungen › Darstellung). Auf der Karte direkt editierbar, ebenso Textkarten. `⌘V` mit Text auf ein Bild setzt ihn.", k: ["⌘V", "T"] },
         ],
       },
       {
@@ -156,7 +156,7 @@ const MANUAL = {
           { t: "Lightbox", d: "The object large, with zoom, a player for audio and video and PDFs page by page. Below: counter, zoom, info, source and “Move to”. Click beside the object to close.", k: ["Space", "←", "→", "Z", "T"] },
           { t: "Details", d: "Side sheet with name, size, format, source, zone, caption and rights.", k: ["⌘D", "I"] },
           { t: "Recently deleted", d: "Deleted items stay in the library for 7 days and can be restored. Anything left in Unsorted for 7 days ends up here too, in any folder named Unsorted, including ones you made (on or off under Settings › Library); for the last two days the item shows “n d left”. After that they go to the Mac’s Trash. Last row of the index and in the ≡ menu.", k: ["⌫"] },
-          { t: "File names", d: "Settings › File names: one scheme for consistent names, such as Date_Zone_No or your own from building blocks. By default every name stays as it is. Names only change when you trigger it yourself, never when saving. Select, right-click “Rename …” (also in the lightbox and in shared libraries), check the old → new list, change single names, confirm. Inconsistent names such as IMG_… are marked. In the details Archiver suggests a name from page title, subject and colour; it only applies once you accept it." },
+          { t: "File names", d: "Settings › Library › File names: one scheme for consistent names, such as Date_Zone_No or your own from building blocks. By default every name stays as it is. Names only change when you trigger it yourself, never when saving. Select, right-click “Rename …” (also in the lightbox and in shared libraries), check the old → new list, change single names, confirm. Inconsistent names such as IMG_… are marked. In the details Archiver suggests a name from page title, subject and colour; it only applies once you accept it." },
           { t: "PDF", d: "Selection, zone or search as contact sheet, poster or moodboard. 1 to 16 per page, A4 landscape or portrait.", k: ["⌘P"] },
           { t: "Copy and drag", d: "`⌘C` puts image data on the clipboard, for text cards text and image. Drag objects from the grid or the lightbox into any program.", k: ["⌘C"] },
           { t: "Paste", d: "`⌘V` puts the clipboard into the open zone: files from the Finder, copied images and screenshots, text as a text card. On the start page it goes to Unsorted. Works in the Tray too while a zone is open.", k: ["⌘V"] },
@@ -177,7 +177,7 @@ const MANUAL = {
           { t: "Several pieces", d: "Hold `⌥` to select more text or click images; click again to remove one. One drag into a zone saves everything. Click elsewhere or press `esc` to clear. `⌘`-click stays with the browser and opens links in a new tab.", k: ["⌥"] },
           { t: "Links and media", d: "Links and pages become cards, PDF, video and audio links become files. YouTube and Vimeo as video cards, Instagram carousels and reels in their original. Drag the address of the open page into a zone and the whole page is saved offline behind the card; “Saved page” in the lightbox opens it." },
           { t: "Overlay", d: "The Active Zones on any page. “Open Archiver ↗” takes you to the app.", k: ["⌥⇧A"] },
-          { t: "Version", d: "If the extension is missing or older than the app needs, a note with “(Download)” appears at the top right. Settings › Extension shows which version is connected." },
+          { t: "Version", d: "If the extension is missing or older than the app needs, a note with “(Download)” appears at the top right. Settings › Mac & browser shows which version is connected." },
         ],
       },
       {
@@ -188,7 +188,7 @@ const MANUAL = {
           { t: "View", d: "Pages through the folder. Zoom with the trackpad, `⌘` and scroll, or double-click.", k: ["←", "→", "⌘0"] },
           { t: "Save", d: "“● Archiver” is grey while the file is not in the library. Click to open “Move to”. Blue means saved, click to show it in the app.", k: ["1–4"] },
           { t: "Info", d: "Dimensions, size, format, date, folder and zone.", k: ["I"] },
-          { t: "Formats", d: "Images, PDF, video and audio. Set Archiver as default per format under Settings › Observer." },
+          { t: "Formats", d: "Images, PDF, video and audio. Set Archiver as default per format under Settings › Mac & browser." },
         ],
       },
       {
@@ -196,12 +196,12 @@ const MANUAL = {
         title: "Tray",
         lead: "Archiver in any program, even with the window closed. `esc` takes you back to the program before.",
         rows: [
-          { t: "Open", d: "Shortcut under Settings › Tray: `⌥ Space`, `⌃⌥ Space`, `⇧⌥ Space` or off.", k: ["⌥ Space"] },
+          { t: "Open", d: "Shortcut under Settings › Mac & browser: `⌥ Space`, `⌃⌥ Space`, `⇧⌥ Space` or off.", k: ["⌥ Space"] },
           { t: "Find", d: "Active Zones as cards, search across zones and objects.", k: ["1–4", "⌘1–4"] },
           { t: "Drag out", d: "Drag an object straight into InDesign, Figma, Mail or the Finder. The Tray almost disappears while you drag." },
           { t: "Copy and show", d: "`↵` copies, `⌘↵` shows in Finder, Space shows the object large.", k: ["↵", "⌘↵", "Space"] },
           { t: "InDesign", d: "Select a frame, open the Tray, double-click or press `↵` on an image: it is placed linked in the frame, filled proportionally and centred." },
-          { t: "Zone bar", d: "Drag files anywhere on your Mac and the Active Zones appear at the bottom. Drop to save. Off by default, turn it on under Settings › Tray." },
+          { t: "Zone bar", d: "Drag files anywhere on your Mac and the Active Zones appear at the bottom. Drop to save. Off by default, turn it on under Settings › Mac & browser." },
         ],
       },
       {
@@ -210,7 +210,7 @@ const MANUAL = {
         rows: [
           { t: "Text cards", d: "Quotes from the web as coloured cards. Change the colour in the details: red, green, violet, cyan, yellow, white or black, the same row as for notes. Stored as .txt in the zone folder." },
           { t: "Notes", d: "Right-click in a zone. In the lightbox you write straight on the sheet, it saves by itself. Stored as .md in the zone folder. Linked objects sit to the left of the sheet.", k: ["⌘⇧N"] },
-          { t: "Caption", d: "Text selected while saving becomes the caption. It is searchable and optional in the PDF. In the grid a dot at the bottom right, in the card’s colour, shows that an image has text; pick the colour in Details (`⌘D`). In the lightbox it sits on a coloured card: as the back, turned over with `T` or the corner at the bottom right, or as a spread next to the image (Settings › Appearance). Edit it right on the card, text cards too. `⌘V` with text on an image sets it.", k: ["⌘V", "T"] },
+          { t: "Caption", d: "Text selected while saving becomes the caption. It is searchable and optional in the PDF. In the grid a dot at the bottom right, in the card’s colour, shows that an image has text; pick the colour in Details (`⌘D`). In the lightbox it sits on a coloured card: as the back, turned over with `T` or the corner at the bottom right, or as a spread next to the image (Settings › Display). Edit it right on the card, text cards too. `⌘V` with text on an image sets it.", k: ["⌘V", "T"] },
         ],
       },
       {

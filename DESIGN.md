@@ -1,6 +1,6 @@
 # Archiver – Design-System
 
-Stand: App 0.40.7 · Extension 3.29.6
+Stand: App 0.40.8 · Extension 3.29.6
 
 Diese Datei hält fest, wie Archiver aussieht und warum. Sie gilt für die Mac-App
 (`app/src`) und die Chrome-Extension (`extension/`). Wer an der Oberfläche
@@ -60,7 +60,7 @@ Bei neuen Regeln gilt:
 | Token | Dunkel | Hell (0.25.0) | Zweck |
 |---|---|---|---|
 | `--bg-solid` | `#1c1c1c` | `#f4f4f4` | Grundfarbe des Fensters, gleich dem Tray (0.28) |
-| `--win-alpha` | 0.72 | 0.78 | Deckkraft über dem Mac-Glas, Standard wie im Tray. Regler „Glas“ (Einstellungen › Aussehen, 40–100 % in 5er-Schritten, `archiver.glass`, i18n.js `applyGlass`) für App, Tray und Observer |
+| `--win-alpha` | 0.72 | 0.78 | Deckkraft über dem Mac-Glas, Standard wie im Tray. Regler „Glas“ (Einstellungen › Darstellung, 40–100 % in 5er-Schritten, `archiver.glass`, i18n.js `applyGlass`) für App, Tray und Observer |
 | `--bg` | aus `--bg-solid` × `--win-alpha` | dito | Fenster über dem Mac-Glas |
 | `--ink` / `--ink-rgb` | `#ffffff` / `255,255,255` | `#111111` / `17,17,17` | Text und Basis aller Alpha-Flächen |
 | `--ink-inverse` | `#0f0f0f` | `#f4f4f4` | Text auf `--ink`-Flächen (Primärknopf) |
@@ -223,7 +223,7 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
   - Ziel unter dem Zeiger (Ring)
   - Herkunftszone (Inhalt auf 45 % zurückgenommen, Glas bleibt)
   - Abgelegt (Ziel glüht kurz in `--glow-rgb`, dann fährt die Leiste aus)
-- **Angeschnitten (0.35, Einstellungen › Ansicht, ab Werk „Ganz“):** Wahlweise
+- **Angeschnitten (0.35, Einstellungen › Darstellung, ab Werk „Ganz“):** Wahlweise
   ragen die Karten erst 90 px herein (`.p-dropbar.strip`), genau wie die Leiste
   der Extension (4.13): oben gerundet, unten bündig, ohne Hinweis. Zeiger in
   den Streifen → volle Höhe, mehr als 24 px darüber → wieder Streifen. Höhe mit
@@ -337,7 +337,7 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
   - Standard: 1 px Linie `--dash`, beim Hover `--ink`.
   - Primär: Fläche `--ink` mit Text `--ink-inverse`.
   - Ecke `--r-md` überall (18.10., vorher eckig), folgt also der Rundung
-    aus Einstellungen › Aussehen. Das gilt auch für Sperrbild (Feld und
+    aus Einstellungen › Darstellung. Das gilt auch für Sperrbild (Feld und
     „Freischalten“) und die Felder im PDF-Ersteller.
 - **Nicht:** Höchstens ein Primärknopf pro Dialog.
 
@@ -349,7 +349,7 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
   Rahmen).
 - **Form (18.10.):** Glas wie Menüs (2.4: `--menu-bg`, `--menu-shadow`,
   `blur(24px) saturate(1.4)`, hell `blur(28px) saturate(0)`), Ecke `--r-lg`,
-  Knöpfe `--r-md`. Beide folgen der Rundung aus Einstellungen › Aussehen.
+  Knöpfe `--r-md`. Beide folgen der Rundung aus Einstellungen › Darstellung.
   Eingabefelder haben 20 px Luft zu den Knöpfen.
 - **Nicht:** Keine feste Rundung und keine Pillen-Knöpfe (bis 0.40.1 waren es
   14 px und 999 px, Lukas 18.10.: „rundungen passen nicht mit den
@@ -403,7 +403,7 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
 - **Lightbox (0.30.1):** Karte im Ton des Bildes wie eine Textkarte
   (`quoteTone`, `.text-sheet.lb-cap-card`): Kennung BILDTEXT · Zone—Nummer,
   Text in Geist 500 nach Länge 7 / 5 / 3,6 `cqmin` (mind. 15 px), Fuß Quelle ·
-  Datum. Zwei Formen, Einstellungen › Aussehen „Bildtext in der Lightbox“:
+  Datum. Zwei Formen, Einstellungen › Darstellung „Bildtext in der Lightbox“:
   - **Rückseite** (Standard): Die Karte hat genau das Maß des Bildes. Ein
     Eselsohr 22 px in der Kartenfarbe unten rechts zeigt sie an (Hover 30 px).
     `T`, Knopf „Text“ oder das Eselsohr wenden um die senkrechte Mitte,
@@ -443,11 +443,11 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
 
 ### 4.12 Tray (`palette.css`)
 - **Name (0.28):** In der Oberfläche heißt sie „Tray“, im Code weiter `palette`.
-- **Zweck:** Per Kürzel (Standard ⌥ Space, Einstellungen › Tray) über
+- **Zweck:** Per Kürzel (Standard ⌥ Space, Einstellungen › Mac & Browser) über
   jedem Programm Zonen und Objekte holen, etwa in einen InDesign-Rahmen.
 - **Form:** 860 × 620 px, macOS-Glas, Suchfeld 17 px oben. Grund `--pal-bg`
   (Dunkel rgb 28 × `--win-alpha` 0.72, Hell rgb 244 × 0.78) ist seit 0.28 auch
-  der Standard des App-Fensters und folgt seit 0.30 dem Glas-Regler (2.1). Hell/Dunkel und Ecken folgen Einstellungen › Aussehen;
+  der Standard des App-Fensters und folgt seit 0.30 dem Glas-Regler (2.1). Hell/Dunkel und Ecken folgen Einstellungen › Darstellung;
   die Fensterecke ist eckig 0, klein 6, mittel 12 (Standard), groß 18 px.
   Start: Active Zones als Zonenkarten (4.4) mit 01–04 und „Active Zone“,
   darunter der Index; seit 0.32 haben alle Karten dieselbe Höhe (Cover 8:3).
@@ -510,7 +510,7 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
   „Gesichert in …“ mit Glühen (`.landed`). Scheitert es, steht „Nicht
   gesichert: …“ in `--danger` (`.failed`, kein Glühen) 2.5 s lang, dann
   blendet die Leiste aus. Die Leiste bleibt so lange stehen (`dropbar_hold`).
-- **Ab Werk aus (0.32.1):** Einschalten unter Einstellungen › Tray. Erst die
+- **Ab Werk aus (0.32.1):** Einschalten unter Einstellungen › Mac & Browser. Erst die
   eigene Wahl zählt (`dropbarChosen`); ein `dropbar: true` aus älteren
   Versionen ohne Wahl gilt als aus. Im Browser übernimmt die Extension.
 - **Nicht:** Erscheint nicht, wenn Archiver selbst vorne ist, und nicht bei
@@ -559,7 +559,7 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
   (`extension.json` neben den Einstellungen). Älter als `EXTENSION_MIN`
   (`bridge.rs`) oder ohne Version = veraltet. Hat sich nie eine gemeldet,
   kommt der Hinweis erst nach zwei Tagen. × blendet ihn aus, bis sich Zustand
-  oder Mindestversion ändern. Einstellungen › Extension zeigt den Stand.
+  oder Mindestversion ändern. Einstellungen › Mac & Browser zeigt den Stand.
 - **Nicht:** Kein Toast, keine Akzentfarbe, kein Dialog beim Start.
 
 ### 4.17 Mehrfachmarkierung (Extension 3.27.0, `content.js`)
@@ -669,10 +669,11 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
 - **Gilt für:** Navigation (`#navBrand`), Startbild, Sperrbild, Kopf von
   Information, Fenstertitel. Nicht: Tray, Extension, PDF, Dateinamen.
 
-### 4.22a Updates (App 0.38.1, Information › Updates)
+### 4.22a Updates (App 0.38.1, seit 0.40.8 Einstellungen › App)
 - **Zweck:** Kanal wählen (Beta oder Vorab) und jede veröffentlichte Version
   installieren, auch eine ältere.
-- **Form:** Eigener Block unter „App“. Kanal als `p-choice` (wie alle
+- **Form:** Block „Version“ (Installiert, rechts Nummer und „Nach Updates
+  suchen“), darunter der Block „Updates“. Kanal als `p-choice` (wie alle
   Schalter), „Version wählen“ mit `p-link` rechts; die Liste darunter sind
   normale Blockzeilen (Version, Datum gedimmt, rechts „Installieren“ oder
   gedimmt „installiert“). Vor dem Installieren ein `dialog confirm`, bei
@@ -820,6 +821,18 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
 - **Nicht:** Keine Rundung an Objekten, keine Akzentfarbe, keine Schatten an
   den Objekten. Die Extension kennt die Wolke nicht.
 
+### 4.25a Einstellungen (App 0.40.8, `.p-settings-nav`)
+- **Aufbau:** Seitenkopf, darunter die Konto-Liste (4.26), darunter fünf
+  Bereiche als ruhige Liste: Bibliothek, Darstellung, Mac & Browser (ohne Mac
+  nur „Extension“), Studio, App. Rechts je eine Zusammenfassung in
+  `--p-dim` und ›.
+- **Bereiche:** Bibliothek = Plätze, verknüpfte Ordner, Standardzone,
+  Struktur, Zonen, Dateinamen. Darstellung = Ansicht, Aussehen, Glas, Start,
+  Startton. Mac & Browser = Extension, Tray und Zonenleiste, Vorschau-Formate.
+  App = Version und Updates (4.22a), Sprache, Feedback, Tasten.
+- **Regel:** Ein neuer Schalter kommt in einen dieser Bereiche, nicht in
+  einen neuen. Jeder Block trägt seinen Titel, auch wenn er allein steht.
+
 ### 4.26 Konto, Sperre und Lese-Modus als Liste (App 0.40.6, `.p-say`, `.p-list`, `.p-lock-*`)
 - **Ansatz (Lukas 20.10.: „3 aber ohne Highlight“):** Wie die Einstellungen.
   Ein Satz als Überschrift, darunter eine Mono-Zeile und gruppierte Zeilen auf
@@ -837,11 +850,13 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
   Mitte: Satz „Dein Archiv. Melde dich an, um weiterzumachen.“, Mono-Zeile
   „(Anmelden) (Beta)“, Liste. Schritt 1: E-Mail, Weg, Beta, Knopf „Code
   senden“. Schritt 2: E-Mail mit „(Ändern)“, Code (6 bis 8 Ziffern aus der Mail),
-  Knopf „Anmelden“. Daneben „(Beta-Code)“ für den alten Freischalt-Code.
+  Knopf „Anmelden“. Den alten Freischalt-Code gibt es seit 0.40.8 nicht mehr
+  zum Eingeben; wer ihn schon hat, bleibt frei (Übergang, `archiver.unlock`)
+  und sieht unter Konto „(Beta-Code)“ mit „Anmelden“.
   Felder sind der Wert ihrer Zeile (`.p-lock-input`, kein Rahmen, keine
   Fläche). Unter der Liste links Mono-Links und die Meldung (`.p-lock-msg`,
   Fehler in `--danger`), rechts der Knopf, 40 px, `--r-sm`. Konto über
-  Supabase (`archiver.account`), Abmelden vergisst Konto und Code.
+  Supabase (`archiver.account`), Abmelden vergisst Konto und alten Code.
 - **Konto (Einstellungen):** Oben über der Liste der Bereiche: „(Konto)“ und
   eine Liste als Knopf mit Status und Danach (Abonnent: Läuft bis). Öffnet
   Einstellungen › Konto. Dort ist der Kopf ein Satz zum Zustand (Beta-Bonus,

@@ -105,13 +105,14 @@
     return pref("feat." + id, !FEATURES_OFF.includes(id)) !== false;
   }
 
-  // ---- Freischalten: ein gemeinsamer Code, nur sein Hash steht im Code ----
-
-  // Gültige Codes (nur Hashes): der aktuelle und der bisherige, damit niemand gesperrt wird
+  // 0.40.8 Übergang: Neue Freischalt-Codes lassen sich nicht mehr eingeben. Wer
+  // schon freigeschaltet ist (nur der Hash liegt in den Einstellungen), bleibt
+  // drin, bis er sich abmeldet. Danach geht es nur noch mit Konto.
   const UNLOCK_HASHES = ["12004fa6495855edcff5595961e8da1e62e9eed6502338060283a8bb0efa5646", "4ffbc1224a6cd30617b443e4665695d19c63d76ba51f6b16bdcdc8b28a2d1e13"];
+  const legacyUnlock = () => UNLOCK_HASHES.includes(pref("unlock", null));
 
   function isUnlocked() {
-    return UNLOCK_HASHES.includes(pref("unlock", null)) || !!account();
+    return legacyUnlock() || !!account();
   }
 
   // ---- Konto (0.40.7): Anmelden mit E-Mail und 6-stelligem Code über Supabase ----
@@ -140,14 +141,8 @@
 
   async function verifyCode(email, token) {
     const data = await auth("verify", { type: "email", email, token });
+    setPref("unlock", null); // Übergang: mit Konto braucht es den alten Code nicht mehr
     setPref("account", { email: data.user?.email || email, id: data.user?.id || null, refresh: data.refresh_token || null, at: Date.now() });
-  }
-
-  async function unlockHash(code) {
-    const clean = String(code).toUpperCase().replace(/[^A-Z0-9]/g, "");
-    const data = new TextEncoder().encode("archiver-unlock:" + clean);
-    const buf = await crypto.subtle.digest("SHA-256", data);
-    return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("");
   }
 
   function applyLock() {
@@ -197,27 +192,6 @@
       form.classList.add("wrong");
       go.disabled = false;
     };
-
-    if (step === "beta") {
-      $("lockGroup").textContent = "(" + t("unlockTitle") + ")";
-      const code = field("text", t("unlockPlaceholder"));
-      code.setAttribute("autocapitalize", "characters");
-      row(t("lockRowCode"), code);
-      row("Beta", t("lockBeta"));
-      go.textContent = t("unlockButton");
-      form.onsubmit = async (e) => {
-        e.preventDefault();
-        const hash = await unlockHash(code.value);
-        if (!UNLOCK_HASHES.includes(hash)) return fail(t("lockWrongCode"));
-        setPref("unlock", hash);
-        applyLock();
-        if (state.page) renderPage(true);
-        toast(t("unlockOk"));
-      };
-      foot.append(swap(t("lockUseMail"), "mail"), status, go);
-      setTimeout(() => code.focus(), 60);
-      return;
-    }
 
     $("lockGroup").textContent = "(" + t("lockSignIn") + ")";
     if (step === "code") {
@@ -279,7 +253,7 @@
         fail(String(err.message || err));
       }
     };
-    foot.append(swap(t("lockUseBeta"), "beta"), status, go);
+    foot.append(status, go);
     setTimeout(() => mail.focus(), 60);
   }
 
@@ -2491,48 +2465,37 @@
   }
 
   // Zeile am Griff ziehen: wandert live mit, beim Loslassen wird gespeichert
-  // Einstellungen: oben eine ruhige Liste der Bereiche, jeder öffnet sein Untermenü.
-  // Ganz unten steht immer der Freischalt-Code.
-  // 0.28: Tray, Observer und Extension je ein eigener Bereich (Tray und Observer nur am Mac)
-  const SETTINGS_SECTIONS = ["library", "names", "view", "look", "start", "tray", "observer", "extension", "studio", "general"].filter(
-    (id) => isMac || (id !== "tray" && id !== "observer")
-  );
+  // Einstellungen: oben das Konto, darunter eine ruhige Liste der Bereiche, jeder öffnet sein Untermenü.
+  // 0.40.8: aus zehn Bereichen werden fünf, Version und Updates stehen unter „App“
+  const SETTINGS_SECTIONS = ["library", "display", "mac", "studio", "app"];
 
   function sectionTitle(id) {
-    return t({ account: "setAccount", library: "setLibrary", names: "setSecNames", view: "setSecView", look: "setLook", start: "setSecStart", tray: "setTray", observer: "setViewer", extension: "setExtension", studio: "setStudio", general: "setGeneral" }[id]);
+    return t({ account: "setAccount", library: "setLibrary", display: "setSecDisplay", mac: isMac ? "setSecMac" : "setExtension", studio: "setStudio", app: "setSecApp" }[id]);
   }
 
   function sectionSummary(id) {
     if (id === "library") {
       const slots = state.libraries || [];
       const i = slots.findIndex((l) => l.active);
-      return i >= 0 ? libraryName(slots[i], i) : shortPath(state.root);
-    }
-    if (id === "names") {
       const n = state.naming;
-      return n && n.preset !== "original" ? t(NAME_PRESET_KEYS[n.preset]) : t("nameOriginal");
+      const names = n && n.preset !== "original" ? t(NAME_PRESET_KEYS[n.preset]) : t("nameOriginal");
+      return (i >= 0 ? libraryName(slots[i], i) : shortPath(state.root)) + " · " + names;
     }
-    if (id === "look") {
+    if (id === "display") {
       const th = window.ArchiverI18n.theme();
-      return t({ system: "themeSystem", light: "themeLight", dark: "themeDark" }[th]);
+      return t(state.view === "original" ? "viewOriginal" : "viewGrid") + " · " + t({ system: "themeSystem", light: "themeLight", dark: "themeDark" }[th]);
     }
-    if (id === "tray") {
+    if (id === "mac") {
       const p = state.sysPrefs;
-      if (!p) return "";
+      if (!isMac || !p) return t("setExtensionSummary");
       const key = PALETTE_KEYS.find(([k]) => k === p.shortcut);
-      return (p.shortcut ? (key && key[1]) || p.shortcut : t("setOff")) + " · " + t("setTrayBar") + " " + (p.dropbar ? t("setOn") : t("setOff")).toLowerCase();
+      return (p.shortcut ? (key && key[1]) || p.shortcut : t("setOff")) + " · " + t("setExtensionSummary");
     }
-    if (id === "observer") return t("setObserverSummary");
-    if (id === "extension") return t("setExtensionSummary");
     if (id === "studio") {
       const on = FEATURES.filter(feat).length;
       return on + " / " + FEATURES.length + (state.shared ? " · " + t("featSharedOn") : "");
     }
-    if (id === "view")
-      return t(state.view === "original" ? "viewOriginal" : "viewGrid");
-    if (id === "start")
-      return t(pref("revealForm", "wave") === "lid" ? "revealLid" : "revealWave") + " · " + t("setSound") + " " + (pref("startSound", false) ? t("setOn") : t("setOff")).toLowerCase();
-    return lang === "de" ? "Deutsch" : "English";
+    return (state.appVersion ? state.appVersion + " · " : "") + (lang === "de" ? "Deutsch" : "English");
   }
 
   // Am ganzen Mac (system.rs): Kürzel der Palette und Zonenleiste beim Ziehen.
@@ -2601,6 +2564,14 @@
             if (state.page === "settings" && !state.settingsSub) renderPage(true);
           })
           .catch(() => {});
+      if (!state.appVersion && TAURI.app && TAURI.app.getVersion)
+        TAURI.app
+          .getVersion()
+          .then((v) => {
+            state.appVersion = v;
+            if (state.page === "settings" && !state.settingsSub) renderPage(true);
+          })
+          .catch(() => {});
       wrap.appendChild(headline(t("settings"), t("settingsText")));
       wrap.appendChild(accountCard());
       const list = el("section", "p-block p-settings-nav");
@@ -2612,7 +2583,6 @@
         list.appendChild(row);
       }
       wrap.appendChild(list);
-      wrap.appendChild(renderUnlock());
       return wrap;
     }
     wrap.appendChild(button("p-settings-back", "‹ " + t("settings"), () => openSettingsSection(null)));
@@ -2628,14 +2598,14 @@
       wrap.appendChild(renderDefaultZone());
       wrap.appendChild(renderStructure());
       wrap.appendChild(renderZoneSettings());
+      wrap.appendChild(renderNamingSettings());
     }
 
     if (sub === "account") wrap.appendChild(renderAccount());
 
-    if (sub === "names") wrap.appendChild(renderNamingSettings());
-
-    if (sub === "view") {
-      const view = block(null);
+    // Darstellung: Ansicht, Aussehen, Glas, Start und Ton auf einer Seite
+    if (sub === "display") {
+      const view = block(t("setSecView"));
       view.appendChild(
         blockRow(
           t("setImages"),
@@ -2686,10 +2656,8 @@
         )
       );
       wrap.appendChild(view);
-    }
 
-    if (sub === "look") {
-      const look = block(null);
+      const look = block(t("setLook"));
       look.appendChild(
         blockRow(
           t("setTheme"),
@@ -2750,11 +2718,9 @@
       );
       wrap.appendChild(look);
       wrap.appendChild(renderGlassSettings());
-    }
 
     // Start: Öffnung und Startton gehören zum selben Moment
-    if (sub === "start") {
-      const open = block(t("setReveal"));
+      const open = block(t("setSecStart"));
       // Licht-Öffnung nach Getting Started: Welle oder Lid, zum Vergleich abspielbar
       const reveal = choice([["wave", t("revealWave")], ["lid", t("revealLid")]], pref("revealForm", "wave"), (id) => {
         setPref("revealForm", id);
@@ -2771,7 +2737,8 @@
       wrap.appendChild(renderSoundSettings());
     }
 
-    if (sub === "extension") {
+    // Mac & Browser: Extension, Tray und Zonenleiste, Vorschau-Formate
+    if (sub === "mac") {
       const extBlock = block(t("setExtension"));
       const ext = el("div", null, "…");
       const get = button("p-link", t("extGet"), openExtensionDownload);
@@ -2788,9 +2755,8 @@
       wrap.appendChild(extBlock);
     }
 
-    if (sub === "tray" && isMac) wrap.appendChild(renderSystemSettings());
-
-    if (sub === "observer" && isMac) {
+    if (sub === "mac" && isMac) {
+      wrap.appendChild(renderSystemSettings());
       {
         const viewerBlock = block(t("setViewer"));
         viewerBlock.appendChild(blockRow(el("div", "p-block-text", t("setViewerText"))));
@@ -2819,7 +2785,9 @@
 
     if (sub === "studio") renderStudioSettings(wrap, rerender);
 
-    if (sub === "general") {
+    // App: Version und Updates, Sprache, Feedback, Tasten
+    if (sub === "app") {
+      for (const b of renderVersion()) wrap.appendChild(b);
       const general = block(t("setLanguage"));
       general.appendChild(
         blockRow(
@@ -2827,7 +2795,7 @@
           choice([["de", "Deutsch"], ["en", "English"]], lang, (id) => {
             if (id === lang) return;
             setPref("lang", id);
-            sessionStorage.setItem("archiver.reopen", "settings:general");
+            sessionStorage.setItem("archiver.reopen", "settings:app");
             location.reload();
           })
         )
@@ -3054,7 +3022,7 @@
       read: [[t("accountStatus"), t("accountNone"), "›"], [t("accountAfter"), t("accountReadMode")]],
     }[view];
     const card = el("div", "p-group p-account");
-    card.append(groupLabel("(" + t("setAccount") + ")", account()?.email), list(rows, open));
+    card.append(groupLabel("(" + t("setAccount") + ")", account()?.email || (legacyUnlock() ? "(" + t("accountLegacy") + ")" : "")), list(rows, open));
     return card;
   }
 
@@ -3072,6 +3040,22 @@
     plan.appendChild(el("div", "p-block-text p-account-plan", t("accountText")));
     frag.appendChild(plan);
     const acc = account();
+    // Übergang: mit altem Beta-Code frei, aber noch ohne Konto
+    if (!acc && legacyUnlock()) {
+      const legacy = block(t("setAccount"));
+      legacy.appendChild(
+        blockRow(
+          el("div", "p-block-text", t("accountLegacyText")),
+          button("p-link", t("lockSignIn"), () => {
+            setPref("accountPreview", "login");
+            lockState.email = "";
+            renderLockForm("mail");
+            applyLock();
+          })
+        )
+      );
+      frag.appendChild(legacy);
+    }
     if (acc) {
       const me = block(t("setAccount"));
       const since = new Date(acc.at).toLocaleDateString(lang === "de" ? "de-DE" : "en-GB", { day: "numeric", month: "long", year: "numeric" });
@@ -3106,7 +3090,7 @@
     );
     preview.appendChild(el("p", "p-block-hint", t("accountReadModeText")));
     frag.appendChild(preview);
-    // Abmelden: vergisst den Freischalt-Code, danach steht die Sperre wie beim ersten Start da
+    // Abmelden: vergisst das Konto, danach steht die Sperre wie beim ersten Start da
     if (isUnlocked()) {
       const out = button("p-link p-account-out", t("accountSignOut"), () => {
         setPref("unlock", null);
@@ -3123,50 +3107,6 @@
       frag.appendChild(el("p", "p-block-hint", t("accountSignOutText")));
     }
     return frag;
-  }
-
-  // Ganz unten: Freischalt-Code eingeben, danach nur noch ein ruhiges „Freigeschaltet“
-  function renderUnlock() {
-    const b = block(t("unlockTitle"));
-    b.classList.add("p-unlock");
-    if (isUnlocked()) {
-      b.appendChild(blockRow(el("div", "p-block-text", t("unlockDone")), mono("●", "p-unlock-dot")));
-      return b;
-    }
-    b.appendChild(el("div", "p-block-text p-unlock-text", t("unlockText")));
-    b.appendChild(unlockForm());
-    return b;
-  }
-
-  // Eingabe für den Code: in den Einstellungen und direkt im Sperr-Hinweis
-  function unlockForm() {
-    const form = el("form", "p-unlock-form");
-    const input = el("input", "p-unlock-input");
-    input.placeholder = t("unlockPlaceholder");
-    input.spellcheck = false;
-    input.autocomplete = "off";
-    input.setAttribute("autocapitalize", "characters");
-    const go = el("button", "p-unlock-go", t("unlockButton"));
-    go.type = "submit";
-    form.append(input, go);
-    form.addEventListener("submit", async (e) => {
-      e.preventDefault();
-      const hash = await unlockHash(input.value);
-      if (!UNLOCK_HASHES.includes(hash)) {
-        form.classList.remove("wrong");
-        void form.offsetWidth;
-        form.classList.add("wrong");
-        input.select();
-        return;
-      }
-      setPref("unlock", hash);
-      applyLock();
-      if (state.page) renderPage(true);
-      toast(t("unlockOk"));
-    });
-    input.addEventListener("input", () => form.classList.remove("wrong"));
-    input.addEventListener("keydown", (e) => e.stopPropagation());
-    return form;
   }
 
   // Startton: Ein/Aus, Lautstärke mit Probehören, eigene Datei oder der Standard
@@ -3272,28 +3212,6 @@
     wrap.appendChild(stats);
 
     const meta = block(t("aboutApp"));
-    const version = el("span", null, "–");
-    let number = "";
-    const showVersion = (pre) => (version.textContent = number + (pre ? " · " + t("aboutPrerelease") : ""));
-    if (TAURI.app && TAURI.app.getVersion)
-      Promise.all([TAURI.app.getVersion(), invoke("update_channel").catch(() => false)])
-        .then(([v, pre]) => {
-          number = v;
-          showVersion(pre);
-        })
-        .catch(() => {});
-    // ⌥-Klick blendet den Block „Updates“ ein (Kanal, Version wählen, 0.38.1).
-    // Ab Werk sehen ihn nur Macs mit Vorabversionen; Beta-Tester bekommen
-    // nur Freigegebenes, solange sie ihn nicht selbst aufdecken.
-    const updates = block(t("aboutUpdates"));
-    updates.hidden = true;
-    version.addEventListener("click", (e) => {
-      if (!e.altKey) return;
-      setPref("updatesShown", true);
-      updates.hidden = false;
-    });
-    meta.appendChild(blockRow(t("aboutVersion"), version));
-    renderUpdates(updates, showVersion);
     const brand = el("input", "p-input note-field");
     brand.value = pref("brandName", "");
     brand.placeholder = "Archiver";
@@ -3310,13 +3228,41 @@
     meta.appendChild(blockRow(t("setLibrary"), pathEl(state.root)));
     meta.appendChild(blockRow(t("aboutFont"), "SIL OFL"));
     wrap.appendChild(meta);
-    wrap.appendChild(updates);
 
     wrap.appendChild(el("div", "p-sheet-foot", "© 2026 Lukas Rudolph"));
     return wrap;
   }
 
-  // ---- Information › Updates: Kanal Beta/Vorab und Version wählen (0.38.1) ----
+  // Einstellungen › App: Version, darunter der Block „Updates“ (Kanal, Version wählen, 0.38.1)
+  function renderVersion() {
+    const meta = block(t("setVersion"));
+    const version = el("span", null, "–");
+    let number = "";
+    const showVersion = (pre) => (version.textContent = number + (pre ? " · " + t("aboutPrerelease") : ""));
+    if (TAURI.app && TAURI.app.getVersion)
+      Promise.all([TAURI.app.getVersion(), invoke("update_channel").catch(() => false)])
+        .then(([v, pre]) => {
+          number = v;
+          state.appVersion = v;
+          showVersion(pre);
+        })
+        .catch(() => {});
+    // ⌥-Klick blendet den Block „Updates“ ein. Ab Werk sehen ihn nur Macs mit
+    // Vorabversionen; Beta-Tester bekommen nur Freigegebenes, solange sie ihn
+    // nicht selbst aufdecken.
+    const updates = block(t("aboutUpdates"));
+    updates.hidden = true;
+    version.addEventListener("click", (e) => {
+      if (!e.altKey) return;
+      setPref("updatesShown", true);
+      updates.hidden = false;
+    });
+    meta.appendChild(blockRow(t("setVersionNow"), [version, button("p-link", t("updCheck"), () => checkUpdate(true))]));
+    renderUpdates(updates, showVersion);
+    return [meta, updates];
+  }
+
+  // ---- Einstellungen › App › Updates: Kanal Beta/Vorab und Version wählen (0.38.1) ----
   // Die Liste kommt aus Archiver-Releases (lib.rs: update_versions). Installiert
   // wird wie bei einem Update, auch rückwärts; vorher fragt ein Dialog.
   async function renderUpdates(box, showVersion) {
@@ -4598,7 +4544,7 @@
   // 0.30.1: Bildtext als farbige Karte im Ton des Bildes, wie die Textkarten.
   // „Rückseite“: das Bild wird gewendet, ein Eselsohr unten rechts zeigt, dass
   // es eine hat. „Doppelseite“: die Karte steht links neben dem Bild, gleich
-  // hoch, im Hochformat 3:4. Einstellungen › Aussehen. Der Text ist editierbar.
+  // hoch, im Hochformat 3:4. Einstellungen › Darstellung. Der Text ist editierbar.
   // Video, PDF und Audio: Karte unten links.
   const LB_TEXT_W = 300;
   const LB_GAP = 24;
@@ -7133,7 +7079,7 @@
   }
 
   // ---- Dateinamen (F10, F11, 0.36.0) ----
-  // Schema einmal in Einstellungen › Dateinamen, Umbenennen-Blatt zum Aufräumen
+  // Schema einmal in Einstellungen › Bibliothek › Dateinamen, Umbenennen-Blatt zum Aufräumen
   // (Auswahl › Rechtsklick), Namensvorschlag aus dem Inhalt in der Info-Spalte.
   // Ab Werk bleibt jeder Name, wie er ist. Der Kern liegt in naming.rs.
 
@@ -8503,9 +8449,10 @@
   }
 
   // ---- Updates (lib.rs: update_check / update_install) ----
-  async function checkUpdate() {
+  async function checkUpdate(manual) {
     if (document.querySelector(".p-update:not(.p-ext)")) return;
     const info = await invoke("update_check").catch(() => null);
+    if (!info && manual === true) return toast(t("updUpToDate"));
     if (!info || document.querySelector(".p-update:not(.p-ext)")) return;
     // Das App-Update geht vor; die neue App bringt meist auch die Extension mit
     document.querySelectorAll(".p-ext").forEach((n) => n.remove());
