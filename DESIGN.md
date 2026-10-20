@@ -1,6 +1,6 @@
 # Archiver – Design-System
 
-Stand: App 0.40.5 · Extension 3.29.6
+Stand: App 0.40.6 · Extension 3.29.6
 
 Diese Datei hält fest, wie Archiver aussieht und warum. Sie gilt für die Mac-App
 (`app/src`) und die Chrome-Extension (`extension/`). Wer an der Oberfläche
@@ -819,38 +819,36 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
 - **Nicht:** Keine Rundung an Objekten, keine Akzentfarbe, keine Schatten an
   den Objekten. Die Extension kennt die Wolke nicht.
 
-### 4.26 Highlight, Konto und Sperre (App 0.40.4, `.p-hl`, `.p-account`, `.p-lock-*`)
-- **Highlight (`.p-hl`):** Ein kurzes Wort als Block in den Tönen der
-  Textkarten (Tokens `--hl-cyan`, `--hl-violet`, `--hl-red` mit `-ink`, gleich
-  in Dunkel und Hell). `inline-block`, `nowrap`, Innenabstand
-  0.04 / 0.12 / 0.1 em. Es läuft nie über zwei Zeilen.
-- **Zeilenhöhe:** Steht ein Highlight in einem Satz, hat der ganze Block die
-  Zeilenhöhe 1.14 (Höhe des Highlights), damit alle Zeilen gleich weit
-  auseinander liegen. Kein Extra-Abstand nur unter dem Highlight.
-- **Wo (Lukas 20.10.: „nur Dein Archiv, Beta-Bonus und Lese-Modus“):**
-  - Sperre: „Dein Archiv.“ in Cyan.
-  - Einstellungen › Konto-Karte: „Beta-Bonus“ in Violett.
-  - Lese-Modus: „Lese-Modus.“ in Rot.
-- **Sperre:** Titelblatt statt kleinem Hinweis. Oben Mono-Zeile „(Archiver)
-  (Beta)“, in der Mitte der Satz in clamp(48 px, 7.6 vw, 92 px), 500,
-  −0.045em, Rest in `--p-faint`. Unten über einer Linie links der Beta-Hinweis,
-  rechts das Feld für den Freischalt-Code (Spalten 1–4 und 6–12 von 12).
-- **Konto-Karte:** Oben in den Einstellungen über der Liste, Fläche ink × 0.08
-  (Hover 0.11), `--r-lg`, Mono-Zeile „(Konto) (Beta) ›“, darunter 24 px / 500.
-  Klick öffnet Einstellungen › Konto mit dem Plan und der Vorschau des
-  Lese-Modus.
-- **Vorschau (0.40.5):** Solange es keine Konten gibt, wählt Einstellungen ›
-  Konto › Ansicht zwischen Beta, Abonnent, Lese-Modus und Anmelden (zeigt die Sperre auch freigeschaltet, oben rechts „(Vorschau beenden)“)
-  (`archiver.accountPreview`, vorher `readPreview`). Abonnent: Karte „(Jahr)“,
-  „Jahr, aktiv.“ und dim „Läuft bis …“ ohne Highlight, im Untermenü ein Block
-  Abo mit Abo, Geräte, Zahlung und Zuletzt geprüft. Es wird nichts gebucht.
-  Darunter „Abmelden“ als Link: vergisst den Freischalt-Code, die Sperre steht
-  wie beim ersten Start da.
-- **Lese-Modus (Vorschau):** Nur zum Ansehen. Der Kopf der Startseite wird zu „Lese-Modus.“ und
-  dem Satz in dim, in der Filterzeile steht „(Vorschau beenden)“. Es wird
-  nichts gesperrt.
-- **Nicht:** Kein zweites Highlight auf derselben Fläche, keine Preise oder
-  Zahlen im Highlight und kein Highlight als Zustand (dafür gibt es den Ring).
+### 4.26 Konto, Sperre und Lese-Modus als Liste (App 0.40.6, `.p-say`, `.p-list`, `.p-lock-*`)
+- **Ansatz (Lukas 20.10.: „3 aber ohne Highlight“):** Wie die Einstellungen.
+  Ein Satz als Überschrift, darunter eine Mono-Zeile und gruppierte Zeilen auf
+  einer Fläche. Keine farbigen Highlights mehr (das `.p-hl` aus 0.40.4 ist
+  entfernt).
+- **Satz (`.p-say`):** 34 px, Zeilenhöhe 1.14, 500, −0.025em, `balance`, der
+  Rest in `--p-dim`. Größer als der Seitenkopf (24 px), aber kein Titelblatt.
+  Auf der Webseite entspricht das 40 px.
+- **Mono-Zeile (`.p-group-label`):** 11 px Mono, Versalien, `--p-dim`, links
+  der Name in Klammern, rechts ein Zusatz.
+- **Liste (`.p-list`):** Fläche ink × 0.045, `--r-lg`, Innenabstand
+  2 / 16 px. Zeilen 12 px hoch gepolstert mit Linie `--p-rule`, Schlüssel
+  132 px in `--p-dim`, Wert, Zusatz in `--p-faint`. Als Knopf Hover ink × 0.07.
+- **Sperre:** Eine Spalte von höchstens 560 px in der Mitte: Satz „Dein
+  Archiv. Gib deinen Code ein.“, Mono-Zeile „(Freischalt-Code) (Beta)“, Liste
+  mit Code, Beta und Ab 1.0. Das Feld ist der Wert der Zeile Code (kein Rahmen,
+  keine Fläche), „Freischalten →“ steht rechts darunter, 40 px, `--r-sm`.
+- **Konto (Einstellungen):** Oben über der Liste der Bereiche: „(Konto)“ und
+  eine Liste als Knopf mit Status und Danach (Abonnent: Läuft bis). Öffnet
+  Einstellungen › Konto. Dort ist der Kopf ein Satz zum Zustand (Beta-Bonus,
+  „Jahr, aktiv.“ oder „Kein Abo.“).
+- **Vorschau (0.40.5):** Einstellungen › Konto › Ansicht wählt zwischen Beta,
+  Abonnent, Lese-Modus und Anmelden (zeigt die Sperre auch freigeschaltet, oben
+  rechts „(Vorschau beenden)“), `archiver.accountPreview`. Es wird nichts
+  gebucht. „Abmelden“ vergisst den Freischalt-Code.
+- **Lese-Modus (Vorschau):** Auf der Startseite statt des Kopfs der Satz
+  „Lese-Modus.“ und eine Liste Lesen, Suchen, Ablegen, Extension mit ● und ○.
+  In der Filterzeile steht „(Vorschau beenden)“. Es wird nichts gesperrt.
+- **Nicht:** Keine Highlights, keine Eingabekästen mit Rahmen, keine großen
+  Titelblätter.
 
 ## 5. Bekannte Abweichungen
 
@@ -883,9 +881,8 @@ sie nur auf ausdrückliches Go.
 - [ ] Die neue Regel nutzt Tokens und keine festen Farben, Dauern oder Radien
       außerhalb der Stufen.
 - [ ] Sie funktioniert in Dunkel und Hell sowie mit und ohne `html.mac`.
-- [ ] Hervorhebungen laufen über den Ring (4.1) und nicht über Farbe. Ausnahme
-      ist das Highlight (4.26): höchstens eins pro Fläche, nur an den dort
-      genannten Stellen.
+- [ ] Hervorhebungen laufen über den Ring (4.1) und nicht über Farbe. Es gibt
+      keine farbigen Highlights im Text (4.26).
 - [ ] Entwürfe und neue Flächen sind mit der Rundung „Weich“ gestaltet.
 - [ ] Wenn die Komponente auch in der Extension vorkommt, ist sie dort gleich
       oder als Abweichung in Abschnitt 5 notiert.

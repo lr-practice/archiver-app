@@ -38,12 +38,14 @@
       <div id="dropbar" class="p-dropbar" hidden></div>
       <div id="lock" class="p-lock" hidden>
         <div class="p-lock-inner">
-          <div class="p-lock-top"><span>(Archiver)</span><span class="p-lock-tr"><button type="button" id="lockEnd" class="p-lock-end" hidden></button><span>(Beta)</span></span></div>
-          <h1 class="p-lock-head"><span id="lockTitle" class="p-hl cyan"></span> <span id="lockText" class="p-lock-sub"></span></h1>
-          <div class="p-lock-foot">
-            <div class="p-lock-note"><span class="p-lock-label">(Ab 1.0)</span><span id="lockNote"></span></div>
-            <div class="p-lock-field"><span id="lockLabel" class="p-lock-label"></span><div id="lockForm" class="p-lock-form"></div></div>
+          <h1 class="p-say"><span id="lockTitle"></span> <span id="lockText" class="p-say-sub"></span></h1>
+          <div class="p-group-label"><span id="lockGroup"></span><span class="p-lock-tr"><button type="button" id="lockEnd" class="p-lock-end" hidden></button><span>(Beta)</span></span></div>
+          <div class="p-list">
+            <div class="p-list-row"><span id="lockRowCode" class="p-list-key"></span><div id="lockForm" class="p-list-value p-lock-form"></div></div>
+            <div class="p-list-row"><span class="p-list-key">Beta</span><span id="lockBeta" class="p-list-value"></span></div>
+            <div class="p-list-row"><span id="lockRowAfter" class="p-list-key"></span><span id="lockAfter" class="p-list-value"></span></div>
           </div>
+          <div id="lockGo" class="p-lock-foot"></div>
         </div>
       </div>
       <header id="top" class="p-top" data-tauri-drag-region>

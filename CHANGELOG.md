@@ -1,5 +1,13 @@
 # Changelog
 
+## App 0.40.6 (Vorabversion)
+
+- Anmelde-Fenster, Konto und Lese-Modus sind jetzt ruhig wie die
+  Einstellungen: ein Satz als Überschrift, darunter gruppierte Zeilen. Keine
+  farbigen Markierungen mehr.
+- Im Anmelde-Fenster ist der Code eine Zeile der Liste, „Freischalten“ steht
+  darunter.
+
 ## App 0.40.5 (Vorabversion)
 
 - Einstellungen › Konto › Ansicht: Vorschau als Beta, als Abonnent (Jahresabo

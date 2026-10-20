@@ -7188,159 +7188,96 @@ html.light {
   line-height: 1.4;
 }
 
-/* ---- 0.40.4: Highlight, Konto und Sperre (4.26) ---- */
+/* ---- 0.40.6: Konto, Sperre und Lese-Modus als Liste (4.26) ---- */
 
-/* Highlight: ein kurzes Wort als Block in den Tönen der Textkarten (QUOTE_TONES).
-   Gleich in Dunkel und Hell. Höchstens eins pro Fläche, nie über zwei Zeilen. */
-:root {
-  --hl-cyan: #00b0f0;
-  --hl-cyan-ink: #003d54;
-  --hl-violet: #7030a0;
-  --hl-violet-ink: #e2c8f5;
-  --hl-red: #ff0000;
-  --hl-red-ink: #5c0000;
+/* Satz als Überschrift: zwischen Seitenkopf (24 px) und Titelblatt, ohne Highlight */
+.p-say {
+  margin: 0;
+  max-width: 18em;
+  font-size: 34px;
+  line-height: 1.14;
+  font-weight: 500;
+  letter-spacing: -0.025em;
+  text-wrap: balance;
 }
 
-.p-hl {
-  display: inline-block;
-  line-height: 1;
-  padding: 0.04em 0.12em 0.1em;
-  white-space: nowrap;
-  background: var(--hl-bg);
-  color: var(--hl-ink);
-}
-.p-hl.cyan { --hl-bg: var(--hl-cyan); --hl-ink: var(--hl-cyan-ink); }
-.p-hl.violet { --hl-bg: var(--hl-violet); --hl-ink: var(--hl-violet-ink); }
-.p-hl.red { --hl-bg: var(--hl-red); --hl-ink: var(--hl-red-ink); }
-
-/* Sperre: groß und links wie ein Titelblatt statt kleinem Hinweis in der Mitte */
-.p-lock {
-  align-items: stretch;
-  justify-content: stretch;
+.p-say-sub {
+  color: var(--p-dim);
 }
 
-.p-lock-inner {
-  display: grid;
-  grid-template-rows: auto 1fr auto;
-  justify-items: stretch;
-  gap: 0;
+/* Mono-Zeile über einer Gruppe: links der Name, rechts ein Zusatz */
+.p-group-label {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 0 2px;
+  font-family: var(--p-mono);
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--p-dim);
+}
+
+/* Gruppierte Zeilen wie die Einstellungen: Schlüssel, Wert, Zusatz */
+.p-list {
+  display: flex;
+  flex-direction: column;
   width: 100%;
-  max-width: none;
-  padding: calc(var(--top-h) + 12px) var(--p-pad) var(--p-pad);
+  padding: 2px 16px;
+  border: none;
+  border-radius: var(--r-lg);
+  background: rgba(var(--ink-rgb), 0.045);
+  color: var(--p-text);
+  font: inherit;
   text-align: left;
   box-sizing: border-box;
 }
 
-.p-lock-top,
-.p-lock-label {
-  font-family: var(--p-mono);
-  font-size: 11px;
-  letter-spacing: 0.02em;
-  text-transform: uppercase;
-  color: var(--p-dim);
+button.p-list {
+  transition: background 0.12s ease;
 }
 
-.p-lock-top {
+button.p-list:hover {
+  background: rgba(var(--ink-rgb), 0.07);
+}
+
+.p-list-row {
   display: flex;
-  justify-content: space-between;
-}
-
-.p-lock-head {
-  align-self: center;
-  margin: 0;
-  max-width: 11em;
-  font-size: clamp(48px, 7.6vw, 92px);
-  line-height: 1.14;
-  font-weight: 500;
-  letter-spacing: -0.045em;
-  text-wrap: balance;
-}
-
-.p-lock-sub {
-  color: var(--p-faint);
-}
-
-.p-lock-foot {
-  display: grid;
-  grid-template-columns: repeat(12, minmax(0, 1fr));
-  column-gap: 16px;
-  align-items: end;
-  padding-top: 24px;
+  align-items: baseline;
+  gap: 16px;
+  padding: 12px 0;
   border-top: 1px solid var(--p-rule);
 }
 
-.p-lock-note {
-  grid-column: 1 / 5;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  font-size: 15px;
-  line-height: 1.35;
-  letter-spacing: -0.01em;
+.p-list-row:first-child {
+  border-top: none;
+}
+
+.p-list-key {
+  flex: 0 0 132px;
   color: var(--p-dim);
 }
 
-.p-lock-field {
-  grid-column: 6 / 13;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.p-lock-form {
+.p-list-value {
+  flex: 1 1 auto;
   min-width: 0;
 }
 
-@media (max-width: 760px) {
-  .p-lock-note,
-  .p-lock-field {
-    grid-column: 1 / 13;
-  }
-  .p-lock-note {
-    margin-bottom: 20px;
-  }
+.p-list-side {
+  flex: 0 0 auto;
+  color: var(--p-faint);
 }
 
-/* Konto: Karte oben in den Einstellungen, eine Stufe heller als die Blöcke */
-.p-account {
+.p-group {
   display: flex;
   flex-direction: column;
   gap: 14px;
   width: 100%;
-  margin-bottom: 6px;
-  padding: 18px 16px;
-  border: none;
-  border-radius: var(--r-lg);
-  background: rgba(var(--ink-rgb), 0.08);
-  color: var(--p-text);
-  font: inherit;
-  text-align: left;
-  transition: background 0.12s ease;
 }
 
-.p-account:hover {
-  background: rgba(var(--ink-rgb), 0.11);
-}
-
-.p-account-top {
-  display: flex;
-  justify-content: space-between;
-  font-family: var(--p-mono);
-  font-size: 11px;
-  letter-spacing: 0.02em;
-  text-transform: uppercase;
-  color: var(--p-dim);
-}
-
-.p-account-line {
-  font-size: 24px;
-  font-weight: 500;
-  letter-spacing: -0.02em;
-  text-wrap: balance;
-}
-
-.p-account-text {
-  color: var(--p-dim);
+/* Konto oben in den Einstellungen */
+.p-account {
+  margin-bottom: 20px;
 }
 
 .p-account-plan {
@@ -7348,14 +7285,32 @@ html.light {
   color: var(--p-dim);
 }
 
-/* Mit Highlight steht der ganze Block auf der Höhe des Highlights (1 + 0.14 em),
-   damit alle Zeilen gleich weit auseinander liegen, nicht nur die erste. */
-.p-head-read,
-.p-account-line {
-  line-height: 1.14;
+.p-sheet .p-settings-back + .p-say {
+  margin: 0 4px 28px;
 }
 
-/* Vorschau „Anmelden“: Ausstieg oben rechts in der Sperre (0.40.5) */
+/* Sperre: eine ruhige Spalte in der Mitte, Code als Zeile der Liste */
+.p-lock {
+  align-items: center;
+  justify-content: center;
+}
+
+.p-lock-inner {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  width: min(560px, 100%);
+  max-width: none;
+  padding: 0 var(--p-pad);
+  text-align: left;
+  box-sizing: border-box;
+}
+
+.p-lock-inner .p-say {
+  max-width: none;
+  margin-bottom: 8px;
+}
+
 .p-lock-tr {
   display: flex;
   gap: 16px;
@@ -7370,4 +7325,56 @@ html.light {
   text-transform: inherit;
   color: var(--p-text);
   cursor: pointer;
+}
+
+/* Das Feld ist kein Kasten, sondern der Wert der Zeile */
+.p-lock-form {
+  min-width: 0;
+}
+
+.p-lock .p-unlock-form {
+  padding: 0;
+}
+
+.p-lock .p-unlock-input {
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: none;
+  font: inherit;
+  letter-spacing: 0.04em;
+}
+
+.p-lock .p-unlock-form.wrong .p-unlock-input {
+  color: var(--danger);
+}
+
+.p-lock-foot {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.p-lock .p-unlock-go {
+  display: inline-flex;
+  align-items: center;
+  gap: 24px;
+  height: 40px;
+  padding: 0 14px;
+  border-radius: var(--r-sm);
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.p-lock .p-unlock-go::after {
+  content: "→";
+}
+
+/* Lese-Modus (Vorschau): Satz und eine kurze Liste, was geht und was ruht */
+.p-read {
+  width: min(560px, 100%);
+  margin-bottom: 28px;
+}
+
+.p-read .p-say {
+  margin-bottom: 8px;
 }

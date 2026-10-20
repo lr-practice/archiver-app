@@ -129,7 +129,13 @@
     document.body.classList.toggle("locked", locked);
     $("lock").hidden = !locked;
     if (locked && !$("lockForm").firstChild) {
-      $("lockForm").appendChild(unlockForm());
+      // Das Feld ist der Wert der Zeile „Code“, der Knopf steht unter der Liste
+      const form = unlockForm();
+      form.id = "lockUnlock";
+      const go = form.querySelector(".p-unlock-go");
+      go.setAttribute("form", form.id);
+      $("lockForm").appendChild(form);
+      $("lockGo").appendChild(go);
       setTimeout(() => $("lockForm").querySelector("input")?.focus(), 60);
     }
   }
@@ -1358,12 +1364,21 @@
     const since = first
       ? new Date(first).toLocaleDateString(lang === "de" ? "de-DE" : "en-GB", { month: "long", year: "numeric" })
       : "";
-    // Vorschau Lese-Modus (Einstellungen › Konto): eigener Kopf mit Highlight, sonst unverändert
+    // Vorschau Lese-Modus (Einstellungen › Konto): Satz und Liste, was geht und was ruht
     const reading = accountView() === "read";
     if (reading) {
-      const h = el("h1", "p-head p-head-read");
-      h.append(highlight(t("readTitle"), "red"), el("span", "p-head-text", " " + t("readText")));
-      wrap.appendChild(h);
+      const read = el("div", "p-group p-read");
+      read.append(
+        say(t("readTitle"), t("readText")),
+        groupLabel("(" + t("accountReadMode") + ")"),
+        list([
+          [t("readRowRead"), t("readRowReadValue"), "●"],
+          [t("readRowSearch"), t("readRowSearchValue"), "●"],
+          [t("readRowSave"), t("readPaused"), "○"],
+          ["Extension", t("readPaused"), "○"],
+        ])
+      );
+      wrap.appendChild(read);
     } else wrap.appendChild(
       headline(
         null,
@@ -2458,7 +2473,7 @@
       return wrap;
     }
     wrap.appendChild(button("p-settings-back", "‹ " + t("settings"), () => openSettingsSection(null)));
-    wrap.appendChild(headline(sectionTitle(sub)));
+    wrap.appendChild(sub === "account" ? accountSay() : headline(sectionTitle(sub)));
     const rerender = () => {
       renderZones();
       renderPage(true);
@@ -2849,9 +2864,29 @@
   // die Karte zeigt den Beta-Bonus, das Untermenü erklärt den Plan und hat die
   // Vorschau des Lese-Modus (nur Ansicht, es wird nichts gesperrt). ----
 
-  // Highlight: ein Wort als farbiger Block in den Tönen der Textkarten (4.26)
-  function highlight(text, tone) {
-    return el("span", "p-hl " + tone, text);
+  // Satz als Überschrift (34 px), Rest gedimmt (4.26)
+  function say(title, text) {
+    const h = el("h1", "p-say");
+    h.append(el("span", null, title), el("span", "p-say-sub", " " + text));
+    return h;
+  }
+
+  function groupLabel(left, right) {
+    const row = el("div", "p-group-label");
+    row.append(el("span", null, left), el("span", null, right || ""));
+    return row;
+  }
+
+  // Gruppierte Zeilen: [Schlüssel, Wert, Zusatz]; mit onClick wird die ganze Liste ein Knopf
+  function list(rows, onClick) {
+    const box = onClick ? button("p-list", null, onClick) : el("div", "p-list");
+    for (const [key, value, side] of rows) {
+      const row = el(onClick ? "span" : "div", "p-list-row");
+      row.append(el("span", "p-list-key", key), el("span", "p-list-value", value));
+      if (side) row.appendChild(el("span", "p-list-side", side));
+      box.appendChild(row);
+    }
+    return box;
   }
 
   // Vorschau: "beta" (heute), "subscriber" (Jahresabo aktiv) oder "read" (ohne Abo)
@@ -2869,16 +2904,23 @@
 
   function accountCard() {
     const view = accountView() === "login" ? "beta" : accountView();
-    const card = button("p-account", null, () => openSettingsSection("account"));
-    const top = el("span", "p-account-top");
-    const tag = { beta: "(Beta) ›", subscriber: "(" + t("accountYearly") + ") ›", read: "(" + t("accountNone") + ") ›" }[view];
-    top.append(el("span", null, "(" + t("setAccount") + ")"), el("span", null, tag));
-    const line = el("span", "p-account-line");
-    if (view === "beta") line.append(highlight(t("accountBonus"), "violet"), el("span", "p-account-text", " " + t("accountBonusText")));
-    else if (view === "subscriber") line.append(el("span", null, t("accountActive")), el("span", "p-account-text", " " + t("accountUntil", { date: accountUntil() })));
-    else line.append(el("span", null, t("accountNoneTitle")), el("span", "p-account-text", " " + t("readText")));
-    card.append(top, line);
+    const open = () => openSettingsSection("account");
+    const rows = {
+      beta: [[t("accountStatus"), t("accountBonus"), "›"], [t("accountAfter"), t("accountAfterBeta")]],
+      subscriber: [[t("accountStatus"), t("accountStatusSub"), "›"], [t("accountRunsUntil"), accountUntil()]],
+      read: [[t("accountStatus"), t("accountNone"), "›"], [t("accountAfter"), t("accountReadMode")]],
+    }[view];
+    const card = el("div", "p-group p-account");
+    card.append(groupLabel("(" + t("setAccount") + ")"), list(rows, open));
     return card;
+  }
+
+  // Kopf von Einstellungen › Konto: Zustand als Satz
+  function accountSay() {
+    const view = accountView() === "login" ? "beta" : accountView();
+    if (view === "subscriber") return say(t("accountActive"), t("accountUntil", { date: accountUntil() }));
+    if (view === "read") return say(t("accountNoneTitle"), t("readText"));
+    return say(t("accountBonus") + ".", t("accountBonusText"));
   }
 
   function renderAccount() {
@@ -7492,7 +7534,8 @@
   // ---- Ereignisse ----
 
   function bindEvents() {
-    for (const id of ["lockTitle", "lockText", "lockNote", "lockLabel"]) $(id).textContent = t(id);
+    for (const id of ["lockTitle", "lockText", "lockRowCode", "lockRowAfter", "lockBeta", "lockAfter"]) $(id).textContent = t(id);
+    $("lockGroup").textContent = "(" + t("unlockTitle") + ")";
     $("lockEnd").textContent = "(" + t("readEnd") + ")";
     $("lockEnd").addEventListener("click", () => {
       setPref("accountPreview", "beta");
