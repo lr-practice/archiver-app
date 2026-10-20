@@ -7131,7 +7131,7 @@ html.light {
   max-width: 18em;
   font-size: 34px;
   line-height: 1.14;
-  font-weight: var(--head-weight, 500);
+  font-weight: 500;
   letter-spacing: -0.025em;
   text-wrap: balance;
 }
@@ -7474,7 +7474,8 @@ button.p-list:hover {
    Zone eine Zeile: links 180 px Name und Mono-Zahl, rechts die Bilder klein
    und dicht wie auf einem Kontaktabzug.
    Gleicher Kopf auf allen Seiten (Übersicht, Zone, Alle, Suche, Gelöscht):
-   gleicher Abstand oben und unten, 28–42 px, Titel weiß, Satz gedimmt darunter. */
+   gleicher Abstand oben und unten, M 28–42 px Regular (Übersicht L 34–56 px),
+   leicht gesperrt (+0.01em), Titel weiß, Satz gedimmt darunter. */
 .p-page > .p-home-hero,
 .p-page > .p-head,
 .p-page > .p-head-row {
@@ -7487,10 +7488,15 @@ button.p-list:hover {
 .p-page > .p-head-row > .p-head {
   max-width: 20em;
   margin: 0;
-  font-size: var(--head-size);
-  font-weight: var(--head-weight);
+  font-size: clamp(28px, 3vw, 42px);
+  font-weight: 400;
   line-height: 1.1;
-  letter-spacing: -0.01em;
+  letter-spacing: 0.01em;
+}
+
+/* Übersicht eine Stufe größer: L (34–56 px) */
+.p-page > .p-home-hero > .p-head {
+  font-size: clamp(34px, 4vw, 56px);
 }
 
 .p-page > .p-home-hero .p-head-text,
@@ -7765,12 +7771,3 @@ button.p-list:hover {
   }
 }
 
-/* Labor › Schrift: Größe der Seitenköpfe (M = Standard) und Schnitt */
-:root {
-  --head-size: clamp(28px, 3vw, 42px);
-  --head-weight: 500;
-}
-:root[data-head-size="s"] { --head-size: clamp(22px, 2.2vw, 30px); }
-:root[data-head-size="l"] { --head-size: clamp(34px, 4vw, 56px); }
-:root[data-head-size="xl"] { --head-size: clamp(44px, 5.6vw, 80px); }
-:root[data-head-weight="400"] { --head-weight: 400; }

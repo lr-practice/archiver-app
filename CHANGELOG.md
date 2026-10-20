@@ -1,5 +1,11 @@
 # Changelog
 
+## App 0.40.14 (Vorabversion)
+
+- Seitenköpfe fest in Regular und leicht gesperrt: die Übersicht in L
+  (34 bis 56 px), alle anderen Seiten in M (28 bis 42 px). Der Schrift-Schalter
+  im Labor ist damit entschieden und wieder weg.
+
 ## App 0.40.13 (Vorabversion)
 
 - Labor › Schrift: Kopfgröße der Seiten in vier Stufen (S, M, L, XL) und

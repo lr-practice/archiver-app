@@ -1,6 +1,6 @@
 # Archiver – Design-System
 
-Stand: App 0.40.13 · Extension 3.29.6
+Stand: App 0.40.14 · Extension 3.29.6
 
 Diese Datei hält fest, wie Archiver aussieht und warum. Sie gilt für die Mac-App
 (`app/src`) und die Chrome-Extension (`extension/`). Wer an der Oberfläche
@@ -96,7 +96,7 @@ Für die Farbe gilt:
 | Meta | Melange | 12 px | 400 | 0 | Datum, Quelle |
 | UI | Melange | 13–13.5 px | 500 | 0 | Navigation, Menüs |
 | Karten-Titel | Melange | 15 px | 500 | −0.01em | Zonenname auf der Karte |
-| Seitenkopf | Melange | 28–42 px (3vw) / 1.1 | 500 | −0.01em | Übersicht, Zone, Alle Objekte, Suche, Zuletzt gelöscht (`.p-page > .p-head`, seit 0.40.10): Titel und Satz je eigene Zeile |
+| Seitenkopf | Melange | 28–42 px (3vw) / 1.1, Übersicht 34–56 px (4vw) | 400 | +0.01em | Übersicht, Zone, Alle Objekte, Suche, Zuletzt gelöscht (`.p-page > .p-head`, seit 0.40.10): Titel und Satz je eigene Zeile |
 | Satz | Melange | 34 px / 1.14 | 500 | −0.025em | Konto, Sperre, Lese-Modus (`.p-say`) |
 | Überschrift | Melange | 22–24 px | 600 | −0.02em | Kopf in Einstellungen und Handbuch (`.p-sheet`), Onboarding |
 
@@ -825,10 +825,11 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
 ### 4.24a Übersicht mit Kontaktbogen, ein Kopf für alle Seiten (App 0.40.11, `.p-sheetlist`, `.p-home-hero`)
 - **Kopf (alle Seiten):** Übersicht, Zone, Alle Objekte, Suche und Zuletzt
   gelöscht tragen denselben Kopf. Titel in voller Farbe, darunter auf eigener
-  Zeile der Satz in `--p-dim`. 28–42 px (3vw), Zeilenhöhe 1.1, −0.01em
-  (kaum gesperrt, nicht eng), höchstens 20em breit. Oben 24–72 px (6vh),
-  unten 40–96 px (9vh) Raum. In der Übersicht ohne Punkt und ohne „seit …“.
-  Ordnerkarten einer Zone stehen rechts oben neben dem Kopf.
+  Zeile der Satz in `--p-dim`. Regular (400), Zeilenhöhe 1.1, leicht gesperrt
+  (+0.01em), höchstens 20em breit. Größe M 28–42 px (3vw), nur die Übersicht
+  eine Stufe größer: L 34–56 px (4vw). Oben 24–72 px (6vh), unten 40–96 px
+  (9vh) Raum. In der Übersicht ohne Punkt und ohne „seit …“. Ordnerkarten
+  einer Zone stehen rechts oben neben dem Kopf.
 - **Übersicht:** Oben immer die vier Active Zones als Karten (2:1, vierspaltig
   ab 200 px Kartenbreite, sonst 2 × 2). Darunter „Index (N)“ und die übrigen
   Zonen als Kontaktbogen.
@@ -856,9 +857,6 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
   scrollen, Pfeile beim Hover). Eine Zone mit nur einem Bild bleibt A.
 - **Video-Vorschau:** Daumenkino (Standard, 8 Standbilder), Skim (Zeiger
   waagerecht = Zeit im Clip), Abspielen (stumm, Schleife), Aus.
-- **Schrift (0.40.13):** Kopfgröße S 22–30 px, M 28–42 px (Standard), L
-  34–56 px, XL 44–80 px (`--head-size`, `data-head-size`), Schnitt Medium
-  500 (Standard) oder Regular 400 (`--head-weight`, gilt auch für `.p-say`).
 - **Bewegung:** Bei `prefers-reduced-motion` laufen G, Daumenkino und
   Abspielen nicht. Skim bleibt, weil es der Hand folgt.
 - **Regel:** Eine Variante, die bleibt, wandert aus dem Labor in die normale

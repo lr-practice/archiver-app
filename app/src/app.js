@@ -99,28 +99,16 @@
   // DESIGN 4.24b), video = Vorschau eines Videos beim Darüberfahren.
   const LAB_CARDS = ["A", "B", "C", "D", "E", "F", "G", "H"];
   const LAB_VIDEO = ["flip", "skim", "play", "off"];
-  // Seitenkopf: Größe S–XL (M ist der Standard aus 4.24a) und Schnitt Medium/Regular
-  const LAB_HEAD = ["s", "m", "l", "xl"];
-  const LAB_WEIGHT = ["500", "400"];
   function lab() {
     const v = pref("lab", null) || {};
     return {
       card: LAB_CARDS.includes(v.card) ? v.card : "A",
       video: LAB_VIDEO.includes(v.video) ? v.video : "flip",
-      head: LAB_HEAD.includes(v.head) ? v.head : "m",
-      weight: LAB_WEIGHT.includes(v.weight) ? v.weight : "500",
     };
-  }
-  function applyLab() {
-    const l = lab();
-    document.documentElement.dataset.headSize = l.head;
-    document.documentElement.dataset.headWeight = l.weight;
   }
   function setLab(patch) {
     setPref("lab", { ...lab(), ...patch });
-    applyLab();
   }
-  applyLab();
 
   // Studio-Funktionen (Einstellungen › Studio): jede einzeln abschaltbar, Standard an.
   // Die geteilte Bibliothek ist kein Schalter hier, sie hängt an der Bibliothek selbst.
@@ -2882,21 +2870,6 @@
         }))
       );
       wrap.appendChild(video);
-      const type = block(t("labType"));
-      type.appendChild(blockRow(el("div", "p-block-text", t("labTypeText"))));
-      type.appendChild(
-        blockRow(t("labHead"), choice(LAB_HEAD.map((id) => [id, id.toUpperCase()]), cur.head, (id) => {
-          setLab({ head: id });
-          rerender();
-        }))
-      );
-      type.appendChild(
-        blockRow(t("labWeight"), choice(LAB_WEIGHT.map((id) => [id, t(id === "400" ? "labRegular" : "labMedium")]), cur.weight, (id) => {
-          setLab({ weight: id });
-          rerender();
-        }))
-      );
-      wrap.appendChild(type);
     }
 
     // App: Version und Updates, Sprache, Feedback, Tasten
