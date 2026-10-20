@@ -1,5 +1,13 @@
 # Changelog
 
+## App 0.40.10 (Vorabversion)
+
+- Übersicht als Kontaktbogen: je Zone eine Zeile, links Name und Anzahl,
+  rechts die Bilder klein und dicht. Ab 24 Bildern „+N“, das die Zone öffnet.
+- Ein Kopf für alle Seiten: Übersicht, Zone, Alle Objekte, Suche und Zuletzt
+  gelöscht zeigen den Titel groß, darunter den Satz gedimmt, mit gleichem
+  Abstand oben und unten.
+
 ## App 0.40.9 (Vorabversion)
 
 - Anmelden neu: ein Satz, darunter ein einziges Feld in Satzgröße auf einer

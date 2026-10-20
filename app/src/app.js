@@ -1488,9 +1488,7 @@
       );
       wrap.appendChild(read);
     } else wrap.appendChild(
-      // 0.40.9: Plakat-Kopf. „Übersicht.“ in voller Farbe, darunter die Zahlen
-      // gedimmt, groß. Der Raum darunter wächst, bis die Active Zones am
-      // unteren Rand stehen (fitHomeHero); alles Weitere kommt beim Scrollen.
+      // 0.40.10: „Übersicht“ in voller Farbe, darunter die Zahlen gedimmt (56 px)
       homeHero()
     );
 
@@ -1561,24 +1559,8 @@
         state.items.length ? t("headHome", { zones: zonesText(state.zones.length), images: countText(state.items.length) }) : t("headHomeEmpty")
       )
     );
-    requestAnimationFrame(fitHomeHero);
     return hero;
   }
-
-  // Kopf so hoch ziehen, dass die erste Reihe (Active Zones) gerade noch ganz im Fenster steht
-  function fitHomeHero() {
-    const hero = document.querySelector(".p-home-hero");
-    const scroller = $("zones");
-    if (!hero || !scroller) return;
-    hero.style.minHeight = "";
-    const first = hero.parentElement.querySelector(".p-hotrow, .p-split, .p-index");
-    if (!first) return;
-    const box = scroller.getBoundingClientRect();
-    const end = first.classList.contains("p-hotrow") ? first.getBoundingClientRect().bottom : first.getBoundingClientRect().top + 160;
-    const free = box.bottom - 40 - end;
-    if (free > 0) hero.style.minHeight = hero.offsetHeight + free + "px";
-  }
-  window.addEventListener("resize", () => requestAnimationFrame(fitHomeHero));
 
   // ---- Startseite per Tastatur: ← → wählen Zonen nacheinander, ↑ ↓ nach
   // Lage auf dem Bildschirm, Enter öffnet, Esc in der Zone kehrt zurück. ----
@@ -1783,17 +1765,40 @@
     return row;
   }
 
+  // Übersicht als Kontaktbogen (0.40.10, Variante E): je Zone eine Zeile, links
+  // Name und Zahl (Active Zones mit ● und Nummer), rechts klein die Bilder wie
+  // auf einem Kontaktabzug. Bildhöhe folgt den Größen-Chips (--row-thumb).
+  const SHEET_MAX = 24;
   function overviewLayout() {
-    const wrap = el("div", "p-overview");
-    wrap.appendChild(hotRow());
-    const rest = state.zones.slice(HOT_ZONES);
-    const label = el("div", "p-bar p-overview-bar");
-    label.appendChild(mono(t("indexLabel") + " (" + rest.length + ")", "strong"));
-    label.appendChild(el("span", "p-flex"));
-    label.appendChild(mono(t("hotHint"), "dim"));
-    wrap.appendChild(label);
-    wrap.appendChild(indexList(false, rest, HOT_ZONES));
-    return wrap;
+    const sheet = el("div", "p-sheetlist");
+    state.zones.forEach((zone, i) => {
+      const items = orderedItems(zone.path);
+      const head = el("div", "p-sheet-zone");
+      head.dataset.zone = zone.path;
+      const name = zoneNameEl(zone);
+      head.appendChild(name);
+      head.appendChild(mono((i < HOT_ZONES ? "● " + String(i + 1).padStart(2, "0") + " · " : "") + cardMeta(zone), "dim"));
+      head.addEventListener("click", (e) => {
+        if (e.target.closest("input")) return;
+        setFocus(zone.path);
+      });
+      if (canEdit(zone.path))
+        name.addEventListener("dblclick", (e) => {
+          e.stopPropagation();
+          startRename(name, zone.path);
+        });
+      const thumbs = el("div", "p-sheet-thumbs");
+      for (const item of items.slice(0, SHEET_MAX)) {
+        const cell = button("p-sheet-thumb", null, () => openLightbox(item));
+        cell.appendChild(previewImg(item));
+        thumbs.appendChild(cell);
+      }
+      if (items.length > SHEET_MAX)
+        thumbs.appendChild(button("p-sheet-more p-mono", "+" + (items.length - SHEET_MAX), () => setFocus(zone.path)));
+      if (!items.length) thumbs.appendChild(mono(t("emptyShort"), "dim"));
+      sheet.append(head, thumbs);
+    });
+    return sheet;
   }
 
   function hotKey(i) {

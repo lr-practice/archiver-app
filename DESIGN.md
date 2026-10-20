@@ -1,6 +1,6 @@
 # Archiver – Design-System
 
-Stand: App 0.40.9 · Extension 3.29.6
+Stand: App 0.40.10 · Extension 3.29.6
 
 Diese Datei hält fest, wie Archiver aussieht und warum. Sie gilt für die Mac-App
 (`app/src`) und die Chrome-Extension (`extension/`). Wer an der Oberfläche
@@ -96,7 +96,8 @@ Für die Farbe gilt:
 | Meta | Melange | 12 px | 400 | 0 | Datum, Quelle |
 | UI | Melange | 13–13.5 px | 500 | 0 | Navigation, Menüs |
 | Karten-Titel | Melange | 15 px | 500 | −0.01em | Zonenname auf der Karte |
-| Seitenkopf | Melange | 34 px / 1.14 | 500 | −0.025em | Übersicht, Zone, Alle Objekte, Zuletzt gelöscht (`.p-page .p-head`, seit 0.40.6) und der Satz in Konto, Sperre, Lese-Modus (`.p-say`) |
+| Seitenkopf | Melange | 34–56 px (4vw) / 1.05 | 500 | −0.04em | Übersicht, Zone, Alle Objekte, Suche, Zuletzt gelöscht (`.p-page > .p-head`, seit 0.40.10): Titel und Satz je eigene Zeile |
+| Satz | Melange | 34 px / 1.14 | 500 | −0.025em | Konto, Sperre, Lese-Modus (`.p-say`) |
 | Überschrift | Melange | 22–24 px | 600 | −0.02em | Kopf in Einstellungen und Handbuch (`.p-sheet`), Onboarding |
 
 Für die Typografie gilt:
@@ -821,15 +822,20 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
 - **Nicht:** Keine Rundung an Objekten, keine Akzentfarbe, keine Schatten an
   den Objekten. Die Extension kennt die Wolke nicht.
 
-### 4.24a Übersicht mit Plakat-Kopf (App 0.40.9, `.p-home-hero`)
-- **Kopf:** „Übersicht“ in voller Farbe, darunter auf eigener Zeile die
-  Zahlen („709 Objekte in 7 Zonen“) in `--p-dim`, beides ohne Punkt. 48–128 px (7.2vw),
-  Zeilenhöhe 1, −0.045em. Kein „seit …“.
-- **Raum:** Der Kopf wächst (`fitHomeHero`), bis die erste Reihe, die vier
-  Active Zones, mit 40 px Abstand am unteren Fensterrand steht. Alle weiteren
-  Zonen kommen erst beim Scrollen. Viel Weißraum ist Absicht.
-- **Spalten:** Active Zones vierspaltig ab 200 px Kartenbreite, sonst zwei.
-  Karten bleiben 2:1.
+### 4.24a Übersicht als Kontaktbogen, ein Kopf für alle Seiten (App 0.40.10, `.p-sheetlist`, `.p-home-hero`)
+- **Kopf (alle Seiten):** Übersicht, Zone, Alle Objekte, Suche und Zuletzt
+  gelöscht tragen denselben Kopf. Titel in voller Farbe, darunter auf eigener
+  Zeile der Satz in `--p-dim`. 34–56 px (4vw), Zeilenhöhe 1.05, −0.04em,
+  höchstens 18em breit. Oben 24–72 px (6vh), unten 40–96 px (9vh) Raum. In
+  der Übersicht ohne Punkt und ohne „seit …“. Ordnerkarten einer Zone stehen
+  rechts oben neben dem Kopf.
+- **Kontaktbogen:** Je Zone eine Zeile. Links 180 px Name und Mono-Zeile
+  (● Nummer der Active Zone, Anzahl), rechts die Bilder klein und dicht wie
+  auf einem Kontaktabzug: Höhe der Zeilen-Miniatur (mind. 40 px), 13:10,
+  4 px Abstand, Rundung `--r-sm`. Höchstens 24, danach „+N“ in Mono, das die
+  Zone öffnet. Klick auf den Namen öffnet die Zone, auf ein Bild die Lightbox.
+- **Fokus:** Ring (4.1), keine Farbe.
+- **Schmal (< 700 px):** Name über den Bildern, eine Spalte.
 
 ### 4.25a Einstellungen (App 0.40.8, `.p-settings-nav`)
 - **Aufbau:** Seitenkopf, darunter die Konto-Liste (4.26), darunter fünf
@@ -849,7 +855,7 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
   einer Fläche. Keine farbigen Highlights mehr (das `.p-hl` aus 0.40.4 ist
   entfernt).
 - **Satz (`.p-say`):** 34 px, Zeilenhöhe 1.14, 500, −0.025em, `balance`, der
-  Rest in `--p-dim`. So groß wie der Seitenkopf, aber kein Titelblatt.
+  Rest in `--p-dim`. 34 px, kleiner als der Seitenkopf, kein Titelblatt.
   Auf der Webseite entspricht das 40 px.
 - **Mono-Zeile (`.p-group-label`):** 11 px Mono, Versalien, `--p-dim`, links
   der Name in Klammern, rechts ein Zusatz.
