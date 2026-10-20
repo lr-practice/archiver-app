@@ -3,7 +3,7 @@
 ## App 0.40.5 (Vorabversion)
 
 - Einstellungen › Konto › Ansicht: Vorschau als Beta, als Abonnent (Jahresabo
-  aktiv, mit Abo, Geräten und Zahlung) oder im Lese-Modus. Es wird nichts
+  aktiv, mit Abo, Geräten und Zahlung), im Lese-Modus oder als Anmelde-Fenster. Es wird nichts
   gebucht oder gesperrt.
 
 ## App 0.40.4 (Vorabversion)

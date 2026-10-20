@@ -840,7 +840,7 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
   Klick öffnet Einstellungen › Konto mit dem Plan und der Vorschau des
   Lese-Modus.
 - **Vorschau (0.40.5):** Solange es keine Konten gibt, wählt Einstellungen ›
-  Konto › Ansicht zwischen Beta, Abonnent und Lese-Modus
+  Konto › Ansicht zwischen Beta, Abonnent, Lese-Modus und Anmelden (zeigt die Sperre auch freigeschaltet, oben rechts „(Vorschau beenden)“)
   (`archiver.accountPreview`, vorher `readPreview`). Abonnent: Karte „(Jahr)“,
   „Jahr, aktiv.“ und dim „Läuft bis …“ ohne Highlight, im Untermenü ein Block
   Abo mit Abo, Geräte, Zahlung und Zuletzt geprüft. Es wird nichts gebucht.

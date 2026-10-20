@@ -122,7 +122,10 @@
   }
 
   function applyLock() {
-    const locked = !isUnlocked();
+    // Vorschau „Anmelden“ (Einstellungen › Konto › Ansicht) zeigt die Sperre auch freigeschaltet
+    const preview = isUnlocked() && pref("accountPreview", null) === "login";
+    const locked = !isUnlocked() || preview;
+    $("lockEnd").hidden = !preview;
     document.body.classList.toggle("locked", locked);
     $("lock").hidden = !locked;
     if (locked && !$("lockForm").firstChild) {
@@ -2854,7 +2857,7 @@
   // Vorschau: "beta" (heute), "subscriber" (Jahresabo aktiv) oder "read" (ohne Abo)
   function accountView() {
     const v = pref("accountPreview", null);
-    if (["beta", "subscriber", "read"].includes(v)) return v;
+    if (["beta", "subscriber", "read", "login"].includes(v)) return v;
     return pref("readPreview", false) ? "read" : "beta"; // 0.40.4 kannte nur den Lese-Modus
   }
 
@@ -2865,7 +2868,7 @@
   }
 
   function accountCard() {
-    const view = accountView();
+    const view = accountView() === "login" ? "beta" : accountView();
     const card = button("p-account", null, () => openSettingsSection("account"));
     const top = el("span", "p-account-top");
     const tag = { beta: "(Beta) ›", subscriber: "(" + t("accountYearly") + ") ›", read: "(" + t("accountNone") + ") ›" }[view];
@@ -2897,10 +2900,11 @@
       blockRow(
         t("accountView"),
         choice(
-          [["beta", "Beta"], ["subscriber", t("accountViewSub")], ["read", t("accountReadMode")]],
+          [["beta", "Beta"], ["subscriber", t("accountViewSub")], ["read", t("accountReadMode")], ["login", t("accountViewLogin")]],
           accountView(),
           (id) => {
             setPref("accountPreview", id);
+            applyLock();
             renderZones();
             renderPage(true);
           }
@@ -7476,6 +7480,12 @@
 
   function bindEvents() {
     for (const id of ["lockTitle", "lockText", "lockNote", "lockLabel"]) $(id).textContent = t(id);
+    $("lockEnd").textContent = "(" + t("readEnd") + ")";
+    $("lockEnd").addEventListener("click", () => {
+      setPref("accountPreview", "beta");
+      applyLock();
+      if (state.page) renderPage(true);
+    });
     $("libTabBtn").addEventListener("click", (e) => {
       e.stopPropagation();
       openLibMenu();
