@@ -1,6 +1,6 @@
 # Archiver – Design-System
 
-Stand: App 0.40.2 · Extension 3.29.4
+Stand: App 0.40.2 · Extension 3.29.5
 
 Diese Datei hält fest, wie Archiver aussieht und warum. Sie gilt für die Mac-App
 (`app/src`) und die Chrome-Extension (`extension/`). Wer an der Oberfläche
@@ -507,6 +507,9 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
   Versionen ohne Wahl gilt als aus. Im Browser übernimmt die Extension.
 - **Nicht:** Erscheint nicht, wenn Archiver selbst vorne ist, und nicht bei
   Text oder Links ohne Datei. Zeigt nie „Gesichert“, bevor es gesichert ist.
+  Im Browser (Extension 3.29.5) erscheint sie nur, wenn das Ziehen auf der
+  Seite beginnt, nicht bei Dateien von außen. Regler, Links und kleine
+  Bedienelemente über Bildern und Videos bleiben Bedienelemente.
 
 ### 4.14 Zuletzt gelöscht (`.p-deleted`, `.card.del`)
 - **Zweck:** Gelöschte Objekte und Zonen liegen 7 Tage unter

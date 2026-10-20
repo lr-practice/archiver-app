@@ -1,5 +1,13 @@
 # Changelog
 
+## Extension 3.29.5
+
+- Regler und Knöpfe über Videos (etwa die Lautstärke) lassen sich wieder
+  bedienen, statt als Bild gezogen zu werden.
+- Links und Knöpfe über Bildern (etwa in Mediatheken) bekommen den Klick wieder.
+- Bilder und Dateien, die von außen in den Browser gezogen werden, blenden
+  keine Zonen mehr ein; die Seite bekommt sie selbst (Upload-Felder).
+
 ## Extension 3.29.4
 
 - Zonenleiste beim Ziehen: Rand 10 px statt 14 px, 8 px statt 10 px zwischen den

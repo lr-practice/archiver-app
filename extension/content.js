@@ -1433,6 +1433,10 @@
     return r.width >= 160 && r.height >= 160;
   }
 
+  const SLIDER_ROLES = "[role='slider'], [role='scrollbar'], [role='progressbar'], [role='spinbutton']";
+  const CONTROL_ROLES =
+    "a[href], label, summary, [role='button'], [role='link'], [role='menuitem'], [role='tab'], [role='checkbox'], [role='switch'], [role='option']";
+
   function armHiddenDrag(e) {
     if (!e.isTrusted) return; // nur echte Eingaben, keine von der Seite erzeugten Events
     clearHiddenDrag();
@@ -1444,6 +1448,14 @@
     // Instagram-Feed: über dem Video liegt ein großer Knopf („Ton stummschalten“).
     // Den wie eine Fläche behandeln, kleine Bedienknöpfe bleiben Knöpfe.
     if (ctl && !(IG && ctl.tagName === "BUTTON" && bigControl(ctl))) return;
+    // Regler und Bedienelemente der Seite bleiben bedienbar (3.29.5): Lautstärke,
+    // Zeitleiste, Knöpfe. Links und Knöpfe ohne <button> ebenso, außer auf
+    // Instagram, wo ein Link über dem Video liegt.
+    if (t.closest(SLIDER_ROLES)) return;
+    if (!IG && t.closest(CONTROL_ROLES)) return;
+    // Kleine Flächen (Reglerknopf, Symbol) sind keine Hülle über einem Bild
+    const tr = t.getBoundingClientRect();
+    if (tr.width < 80 || tr.height < 80) return;
     // Echt ziehbare Bilder und Links laufen wie bisher
     if (t.closest("[draggable='true']") || (t.tagName === "IMG" && t.getAttribute("draggable") !== "false")) return;
     if (selectedText() && insideSelection(e.clientX, e.clientY)) return;
@@ -2063,12 +2075,20 @@
     });
   }
 
+  // Dateien von außen (Finder, Schreibtisch) in den Browser gezogen: keine
+  // Zonen, die Seite bekommt das Ablegen selbst (Upload-Felder). Zonen nur,
+  // wenn das Ziehen auf dieser Seite begonnen hat (3.29.5).
+  function foreignDrag(e) {
+    return !dragSource && !hiddenDrag && !!e.dataTransfer && [...e.dataTransfer.types].includes("Files");
+  }
+
   window.addEventListener(
     "dragenter",
     (e) => {
       if (!e.isTrusted) return; // nur echte Eingaben, keine von der Seite erzeugten Events
       if (gone()) return removeZones();
       if (!e.dataTransfer || manualOpen) return; // im offenen Overlay übernehmen die Zonen-Karten
+      if (foreignDrag(e)) return;
       dragCounter++;
       if (dragCounter === 1 && !zonesBarEl) loadDragLibs();
       showZones();
@@ -2081,7 +2101,7 @@
     (e) => {
       if (!e.isTrusted) return; // nur echte Eingaben, keine von der Seite erzeugten Events
       if (gone()) return;
-      if (!e.dataTransfer || manualOpen) return;
+      if (!e.dataTransfer || manualOpen || foreignDrag(e)) return;
       e.preventDefault(); // notwendig, damit "drop" überhaupt feuert
       e.dataTransfer.dropEffect = "copy";
       // Mehrere Bibliotheken: jeder Druck auf ⇧ springt zur nächsten
@@ -2103,8 +2123,8 @@
 
   window.addEventListener(
     "dragleave",
-    () => {
-      if (manualOpen) return;
+    (e) => {
+      if (manualOpen || foreignDrag(e)) return;
       dragCounter--;
       if (dragCounter <= 0) removeZones();
     },
@@ -2116,7 +2136,7 @@
     (e) => {
       if (!e.isTrusted) return; // nur echte Eingaben, keine von der Seite erzeugten Events
       if (gone()) return;
-      if (manualOpen) return;
+      if (manualOpen || foreignDrag(e)) return;
       const zoneIdx = getZoneIndex(e.clientX, e.clientY);
       shiftDrop = dragLibs.length > 1 ? false : e.shiftKey;
       removeLibBar();
