@@ -93,15 +93,19 @@ Für die Farbe gilt:
 | Rolle | Schrift | Größe | Gewicht | Laufweite | Beispiel |
 |---|---|---|---|---|---|
 | Label, Chip | Geist Mono, Versalien | 11 px | 400 | +0.02em | Filter-Chips, Zähler |
-| Meta | Geist | 12 px | 400 | 0 | Datum, Quelle |
-| UI | Geist | 13–13.5 px | 500 | 0 | Navigation, Menüs |
-| Karten-Titel | Geist | 15 px | 500 | −0.01em | Zonenname auf der Karte |
-| Überschrift | Geist | 22–24 px | 600 | −0.02em | Zonen-Titel, Onboarding |
+| Meta | Melange | 12 px | 400 | 0 | Datum, Quelle |
+| UI | Melange | 13–13.5 px | 500 | 0 | Navigation, Menüs |
+| Karten-Titel | Melange | 15 px | 500 | −0.01em | Zonenname auf der Karte |
+| Überschrift | Melange | 22–24 px | 600 | −0.02em | Zonen-Titel, Onboarding |
 
 Für die Typografie gilt:
 
-- Es gibt nur Geist (variabel, 100–900) und Geist Mono. Beide liegen lokal in
-  `fonts/` und haben `font-display: block`.
+- Grundschrift ist KMR Melange Grotesk (kimera), Mono bleibt Geist Mono.
+  Jeder Stapel beginnt mit `"KMR Melange Grotesk", "Geist", …`.
+- Melange ist kommerziell und liegt nicht im Repo. Sie greift, wenn sie am Mac
+  installiert ist; sonst springt Geist (lokal in `fonts/`, `font-display:
+  block`) ein. Text-Karten und Bildbeschriftungen der Extension behalten ihre
+  eigenen Stapel.
 - Mono ist für Daten und Etiketten da, nicht für Fließtext.
 - Gewichte sind nur 400, 500 und 600.
 - Neue Größen werden auf diese Stufen gerundet. Im Code stecken heute auch

@@ -9,7 +9,7 @@
 }
 
 .root {
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-family: "KMR Melange Grotesk", "Geist", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   color: #ffffff;
   font-size: 13px;
   line-height: normal;
@@ -54,7 +54,7 @@ input {
      unter der Leiste (Chat-Felder) greifen mit. */
   pointer-events: auto;
   color: var(--p-text);
-  font-family: "Geist", -apple-system, BlinkMacSystemFont, sans-serif;
+  font-family: "KMR Melange Grotesk", "Geist", -apple-system, BlinkMacSystemFont, sans-serif;
   -webkit-font-smoothing: antialiased;
   animation: zones-in 0.14s ease-out;
   /* Streifen: fährt auf volle Höhe, wenn der Zeiger hineinkommt (content.js) */
@@ -209,7 +209,7 @@ input {
   z-index: 2147483647;
   cursor: crosshair;
   background: rgba(0, 0, 0, 0.18);
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-family: "KMR Melange Grotesk", "Geist", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 }
 
 .area-hint {
@@ -271,7 +271,7 @@ input {
   outline-offset: -1px;
   background: transparent;
   color: #ededed;
-  font: 500 13px -apple-system, BlinkMacSystemFont, sans-serif;
+  font: 500 13px "KMR Melange Grotesk", "Geist", -apple-system, BlinkMacSystemFont, sans-serif;
   cursor: pointer;
 }
 
@@ -423,7 +423,7 @@ html.light .area-key,
   backdrop-filter: blur(24px) saturate(1.4);
   -webkit-backdrop-filter: blur(24px) saturate(1.4);
   box-shadow: 0 14px 44px rgba(0, 0, 0, 0.5), inset 0 0 0 1px rgba(255, 255, 255, 0.07);
-  font-family: "Geist", -apple-system, BlinkMacSystemFont, sans-serif;
+  font-family: "KMR Melange Grotesk", "Geist", -apple-system, BlinkMacSystemFont, sans-serif;
   font-size: 14px;
   line-height: 1;
   color: #8c8c8c;

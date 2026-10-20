@@ -44,7 +44,7 @@ body {
   height: 100%;
   background: var(--bg);
   color: var(--text);
-  font: 13px/1.4 -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", sans-serif;
+  font: 13px/1.4 "KMR Melange Grotesk", "Geist", -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", sans-serif;
   -webkit-font-smoothing: antialiased;
   user-select: none;
   -webkit-user-select: none;
@@ -1068,7 +1068,7 @@ html.light .dialog {
 
 .splash-word,
 .splash-sub {
-  font-family: "Geist", -apple-system, BlinkMacSystemFont, sans-serif;
+  font-family: "KMR Melange Grotesk", "Geist", -apple-system, BlinkMacSystemFont, sans-serif;
   font-size: 1em;
   line-height: 1.2;
   letter-spacing: -0.01em;
@@ -1174,7 +1174,7 @@ html:not(.mac) {
 
 html,
 body {
-  font-family: "Geist", -apple-system, BlinkMacSystemFont, sans-serif;
+  font-family: "KMR Melange Grotesk", "Geist", -apple-system, BlinkMacSystemFont, sans-serif;
   font-size: 13px;
   font-feature-settings: "ss01" 0;
 }
@@ -6105,7 +6105,7 @@ html.light {
   flex: 1;
   min-width: 0;
   padding: var(--ts-pad);
-  font-family: "Geist", -apple-system, sans-serif;
+  font-family: "KMR Melange Grotesk", "Geist", -apple-system, sans-serif;
 }
 .lb-cap-card .ts-label,
 .lb-cap-card .ts-foot {

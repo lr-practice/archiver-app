@@ -1,5 +1,12 @@
 # Changelog
 
+## Unveröffentlicht
+
+- Grundschrift ist jetzt KMR Melange Grotesk in App, Tray, Observer,
+  Zonenleiste, Viewer, Palette und Extension (Popup, Dashboard, Galerie,
+  Overlay). Geist Mono bleibt für Etiketten. Ohne installierte Melange
+  bleibt es bei Geist.
+
 ## Extension 3.29.5
 
 - Regler und Knöpfe über Videos (etwa die Lautstärke) lassen sich wieder
