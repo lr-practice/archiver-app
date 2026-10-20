@@ -96,7 +96,8 @@ Für die Farbe gilt:
 | Meta | Melange | 12 px | 400 | 0 | Datum, Quelle |
 | UI | Melange | 13–13.5 px | 500 | 0 | Navigation, Menüs |
 | Karten-Titel | Melange | 15 px | 500 | −0.01em | Zonenname auf der Karte |
-| Überschrift | Melange | 22–24 px | 600 | −0.02em | Zonen-Titel, Onboarding |
+| Seitenkopf | Melange | 34 px / 1.14 | 500 | −0.025em | Übersicht, Zone, Alle Objekte, Zuletzt gelöscht (`.p-page .p-head`, seit 0.40.6) und der Satz in Konto, Sperre, Lese-Modus (`.p-say`) |
+| Überschrift | Melange | 22–24 px | 600 | −0.02em | Kopf in Einstellungen und Handbuch (`.p-sheet`), Onboarding |
 
 Für die Typografie gilt:
 
@@ -825,7 +826,7 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
   einer Fläche. Keine farbigen Highlights mehr (das `.p-hl` aus 0.40.4 ist
   entfernt).
 - **Satz (`.p-say`):** 34 px, Zeilenhöhe 1.14, 500, −0.025em, `balance`, der
-  Rest in `--p-dim`. Größer als der Seitenkopf (24 px), aber kein Titelblatt.
+  Rest in `--p-dim`. So groß wie der Seitenkopf, aber kein Titelblatt.
   Auf der Webseite entspricht das 40 px.
 - **Mono-Zeile (`.p-group-label`):** 11 px Mono, Versalien, `--p-dim`, links
   der Name in Klammern, rechts ein Zusatz.

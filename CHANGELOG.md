@@ -7,6 +7,10 @@
   farbigen Markierungen mehr.
 - Im Anmelde-Fenster ist der Code eine Zeile der Liste, „Freischalten“ steht
   darunter.
+- Überschriften in der Übersicht, in Zonen, Alle Objekte und Zuletzt gelöscht
+  sind größer (34 px statt 24 px).
+- Verknüpfte Ordner von außerhalb der Bibliothek heißen beim Entfernen jetzt
+  „Entkoppeln“. Der Ordner auf dem Mac bleibt, gelöscht wird nichts.
 
 ## App 0.40.5 (Vorabversion)
 

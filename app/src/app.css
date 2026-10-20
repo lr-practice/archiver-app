@@ -7378,3 +7378,12 @@ button.p-list:hover {
 .p-read .p-say {
   margin-bottom: 8px;
 }
+
+/* Kopf der Seiten (Übersicht, Zone, Alle Objekte): so groß wie der Satz in 4.26 */
+.p-page .p-head {
+  max-width: 22em;
+  font-size: 34px;
+  line-height: 1.14;
+  letter-spacing: -0.025em;
+  text-wrap: balance;
+}
