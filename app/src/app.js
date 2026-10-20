@@ -2913,6 +2913,19 @@
     );
     preview.appendChild(el("p", "p-block-hint", t("accountReadModeText")));
     frag.appendChild(preview);
+    // Abmelden: vergisst den Freischalt-Code, danach steht die Sperre wie beim ersten Start da
+    if (isUnlocked()) {
+      const out = button("p-link p-account-out", t("accountSignOut"), () => {
+        setPref("unlock", null);
+        setPref("accountPreview", "beta");
+        state.settingsSub = null;
+        closePage();
+        applyLock();
+        renderZones();
+      });
+      frag.appendChild(out);
+      frag.appendChild(el("p", "p-block-hint", t("accountSignOutText")));
+    }
     return frag;
   }
 

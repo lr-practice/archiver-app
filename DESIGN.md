@@ -844,6 +844,8 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
   (`archiver.accountPreview`, vorher `readPreview`). Abonnent: Karte „(Jahr)“,
   „Jahr, aktiv.“ und dim „Läuft bis …“ ohne Highlight, im Untermenü ein Block
   Abo mit Abo, Geräte, Zahlung und Zuletzt geprüft. Es wird nichts gebucht.
+  Darunter „Abmelden“ als Link: vergisst den Freischalt-Code, die Sperre steht
+  wie beim ersten Start da.
 - **Lese-Modus (Vorschau):** Nur zum Ansehen. Der Kopf der Startseite wird zu „Lese-Modus.“ und
   dem Satz in dim, in der Filterzeile steht „(Vorschau beenden)“. Es wird
   nichts gesperrt.

@@ -5,6 +5,8 @@
 - Einstellungen › Konto › Ansicht: Vorschau als Beta, als Abonnent (Jahresabo
   aktiv, mit Abo, Geräten und Zahlung), im Lese-Modus oder als Anmelde-Fenster. Es wird nichts
   gebucht oder gesperrt.
+- Einstellungen › Konto › Abmelden vergisst den Freischalt-Code auf diesem Mac.
+  Danach steht das Anmelde-Fenster wie beim ersten Start da.
 
 ## App 0.40.4 (Vorabversion)
 
