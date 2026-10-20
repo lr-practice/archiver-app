@@ -7431,3 +7431,105 @@ button.p-list:hover {
   letter-spacing: -0.025em;
   text-wrap: balance;
 }
+
+/* ---- 0.40.9: Anmelden als Satz (Variante B) ----
+   Satz, darunter ein einziges Feld in Satzgröße auf einer Linie, rechts ein
+   runder Pfeil (Pille). Darunter Mono-Hinweis oder Mono-Links und die Meldung. */
+.p-lock-inner {
+  gap: 0;
+  width: min(640px, 100%);
+}
+
+.p-lock-inner .p-say {
+  margin-bottom: 28px;
+}
+
+.p-lock-preview {
+  align-self: flex-end;
+  margin-bottom: 18px;
+  font-family: var(--p-mono);
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.p-lock-line {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 6px 0 14px;
+  border-bottom: 1px solid rgba(var(--ink-rgb), 0.22);
+  transition: border-color 0.12s ease;
+}
+
+.p-lock-line:focus-within {
+  border-bottom-color: rgba(var(--ink-rgb), 0.5);
+}
+
+.p-lock-line .p-lock-input {
+  flex: 1;
+  min-width: 0;
+  font-size: 34px;
+  font-weight: 500;
+  line-height: 1.14;
+  letter-spacing: -0.025em;
+}
+
+.p-lock-line .p-lock-input.is-code {
+  letter-spacing: 0.06em;
+  font-variant-numeric: tabular-nums;
+}
+
+.p-lock-line.wrong {
+  border-bottom-color: var(--danger);
+}
+
+.p-lock-line.wrong .p-lock-input {
+  animation: unlock-shake 0.36s;
+}
+
+.p-lock-go {
+  flex: none;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: none;
+  border-radius: 999px;
+  background: var(--ink);
+  color: var(--ink-inverse);
+  font-size: 18px;
+  cursor: pointer;
+  transition: opacity 0.12s ease;
+}
+
+.p-lock-go:disabled {
+  opacity: 0.5;
+}
+
+.p-lock-inner .p-lock-foot {
+  margin-top: 14px;
+  gap: 20px;
+  font-family: var(--p-mono);
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.p-lock-hint {
+  color: var(--p-dim);
+}
+
+.p-lock-inner .p-lock-msg {
+  margin-left: auto;
+  color: var(--p-dim);
+}
+
+.p-lock-line.wrong + .p-lock-foot .p-lock-msg {
+  color: var(--danger);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .p-lock-line.wrong .p-lock-input {
+    animation: none;
+  }
+}

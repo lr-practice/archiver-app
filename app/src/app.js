@@ -157,34 +157,25 @@
 
   // Sperre als Liste: "mail" (E-Mail eingeben), "code" (Code aus der Mail), "beta" (Freischalt-Code)
   const lockState = { email: "" };
+  // Anmelden (0.40.9, Variante B „Satz“): Der Satz sagt, was zu tun ist, darunter
+  // ein einziges Feld in Satzgröße auf einer Linie, rechts ein runder Pfeil.
+  // Zwei Schritte: "mail" (E-Mail) und "code" (Code aus der Mail).
   function renderLockForm(step) {
     const form = $("lockList");
     const foot = $("lockGo");
     form.replaceChildren();
     foot.replaceChildren();
     form.onsubmit = null;
-    const row = (key, value, side) => {
-      const r = el("div", "p-list-row");
-      r.append(el("span", "p-list-key", key), value instanceof Node ? value : el("span", "p-list-value", value));
-      if (side) r.appendChild(side);
-      form.appendChild(r);
-    };
-    const field = (type, placeholder, value) => {
-      const input = el("input", "p-list-value p-lock-input");
-      input.type = type;
-      input.placeholder = placeholder;
-      input.value = value || "";
-      input.spellcheck = false;
-      input.autocomplete = type === "email" ? "email" : "one-time-code";
-      input.addEventListener("keydown", (e) => e.stopPropagation());
-      input.addEventListener("input", () => form.classList.remove("wrong"));
-      return input;
-    };
-    const status = el("span", "p-lock-msg");
-    const go = el("button", "p-unlock-go", "");
+    form.classList.remove("wrong");
+    const input = el("input", "p-lock-input");
+    input.spellcheck = false;
+    input.addEventListener("keydown", (e) => e.stopPropagation());
+    input.addEventListener("input", () => form.classList.remove("wrong"));
+    const go = el("button", "p-lock-go", "→");
     go.type = "submit";
-    go.setAttribute("form", "lockList");
-    const swap = (label, next) => button("p-lock-end", "(" + label + ")", () => renderLockForm(next));
+    form.append(input, go);
+    const status = el("span", "p-lock-msg");
+    const link = (label, fn) => button("p-lock-end", "(" + label + ")", fn);
     const fail = (text) => {
       status.textContent = text;
       form.classList.remove("wrong");
@@ -193,17 +184,19 @@
       go.disabled = false;
     };
 
-    $("lockGroup").textContent = "(" + t("lockSignIn") + ")";
     if (step === "code") {
-      const code = field("text", "123456");
-      code.inputMode = "numeric";
-      code.maxLength = 10;
-      row(t("lockRowMail"), lockState.email, swap(t("lockChange"), "mail"));
-      row(t("lockRowCode"), code);
-      go.textContent = t("lockSignInGo");
+      $("lockTitle").textContent = t("lockCodeTitle");
+      $("lockText").textContent = t("lockCodeText", { email: lockState.email });
+      input.type = "text";
+      input.inputMode = "numeric";
+      input.autocomplete = "one-time-code";
+      input.placeholder = "12345678";
+      input.maxLength = 10;
+      input.classList.add("is-code");
+      go.setAttribute("aria-label", t("lockSignInGo"));
       form.onsubmit = async (e) => {
         e.preventDefault();
-        const token = code.value.replace(/\D/g, "");
+        const token = input.value.replace(/\D/g, "");
         // Supabase verschickt je nach Projekt 6 oder 8 Ziffern
         if (token.length < 6 || token.length > 8) return fail(t("lockCodeShort"));
         go.disabled = true;
@@ -216,11 +209,11 @@
           toast(t("lockWelcome", { email: lockState.email }));
         } catch (err) {
           // abgelaufen/falsch → eigene Meldung, alles andere mit dem Grund von Supabase
-          const why = String(err && err.message || "");
+          const why = String((err && err.message) || "");
           fail(/expired|invalid/i.test(why) || !why ? t("lockWrongCode") : why);
         }
       };
-      const again = button("p-lock-end", "(" + t("lockResend") + ")", async () => {
+      const again = link(t("lockResend"), async () => {
         status.textContent = t("lockSending");
         try {
           await sendCode(lockState.email);
@@ -229,19 +222,21 @@
           fail(String(err.message || err));
         }
       });
-      foot.append(again, status, go);
-      setTimeout(() => code.focus(), 60);
+      foot.append(again, link(t("lockOtherMail"), () => renderLockForm("mail")), status);
+      setTimeout(() => input.focus(), 60);
       return;
     }
 
-    const mail = field("email", "du@studio.de", lockState.email);
-    row(t("lockRowMail"), mail);
-    row(t("lockRowHow"), t("lockHow"));
-    row("Beta", t("lockBeta"));
-    go.textContent = t("lockSendCode");
+    $("lockTitle").textContent = t("lockTitle");
+    $("lockText").textContent = t("lockText");
+    input.type = "email";
+    input.autocomplete = "email";
+    input.placeholder = t("lockMailPlaceholder");
+    input.value = lockState.email;
+    go.setAttribute("aria-label", t("lockSendCode"));
     form.onsubmit = async (e) => {
       e.preventDefault();
-      const email = mail.value.trim();
+      const email = input.value.trim();
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return fail(t("lockBadMail"));
       go.disabled = true;
       status.textContent = t("lockSending");
@@ -253,8 +248,8 @@
         fail(String(err.message || err));
       }
     };
-    foot.append(status, go);
-    setTimeout(() => mail.focus(), 60);
+    foot.append(el("span", "p-lock-hint", "(" + t("lockHow") + ")"), status);
+    setTimeout(() => input.focus(), 60);
   }
 
   // ---- Zustand ----
@@ -1477,10 +1472,6 @@
 
   function renderHome() {
     const wrap = el("div", "p-page p-home p-home-" + state.home);
-    const first = state.items.length ? Math.min(...state.items.map(itemTime).filter(Boolean)) : 0;
-    const since = first
-      ? new Date(first).toLocaleDateString(lang === "de" ? "de-DE" : "en-GB", { month: "long", year: "numeric" })
-      : "";
     // Vorschau Lese-Modus (Einstellungen › Konto): Satz und Liste, was geht und was ruht
     const reading = accountView() === "read";
     if (reading) {
@@ -1497,11 +1488,10 @@
       );
       wrap.appendChild(read);
     } else wrap.appendChild(
+      // 0.40.9: „Übersicht.“ weiß, danach eine Zeile mit den Zahlen (ohne „seit“)
       headline(
-        null,
-        state.items.length
-          ? t("headHome", { zones: zonesText(state.zones.length), images: countText(state.items.length), since })
-          : t("headHomeEmpty")
+        t("headHomeTitle"),
+        state.items.length ? t("headHome", { zones: zonesText(state.zones.length), images: countText(state.items.length) }) : t("headHomeEmpty")
       )
     );
 
@@ -7634,7 +7624,6 @@
   // ---- Ereignisse ----
 
   function bindEvents() {
-    for (const id of ["lockTitle", "lockText"]) $(id).textContent = t(id);
     $("lockEnd").textContent = "(" + t("readEnd") + ")";
     $("lockEnd").addEventListener("click", () => {
       setPref("accountPreview", "beta");

@@ -1,6 +1,6 @@
 # Archiver – Design-System
 
-Stand: App 0.40.8 · Extension 3.29.6
+Stand: App 0.40.9 · Extension 3.29.6
 
 Diese Datei hält fest, wie Archiver aussieht und warum. Sie gilt für die Mac-App
 (`app/src`) und die Chrome-Extension (`extension/`). Wer an der Oberfläche
@@ -846,17 +846,20 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
 - **Liste (`.p-list`):** Fläche ink × 0.045, `--r-lg`, Innenabstand
   2 / 16 px. Zeilen 12 px hoch gepolstert mit Linie `--p-rule`, Schlüssel
   132 px in `--p-dim`, Wert, Zusatz in `--p-faint`. Als Knopf Hover ink × 0.07.
-- **Sperre (Anmelden, 0.40.7):** Eine Spalte von höchstens 560 px in der
-  Mitte: Satz „Dein Archiv. Melde dich an, um weiterzumachen.“, Mono-Zeile
-  „(Anmelden) (Beta)“, Liste. Schritt 1: E-Mail, Weg, Beta, Knopf „Code
-  senden“. Schritt 2: E-Mail mit „(Ändern)“, Code (6 bis 8 Ziffern aus der Mail),
-  Knopf „Anmelden“. Den alten Freischalt-Code gibt es seit 0.40.8 nicht mehr
-  zum Eingeben; wer ihn schon hat, bleibt frei (Übergang, `archiver.unlock`)
-  und sieht unter Konto „(Beta-Code)“ mit „Anmelden“.
-  Felder sind der Wert ihrer Zeile (`.p-lock-input`, kein Rahmen, keine
-  Fläche). Unter der Liste links Mono-Links und die Meldung (`.p-lock-msg`,
-  Fehler in `--danger`), rechts der Knopf, 40 px, `--r-sm`. Konto über
-  Supabase (`archiver.account`), Abmelden vergisst Konto und alten Code.
+- **Sperre (Anmelden, 0.40.9, Variante B „Satz“):** Eine Spalte von höchstens
+  640 px in der Mitte. Satz (`.p-say`) „Dein Archiv. Melde dich mit deiner
+  E-Mail an.“, 28 px Abstand, dann eine Linie (`.p-lock-line`, Unterkante
+  ink × 0.22, im Fokus × 0.5, bei Fehler `--danger`): das Feld in Satzgröße
+  (34 px, 500, −0.025em), rechts ein runder Pfeil 44 px (Pille, ink auf
+  `--ink-inverse`). Darunter 14 px Abstand und eine Mono-Zeile 11 px: Hinweis
+  „(Wir schicken einen Code, kein Passwort)“ bzw. „(Neuer Code) (Andere
+  E-Mail)“, rechts die Meldung. Schritt Code: Satz „Code aus der Mail.
+  Gesendet an …“, Ziffern mit 0.06em Laufweite, 6 bis 8 Ziffern. Keine
+  Fläche, keine Zeilen „Weg“ und „Beta“. In der Vorschau steht oben rechts
+  „(Vorschau beenden)“. Den alten Freischalt-Code gibt es nicht mehr zum
+  Eingeben; wer ihn schon hat, bleibt frei (Übergang, `archiver.unlock`) und
+  sieht unter Konto „(Beta-Code)“ mit „Anmelden“. Abmelden vergisst Konto und
+  alten Code.
 - **Konto (Einstellungen):** Oben über der Liste der Bereiche: „(Konto)“ und
   eine Liste als Knopf mit Status und Danach (Abonnent: Läuft bis). Öffnet
   Einstellungen › Konto. Dort ist der Kopf ein Satz zum Zustand (Beta-Bonus,

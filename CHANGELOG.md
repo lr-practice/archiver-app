@@ -1,5 +1,13 @@
 # Changelog
 
+## App 0.40.9 (Vorabversion)
+
+- Anmelden neu: ein Satz, darunter ein einziges Feld in Satzgröße auf einer
+  Linie, rechts ein runder Pfeil. Die Zeilen „Weg“ und „Beta“ sind weg. Beim
+  Code nennt der Satz die Adresse, darunter „(Neuer Code)“ und „(Andere E-Mail)“.
+- Übersicht: Der Kopf beginnt mit „Übersicht.“ in voller Farbe, danach eine
+  Zeile mit den Zahlen. „seit …“ ist weg.
+
 ## App 0.40.8 (Vorabversion)
 
 - Einstellungen aufgeräumt: oben das Konto, darunter fünf statt zehn Bereiche.
