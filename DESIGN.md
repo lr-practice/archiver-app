@@ -1,6 +1,6 @@
 # Archiver – Design-System
 
-Stand: App 0.40.2 · Extension 3.29.5
+Stand: App 0.40.3 · Extension 3.29.6
 
 Diese Datei hält fest, wie Archiver aussieht und warum. Sie gilt für die Mac-App
 (`app/src`) und die Chrome-Extension (`extension/`). Wer an der Oberfläche
@@ -102,9 +102,12 @@ Für die Typografie gilt:
 
 - Grundschrift ist KMR Melange Grotesk (kimera), Mono bleibt Geist Mono.
   Jeder Stapel beginnt mit `"KMR Melange Grotesk", "Geist", …`.
-- Melange ist kommerziell und liegt nicht im Repo. Sie greift, wenn sie am Mac
-  installiert ist; sonst springt Geist (lokal in `fonts/`, `font-display:
-  block`) ein. Text-Karten und Bildbeschriftungen der Extension behalten ihre
+- Melange ist kommerziell (kimera, Freigabe für den internen Gebrauch) und
+  liegt nicht in diesem Repo. Der Build holt die woff2-Schnitte 100, 300, 400,
+  400 kursiv, 500, 600 und 700 aus dem privaten Repo `lr-practice/archiver`
+  (`fonts/melange/`) nach `app/src/fonts/melange/` und
+  `extension/fonts/melange/` (beide in `.gitignore`). Fehlen sie, springt
+  Geist ein. Text-Karten und Bildbeschriftungen der Extension behalten ihre
   eigenen Stapel.
 - Mono ist für Daten und Etiketten da, nicht für Fließtext.
 - Gewichte sind nur 400, 500 und 600.

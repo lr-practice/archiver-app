@@ -50,6 +50,25 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
+      # Melange (kimera) ist lizenziert und liegt nur im privaten Repo.
+      - name: Melange holen
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          repository: lr-practice/archiver
+          ref: claude/project-thread-47qm6a
+          token: ${{ secrets.RELEASES_TOKEN }}
+          path: _melange
+          sparse-checkout: fonts/melange
+          persist-credentials: false
+
+      - name: Melange einsetzen
+        run: |
+          ls _melange/fonts/melange/Melange-400.woff2
+          mkdir -p app/src/fonts/melange extension/fonts/melange
+          cp _melange/fonts/melange/*.woff2 app/src/fonts/melange/
+          cp _melange/fonts/melange/*.woff2 extension/fonts/melange/
+          rm -rf _melange
+
       - uses: dtolnay/rust-toolchain@686976e191b89faba57d3206551f0f330d8cb249 # stable
 
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2

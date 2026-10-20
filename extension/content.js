@@ -59,7 +59,7 @@
   let panelHostEl = null;
   let panels = null;
 
-  // Geist wie in der App. @font-face greift im Shadow DOM nicht, deshalb über
+  // Melange und Geist wie in der App. @font-face greift im Shadow DOM nicht, deshalb über
   // document.fonts; die Seite sieht nur die zusätzliche Schrift, ändert nichts.
   let fontsLoaded = false;
   function loadFonts() {
@@ -68,6 +68,13 @@
     [
       ["Geist", "fonts/Geist-Variable.woff2", { weight: "100 900" }],
       ["Geist Mono", "fonts/GeistMono-Regular.woff2", { weight: "400" }],
+      ["KMR Melange Grotesk", "fonts/melange/Melange-100.woff2", { weight: "100" }],
+      ["KMR Melange Grotesk", "fonts/melange/Melange-300.woff2", { weight: "300" }],
+      ["KMR Melange Grotesk", "fonts/melange/Melange-400.woff2", { weight: "400" }],
+      ["KMR Melange Grotesk", "fonts/melange/Melange-400i.woff2", { weight: "400", style: "italic" }],
+      ["KMR Melange Grotesk", "fonts/melange/Melange-500.woff2", { weight: "500" }],
+      ["KMR Melange Grotesk", "fonts/melange/Melange-600.woff2", { weight: "600" }],
+      ["KMR Melange Grotesk", "fonts/melange/Melange-700.woff2", { weight: "700" }],
     ].forEach(([family, file, desc]) => {
       const face = new FontFace(family, `url(${chrome.runtime.getURL(file)})`, desc);
       face.load().then((f) => document.fonts.add(f)).catch(() => {});

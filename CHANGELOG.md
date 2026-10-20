@@ -1,11 +1,11 @@
 # Changelog
 
-## Unveröffentlicht
+## App 0.40.3 (Extension 3.29.6, Vorabversion)
 
 - Grundschrift ist jetzt KMR Melange Grotesk in App, Tray, Observer,
   Zonenleiste, Viewer, Palette und Extension (Popup, Dashboard, Galerie,
-  Overlay). Geist Mono bleibt für Etiketten. Ohne installierte Melange
-  bleibt es bei Geist.
+  Overlay). Geist Mono bleibt für Etiketten. Die Schrift ist eingebettet und
+  muss nicht installiert sein.
 
 ## Extension 3.29.5
 

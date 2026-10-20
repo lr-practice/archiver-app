@@ -1,3 +1,54 @@
+/* Melange (kimera, lizenziert): Dateien kommen beim Build aus dem privaten
+   Repo, fehlen sie, greift Geist. */
+@font-face {
+  font-family: "KMR Melange Grotesk";
+  src: url("fonts/melange/Melange-100.woff2") format("woff2");
+  font-weight: 100;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: "KMR Melange Grotesk";
+  src: url("fonts/melange/Melange-300.woff2") format("woff2");
+  font-weight: 300;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: "KMR Melange Grotesk";
+  src: url("fonts/melange/Melange-400.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: "KMR Melange Grotesk";
+  src: url("fonts/melange/Melange-400i.woff2") format("woff2");
+  font-weight: 400;
+  font-style: italic;
+}
+
+@font-face {
+  font-family: "KMR Melange Grotesk";
+  src: url("fonts/melange/Melange-500.woff2") format("woff2");
+  font-weight: 500;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: "KMR Melange Grotesk";
+  src: url("fonts/melange/Melange-600.woff2") format("woff2");
+  font-weight: 600;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: "KMR Melange Grotesk";
+  src: url("fonts/melange/Melange-700.woff2") format("woff2");
+  font-weight: 700;
+  font-style: normal;
+}
+
 /* popup.css — Toolbar-Popup. Gleiche Grauwerte und Abstände wie die
    Seiten in Vollansicht und Overlay; der Inhalt kommt aus panel.css. */
 
