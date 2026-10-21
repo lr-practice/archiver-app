@@ -94,10 +94,10 @@ Für die Farbe gilt:
 | Label, Chip | Geist Mono, Versalien | 11 px | 400 | +0.02em | Filter-Chips, Zähler |
 | Meta | Melange | 12 px | 400 | 0 | Datum, Quelle |
 | UI | Melange | 13–13.5 px | 500 | 0 | Navigation, Menüs |
-| Karten-Titel | Melange | 15 px | 500 | −0.01em | Zonenname auf der Karte |
-| Seitenkopf | Melange | 28–42 px (3vw) / 1.1, Übersicht 34–56 px (4vw) | 400 | +0.01em | Übersicht, Zone, Alle Objekte, Suche, Zuletzt gelöscht (`.p-page > .p-head`, seit 0.40.10): Titel und Satz je eigene Zeile |
-| Satz | Melange | 34 px / 1.14 | 500 | −0.025em | Konto, Sperre, Lese-Modus (`.p-say`) |
-| Überschrift | Melange | 22–24 px | 600 | −0.02em | Kopf in Einstellungen und Handbuch (`.p-sheet`), Onboarding |
+| Karten-Titel | Melange | 15 px | 500 | 0 | Zonenname auf der Karte |
+| Seitenkopf | Melange | 28–42 px (3vw) / 1.1, Übersicht 34–56 px (4vw) | 400 | 0 | Übersicht, Zone, Alle Objekte, Suche, Zuletzt gelöscht (`.p-page > .p-head`, seit 0.40.10): Titel und Satz je eigene Zeile |
+| Satz | Melange | 34 px / 1.14 | 500 | 0 | Konto, Sperre, Lese-Modus (`.p-say`) |
+| Überschrift | Melange | 22–24 px | 600 | 0 | Kopf in Einstellungen und Handbuch (`.p-sheet`), Onboarding |
 
 Für die Typografie gilt:
 
@@ -110,6 +110,9 @@ Für die Typografie gilt:
   `extension/fonts/melange/` (beide in `.gitignore`). Fehlen sie, springt
   Geist ein. Text-Karten und Bildbeschriftungen der Extension behalten ihre
   eigenen Stapel.
+- Melange läuft überall mit Standard-Laufweite (`letter-spacing: 0`), auch in
+  Köpfen und Sätzen. Nur Geist Mono in Versalien bekommt +0.02em, die
+  Notiz-Blätter in Systemschrift behalten ihre eigenen Werte.
 - Mono ist für Daten und Etiketten da, nicht für Fließtext.
 - Gewichte sind nur 400, 500 und 600.
 - Neue Größen werden auf diese Stufen gerundet. Im Code stecken heute auch
@@ -706,8 +709,8 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
 ### 4.24a Übersicht mit Kontaktbogen, ein Kopf für alle Seiten (App 0.40.11, `.p-sheetlist`, `.p-home-hero`)
 - **Kopf (alle Seiten):** Übersicht, Zone, Alle Objekte, Suche und Zuletzt
   gelöscht tragen denselben Kopf. Titel in voller Farbe, darunter auf eigener
-  Zeile der Satz in `--p-dim`. Regular (400), Zeilenhöhe 1.1, leicht gesperrt
-  (+0.01em), höchstens 20em breit. Größe M 28–42 px (3vw), nur die Übersicht
+  Zeile der Satz in `--p-dim`. Regular (400), Zeilenhöhe 1.1, Laufweite 0,
+  höchstens 20em breit. Größe M 28–42 px (3vw), nur die Übersicht
   eine Stufe größer: L 34–56 px (4vw). Oben 24–72 px (6vh), unten 40–96 px
   (9vh) Raum. In der Übersicht ohne Punkt und ohne „seit …“. Ordnerkarten
   einer Zone stehen rechts oben neben dem Kopf.
@@ -760,7 +763,7 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
   Ein Satz als Überschrift, darunter eine Mono-Zeile und gruppierte Zeilen auf
   einer Fläche. Keine farbigen Highlights mehr (das `.p-hl` aus 0.40.4 ist
   entfernt).
-- **Satz (`.p-say`):** 34 px, Zeilenhöhe 1.14, 500, −0.025em, `balance`, der
+- **Satz (`.p-say`):** 34 px, Zeilenhöhe 1.14, 500, Laufweite 0, `balance`, der
   Rest in `--p-dim`. 34 px, kleiner als der Seitenkopf, kein Titelblatt.
   Auf der Webseite entspricht das 40 px.
 - **Mono-Zeile (`.p-group-label`):** 11 px Mono, Versalien, `--p-dim`, links
@@ -772,7 +775,7 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
   640 px in der Mitte. Satz (`.p-say`) „Dein Archiv. Melde dich mit deiner
   E-Mail an.“, 28 px Abstand, dann eine Linie (`.p-lock-line`, Unterkante
   ink × 0.22, im Fokus × 0.5, bei Fehler `--danger`): das Feld in Satzgröße
-  (34 px, 500, −0.025em), rechts ein runder Pfeil 44 px (Pille, ink auf
+  (34 px, 500, Laufweite 0), rechts ein runder Pfeil 44 px (Pille, ink auf
   `--ink-inverse`). Darunter 14 px Abstand und eine Mono-Zeile 11 px: Hinweis
   „(Wir schicken einen Code, kein Passwort)“ bzw. „(Neuer Code) (Andere
   E-Mail)“, rechts die Meldung. Schritt Code: Satz „Code aus der Mail.

@@ -128,7 +128,7 @@ button {
   font-size: 30px;
   line-height: 1.12;
   font-weight: 600;
-  letter-spacing: -0.01em;
+  letter-spacing: 0;
   margin: 18px 0 12px;
 }
 
@@ -732,7 +732,7 @@ html.light .lb-bar {
   margin: 0 4px 22px;
   font-size: 22px;
   line-height: 1.25;
-  letter-spacing: -0.01em;
+  letter-spacing: 0;
   word-break: break-word;
 }
 
@@ -1071,7 +1071,7 @@ html.light .dialog {
   font-family: "KMR Melange Grotesk", "Geist", -apple-system, BlinkMacSystemFont, sans-serif;
   font-size: 1em;
   line-height: 1.2;
-  letter-spacing: -0.01em;
+  letter-spacing: 0;
 }
 
 .splash-word {
@@ -1271,7 +1271,7 @@ body {
   font-size: 24px;
   line-height: 1.18;
   font-weight: 500;
-  letter-spacing: -0.02em;
+  letter-spacing: 0;
 }
 
 .p-head-title.zone-card-name {
@@ -1469,7 +1469,7 @@ body {
   padding: 8px 0;
   border-bottom: 1px solid var(--p-rule);
   font-size: 14px;
-  letter-spacing: -0.005em;
+  letter-spacing: 0;
   color: var(--p-text);
 }
 
@@ -1624,7 +1624,7 @@ body {
   background: rgba(var(--ink-rgb), 0.055);
   overflow: hidden;
   font-size: 15px;
-  letter-spacing: -0.01em;
+  letter-spacing: 0;
   transition: background 0.12s ease;
 }
 
@@ -1884,7 +1884,7 @@ body.sorting * {
   color: var(--p-text);
   font-size: 13px;
   font-weight: 500;
-  letter-spacing: -0.005em;
+  letter-spacing: 0;
   white-space: nowrap;
 }
 
@@ -2333,14 +2333,14 @@ body.lightbox-open .p-dropbar {
 .p-sheet {
   font-size: 15px;
   line-height: 1.35;
-  letter-spacing: -0.01em;
+  letter-spacing: 0;
   color: var(--p-text);
 }
 
 .p-sheet .p-head {
   font-size: 28px;
   line-height: 1.12;
-  letter-spacing: -0.025em;
+  letter-spacing: 0;
 }
 
 /* Originalansicht: CSS-Spalten schneiden alles ab, was über eine Karte
@@ -2778,7 +2778,7 @@ html.fullscreen .p-top {
 
 .p-nav-brand {
   font-weight: 600;
-  letter-spacing: -0.01em;
+  letter-spacing: 0;
 }
 
 /* Steht hinter „Archiver“ kein Pfad: auch keine Trennlinie */
@@ -2938,7 +2938,7 @@ body.lightbox-open .p-top {
 .p-hot .zone-card-name {
   font-size: 17px;
   font-weight: 400;
-  letter-spacing: -0.01em;
+  letter-spacing: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -3695,7 +3695,7 @@ html.light .pdf-maker {
   margin: 0 0 6px;
   font-size: 22px;
   font-weight: 500;
-  letter-spacing: -0.01em;
+  letter-spacing: 0;
 }
 
 .pdf-field {
@@ -4256,7 +4256,7 @@ body.page-open .p-lock {
 .p-lock-mark {
   font-size: 22px;
   font-weight: 500;
-  letter-spacing: -0.02em;
+  letter-spacing: 0;
 }
 
 .p-lock-inner p {
@@ -6018,7 +6018,7 @@ html.light {
 .lb-btn {
   height: var(--nav-h, 36px);
   font-size: 13.5px;
-  letter-spacing: -0.005em;
+  letter-spacing: 0;
 }
 .lb-name {
   font-size: 13.5px;
@@ -6113,7 +6113,7 @@ html.light {
   margin: 1.6em 0 1.2em;
   font-weight: 500;
   line-height: 1.28;
-  letter-spacing: -0.015em;
+  letter-spacing: 0;
   white-space: pre-wrap;
   word-break: break-word;
   outline: none;
@@ -7132,7 +7132,7 @@ html.light {
   font-size: 34px;
   line-height: 1.14;
   font-weight: 500;
-  letter-spacing: -0.025em;
+  letter-spacing: 0;
   text-wrap: balance;
 }
 
@@ -7363,7 +7363,7 @@ button.p-list:hover {
   max-width: 22em;
   font-size: 34px;
   line-height: 1.14;
-  letter-spacing: -0.025em;
+  letter-spacing: 0;
   text-wrap: balance;
 }
 
@@ -7407,7 +7407,7 @@ button.p-list:hover {
   font-size: 34px;
   font-weight: 500;
   line-height: 1.14;
-  letter-spacing: -0.025em;
+  letter-spacing: 0;
 }
 
 .p-lock-line .p-lock-input.is-code {
@@ -7491,7 +7491,7 @@ button.p-list:hover {
   font-size: clamp(28px, 3vw, 42px);
   font-weight: 400;
   line-height: 1.1;
-  letter-spacing: 0.01em;
+  letter-spacing: 0;
 }
 
 /* Übersicht eine Stufe größer: L (34–56 px) */

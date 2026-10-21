@@ -48,7 +48,7 @@ html.light .db-hot {
 .db-name {
   font-size: 17px;
   font-weight: 400;
-  letter-spacing: -0.01em;
+  letter-spacing: 0;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;

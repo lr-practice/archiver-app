@@ -177,7 +177,7 @@ body {
   background: none;
   color: var(--p-text);
   font: 400 17px "KMR Melange Grotesk", "Geist", sans-serif;
-  letter-spacing: -0.01em;
+  letter-spacing: 0;
 }
 
 .pal-search input::placeholder {
@@ -214,7 +214,7 @@ body {
 .pal-crumb-name {
   font-size: 22px;
   font-weight: 600;
-  letter-spacing: -0.02em;
+  letter-spacing: 0;
 }
 
 /* 0.32: im Unterordner führt der Zonenname zurück */
@@ -363,7 +363,7 @@ body {
 .pal-card-name {
   font-size: 15px;
   font-weight: 500;
-  letter-spacing: -0.01em;
+  letter-spacing: 0;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
