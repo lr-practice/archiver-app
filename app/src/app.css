@@ -7776,7 +7776,7 @@ button.p-list:hover {
 
 /* ---- 0.40.18: Labor › Kopf ----
    Vierzehn Mechaniken für den Seitenkopf (html[data-head]), dazu Größe (--hk)
-   und Farbe von Titel und Satz (--head-title, --head-text). Ab Werk 01. */
+   und Farbe von Titel und Satz (--head-title, --head-text). Ab Werk 05 in M, Titel voll, Satz hell. */
 html[data-font="melange"] {
   --sans: "KMR Melange Grotesk", "Geist", -apple-system, BlinkMacSystemFont, sans-serif;
 }

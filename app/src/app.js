@@ -110,10 +110,10 @@
     return {
       card: LAB_CARDS.includes(v.card) ? v.card : "A",
       video: LAB_VIDEO.includes(v.video) ? v.video : "flip",
-      head: LAB_HEADS.includes(v.head) ? v.head : "01",
+      head: LAB_HEADS.includes(v.head) ? v.head : "05",
       size: v.size in LAB_SIZES ? v.size : "M",
       title: v.title in LAB_INKS ? v.title : "text",
-      text: v.text in LAB_INKS ? v.text : "dim",
+      text: v.text in LAB_INKS ? v.text : "faint",
       font: LAB_FONTS.includes(v.font) ? v.font : "geist",
     };
   }

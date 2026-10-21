@@ -1,5 +1,10 @@
 # Changelog
 
+## App 0.40.19 (Vorabversion)
+
+- Seitenkopf ab Werk Variante 05 (Satz im Fluss) in Größe M, Titel voll, Satz
+  hell. Wer im Labor schon etwas gewählt hat, behält seine Wahl.
+
 ## App 0.40.18 (Vorabversion)
 
 - Grundschrift wieder Geist. Melange lässt sich unter Einstellungen › Labor

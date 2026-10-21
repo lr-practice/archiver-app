@@ -1,6 +1,6 @@
 # Archiver – Design-System
 
-Stand: App 0.40.18 · Extension 3.29.6
+Stand: App 0.40.19 · Extension 3.29.6
 
 Diese Datei hält fest, wie Archiver aussieht und warum. Sie gilt für die Mac-App
 (`app/src`) und die Chrome-Extension (`extension/`). Wer an der Oberfläche
@@ -95,7 +95,7 @@ Für die Farbe gilt:
 | Meta | Geist | 12 px | 400 | 0 | Datum, Quelle |
 | UI | Geist | 13–13.5 px | 500 | 0 | Navigation, Menüs |
 | Karten-Titel | Geist | 15 px | 500 | 0 | Zonenname auf der Karte |
-| Seitenkopf | Geist | 28–42 px (3vw) / 1.1, Übersicht 34–56 px (4vw) | je nach Labor-Variante | 0 | Übersicht, Zone, Alle Objekte, Suche, Zuletzt gelöscht (`.p-page > .p-head`, seit 0.40.10). Mechanik, Größe und Farbe aus Labor › Kopf (4.24c), ab Werk 01 |
+| Seitenkopf | Geist | 28–42 px (3vw) / 1.1, Übersicht 34–56 px (4vw) | je nach Labor-Variante | 0 | Übersicht, Zone, Alle Objekte, Suche, Zuletzt gelöscht (`.p-page > .p-head`, seit 0.40.10). Mechanik, Größe und Farbe aus Labor › Kopf (4.24c), ab Werk 05 |
 | Satz | Geist | 34 px / 1.14 | 500 | 0 | Konto, Sperre, Lese-Modus (`.p-say`) |
 | Überschrift | Geist | 22–24 px | 600 | 0 | Kopf in Einstellungen und Handbuch (`.p-sheet`), Onboarding |
 
@@ -710,7 +710,7 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
 
 ### 4.24c Labor › Kopf (App 0.40.18, `html[data-head]`)
 - **Wozu:** Vierzehn Mechaniken für den Seitenkopf zum Ausprobieren, nur auf
-  diesem Mac (`archiver.lab`). Ab Werk 01.
+  diesem Mac (`archiver.lab`). Ab Werk 05 (Satz im Fluss) in M, Titel Voll, Satz Hell.
 - **Varianten:** 01 Geist-Original (24 px, 600, Satz klein daneben), 02 Plakat
   (7.2vw, 600, zwei Zeilen), 03 Kontaktbogen (3vw, 500), 04 Regular L (4vw,
   400, +0.01em), 05 Satz im Fluss, 06 Satz als Mono-Etikett über dem Titel,
