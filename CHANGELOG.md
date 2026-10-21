@@ -1,5 +1,13 @@
 # Changelog
 
+## App 0.40.17 (Vorabversion)
+
+- Liegt die Bibliothek in einem geteilten iCloud-Ordner, fragte macOS bei
+  jedem Start „Möchtest du diesen geteilten Ordner wirklich bewegen?“, sobald
+  „Zuletzt gelöscht“ Einträge älter als 7 Tage in den Papierkorb legte. Der
+  Papierkorb wird jetzt direkt über das System angesprochen statt über den
+  Finder; die Abfrage entfällt.
+
 ## App 0.40.16 (Vorabversion)
 
 - KMR Melange Grotesk läuft überall mit Standard-Laufweite (0): Seitenköpfe,

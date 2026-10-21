@@ -212,6 +212,21 @@ pub struct ImportReport {
     pub with_source: usize,
 }
 
+/// In den Papierkorb des Macs, ohne Finder: Der Finder fragt bei Ordnern in
+/// geteilten iCloud-Ordnern jedes Mal nach („Möchtest du diesen geteilten
+/// Ordner wirklich bewegen?“) und blockiert damit den Start.
+pub fn to_trash(p: &Path) -> std::result::Result<(), trash::Error> {
+    #[allow(unused_mut)]
+    let mut ctx = trash::TrashContext::default();
+    #[cfg(target_os = "macos")]
+    {
+        use trash::macos::{DeleteMethod, TrashContextExtMacos};
+        ctx.set_delete_method(DeleteMethod::NsFileManager);
+    }
+    ctx.delete(p)
+}
+
+
 pub struct Library {
     pub root: PathBuf,
     pub(crate) conn: Mutex<Connection>,
@@ -2357,7 +2372,7 @@ impl Library {
         for f in files {
             let Some(p) = self.inside_deleted(f) else { continue };
             if p != base && p.exists() {
-                trash::delete(&p).map_err(err)?;
+                to_trash(&p).map_err(err)?;
                 n += 1;
             }
         }
@@ -2372,7 +2387,7 @@ impl Library {
         let Ok(rd) = fs::read_dir(self.deleted_dir()) else { return 0 };
         for stamp in rd.filter_map(|e| e.ok()).map(|e| e.path()) {
             let at = stamp.file_name().and_then(|n| n.to_str()).and_then(|n| n.parse::<i64>().ok());
-            if at.map(|t| t < limit).unwrap_or(false) && trash::delete(&stamp).is_ok() {
+            if at.map(|t| t < limit).unwrap_or(false) && to_trash(&stamp).is_ok() {
                 n += 1;
             }
         }

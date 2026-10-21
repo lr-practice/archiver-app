@@ -742,7 +742,7 @@ async fn open_demo(app: AppHandle, state: State<'_, AppState>) -> Result<DemoInf
     let root = demo_root();
     if root.exists() {
         // Reste einer früheren Demo
-        let _ = trash::delete(&root);
+        let _ = library::to_trash(&root);
     }
     let mut seed = Vec::new();
     let mut zones: Vec<String> = Vec::new();
@@ -815,7 +815,7 @@ async fn close_demo(app: AppHandle, keep: bool) -> Result<usize, String> {
     }
     *app.state::<AppState>().watcher.lock().unwrap() = None;
     if !keep && root.is_dir() {
-        trash::delete(&root).map_err(|e| e.to_string())?;
+        library::to_trash(&root).map_err(|e| e.to_string())?;
     }
     if let Some(own) = own.filter(|o| o.is_dir()) {
         activate(&app, &own)?;
