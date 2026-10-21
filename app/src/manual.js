@@ -97,7 +97,6 @@ const MANUAL = {
           { t: "Rechte", d: "Urheber, Lizenz und „nur intern“ mit rotem Punkt." },
           { t: "Zone als Paket", d: "Ordner mit Dateien, Quellenliste und Kontaktbogen, über ⋯ › „Als Paket exportieren“." },
           { t: "Geteilte Bibliothek", d: "Auf Server, NAS oder Dropbox. Objekte anderer zeigen ihr Kürzel und einen Punkt bis zum ersten Ansehen." },
-          { t: "Boards (Vorabversion)", d: "Präsentationen aus Bildern der Bibliothek, als eigener Bereich neben Archiver. Jedes Board ist eine Datei im Ordner Boards, Bilder darin sind Verweise, keine Kopien. Auswahl in einer Zone, Rechtsklick › „Aufs Board …“. Im Board steht nur die Folie, unten eine Leiste: Folien, Bilder und Gestalten (Vorlage, Raster, Schrift, Farbe, Folie) öffnen sich daraus. Zwölf Vorlagen ordnen die Bilder einer Folie, danach ist alles frei. Ziehen rastet an Kanten, Mitten und Spalten ein (⌥ hält es kurz an). Präsentieren zeigt die Folien im Vollbild.", k: ["F", "B", "E", "T", "P", "G", "esc"] },
         ],
       },
       {
@@ -221,7 +220,6 @@ const MANUAL = {
           { t: "Rights", d: "Author, licence and “internal only” with a red dot." },
           { t: "Zone as package", d: "Folder with files, source list and contact sheet, via ⋯ › “Export as package”." },
           { t: "Shared library", d: "On a server, NAS or Dropbox. Objects from others show their initials and a dot until first viewed." },
-          { t: "Boards (pre-release)", d: "Presentations from images in the library, as their own area next to Archiver. Each board is a file in the Boards folder; images in it are references, not copies. Select images in a zone, right-click › “Add to board …”. A board shows only the slide and a bar below: Slides, Images and Design (layout, grid, type, color, slide) open from there. Twelve layouts arrange the images on a slide; after that everything is free. Dragging snaps to edges, centers and columns (⌥ pauses it). Present shows the slides full screen.", k: ["F", "B", "E", "T", "P", "G", "esc"] },
         ],
       },
       {

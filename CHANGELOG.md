@@ -1,5 +1,18 @@
 # Changelog
 
+## App 0.40.15 (Vorabversion)
+
+- Boards und Projekte als Funktion gestrichen. Archiver ist eine visuelle
+  Bibliothek zum Sammeln von Referenzen; Präsentationen und
+  Projektmanagement gehören nicht mehr dazu. Weg sind die beiden Bereiche in
+  der Leiste, ihre Schalter unter Einstellungen › Studio, „Aufs Board …“ im
+  Rechtsklick und die Einträge im Handbuch.
+- Auf der Platte bleibt alles, wie es ist: ein Ordner `Boards` mit
+  `.board`-Dateien und der Projekte-Ordner werden nicht angefasst und nicht
+  gelöscht. Der Ordner `Boards` gilt jetzt wie jeder andere Ordner.
+- Jeder Ordner kann jetzt Bibliothek sein; die Sperre gegen Ordner, die nach
+  Projekten aussehen, entfällt.
+
 ## App 0.40.14 (Vorabversion)
 
 - Seitenköpfe fest in Regular und leicht gesperrt: die Übersicht in L

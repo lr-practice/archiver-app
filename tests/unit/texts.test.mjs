@@ -55,7 +55,7 @@ test("Extension: jeder t(\"…\")-Schlüssel steht in den Texten", () => {
 test("App: jeder t(\"…\")-Schlüssel steht in den Texten", () => {
   const { en } = appMessages();
   const used = new Set();
-  for (const f of ["app.js", "dropbar.js", "palette.js", "viewer.js", "manual.js", "media.js", "reveal.js", "projects.js", "boards.js", "cloud.js"]) {
+  for (const f of ["app.js", "dropbar.js", "palette.js", "viewer.js", "manual.js", "media.js", "reveal.js", "cloud.js"]) {
     for (const m of read("app/src/" + f).matchAll(/\bt\("([A-Za-z0-9_]+)"\s*[,)]/g)) used.add(m[1]);
   }
   assert.deepEqual([...used].filter((k) => !(k in en)), []);

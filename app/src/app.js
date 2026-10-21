@@ -113,12 +113,10 @@
   // Studio-Funktionen (Einstellungen › Studio): jede einzeln abschaltbar, Standard an.
   // Die geteilte Bibliothek ist kein Schalter hier, sie hängt an der Bibliothek selbst.
   // Schaltbare Studio-Werkzeuge. Moodboard und eigene Reihenfolge sind seit 0.24.6 immer an.
-  // Projekte (0.40.0) und Boards (0.39.0) sind ab Werk aus und lassen sich nur in Vorabversionen einschalten.
-  const FEATURES = ["rights", "package", "projects", "boards"]; // „notes“ (Feld Notiz) ist seit 0.30 Teil des Bildtexts
-  const FEATURES_OFF = ["projects", "boards"];
+  const FEATURES = ["rights", "package"]; // „notes“ (Feld Notiz) ist seit 0.30 Teil des Bildtexts
   function feat(id) {
     if (!FEATURES.includes(id)) return true;
-    return pref("feat." + id, !FEATURES_OFF.includes(id)) !== false;
+    return pref("feat." + id, true) !== false;
   }
 
   // 0.40.8 Übergang: Neue Freischalt-Codes lassen sich nicht mehr eingeben. Wer
@@ -297,7 +295,6 @@
     // Pfad der allein gezeigten Zone, sonst null (alte Seiten-Werte "\u0000…" verwerfen)
     focus: null, // jeder Start beginnt auf der Startseite (Zonen als Karten)
     page: null, // Seite, die von rechts hereingleitet: null | "settings" | "about" | "manual"
-    area: "library", // "library" | "projects" (0.40.0, projects.js) | "boards" (0.39.0, boards.js)
     home: "overview", // Startseite: "overview" | "index" | "cards"; jeder Start beginnt mit der Übersicht
     // Bildgröße auf der Startseite, Stufe 0–3, je Ansicht getrennt
     homeSizes: pref("homeSizes", null) || { index: pref("homeSize", 1), cards: pref("homeSize", 1) },
@@ -591,7 +588,6 @@
     // Offenes Menü nicht unter der Maus wegzeichnen (z. B. während „Wirklich löschen?“)
     if (document.querySelector(".zone-menu")) pendingRender = true;
     else render();
-    if (state.area === "boards") window.ArchiverBoards.refresh();
   }
 
   let pendingRender = false;
@@ -933,26 +929,6 @@
     document.documentElement.style.setProperty("--lt", LIST_THUMBS[Math.max(0, SIZES.indexOf(state.size))] + "px");
     const main = $("navMain");
     const btns = [];
-    const projects = state.area === "projects";
-    const boards = state.area === "boards";
-    $("navProjects").hidden = !feat("projects") || !window.ArchiverProjects;
-    $("navProjects").textContent = t("pjTitle");
-    $("navProjects").classList.toggle("active", projects && !state.page && window.ArchiverProjects.atHome());
-    $("navBoards").hidden = !feat("boards") || !window.ArchiverBoards;
-    $("navBoards").classList.toggle("active", boards && !state.page && window.ArchiverBoards.atHome());
-    $("navSearch").hidden = projects || boards;
-    if (projects || boards) {
-      // Projekte: Name des offenen Projekts, Boards: Name des offenen Boards; keine Suche
-      btns.push(...(projects ? window.ArchiverProjects : window.ArchiverBoards).nav(navButton));
-      if (state.page) {
-        if (btns.length) btns.push(el("span", "p-nav-sep", "›"));
-        btns.push(navButton(t(state.page), true, closePage));
-      }
-      main.replaceChildren(...btns);
-      $("navMore").classList.toggle("active", !!document.querySelector(".p-more-menu"));
-      $("navBrand").classList.remove("active");
-      return;
-    }
     const inZone = isZone(state.focus) && !state.query;
     // Zur Übersicht führt „Archiver“ links; in einer Zone folgt hier der Pfad.
     if (inZone) {
@@ -1400,7 +1376,6 @@
   let lastViewKey = "";
 
   function renderZones() {
-    if (state.area !== "library") return; // Projekte und Boards zeichnen #zones selbst (projects.js, boards.js)
     document.body.classList.toggle("has-selection", state.selection.size > 0);
     const words = queryWords();
     const filtering = filtersActive();
@@ -2936,40 +2911,6 @@
       );
     }
 
-    // Projekte (0.40.0): nur in Vorabversionen schaltbar, ab Werk aus. Ist es an,
-    // bleibt der Schalter sichtbar, damit man es wieder ausschalten kann.
-    const projectsRow = () =>
-      blockRow(
-        [el("div", null, t("featProjects")), el("div", "p-block-text dim", t("featProjectsText"))],
-        choice([["on", t("setOn")], ["off", t("setOff")]], feat("projects") ? "on" : "off", (v) => {
-          setPref("feat.projects", v === "on");
-          if (v !== "on") leaveProjects();
-          rerender();
-          renderToolbar();
-        })
-      );
-    // Boards (0.39.0): genauso, nur in Vorabversionen schaltbar, ab Werk aus
-    const boardsRow = () =>
-      blockRow(
-        [el("div", null, t("featBoards")), el("div", "p-block-text dim", t("featBoardsText"))],
-        choice([["on", t("setOn")], ["off", t("setOff")]], feat("boards") ? "on" : "off", (v) => {
-          setPref("feat.boards", v === "on");
-          if (v !== "on") leaveBoards();
-          rerender();
-          renderToolbar();
-        })
-      );
-    if (feat("projects")) tools.appendChild(projectsRow());
-    if (feat("boards")) tools.appendChild(boardsRow());
-    if (!feat("projects") || !feat("boards"))
-      invoke("update_channel")
-        .then((pre) => {
-          if (!pre || !tools.isConnected) return;
-          if (!feat("projects")) tools.appendChild(projectsRow());
-          if (!feat("boards")) tools.appendChild(boardsRow());
-        })
-        .catch(() => {});
-
     const team = block(t("featShared"));
     team.appendChild(blockRow(el("div", "p-block-text", t("featSharedText"))));
     const name = el("input", "p-input note-field");
@@ -4200,7 +4141,6 @@
   }
 
   function setFocus(path) {
-    leaveArea();
     // Zone verlassen: was darin neu von anderen war, gilt als gesehen
     if (path !== state.focus && isZone(state.focus) && state.shared) markSeen(zoneItems(state.focus));
     if (path !== state.focus) {
@@ -6280,11 +6220,6 @@
   function onDragDrop(event) {
     if (!isUnlocked()) return;
     const p = event.payload;
-    if (state.area === "boards") return; // Boards nimmt keine Dateien von außen an
-    if (state.area === "projects") {
-      const ratio = isMac ? 1 : window.devicePixelRatio || 1;
-      return window.ArchiverProjects.drop(p, p.position ? p.position.x / ratio : -1, p.position ? p.position.y / ratio : -1);
-    }
     if (p.type === "leave") {
       dragPaths = [];
       lastTarget = null;
@@ -7177,7 +7112,6 @@
     entry(menu, t("ctxCopy"), () => copyImages(items), "⌘C");
     if (one) entry(menu, t("reveal"), () => invoke("reveal", { path: one.abs }).catch(fail));
     entry(menu, t("pdfExport"), exportPdf, "⌘P");
-    if (feat("boards") && window.ArchiverBoards) entry(menu, t("bToBoard") + " …", () => window.ArchiverBoards.pickFor(items, x, y));
     rule();
     entry(menu, t("trash"), trashSelection, "⌫", " danger");
     document.body.appendChild(menu);
@@ -7755,7 +7689,6 @@
     const zones = $("zones");
 
     zones.addEventListener("mousedown", (e) => {
-      if (state.area !== "library") return;
       if (e.button !== 0) return;
       const card = e.target.closest(".card:not(.del)");
       suppressClick = false;
@@ -7783,7 +7716,6 @@
     });
 
     zones.addEventListener("click", (e) => {
-      if (state.area !== "library") return;
       if (suppressClick) {
         suppressClick = false;
         return;
@@ -7797,7 +7729,6 @@
     }, { passive: true, capture: true });
 
     zones.addEventListener("contextmenu", (e) => {
-      if (state.area !== "library") return;
       const zoneEl = e.target.closest(".p-home [data-zone]");
       if (zoneEl && !e.target.closest(".card:not(.del)")) {
         e.preventDefault();
@@ -7819,14 +7750,12 @@
     });
 
     zones.addEventListener("dblclick", (e) => {
-      if (state.area !== "library") return;
       const card = e.target.closest(".card:not(.del)");
       if (card) openLightbox(state.byPath.get(card.dataset.path));
     });
 
     // 0.27: Video beim Hover als kurze Vorschau aus wenigen Bildern
     zones.addEventListener("pointerover", (e) => {
-      if (state.area !== "library") return;
       const card = e.target.closest(".card:not(.del)");
       if (card && !card.contains(e.relatedTarget)) videoScrub(card);
     });
@@ -7859,27 +7788,10 @@
     setupNavGlide();
     // „Archiver“ in der Leiste führt immer zum Start: Zonen als Karten.
     $("navBrand").addEventListener("click", () => {
-      leaveArea();
       closePage();
       state.home = "cards";
       if (state.focus == null && !state.query) renderZones();
       else setFocus(null);
-    });
-    // Projekte steht wie „Archiver“ als eigener Bereich in der Leiste (0.40.0)
-    $("navProjects").addEventListener("click", () => {
-      closePage();
-      if (state.area === "projects") window.ArchiverProjects.brandClick();
-      else enterProjects();
-    });
-    $("navProjects").addEventListener("contextmenu", (e) => {
-      if (state.area === "projects") window.ArchiverProjects.brandMenu(e);
-    });
-    // Boards (0.39.0): eigener Bereich wie Projekte
-    $("navBoards").addEventListener("click", () => {
-      closePage();
-      if (state.area === "boards") window.ArchiverBoards.brandClick();
-      else enterBoards();
-      renderToolbar();
     });
     $("navMore").textContent = "≡";
     $("navMore").title = t("navMore");
@@ -7906,7 +7818,6 @@
     // 0.29: ⌘V mit Text auf ein gewähltes Bild (oder in der Lightbox) setzt den Bildtext.
     // 0.32: sonst kommt die Zwischenablage in die offene Zone (Dateien, Bild, Text).
     document.addEventListener("paste", (e) => {
-      if (state.area !== "library") return;
       if (e.target.closest && e.target.closest("input, textarea, [contenteditable]")) return;
       if (!$("modal").hidden) return;
       const text = (e.clipboardData && e.clipboardData.getData("text/plain") || "").trim();
@@ -7929,7 +7840,6 @@
     window.addEventListener(
       "resize",
       debounce(() => {
-        if (state.area !== "library") return;
         if (document.body.classList.contains("at-home") && (state.home === "cards" || state.home === "overview")) renderZones();
         else layoutMasonry(false);
       }, 120)
@@ -7985,33 +7895,6 @@
         moveCursor("right");
         e.preventDefault();
       }
-      return;
-    }
-
-    // Boards: eigene Tasten (boards.js), dazu ⌘, und ⌘I wie in Projekte
-    if (state.area === "boards") {
-      if (mod && e.key === ",") togglePage("settings");
-      else if (mod && (e.key === "i" || e.key === "I")) togglePage("about");
-      else if (e.key === "Escape" && state.page) closePage();
-      else if (!state.page && $("modal").hidden && window.ArchiverBoards.key(e)) {
-        e.preventDefault();
-        renderToolbar();
-      } else return;
-      e.preventDefault();
-      return;
-    }
-
-    // Projekte: eigene Tasten, dazu ⌘, für die Einstellungen und Esc für offene Seiten
-    if (state.area === "projects") {
-      if (mod && e.key === ",") togglePage("settings");
-      else if (mod && (e.key === "i" || e.key === "I")) togglePage("about");
-      else if (e.key === "Escape" && state.page) closePage();
-      else if (!state.page && $("modal").hidden && window.ArchiverProjects.key(e)) {
-        e.preventDefault();
-        renderToolbar();
-      }
-      else return;
-      e.preventDefault();
       return;
     }
 
@@ -8179,13 +8062,12 @@
   // Fehler des Ordner-Schutzes (lib.rs: check_library) verständlich machen
   function libraryFail(e) {
     const msg = String(e && e.message ? e.message : e);
-    const key = { "library-system": "libSystem", "library-large": "libLarge", "library-slow": "libSlow", "library-active": "libActive", "library-missing": "libMissing", "library-file": "libFile", "library-projects": "libProjects" }[msg];
+    const key = { "library-system": "libSystem", "library-large": "libLarge", "library-slow": "libSlow", "library-active": "libActive", "library-missing": "libMissing", "library-file": "libFile" }[msg];
     if (key) toast(t(key), false, 5200);
     else fail(e);
   }
 
   function afterLibrarySwitch() {
-    leaveArea(false);
     undoStack.length = 0;
     state.focus = null;
     state.selection = new Set();
@@ -8638,80 +8520,12 @@
     document.body.appendChild(bar);
   }
 
-  // ---- Projekte (0.40.0, projects.js): Projektmanagement als eigener Bereich ----
-  // Projekte zeichnet in #zones; renderZones und die Ereignisse der Bibliothek
-  // halten still, solange state.area "projects" ist.
-
-  function enterProjects() {
-    if (!feat("projects") || !window.ArchiverProjects || state.area === "projects") return;
-    leaveBoards(false);
-    closeMenus();
-    closeMoreMenu();
-    if (state.lightbox) closeLightbox();
-    state.area = "projects";
-    document.body.classList.remove("at-home", "has-selection");
-    window.ArchiverProjects.enter();
-    renderToolbar();
-  }
-
-  function leaveProjects(rerender = true) {
-    if (state.area !== "projects") return;
-    window.ArchiverProjects.leave();
-    state.area = "library";
-    $("zones").replaceChildren();
-    if (rerender) render();
-    else renderToolbar();
-  }
-
-  // ---- Boards (0.39.0, boards.js): Präsentationen als eigener Bereich ----
-
-  function enterBoards() {
-    if (!feat("boards") || !window.ArchiverBoards || state.area === "boards") return;
-    leaveProjects(false);
-    closeMenus();
-    closeMoreMenu();
-    if (state.lightbox) closeLightbox();
-    state.area = "boards";
-    document.body.classList.remove("at-home", "has-selection");
-    window.ArchiverBoards.enter().then(renderToolbar);
-    renderToolbar();
-  }
-
-  function leaveBoards(rerender = true) {
-    if (state.area !== "boards") return;
-    window.ArchiverBoards.leave();
-    state.area = "library";
-    $("zones").replaceChildren();
-    if (rerender) render();
-    else renderToolbar();
-  }
-
-  // Zurück in die Bibliothek, egal aus welchem Bereich
-  function leaveArea(rerender = false) {
-    leaveProjects(rerender);
-    leaveBoards(rerender);
-  }
-
   function openModal(dialog, onEnter) {
     const modal = $("modal");
     modal.replaceChildren(dialog);
     modal.hidden = false;
     modal.onEnter = onEnter || null;
   }
-
-  if (window.ArchiverProjects)
-    window.ArchiverProjects.init({
-      el, button, chip, invoke, fileSrc, toast, fail, recentDate, navButton, renderToolbar, closeMenus, closeMoreMenu,
-      openModal, closeModal,
-    });
-
-  if (window.ArchiverBoards)
-    window.ArchiverBoards.init({
-      el, button, chip, invoke, fileSrc, thumbSrc, kindOf, toast, fail, recentDate, renderToolbar, closeMenus, closeMoreMenu,
-      openModal, closeModal,
-      items: () => state.items,
-      zones: () => state.zones,
-    });
 
   if (window.ArchiverCloud) window.ArchiverCloud.init({ el, button, thumbSrc, kindOf, items: () => state.items });
 
