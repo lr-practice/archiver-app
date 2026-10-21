@@ -1,6 +1,6 @@
 # Archiver – Design-System
 
-Stand: App 0.40.17 · Extension 3.29.6
+Stand: App 0.40.18 · Extension 3.29.6
 
 Diese Datei hält fest, wie Archiver aussieht und warum. Sie gilt für die Mac-App
 (`app/src`) und die Chrome-Extension (`extension/`). Wer an der Oberfläche
@@ -92,17 +92,19 @@ Für die Farbe gilt:
 | Rolle | Schrift | Größe | Gewicht | Laufweite | Beispiel |
 |---|---|---|---|---|---|
 | Label, Chip | Geist Mono, Versalien | 11 px | 400 | +0.02em | Filter-Chips, Zähler |
-| Meta | Melange | 12 px | 400 | 0 | Datum, Quelle |
-| UI | Melange | 13–13.5 px | 500 | 0 | Navigation, Menüs |
-| Karten-Titel | Melange | 15 px | 500 | 0 | Zonenname auf der Karte |
-| Seitenkopf | Melange | 28–42 px (3vw) / 1.1, Übersicht 34–56 px (4vw) | 400 | 0 | Übersicht, Zone, Alle Objekte, Suche, Zuletzt gelöscht (`.p-page > .p-head`, seit 0.40.10): Titel und Satz je eigene Zeile |
-| Satz | Melange | 34 px / 1.14 | 500 | 0 | Konto, Sperre, Lese-Modus (`.p-say`) |
-| Überschrift | Melange | 22–24 px | 600 | 0 | Kopf in Einstellungen und Handbuch (`.p-sheet`), Onboarding |
+| Meta | Geist | 12 px | 400 | 0 | Datum, Quelle |
+| UI | Geist | 13–13.5 px | 500 | 0 | Navigation, Menüs |
+| Karten-Titel | Geist | 15 px | 500 | 0 | Zonenname auf der Karte |
+| Seitenkopf | Geist | 28–42 px (3vw) / 1.1, Übersicht 34–56 px (4vw) | je nach Labor-Variante | 0 | Übersicht, Zone, Alle Objekte, Suche, Zuletzt gelöscht (`.p-page > .p-head`, seit 0.40.10). Mechanik, Größe und Farbe aus Labor › Kopf (4.24c), ab Werk 01 |
+| Satz | Geist | 34 px / 1.14 | 500 | 0 | Konto, Sperre, Lese-Modus (`.p-say`) |
+| Überschrift | Geist | 22–24 px | 600 | 0 | Kopf in Einstellungen und Handbuch (`.p-sheet`), Onboarding |
 
 Für die Typografie gilt:
 
-- Grundschrift ist KMR Melange Grotesk (kimera), Mono bleibt Geist Mono.
-  Jeder Stapel beginnt mit `"KMR Melange Grotesk", "Geist", …`.
+- Grundschrift ist wieder Geist (seit 0.40.18, `--sans`), Mono bleibt Geist
+  Mono. Melange lässt sich unter Einstellungen › Labor › Kopf › Schrift
+  zurückholen (`html[data-font="melange"]`). Tray und Observer setzen fest
+  Geist.
 - Melange ist kommerziell (kimera, Freigabe für den internen Gebrauch) und
   liegt nicht in diesem Repo. Der Build holt die woff2-Schnitte 100, 300, 400,
   400 kursiv, 500, 600 und 700 aus dem privaten Repo `lr-practice/archiver`
@@ -110,7 +112,7 @@ Für die Typografie gilt:
   `extension/fonts/melange/` (beide in `.gitignore`). Fehlen sie, springt
   Geist ein. Text-Karten und Bildbeschriftungen der Extension behalten ihre
   eigenen Stapel.
-- Melange läuft überall mit Standard-Laufweite (`letter-spacing: 0`), auch in
+- Die Grundschrift läuft mit Standard-Laufweite (`letter-spacing: 0`), auch in
   Köpfen und Sätzen. Nur Geist Mono in Versalien bekommt +0.02em, die
   Notiz-Blätter in Systemschrift behalten ihre eigenen Werte.
 - Mono ist für Daten und Etiketten da, nicht für Fließtext.
@@ -705,6 +707,19 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
   `archiver.clouds` (höchstens 300 Wolken). Keine Datei, keine Kopien.
 - **Nicht:** Keine Rundung an Objekten, keine Akzentfarbe, keine Schatten an
   den Objekten. Die Extension kennt die Wolke nicht.
+
+### 4.24c Labor › Kopf (App 0.40.18, `html[data-head]`)
+- **Wozu:** Vierzehn Mechaniken für den Seitenkopf zum Ausprobieren, nur auf
+  diesem Mac (`archiver.lab`). Ab Werk 01.
+- **Varianten:** 01 Geist-Original (24 px, 600, Satz klein daneben), 02 Plakat
+  (7.2vw, 600, zwei Zeilen), 03 Kontaktbogen (3vw, 500), 04 Regular L (4vw,
+  400, +0.01em), 05 Satz im Fluss, 06 Satz als Mono-Etikett über dem Titel,
+  07 Zeile mit Linie, 08 zweispaltig, 09 großer leichter Satz unter kleinem
+  Titel, 10 Wortreihe aller Zonen, 11 Schnitt 300 mit „·“, 12 kein Kopf (eine
+  Zeile 14 px), 13 Pfad hell, Ort voll, 14 hochkant an der linken Kante.
+- **Stellschrauben:** Größe S / M / L / XL (`--hk` 0.8 / 1 / 1.25 / 1.5),
+  Farbe von Titel und Satz je Voll, Grau, Hell oder Blau (`--head-title`,
+  `--head-text`), Schrift Geist oder Melange.
 
 ### 4.24a Übersicht mit Kontaktbogen, ein Kopf für alle Seiten (App 0.40.11, `.p-sheetlist`, `.p-home-hero`)
 - **Kopf (alle Seiten):** Übersicht, Zone, Alle Objekte, Suche und Zuletzt

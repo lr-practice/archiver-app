@@ -1,5 +1,13 @@
 # Changelog
 
+## App 0.40.18 (Vorabversion)
+
+- Grundschrift wieder Geist. Melange lässt sich unter Einstellungen › Labor
+  zurückholen.
+- Labor › Kopf: vierzehn Mechaniken für den Seitenkopf (01 Geist-Original bis
+  14 Hochkant), dazu Größe S–XL und die Farbe von Titel und Satz (Voll, Grau,
+  Hell, Blau). Ab Werk 01.
+
 ## App 0.40.17 (Vorabversion)
 
 - Liegt die Bibliothek in einem geteilten iCloud-Ordner, fragte macOS bei

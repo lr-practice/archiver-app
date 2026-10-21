@@ -99,16 +99,38 @@
   // DESIGN 4.24b), video = Vorschau eines Videos beim Darüberfahren.
   const LAB_CARDS = ["A", "B", "C", "D", "E", "F", "G", "H"];
   const LAB_VIDEO = ["flip", "skim", "play", "off"];
+  // 0.40.18: head = Mechanik des Seitenkopfs (01–14, DESIGN 4.24c), size = Größe
+  // S–XL, title/text = Farbe von Titel und Satz, font = Geist oder Melange.
+  const LAB_HEADS = ["01", "02", "03", "04", "05", "06", "07", "08", "09", "10", "11", "12", "13", "14"];
+  const LAB_SIZES = { S: 0.8, M: 1, L: 1.25, XL: 1.5 };
+  const LAB_INKS = { text: "var(--p-text)", dim: "var(--p-dim)", faint: "var(--p-faint)", accent: "var(--accent)" };
+  const LAB_FONTS = ["geist", "melange"];
   function lab() {
     const v = pref("lab", null) || {};
     return {
       card: LAB_CARDS.includes(v.card) ? v.card : "A",
       video: LAB_VIDEO.includes(v.video) ? v.video : "flip",
+      head: LAB_HEADS.includes(v.head) ? v.head : "01",
+      size: v.size in LAB_SIZES ? v.size : "M",
+      title: v.title in LAB_INKS ? v.title : "text",
+      text: v.text in LAB_INKS ? v.text : "dim",
+      font: LAB_FONTS.includes(v.font) ? v.font : "geist",
     };
   }
   function setLab(patch) {
     setPref("lab", { ...lab(), ...patch });
+    applyLab();
   }
+  function applyLab() {
+    const l = lab();
+    const root = document.documentElement;
+    root.dataset.head = l.head;
+    root.dataset.font = l.font;
+    root.style.setProperty("--hk", String(LAB_SIZES[l.size]));
+    root.style.setProperty("--head-title", LAB_INKS[l.title]);
+    root.style.setProperty("--head-text", LAB_INKS[l.text]);
+  }
+  applyLab();
 
   // Studio-Funktionen (Einstellungen › Studio): jede einzeln abschaltbar, Standard an.
   // Die geteilte Bibliothek ist kein Schalter hier, sie hängt an der Bibliothek selbst.
@@ -2845,6 +2867,44 @@
         }))
       );
       wrap.appendChild(video);
+      const head = block(t("labHeads"));
+      head.appendChild(blockRow(el("div", "p-block-text", t("labHeadsText"))));
+      // 14 Varianten in zwei Reihen, sonst passt die Zeile nicht ins Blatt
+      for (const [i, part] of [LAB_HEADS.slice(0, 7), LAB_HEADS.slice(7)].entries()) {
+        head.appendChild(
+          blockRow(i ? "" : t("labHead"), choice(part.map((id) => [id, id]), cur.head, (id) => {
+            setLab({ head: id });
+            rerender();
+          }))
+        );
+      }
+      head.appendChild(blockRow(el("div", "p-block-text", cur.head + " · " + t("labHead_" + cur.head))));
+      head.appendChild(
+        blockRow(t("labSize"), choice(Object.keys(LAB_SIZES).map((id) => [id, id]), cur.size, (id) => {
+          setLab({ size: id });
+          rerender();
+        }))
+      );
+      const inks = Object.keys(LAB_INKS).map((id) => [id, t("labInk_" + id)]);
+      head.appendChild(
+        blockRow(t("labTitleInk"), choice(inks, cur.title, (id) => {
+          setLab({ title: id });
+          rerender();
+        }))
+      );
+      head.appendChild(
+        blockRow(t("labTextInk"), choice(inks, cur.text, (id) => {
+          setLab({ text: id });
+          rerender();
+        }))
+      );
+      head.appendChild(
+        blockRow(t("labFont"), choice([["geist", "Geist"], ["melange", "Melange"]], cur.font, (id) => {
+          setLab({ font: id });
+          rerender();
+        }))
+      );
+      wrap.appendChild(head);
     }
 
     // App: Version und Updates, Sprache, Feedback, Tasten
@@ -3438,6 +3498,14 @@
       // 0.32: Unsorted räumt sich nach 7 Tagen selbst auf (library.rs expire_inbox).
       // 0.33: dort steht nur dieser Satz, ohne Anzahl, Datum und Quellen
       const h = headline(lastSegment(zone.path), isInbox(zone.path) ? t("headUnsorted") : sentence);
+      if (lab().head === "10") {
+        // Labor › Kopf 10: alle Zonen als eine Zeile, die aktuelle in Titelfarbe
+        const at = state.zones.findIndex((z) => z.path === zone.path);
+        const names = state.zones.map((z) => lastSegment(z.path));
+        const title = h.querySelector(".p-head-title");
+        if (at > 0) title.before(el("span", "p-head-row-word", names.slice(0, at).join(", ") + ", "));
+        if (at >= 0 && at < names.length - 1) h.querySelector(".p-head-text")?.before(el("span", "p-head-row-word", ", " + names.slice(at + 1).join(", ")));
+      }
       if (canEdit(zone.path)) {
         const title = h.querySelector(".p-head-title");
         title.classList.add("zone-card-name");

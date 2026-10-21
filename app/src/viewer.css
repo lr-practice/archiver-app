@@ -108,7 +108,7 @@ body {
   overflow: hidden;
   background: var(--bg);
   color: var(--text);
-  font-family: "KMR Melange Grotesk", "Geist", -apple-system, BlinkMacSystemFont, sans-serif;
+  font-family: "Geist", -apple-system, BlinkMacSystemFont, sans-serif;
   font-size: 13px;
   -webkit-font-smoothing: antialiased;
   user-select: none;
