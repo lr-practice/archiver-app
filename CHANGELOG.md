@@ -1,6 +1,6 @@
 # Changelog
 
-## Safari-Extension (in Arbeit)
+## App 0.40.20 (Vorabversion, Safari-Extension)
 
 - Die Extension läuft auch in Safari am Mac, aus demselben Code wie in
   Chrome. Sie steckt als App-Erweiterung in Archiver.app und wird unter
