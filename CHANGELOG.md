@@ -1,5 +1,11 @@
 # Changelog
 
+## App 0.40.16 (Vorabversion)
+
+- KMR Melange Grotesk läuft überall mit Standard-Laufweite (0): Seitenköpfe,
+  Sätze, Kartentitel, Navigation, Tray, Zonenleiste und Observer. Vorher
+  lagen die Werte zwischen −0.025em und +0.01em.
+
 ## App 0.40.15 (Vorabversion)
 
 - Boards und Projekte als Funktion gestrichen. Archiver ist eine visuelle
