@@ -1,6 +1,6 @@
 # Archiver – Design-System
 
-Stand: App 0.40.19 · Extension 3.29.6
+Stand: App 0.40.19 · Extension 3.29.7
 
 Diese Datei hält fest, wie Archiver aussieht und warum. Sie gilt für die Mac-App
 (`app/src`) und die Chrome-Extension (`extension/`). Wer an der Oberfläche
@@ -220,7 +220,7 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
   - Herkunftszone (Inhalt auf 45 % zurückgenommen, Glas bleibt)
   - Abgelegt (Ziel glüht kurz in `--glow-rgb`, dann fährt die Leiste aus)
 - **Angeschnitten (0.35, Einstellungen › Darstellung, ab Werk „Ganz“):** Wahlweise
-  ragen die Karten erst 90 px herein (`.p-dropbar.strip`), genau wie die Leiste
+  ragen die Karten erst 90 px herein (`.p-dropbar.strip`), wie früher die Leiste
   der Extension (4.13): oben gerundet, unten bündig, ohne Hinweis. Zeiger in
   den Streifen → volle Höhe, mehr als 24 px darüber → wieder Streifen. Höhe mit
   0.22 s Übergang, ohne bei `prefers-reduced-motion`. Die Vorschau beim
@@ -491,14 +491,15 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
   bündig, ohne Hinweis. Darüber
   bleibt alles frei, etwa das Eingabefeld eines Chats. Fährt der Zeiger in den
   Streifen, wird das Fenster mit macOS-Animation 280 px hoch; steht er mehr
-  als 24 px darüber, wird es wieder Streifen. Gleiches gilt für die Leiste der
-  Extension im Browser (3.25.0, `overlay.css` `.zones-bar.strip`, Höhe mit
-  0.22 s Übergang, ohne bei `prefers-reduced-motion`). Die Leiste der Extension hat
+  als 24 px darüber, wird es wieder Streifen. Die Extension im Browser zeigt
+  seit 3.29.7 keinen Streifen mehr: Ihre Leiste steht beim Ziehen gleich in
+  voller Höhe (`overlay.css` `.zones-bar`, 30vh, höchstens 260 px), mit Hinweis
+  unten auf der Karte. Die Leiste der Extension hat
   seit 3.25.2 genau die Karten der Leiste in der App (4.3, `.p-hot`): Glas mit
   Unschärfe und Schatten, Nummer oben, Name in der Mitte, Ziel mit
   gestricheltem Ring (`--ring-lg`, 3 px) statt Outline. Sie nimmt
   den Zeiger an (3.25.1), damit Chrome am unteren Rand die Seite nicht
-  darunter wegscrollt; Text- und Instagram-Ziehen nutzen denselben Streifen. Die Karten
+  darunter wegscrollt; Text- und Instagram-Ziehen nutzen dieselbe Leiste. Die Karten
   am ganzen Mac haben keine eigene Unschärfe (das Fenster ist durchsichtig),
   deshalb gilt dort nur `--zone-alpha`.
 - **Ablauf (0.31.0):** Nach dem Loslassen zeigt das Ziel „Wird gesichert …“
@@ -626,14 +627,12 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
   zu drücken. Erscheint nur, wenn es mehr als eine Bibliothek gibt.
 - **Form:** Eine Glas-Pille mittig über der Zonenleiste (4.13), Werte wie die
   Navigation (4.2): 10 px Rundung, 5 px Innenabstand, Namen 14 px Geist. Die
-  aktive Bibliothek ist gefüllt (ink × 0.1 / schwarz × 0.08). Steht 104 px
-  über dem unteren Rand, solange die Leiste Streifen ist, und rückt mit
-  0.22 s auf `min(30vh, 260px) + 22px`, wenn sie die volle Höhe hat (`.high`).
+  aktive Bibliothek ist gefüllt (ink × 0.1 / schwarz × 0.08). Steht
+  `min(30vh, 260px) + 22px` über dem unteren Rand, also gleich über der
+  vollen Leiste (3.29.7, vorher erst über dem Streifen).
 - **Ablauf:** Zeiger auf einen Namen → Ring aus 4.1 (`--ring-md`, rx 9, 3 px
   Abstand). Nach 0.4 s Verweilen wechselt die Bibliothek, die Karten bleiben
-  stehen und tauschen nur ihre Namen. Solange der Zeiger auf der Pille ist,
-  bleibt die Leiste in ihrer Höhe; zurück zum Streifen erst 70 px über der
-  vollen Leiste. ⇧ springt weiter zur nächsten (dragover liest nur
+  stehen und tauschen nur ihre Namen. ⇧ springt weiter zur nächsten (dragover liest nur
   Modifier-Tasten).
 - **Nicht:** Kein ⇧-Zeichen in der Pille, keine Zahlen, keine zweite
   Hervorhebung neben Ring und Füllung. Ablegen auf der Pille legt nichts ab.

@@ -13,11 +13,6 @@
 // gegenseitig beeinflussen.
 
 (function () {
-  // Leiste beim Ziehen (0.32 der App, 3.25.0): erst ein Streifen von STRIP_PX am
-  // unteren Rand, damit darüber alles frei bleibt (Eingabefeld eines Chats).
-  // Fährt der Zeiger hinein, kommt die volle Höhe (overlay.css .zones-bar).
-  const STRIP_PX = 90;
-  const barHeight = () => Math.min(window.innerHeight * 0.3, 260);
   const { DEFAULT_ZONES, DEFAULT_SHORTCUT, isRootZoneName, loadZones, debugLog, currentPageSource, extractDroppedImage, t } =
     ArchiverShared;
   const UI = ArchiverUI;
@@ -748,7 +743,7 @@
     ensureOverlay().then(() => {
       if (zonesBarEl || manualOpen || dragCounter <= 0) return; // schon da, Overlay offen oder Drag vorbei
 
-      zonesBarEl = UI.el("div", "zones-bar strip");
+      zonesBarEl = UI.el("div", "zones-bar");
       if (zoneAlpha != null) zonesBarEl.style.setProperty("--zone-alpha", String(zoneAlpha));
       zoneEls = barZones.map((name, i) => {
         const zone = UI.el("div", "zone" + (isRootZoneName(name) ? " zone-root" : ""));
@@ -815,18 +810,11 @@
     setTimeout(() => bar.remove(), 520);
   }
 
-  // Zeiger während eines Ziehens (Browser-Ziehen, Text, Instagram): Streifen
-  // oder volle Höhe, Zielkarte markieren
+  // Zeiger während eines Ziehens (Browser-Ziehen, Text, Instagram): Zielkarte
+  // markieren. Die Leiste steht in voller Höhe (3.29.7, vorher erst ein Streifen).
   function trackZones(x, y) {
     if (!zonesBarEl) return;
-    const onLib = trackLibs(x, y);
-    const fromBottom = window.innerHeight - y;
-    const strip = zonesBarEl.classList.contains("strip");
-    // über der vollen Leiste sitzt die Bibliotheks-Pille: erst darüber wieder Streifen
-    const above = libBarEl && !libBarEl.hidden ? 70 : 24;
-    if (strip && fromBottom < STRIP_PX) zonesBarEl.classList.remove("strip");
-    else if (!strip && !onLib && fromBottom > barHeight() + above) zonesBarEl.classList.add("strip");
-    if (libBarEl) libBarEl.classList.toggle("high", !zonesBarEl.classList.contains("strip"));
+    trackLibs(x, y);
     const active = getZoneIndex(x, y);
     zoneEls.forEach((el, i) => el.classList.toggle("active", i === active));
   }
@@ -2021,7 +2009,6 @@
     if (!rootEl || !zonesBarEl || dragLibs.length < 2) return;
     if (!libBarEl) {
       libBarEl = UI.el("div", "lib-bar");
-      libBarEl.classList.toggle("high", !zonesBarEl.classList.contains("strip"));
       rootEl.appendChild(libBarEl);
     }
     libBarEl.replaceChildren(

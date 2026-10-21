@@ -57,8 +57,6 @@ input {
   font-family: "KMR Melange Grotesk", "Geist", -apple-system, BlinkMacSystemFont, sans-serif;
   -webkit-font-smoothing: antialiased;
   animation: zones-in 0.14s ease-out;
-  /* Streifen: fährt auf volle Höhe, wenn der Zeiger hineinkommt (content.js) */
-  transition: height 0.22s cubic-bezier(0.16, 1, 0.3, 1), padding 0.22s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 :host([data-radius="square"]) .zones-bar {
@@ -169,21 +167,6 @@ input {
   to {
     --archiver-zone-in: 0;
   }
-}
-
-/* Streifen (3.25.0, 90 px seit 3.25.2): beim Ziehen ragen die Karten erst nur
-   unten herein, darüber bleibt die Seite frei. Dieselbe Karte, unten bündig. */
-.zones-bar.strip {
-  height: 90px;
-  padding: 0 10px;
-}
-
-.zones-bar.strip .zone {
-  border-radius: var(--r-lg, 8px) var(--r-lg, 8px) 0 0;
-}
-
-.zones-bar.strip .zone-hint {
-  display: none;
 }
 
 /* ---- Overlay per Tastenkombination: wie die Vollansicht, halbtransparent ---- */
@@ -402,16 +385,15 @@ html.light .area-key,
   color: #111111;
 }
 
-/* ---- Bibliotheken beim Ziehen (3.29.0): Pille mittig über dem Streifen ----
+/* ---- Bibliotheken beim Ziehen (3.29.0): Pille mittig über der Leiste ----
    Steht während des ganzen Ziehens, sobald es mehr als eine Bibliothek gibt.
    Name anfahren → Ring (4.1), nach 0.4 s Verweilen wechselt die Bibliothek
-   (content.js). Sitzt über dem Streifen und rückt mit, wenn die Leiste die
-   volle Höhe hat (.high). ⇧ springt weiter zur nächsten. */
+   (content.js). ⇧ springt weiter zur nächsten. */
 .lib-bar {
   --ring-md: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Crect x='.5' y='.5' rx='9' style='width:calc(100%25 - 1px);height:calc(100%25 - 1px)' fill='none' stroke='black' stroke-dasharray='4 4'/%3E%3C/svg%3E");
   position: fixed;
   left: 50%;
-  bottom: 104px;
+  bottom: calc(min(30vh, 260px) + 22px);
   transform: translateX(-50%);
   z-index: 3;
   display: flex;
@@ -429,10 +411,6 @@ html.light .area-key,
   color: #8c8c8c;
   /* nimmt den Zeiger an wie die Zonenleiste, damit die Seite darunter nicht mitzieht */
   pointer-events: auto;
-  transition: bottom 0.22s cubic-bezier(0.16, 1, 0.3, 1);
-}
-.lib-bar.high {
-  bottom: calc(min(30vh, 260px) + 22px);
 }
 .lib-bar[hidden] {
   display: none;
@@ -485,8 +463,6 @@ html.light .lib-bar .lib.target::after,
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .zones-bar,
-  .lib-bar,
   .lib-bar .lib {
     transition: none;
   }

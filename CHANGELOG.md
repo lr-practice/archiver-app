@@ -1,5 +1,10 @@
 # Changelog
 
+## Extension 3.29.7
+
+- Die Zonenleiste beim Ziehen im Browser steht gleich in voller Höhe. Die
+  Karten ragen nicht mehr erst als 90-px-Streifen herein.
+
 ## App 0.40.19 (Vorabversion)
 
 - Seitenkopf ab Werk Variante 05 (Satz im Fluss) in Größe M, Titel voll, Satz
