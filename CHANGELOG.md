@@ -1,5 +1,24 @@
 # Changelog
 
+## Safari-Extension (in Arbeit)
+
+- Die Extension läuft auch in Safari am Mac, aus demselben Code wie in
+  Chrome. Sie steckt als App-Erweiterung in Archiver.app und wird unter
+  Safari › Einstellungen › Erweiterungen eingeschaltet (ohne Apple-Signatur
+  vorher Entwickler › „Unsignierte Erweiterungen erlauben“).
+- Safari spricht mit der laufenden App über HTTP auf 127.0.0.1 (Port 47613,
+  sonst 47614/47615). Die App nimmt dort nur Anfragen von Safari-Extensions an
+  (Origin, Host und Kopf „X-Archiver“ werden geprüft). Bilder kommen als Bytes
+  („save_data“) statt über Downloads/Archiver-Transfer.
+- Läuft Archiver nicht, startet die Extension die App und legt danach ab.
+  Klappt das nicht, sagt ein Hinweis Bescheid; in Downloads wird in Safari
+  nichts gesichert. Linkkarten haben in Safari kein Seitenarchiv.
+- Einstellungen › Mac & Browser zeigt, ob Safari verbunden ist, oder wie man
+  die Extension einschaltet.
+- Build: `safari/build.sh` erzeugt die Erweiterung mit
+  `safari-web-extension-converter`; der Mac-Workflow baut sie vor der App und
+  legt sie nach `Contents/PlugIns`.
+
 ## Extension 3.29.7
 
 - Die Zonenleiste beim Ziehen im Browser steht gleich in voller Höhe. Die

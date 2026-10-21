@@ -5,3 +5,4 @@ dist/
 # Melange (kimera) liegt nur im privaten Repo, siehe DESIGN.md 2.2
 app/src/fonts/melange/
 extension/fonts/melange/
+/build/

@@ -108,6 +108,13 @@ jobs:
           if [ -z "$ID" ]; then echo "Kein Developer-ID-Application-Zertifikat in APPLE_CERTIFICATE"; exit 1; fi
           echo "identity=$ID" >> "$GITHUB_OUTPUT"
 
+      # Safari-Extension als App-Erweiterung (Contents/PlugIns), siehe safari/build.sh.
+      # Scheitert sie, scheitert der Build: lieber laut als eine App ohne Safari.
+      - name: Safari-Extension bauen
+        env:
+          APPLE_SIGNING_IDENTITY: ${{ steps.cert.outputs.identity }}
+        run: safari/build.sh
+
       - name: App bauen
         working-directory: app
         env:
@@ -127,8 +134,24 @@ jobs:
           if [ -n "$IDENTITY" ]; then
             CONFIG=$(echo "$CONFIG" | jq -c --arg id "$IDENTITY" '.bundle.macOS.signingIdentity=$id')
           fi
+          # Safari-Extension aus safari/build.sh nach Contents/PlugIns
+          APPEX="$GITHUB_WORKSPACE/build/safari/Archiver Extension.appex"
+          test -d "$APPEX"
+          CONFIG=$(echo "$CONFIG" | jq -c --arg p "$APPEX" '.bundle.macOS.files["PlugIns/Archiver Extension.appex"]=$p')
           for v in APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID; do [ -z "${!v}" ] && unset $v; done
           npx tauri build --bundles app,dmg --config "$CONFIG"
+
+      # Die Erweiterung muss im fertigen Bündel liegen und weiter in der Sandbox
+      # laufen (Safari lädt sie sonst nicht), auch nachdem Tauri die App signiert hat.
+      - name: Safari-Extension prüfen
+        run: |
+          APP=$(ls -d app/src-tauri/target/release/bundle/macos/*.app | head -1)
+          APPEX="$APP/Contents/PlugIns/Archiver Extension.appex"
+          test -d "$APPEX"
+          codesign --verify --strict "$APPEX"
+          codesign -d --entitlements - "$APPEX" 2>/dev/null | grep -q com.apple.security.app-sandbox
+          codesign --verify --deep --strict "$APP"
+          plutil -extract CFBundleIdentifier raw "$APPEX/Contents/Info.plist"
 
       # Das DMG selbst signieren, notarisieren und das Ticket anheften,
       # damit schon das Öffnen des Downloads ohne Warnung klappt.

@@ -7,6 +7,7 @@
 //   "thumbs-ready"     [{ hash, thumb }] neue Vorschaubilder
 
 pub mod bridge;
+pub mod http_bridge;
 pub mod library;
 pub mod log;
 pub mod naming;
@@ -1664,6 +1665,10 @@ pub fn run() {
             let handle = app.handle().clone();
             // Brücke zur Chrome-Extension anmelden (bei jedem Start, falls die App verschoben wurde).
             std::thread::spawn(bridge::install_manifests);
+            // Brücke zur Safari-Extension: HTTP auf 127.0.0.1 (http_bridge.rs).
+            // Nur in der laufenden App; der Chrome-Host startet ohne setup.
+            #[cfg(target_os = "macos")]
+            http_bridge::start();
             // Die Bibliothek öffnet die Oberfläche selbst (open_library), damit das
             // Fenster sofort erscheint, auch wenn das Einlesen dauert.
             if let Some(path) = viewer::from_args() {

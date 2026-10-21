@@ -173,6 +173,15 @@
       }
     }
   },
+  "appNotRunning": {
+    "message": "Archiver läuft nicht. Bitte die App öffnen und noch einmal ablegen"
+  },
+  "appNoLibrary": {
+    "message": "In Archiver ist noch keine Bibliothek eingerichtet"
+  },
+  "safariNoDownloads": {
+    "message": "In Safari geht alles in die Bibliothek, nicht in Downloads"
+  },
   "extensionReloaded": {
     "message": "Archiver wurde aktualisiert. Bitte lade die Seite neu."
   },

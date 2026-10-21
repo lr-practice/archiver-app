@@ -6,6 +6,12 @@
 // Fenster: Das Programm liest Anfragen von stdin und antwortet auf stdout
 // (je 4 Byte Länge + JSON), bis Chrome die Verbindung schließt.
 //
+// Safari (Safari-Extension, in Arbeit): Safari erreicht per Native Messaging nur die
+// App-Erweiterung in Archiver.app, nicht dieses Programm. Die laufende App
+// beantwortet dieselben Befehle deshalb auch über HTTP auf 127.0.0.1
+// (http_bridge.rs). Beide Wege teilen sich `dispatch` und die offenen
+// Bibliotheken.
+//
 // Damit Chrome das Programm findet, legt die App bei jedem Start eine kleine
 // Manifest-Datei in den NativeMessagingHosts-Ordner jedes installierten
 // Chromium-Browsers. Läuft die App nicht, funktioniert die Brücke trotzdem:
@@ -129,7 +135,10 @@ fn extension_file() -> Option<PathBuf> {
 
 fn note_extension(msg: &Value) {
     let Some(file) = extension_file() else { return };
-    let entry = json!({ "version": str_arg(msg, "ext"), "seen": now_ms() });
+    let before: Value = std::fs::read_to_string(&file).ok().and_then(|t| serde_json::from_str(&t).ok()).unwrap_or(Value::Null);
+    // Safari zusätzlich vermerken, damit Einstellungen › Mac & Browser es zeigt
+    let safari = if str_arg(msg, "browser") == Some("safari") { json!(now_ms()) } else { before.get("safari").cloned().unwrap_or(Value::Null) };
+    let entry = json!({ "version": str_arg(msg, "ext"), "seen": now_ms(), "safari": safari });
     if let Some(dir) = file.parent() {
         let _ = std::fs::create_dir_all(dir);
     }
@@ -145,6 +154,7 @@ pub fn extension_status() -> Value {
     json!({
         "version": seen.get("version").cloned().unwrap_or(Value::Null),
         "seen": seen.get("seen").cloned().unwrap_or(Value::Null),
+        "safari": seen.get("safari").cloned().unwrap_or(Value::Null),
         "min": EXTENSION_MIN,
     })
 }
@@ -251,32 +261,46 @@ fn write_message(out: &mut impl Write, value: &Value) -> std::io::Result<()> {
     out.flush()
 }
 
+/// Offene Bibliotheken, geteilt von stdin-Host und HTTP-Brücke. Der Mutex
+/// reiht die Anfragen der HTTP-Brücke (je Verbindung ein Thread) hintereinander.
+static SLOT: Mutex<Vec<(PathBuf, Library)>> = Mutex::new(Vec::new());
+
+/// Eine Anfrage beantworten: `{ ok: true, … }` oder `{ ok: false, error }`,
+/// dazu die `id` der Anfrage. `data`: Datei, die die HTTP-Brücke für
+/// "save_data" in einen eigenen Zwischenordner geschrieben hat.
+pub(crate) fn dispatch(msg: &Value, data: Option<&Path>) -> Value {
+    let id = msg.get("id").cloned().unwrap_or(Value::Null);
+    let result = match msg.get("error").and_then(|e| e.as_str()) {
+        Some(e) => Err(e.to_string()),
+        None => {
+            let mut slot = SLOT.lock().unwrap_or_else(|e| e.into_inner());
+            handle(msg, &mut slot, data)
+        }
+    };
+    let mut reply = match result {
+        Ok(mut v) => {
+            v["ok"] = json!(true);
+            v
+        }
+        Err(e) => {
+            crate::log::error("bridge", format!("{}: {e}", msg.get("cmd").and_then(|t| t.as_str()).unwrap_or("?")));
+            json!({ "ok": false, "error": e })
+        }
+    };
+    reply["id"] = id;
+    reply
+}
+
 /// Hauptschleife im Host-Modus. Endet, wenn Chrome stdin schließt.
 pub fn run_host() {
     let stdin = std::io::stdin();
     let stdout = std::io::stdout();
     let mut input = stdin.lock();
     let mut output = stdout.lock();
-    let mut lib: Vec<(PathBuf, Library)> = Vec::new();
     while let Some(msg) = read_message(&mut input) {
         let msg = msg.unwrap_or_else(|e| json!({ "type": "", "error": e }));
         let id = msg.get("id").cloned().unwrap_or(Value::Null);
-        let result = match msg.get("error").and_then(|e| e.as_str()) {
-            Some(e) => Err(e.to_string()),
-            None => handle(&msg, &mut lib),
-        };
-        let reply = match result {
-            Ok(mut v) => {
-                v["ok"] = json!(true);
-                v
-            }
-            Err(e) => {
-                crate::log::error("bridge", format!("{}: {e}", msg.get("type").and_then(|t| t.as_str()).unwrap_or("?")));
-                json!({ "ok": false, "error": e })
-            }
-        };
-        let mut reply = reply;
-        reply["id"] = id.clone();
+        let mut reply = dispatch(&msg, None);
         // Zu groß für Chrome: Chrome würde die Verbindung kappen, alle offenen
         // Anfragen gingen verloren. Stattdessen ein klarer Fehler (0.31.0).
         if serde_json::to_vec(&reply).map(|b| b.len() > 1024 * 1024).unwrap_or(true) {
@@ -361,7 +385,7 @@ fn str_arg<'a>(msg: &'a Value, key: &str) -> Option<&'a str> {
     msg.get(key).and_then(|v| v.as_str()).filter(|s| !s.is_empty())
 }
 
-fn handle(msg: &Value, slot: &mut Vec<(PathBuf, Library)>) -> Result<Value, String> {
+fn handle(msg: &Value, slot: &mut Vec<(PathBuf, Library)>, data: Option<&Path>) -> Result<Value, String> {
     let cmd = str_arg(msg, "cmd").unwrap_or("");
     match cmd {
         "hello" => {
@@ -404,7 +428,10 @@ fn handle(msg: &Value, slot: &mut Vec<(PathBuf, Library)>) -> Result<Value, Stri
             // Das Seitenarchiv gehört zur Bildanfrage: scheitert die, darf es nicht
             // als Waise im Zwischenordner liegen bleiben (0.31.0)
             let archive = str_arg(msg, "archive").map(|a| transfer_file(a, Some("mhtml")));
-            let saved = save(msg, slot, archive.as_ref().and_then(|a| a.as_ref().ok()));
+            let saved = library(slot, msg).and_then(|lib| {
+                let file = transfer_file(str_arg(msg, "file").ok_or("Datei fehlt")?, None)?;
+                save(lib, msg, &file, archive.as_ref().and_then(|a| a.as_ref().ok()))
+            });
             if let Some(Ok(a)) = &archive {
                 if a.exists() {
                     let _ = std::fs::remove_file(a);
@@ -416,6 +443,13 @@ fn handle(msg: &Value, slot: &mut Vec<(PathBuf, Library)>) -> Result<Value, Stri
                 warn(&mut saved, "archive", &e);
             }
             Ok(saved)
+        }
+        // Safari: die Datei kam als Bytes über die HTTP-Brücke, sonst wie "save"
+        // (ohne Seitenarchiv, Safari kennt kein pageCapture)
+        "save_data" => {
+            let file = data.ok_or("Daten fehlen")?;
+            let lib = library(slot, msg)?;
+            save(lib, msg, file, None)
         }
         "list" => {
             let lib = library(slot, msg)?;
@@ -495,10 +529,10 @@ fn fit_reply(items: Vec<Value>, offset: usize, total: usize) -> (Vec<Value>, Opt
     (out, (end < total).then_some(end))
 }
 
-/// Bild (oder Text-/Linkkarte) aus dem Zwischenordner übernehmen
-fn save(msg: &Value, slot: &mut Vec<(PathBuf, Library)>, archive: Option<&PathBuf>) -> Result<Value, String> {
-    let lib = library(slot, msg)?;
-    let file = transfer_file(str_arg(msg, "file").ok_or("Datei fehlt")?, None)?;
+/// Bild (oder Text-/Linkkarte) aus dem Zwischenordner übernehmen. `file` ist
+/// schon geprüft: aus Downloads/Archiver-Transfer (Chrome) oder aus dem
+/// Zwischenordner der HTTP-Brücke (Safari).
+pub(crate) fn save(lib: &Library, msg: &Value, file: &Path, archive: Option<&PathBuf>) -> Result<Value, String> {
     let fallback = lib.default_zone();
     let zone = str_arg(msg, "zone").unwrap_or(&fallback);
     crate::library::check_rel(zone)?;
@@ -510,7 +544,7 @@ fn save(msg: &Value, slot: &mut Vec<(PathBuf, Library)>, archive: Option<&PathBu
         quote: str_arg(msg, "quote").map(|q| q.chars().take(20_000).collect()),
     };
     let mut warnings: Vec<Value> = Vec::new();
-    let (mut path, duplicate) = lib.adopt_file(&file, str_arg(msg, "name"), zone, &source)?;
+    let (mut path, duplicate) = lib.adopt_file(file, str_arg(msg, "name"), zone, &source)?;
     let mut moved_here = false;
     remove_if_empty(file.parent());
     // Schon in der Bibliothek, aber auf eine andere Zone gezogen (0.30.1):

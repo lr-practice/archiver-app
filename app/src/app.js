@@ -2802,7 +2802,8 @@
       const ext = el("div", null, "…");
       const get = button("p-link", t("extGet"), openExtensionDownload);
       get.hidden = true;
-      Promise.all([invoke("bridge_browsers").catch(() => []), extensionState()]).then(([list, s]) => {
+      Promise.all([invoke("bridge_browsers").catch(() => []), extensionState()]).then(([chromium, s]) => {
+        const list = s && s.safari ? [...chromium, "Safari"] : chromium;
         if (!list.length) return (ext.textContent = t("setBridgeOff"));
         const kind = s ? s.kind : "missing";
         get.hidden = kind === "ok";
@@ -2811,6 +2812,12 @@
         else ext.textContent = t("extStatusMissing");
       });
       extBlock.appendChild(blockRow(ext, [get, button("p-link", t("import"), openImportDialog)]));
+      // Safari: Erweiterung steckt in Archiver.app, nur einschalten (http_bridge.rs)
+      if (isMac) {
+        const safari = el("div", "p-block-text", "…");
+        extensionState().then((s) => (safari.textContent = s && s.safari ? t("extSafariOn") : t("extSafariHint")));
+        extBlock.appendChild(blockRow(safari));
+      }
       wrap.appendChild(extBlock);
     }
 
@@ -8337,7 +8344,8 @@
     let timer = 0;
     const check = () =>
       Promise.all([invoke("bridge_browsers"), extensionState()])
-        .then(([list, s]) => {
+        .then(([chromium, s]) => {
+          const list = s && s.safari ? [...chromium, "Safari"] : chromium;
           // Verbunden heißt: Die Extension hat sich gemeldet (nicht nur die Brücke eingerichtet)
           const on = list.length > 0 && !!s && s.kind !== "missing";
           status.textContent = on ? t("onbExtOn", { list: list.join(", ") }) : t("onbExtWaiting");
@@ -8556,7 +8564,7 @@
     const s = await invoke("extension_status").catch(() => null);
     if (!s) return null;
     const kind = !s.seen ? "missing" : !s.version || versionLess(s.version, s.min) ? "old" : "ok";
-    return { kind, version: s.version, min: s.min };
+    return { kind, version: s.version, min: s.min, safari: s.safari || null };
   }
 
   async function checkExtension() {

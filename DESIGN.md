@@ -3,7 +3,7 @@
 Stand: App 0.40.19 · Extension 3.29.7
 
 Diese Datei hält fest, wie Archiver aussieht und warum. Sie gilt für die Mac-App
-(`app/src`) und die Chrome-Extension (`extension/`). Wer an der Oberfläche
+(`app/src`) und die Extension (`extension/`, in Chrome und in Safari). Wer an der Oberfläche
 arbeitet, Mensch oder KI, liest sie vorher. Die Werte stammen aus dem Code.
 Wo Code und Datei auseinanderlaufen, gilt der Code, und die Datei wird im
 selben Commit nachgezogen.
@@ -181,6 +181,7 @@ Karten nebeneinander, stehen sie 2 × 2 wie der Index (0.28).
 (`overlay.css`, `:host`), Galerie im App-Layout (`gallery.css`), Panel
 (`panel.css`). Sie folgt der App 1:1. Seit 3.20.0 gilt das für die Übersicht,
 die Zone, die Glasleiste beim Ziehen, Geist und die Bibliothek oben rechts.
+Safari nutzt denselben Code und sieht gleich aus (4.27).
 
 **Am ganzen Mac** (`palette.*`, `dropbar.*`, `src-tauri/src/system.rs`):
 schwebende Fenster über anderen Programmen, auch wenn das Archiver-Fenster zu
@@ -556,7 +557,8 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
   (`extension.json` neben den Einstellungen). Älter als `EXTENSION_MIN`
   (`bridge.rs`) oder ohne Version = veraltet. Hat sich nie eine gemeldet,
   kommt der Hinweis erst nach zwei Tagen. × blendet ihn aus, bis sich Zustand
-  oder Mindestversion ändern. Einstellungen › Mac & Browser zeigt den Stand.
+  oder Mindestversion ändern. Einstellungen › Mac & Browser zeigt den Stand,
+  am Mac darunter eine Zeile für Safari (4.27).
 - **Nicht:** Kein Toast, keine Akzentfarbe, kein Dialog beim Start.
 
 ### 4.17 Mehrfachmarkierung (Extension 3.27.0, `content.js`)
@@ -812,6 +814,26 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
   In der Filterzeile steht „(Vorschau beenden)“. Es wird nichts gesperrt.
 - **Nicht:** Keine Highlights, keine Eingabekästen mit Rahmen, keine großen
   Titelblätter.
+
+### 4.27 Safari-Extension (in Arbeit, `safari/`, `http_bridge.rs`)
+- **Zweck:** Dieselbe Extension in Safari am Mac. Sie steckt als
+  App-Erweiterung in Archiver.app (`Contents/PlugIns`) und wird nur in Safari
+  eingeschaltet, nicht geladen.
+- **Form:** Kein eigener Look. Overlay, Galerie, Zonenleiste, Toasts und
+  Panels sind die aus `extension/`, Byte für Byte. Was in Chrome gilt, gilt
+  hier (4.17, 4.18, 4.20).
+- **Unterschiede:** Ohne laufende App versucht die Extension, Archiver zu
+  starten. Klappt das nicht, kommt ein Toast („Archiver läuft nicht …“) statt
+  eines Sicherns in Downloads. ⇧ nach Downloads gibt es nicht (Toast). Die
+  Linkkarte hat kein Seitenarchiv (Safari kennt kein pageCapture). Links auf
+  `chrome://`-Seiten im Panel tun in Safari nichts.
+- **App:** Einstellungen › Mac & Browser › Extension zeigt unter dem
+  Chrome-Stand eine Zeile in `.p-block-text`: „Safari: Extension verbunden“
+  oder der Weg zum Einschalten (Safari › Einstellungen › Erweiterungen, ohne
+  Apple-Signatur vorher Entwickler › „Unsignierte Erweiterungen erlauben“).
+  Kein neuer Block, kein Knopf.
+- **Nicht:** Keine Safari-eigenen Farben, Icons oder Abstände. Was nur in
+  Safari anders sein muss, regelt `background.js` (`IS_SAFARI`), nie CSS.
 
 ## 5. Bekannte Abweichungen
 

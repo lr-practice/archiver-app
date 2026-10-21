@@ -19,6 +19,14 @@
 // Brücke zur Desktop-App (seit v3.6.0): Ist die Archiver-App installiert und
 // eine Bibliothek eingerichtet, kommen Zonen und Galerie aus der Bibliothek,
 // und gesicherte Bilder landen direkt dort. Ohne App bleibt alles wie bisher.
+//
+// Safari (Safari-Extension, in Arbeit): derselbe Code läuft als Safari-Web-Extension in
+// Archiver.app (safari/build.sh). Safari hat kein chrome.downloads, kein
+// pageCapture und kein Native Messaging zu fremden Programmen. Deshalb:
+// Anfragen per HTTP an die laufende App (127.0.0.1, http_bridge.rs), Bilder
+// als Bytes statt über Downloads/Archiver-Transfer, kein Seitenarchiv, und
+// ohne App kein Sichern in Downloads, sondern der Versuch, die App zu starten
+// (SafariWebExtensionHandler.swift), sonst ein Hinweis.
 
 const MAX_ITEMS_PER_FOLDER = 500;
 
@@ -172,6 +180,7 @@ let bridgeCache = { at: 0, info: null };
 const previewCache = new Map(); // hash -> data-URL
 
 function hostCall(cmd, args = {}) {
+  if (IS_SAFARI) return httpCall(cmd, args);
   return new Promise((resolve, reject) => {
     if (!hostPort) {
       let port;
@@ -221,13 +230,102 @@ function closeHostWhenIdle() {
   hostPort = null;
 }
 
+// ---- Safari: HTTP statt Native Messaging ----
+// Die laufende App lauscht auf 127.0.0.1 (erster freier Port der Liste). Jede
+// Anfrage trägt "X-Archiver: 1"; die App nimmt nur Anfragen von
+// safari-web-extension:// an. Läuft die App nicht, startet sie die
+// App-Erweiterung in Archiver.app (sendNativeMessage "launch").
+
+const IS_SAFARI = chrome.runtime.getURL("").startsWith("safari-web-extension:");
+const HTTP_PORTS = [47613, 47614, 47615];
+const UPLOAD_TIMEOUT_MS = 120000;
+const LAUNCH_WAIT_MS = 10000;
+let httpPort = null;
+let appAnswered = false; // letzte Anfrage „hello“ kam an (auch ohne Bibliothek)
+
+async function httpPost(headers, body, timeoutMs) {
+  const ports = httpPort ? [httpPort, ...HTTP_PORTS.filter((p) => p !== httpPort)] : HTTP_PORTS;
+  let lastErr = null;
+  for (const port of ports) {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+    let res;
+    try {
+      res = await fetch(`http://127.0.0.1:${port}/bridge`, {
+        method: "POST",
+        headers: { "X-Archiver": "1", ...headers },
+        body,
+        signal: ctrl.signal,
+        cache: "no-store",
+        credentials: "omit",
+      });
+    } catch (err) {
+      clearTimeout(timer);
+      // Zeitüberschreitung: die App hat die Anfrage, nicht an den nächsten Port schicken
+      if (ctrl.signal.aborted) throw new Error("App antwortet nicht");
+      lastErr = err;
+      continue;
+    }
+    let msg = null;
+    try {
+      msg = await res.json();
+    } catch {}
+    clearTimeout(timer);
+    if (!msg || typeof msg !== "object") {
+      lastErr = new Error("App antwortet nicht");
+      continue;
+    }
+    httpPort = port;
+    if (msg.ok) return msg;
+    throw Object.assign(new Error(msg.error || "App-Fehler"), { fromApp: true });
+  }
+  throw lastErr || new Error("App nicht erreichbar");
+}
+
+function httpCall(cmd, args = {}) {
+  return httpPost({ "Content-Type": "application/json" }, JSON.stringify({ cmd, ...args }), HOST_TIMEOUT_MS);
+}
+
+// Die App-Erweiterung in Archiver.app öffnet die App (oder holt sie nach vorn).
+async function launchAppNative() {
+  const msg = { cmd: "launch" };
+  try {
+    if (globalThis.browser && browser.runtime && browser.runtime.sendNativeMessage) {
+      await browser.runtime.sendNativeMessage("app.archiver.desktop", msg);
+    } else {
+      await new Promise((res, rej) =>
+        chrome.runtime.sendNativeMessage("app.archiver.desktop", msg, (r) => (chrome.runtime.lastError ? rej(new Error(chrome.runtime.lastError.message)) : res(r)))
+      );
+    }
+    return true;
+  } catch (err) {
+    console.warn("[Archiver] App nicht gestartet:", err && err.message);
+    return false;
+  }
+}
+
+// App starten und warten, bis sie antwortet. Infos wie appBridge() oder null.
+async function launchApp() {
+  if (!(await launchAppNative())) return null;
+  const until = Date.now() + LAUNCH_WAIT_MS;
+  while (Date.now() < until) {
+    await new Promise((r) => setTimeout(r, 500));
+    bridgeCache.at = 0;
+    const info = await appBridge();
+    if (info || appAnswered) return info;
+  }
+  return null;
+}
+
 // Infos zur App (Bibliotheksname) oder null, wenn keine App bzw. keine Bibliothek.
 async function appBridge() {
   if (Date.now() - bridgeCache.at < BRIDGE_CACHE_MS) return bridgeCache.info;
   let info = null;
+  appAnswered = false;
   try {
     // ext: eigene Version, damit die App einen Hinweis zeigen kann, wenn sie veraltet ist
-    const r = await hostCall("hello", { ext: chrome.runtime.getManifest().version });
+    const r = await hostCall("hello", IS_SAFARI ? { ext: chrome.runtime.getManifest().version, browser: "safari" } : { ext: chrome.runtime.getManifest().version });
+    appAnswered = true;
     if (r.library) info = { library: r.library, name: r.name || "Archiver", version: r.version, libraries: Array.isArray(r.libraries) ? r.libraries : [] };
   } catch {}
   bridgeCache = { at: Date.now(), info };
@@ -250,6 +348,7 @@ async function noteStrayTransfer(...ids) {
   await storageSet({ strayTransfers: list.slice(-200) });
 }
 async function sweepStrayTransfers() {
+  if (IS_SAFARI) return; // kein Zwischenordner in Safari
   const { strayTransfers } = await storageGet({ strayTransfers: [] });
   if (!Array.isArray(strayTransfers) || !strayTransfers.length) return;
   const keep = [];
@@ -363,6 +462,7 @@ async function archiveTab(tabId) {
 }
 
 async function saveToApp(message, sender) {
+  if (IS_SAFARI) return saveToAppSafari(message, sender);
   const tabId = sender.tab && sender.tab.id;
   const frameId = sender.frameId;
   // ohne Zone entscheidet die App (Standard-Zone, sonst Unsorted)
@@ -424,6 +524,59 @@ async function saveToApp(message, sender) {
     } else {
       await noteStrayTransfer(id, archive && archive.id);
     }
+    sendFeedback(tabId, frameId, t("appSaveFailed") + (err.fromApp && err.message ? ": " + err.message : ""), false);
+    return { ok: false };
+  }
+}
+
+// Safari: Bild im Hintergrund laden und die Bytes samt Angaben an die App
+// (POST /bridge, "save_data"). Angaben und Rückmeldungen wie bei Chrome; ein
+// Seitenarchiv gibt es nicht (kein pageCapture), die Linkkarte schon.
+async function saveToAppSafari(message, sender) {
+  const tabId = sender.tab && sender.tab.id;
+  const frameId = sender.frameId;
+  const zone = message.folder ? sanitizePath(message.folder) : null;
+  const filename = buildFilename(message.url, message.suggestedName, TRANSFER_DIR);
+  let blob;
+  try {
+    const res = await fetch(message.url, { credentials: "include" });
+    if (!res.ok) throw new Error(String(res.status));
+    blob = await res.blob();
+    if (!blob.size) throw new Error("leer");
+  } catch (err) {
+    console.warn("[Archiver] Download fehlgeschlagen:", err.message);
+    sendFeedback(tabId, frameId, t("downloadFailed"), false);
+    return { ok: false };
+  }
+  const meta = new TextEncoder().encode(
+    JSON.stringify({
+      name: filename.split("/").pop(),
+      zone,
+      imageUrl: message.url && !String(message.url).startsWith("data:") ? message.url : null,
+      pageUrl: cleanPageUrl(message.pageUrl),
+      pageTitle: message.pageTitle ? String(message.pageTitle).slice(0, 300) : null,
+      quote: message.quote ? String(message.quote).slice(0, 20000) : null,
+      tone: message.tone || null,
+      caption: message.caption ? String(message.caption).slice(0, 2000) : null,
+      capturedAt: Date.now(),
+      library: message.library || null,
+    })
+  );
+  try {
+    const r = await httpPost(
+      { "Content-Type": "application/octet-stream", "X-Archiver-Meta-Length": String(meta.length) },
+      new Blob([meta, blob]),
+      UPLOAD_TIMEOUT_MS
+    );
+    if (!message.library) rememberRecent(zone || bridgeDefaultZone);
+    forgetZones();
+    const where = String(r.path || "").split("/").slice(0, -1).pop() || "Unsorted";
+    if (r.duplicate) sendFeedback(tabId, frameId, t("duplicateIn", [where]), true);
+    else if (!message.quiet) sendFeedback(tabId, frameId, t("savedIn", [where]), true);
+    return { ok: true, id: r.path };
+  } catch (err) {
+    console.warn("[Archiver] Übergabe an die App fehlgeschlagen:", err.message);
+    bridgeCache.at = 0;
     sendFeedback(tabId, frameId, t("appSaveFailed") + (err.fromApp && err.message ? ": " + err.message : ""), false);
     return { ok: false };
   }
@@ -814,7 +967,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   if (message.type === "list-folder-downloads") {
     appBridge()
-      .then((info) => (info ? listAppFolder(message.folder) : listFolder(message.folder ? sanitizePath(message.folder) : "")))
+      .then((info) => (info ? listAppFolder(message.folder) : IS_SAFARI ? { items: [] } : listFolder(message.folder ? sanitizePath(message.folder) : "")))
       .then(sendResponse, () => sendResponse({ items: [] }));
     return true;
   }
@@ -835,6 +988,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message.type === "show-download" && message.id != null) {
+    if (IS_SAFARI) return; // ohne App keine Galerie in Safari
     searchDownloads({ id: message.id }).then((r) => {
       if (r[0] && r[0].exists !== false) chrome.downloads.show(message.id);
       else chrome.downloads.showDefaultFolder(); // nicht mehr im Verlauf → wenigstens den Ordner öffnen
@@ -843,18 +997,24 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message.type === "open-chrome-page") {
+    if (IS_SAFARI) return; // Safari › Einstellungen › Erweiterungen lässt sich nicht öffnen
     const pages = { downloads: "chrome://settings/downloads", shortcuts: "chrome://extensions/shortcuts" };
     if (pages[message.page]) chrome.tabs.create({ url: pages[message.page] });
     return;
   }
 
   if (message.type === "export-for-app") {
+    if (IS_SAFARI) {
+      sendResponse({ ok: false, error: "safari" });
+      return;
+    }
     exportForApp().then(sendResponse, (err) => sendResponse({ ok: false, error: err.message }));
     return true;
   }
 
   if (message.type === "open-app") {
-    hostCall("open_app").catch(() => {});
+    if (IS_SAFARI) launchAppNative();
+    else hostCall("open_app").catch(() => {});
     return;
   }
 
@@ -944,6 +1104,7 @@ function asTextFile(message) {
 }
 
 async function handleDownload(message, sender) {
+  if (IS_SAFARI) return handleDownloadSafari(message, sender);
   if (message.toDownloads) return saveToDownloads(message, sender);
   if (await appBridge()) return saveToApp(asTextFile(message), sender);
   // Die App war schon einmal verbunden, antwortet jetzt aber nicht: trotzdem
@@ -986,6 +1147,22 @@ async function handleDownload(message, sender) {
     });
   }
   return { ok: true, id };
+}
+
+// Safari: nur mit App. Läuft sie nicht, starten und kurz warten; sonst ein
+// Hinweis statt Downloads (die gibt es für Extensions in Safari nicht).
+async function handleDownloadSafari(message, sender) {
+  const tabId = sender.tab && sender.tab.id;
+  const frameId = sender.frameId;
+  if (message.toDownloads) {
+    sendFeedback(tabId, frameId, t("safariNoDownloads"), false);
+    return { ok: false };
+  }
+  let info = await appBridge();
+  if (!info && !appAnswered) info = await launchApp();
+  if (info) return saveToApp(asTextFile(message), sender);
+  sendFeedback(tabId, frameId, t(appAnswered ? "appNoLibrary" : "appNotRunning"), false);
+  return { ok: false };
 }
 
 function sendFeedback(tabId, frameId, text, ok) {
