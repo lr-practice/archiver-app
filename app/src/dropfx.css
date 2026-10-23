@@ -1,0 +1,135 @@
+/* dropfx.css — Ablegen auf einer Active Zone (DESIGN.md 4.13, Labor ›
+   Ablegen). Gilt für die Leiste der App (.p-hot) und die Zonenleiste am
+   ganzen Mac (.db-hot); dropfx.js setzt .fx und .fx-<variante>. */
+
+.fx {
+  position: relative;
+}
+
+.fx > :not(.fx-after, .fx-stamp, .fx-ring) {
+  position: relative;
+}
+
+.fx-mono {
+  font-family: var(--mono, var(--p-mono));
+  font-size: 11px;
+  letter-spacing: 0.02em;
+}
+
+/* Miniatur: das Bild sitzt oben rechts in der Karte, bei mehreren „+N“ */
+.fx-stamp {
+  position: absolute;
+  top: 14px;
+  right: 16px;
+  display: flex;
+  flex-direction: row-reverse;
+  align-items: center;
+  gap: 6px;
+}
+
+.fx-stamp img {
+  width: 36px;
+  height: 36px;
+  object-fit: cover;
+  border-radius: calc(var(--r-sm) * 0.6);
+}
+
+.fx-more {
+  color: var(--p-dim);
+}
+
+/* Haken vor dem Hinweis, in Textfarbe */
+.fx-check {
+  display: inline-block;
+  width: 9px;
+  height: 5px;
+  margin: 0 7px 3px 1px;
+  border-left: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: rotate(-45deg);
+  animation: fx-in 0.18s ease-out;
+}
+
+@keyframes fx-in {
+  from {
+    opacity: 0;
+  }
+}
+
+/* Ring schließt sich: in einem Zug durchgezogen */
+.fx-ring {
+  position: absolute;
+  inset: -3px;
+  width: calc(100% + 6px);
+  height: calc(100% + 6px);
+  overflow: visible;
+  pointer-events: none;
+}
+
+.fx-ring rect {
+  fill: none;
+  stroke: var(--p-text);
+  stroke-width: 1;
+  stroke-dasharray: 1;
+}
+
+/* Zähler und Dateiname rollen in ihrer Zeile */
+.fx-rolling {
+  display: block;
+  overflow: hidden;
+}
+
+.fx-roll {
+  display: flex;
+  flex-direction: column;
+}
+
+.fx-roll > span {
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.fx-is-count.fx-landed .fx-rolling {
+  color: var(--p-text);
+}
+
+/* Nachbild: grauer Abdruck des Bildes, verblasst */
+.fx-after {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: inherit;
+  filter: grayscale(1);
+  opacity: 0.22;
+  pointer-events: none;
+}
+
+.fx-landed .fx-after {
+  opacity: 0;
+  transition: opacity 1.6s ease-in;
+}
+
+/* Glühen (bis 0.40.21) */
+.fx-is-glow.fx-landed {
+  box-shadow: 0 0 0 1px rgba(var(--glow-rgb, 91, 124, 255), 0.9), 0 0 28px rgba(var(--glow-rgb, 91, 124, 255), 0.45) !important;
+}
+
+/* Hinweis bleibt sichtbar, solange die Variante spielt */
+.fx-landed .p-hot-hint {
+  opacity: 1;
+  color: var(--p-text);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fx-check {
+    animation: none;
+  }
+
+  .fx-landed .fx-after {
+    transition: none;
+  }
+}

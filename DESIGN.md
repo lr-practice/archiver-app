@@ -1,6 +1,6 @@
 # Archiver – Design-System
 
-Stand: App 0.40.22 · Extension 3.29.7
+Stand: App 0.40.23 · Extension 3.29.7
 
 Diese Datei hält fest, wie Archiver aussieht und warum. Sie gilt für die Mac-App
 (`app/src`) und die Extension (`extension/`, in Chrome und in Safari). Wer an der Oberfläche
@@ -514,7 +514,8 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
   „Gesichert in …“ (`.landed`). Scheitert es, steht „Nicht
   gesichert: …“ in `--danger` (`.failed`, kein Glühen) 2.5 s lang, dann
   blendet die Leiste aus. Die Leiste bleibt so lange stehen (`dropbar_hold`).
-- **Ablegen (0.40.22, statt Glühen):** Ab Werk „Miniatur“: Das erste Bild
+- **Ablegen (0.40.22, statt Glühen; seit 0.40.23 auch in der Leiste der App,
+  4.3, gemeinsam in `dropfx.js` und `dropfx.css`):** Ab Werk „Miniatur“: Das erste Bild
   fliegt vom Zeiger in die obere rechte Ecke der Karte (36 px, 0.28 s
   `--sheet-ease`) und bleibt dort, bis die Leiste geht; bei mehreren Dateien
   steht „+N“ in Mono davor. Das Bild kommt direkt aus der abgelegten Datei
@@ -524,7 +525,10 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
   bietet Varianten: Haken vor „Gesichert“, Ring schließt sich, Zähler (Nummer
   rollt auf „+N“), Dateiname (Name rollt zum Dateinamen, mindestens 0.6 s, und
   zurück), Nachbild (graues Bild × 0.22 verblasst in 1.6 s), Glühen (bisher).
-  Abweichung: Die Leiste in der App (4.3) und die Extension glühen noch.
+  In der App (4.3) steht dabei „Abgelegt“, weil das Verschieben dort nicht
+  abgewartet wird. Die Position aus `onDragDropEvent` ist auf macOS schon in
+  Punkten; nie durch `devicePixelRatio` teilen (0.26 bis 0.40.22 taten es, der
+  Drop landete auf Retina links daneben). Abweichung: Die Extension glüht noch.
 - **Ab Werk an (0.40.21, vorher ab 0.32.1 aus):** Weil sie nur mit ⌥ kommt,
   ist sie wieder an, auch wenn die alte Leiste ausgeschaltet war.
   Ausschalten unter Einstellungen › Mac & Browser; erst diese Wahl zählt
@@ -775,10 +779,13 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
   scrollen, Pfeile beim Hover). Eine Zone mit nur einem Bild bleibt A.
 - **Video-Vorschau:** Daumenkino (Standard, 8 Standbilder), Skim (Zeiger
   waagerecht = Zeit im Clip), Abspielen (stumm, Schleife), Aus.
-- **Ablegen (0.40.22):** Rückmeldung der Zonenleiste am ganzen Mac (4.13):
-  Miniatur (Standard), Haken, Ring, Zähler, Dateiname, Nachbild, Glühen.
-  „Danach“: Schnell weg (Standard) oder Kurz stehen. Die Leiste liest
-  `archiver.lab` selbst (`drop`, `dropLeave`).
+- **Ablegen (0.40.22):** Rückmeldung der Active-Zone-Karte in der App und am
+  ganzen Mac (4.13, seit 0.40.23 beide): Miniatur (Standard), Haken, Ring,
+  Zähler, Dateiname, Nachbild, Glühen, in zwei Reihen (4 + 3).
+  „Danach“: Schnell weg (Standard) oder Kurz stehen. `dropfx.js` liest
+  `archiver.lab` selbst (`drop`, `dropLeave`). Klassen der Karte heißen
+  `fx-is-<variante>`, nie `fx-<variante>` (sonst greifen die Regeln der
+  Bauteile wie `.fx-ring` auf die Karte).
 - **Bewegung:** Bei `prefers-reduced-motion` laufen G, Daumenkino und
   Abspielen nicht. Skim bleibt, weil es der Hand folgt.
 - **Regel:** Eine Variante, die bleibt, wandert aus dem Labor in die normale
@@ -862,8 +869,8 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
 Diese Punkte stehen hier, damit niemand sie für Absicht hält. Behoben werden
 sie nur auf ausdrückliches Go.
 
-- **Ablegen glüht noch in der App (4.3) und in der Extension (0.40.22).**
-  Nur die Zonenleiste am ganzen Mac zeigt die Miniatur (4.13). Nachziehen,
+- **Ablegen glüht noch in der Extension (0.40.23).**
+  App und Zonenleiste am ganzen Mac zeigen die Variante aus dem Labor (4.13). Nachziehen,
   sobald eine Variante aus dem Labor feststeht.
 - **Die Extension hat ihre Farben fest im Code und nutzt keine Tokens.**
   Seit 3.22.0 stimmen die Werte mit der App überein (Hellgrund `#f4f4f4`,

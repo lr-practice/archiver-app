@@ -1,5 +1,17 @@
 # Changelog
 
+## App 0.40.23 (Vorabversion)
+
+- Zonenleiste am ganzen Mac: Ein Drop landet wieder in der Zone unter dem
+  Zeiger. Seit 0.26 wurde die Position auf Retina-Bildschirmen halbiert, der
+  Drop traf deshalb oft die Karte links daneben (vermutlich der alte Fehler
+  „sortiert falsch ein“). Auch die Miniatur kam von der falschen Stelle.
+- Die Varianten aus Labor › Ablegen gelten jetzt auch für die Leiste in der
+  App (Ziehen aus der App heraus oder von außen hinein). In der App steht
+  dabei „Abgelegt“.
+- Labor › Ablegen: Die sieben Varianten stehen in zwei Reihen, statt aus dem
+  Blatt zu laufen. Die Überschrift heißt auf Englisch „Drop feedback“.
+
 ## App 0.40.22 (Vorabversion)
 
 - Zonenleiste am ganzen Mac: Die Karten haben jetzt das Format 2:1 wie die

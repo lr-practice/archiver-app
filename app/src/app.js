@@ -2880,12 +2880,15 @@
       // Ablegen in der Zonenleiste am ganzen Mac (4.13); die Leiste liest archiver.lab
       const drops = block(t("labDrops"));
       drops.appendChild(blockRow(el("div", "p-block-text", t("labDropsText"))));
-      drops.appendChild(
-        blockRow(t("labDrop"), choice(LAB_DROPS.map((id) => [id, t("labDrop_" + id)]), cur.drop, (id) => {
-          setLab({ drop: id });
-          rerender();
-        }))
-      );
+      // sieben Varianten in zwei Reihen, sonst passt die Zeile nicht ins Blatt
+      for (const [i, part] of [LAB_DROPS.slice(0, 4), LAB_DROPS.slice(4)].entries()) {
+        drops.appendChild(
+          blockRow(i ? "" : t("labDrop"), choice(part.map((id) => [id, t("labDrop_" + id)]), cur.drop, (id) => {
+            setLab({ drop: id });
+            rerender();
+          }))
+        );
+      }
       drops.appendChild(blockRow(el("div", "p-block-text", t("labDropText_" + cur.drop))));
       drops.appendChild(
         blockRow(t("labDropLeave"), choice([["fast", t("labDropLeave_fast")], ["calm", t("labDropLeave_calm")]], cur.dropLeave, (id) => {
@@ -6222,24 +6225,40 @@
     else if (!strip && fromBottom > Math.min(window.innerHeight * 0.3, 260) + 24) bar.classList.add("strip");
   }
 
-  // Abgelegt: Liegt das Ziel in der Leiste, bleibt sie kurz stehen und
-  // blendet dann ruhig aus (kein Glühen, keine Bewegung).
+  // Abgelegt: Liegt das Ziel in der Leiste, zeigt die Karte das Ankommen
+  // (dropfx.js, Labor › Ablegen), dann blendet die Leiste aus (0.40.22).
   let landingUntil = 0;
-  function landOn(target) {
+  function landOn(target, paths, pos) {
     const bar = $("dropbar");
     if (!target) return hideDropbar();
     if (bar.hidden || !bar.contains(target)) return hideDropbar();
-    bar.classList.add("leaving");
-    landingUntil = Date.now() + 500;
-    setTimeout(() => {
-      landingUntil = 0;
-      hideDropbar();
-    }, 500);
+    const parts = {
+      num: target.querySelector(".p-drop-key"),
+      name: target.querySelector(".zone-card-name"),
+      hint: target.querySelector(".p-hot-hint"),
+    };
+    // eigenes Objekt: sein Vorschaubild, es wird gleich verschoben
+    const own = insideLibrary(paths[0]) ? state.byPath.get(paths[0].slice(state.root.length + 1)) : null;
+    const url = own ? thumbSrc(own) : null;
+    landingUntil = Date.now() + 10000;
+    (async () => {
+      const play = await window.ArchiverDropFx.begin(target, parts, { paths, pos, invoke, src: fileSrc, url });
+      parts.hint.textContent = t("dropDone");
+      const delay = await window.ArchiverDropFx.land(play, lastSegment(target.dataset.zone));
+      bar.style.setProperty("--leave-delay", delay / 1000 + "s");
+      bar.classList.add("leaving");
+      landingUntil = Date.now() + delay + 200;
+      setTimeout(() => {
+        landingUntil = 0;
+        hideDropbar();
+      }, delay + 200);
+    })();
   }
 
   function hideDropbar() {
     if (Date.now() < landingUntil) return;
     $("dropbar").classList.remove("leaving");
+    $("dropbar").style.removeProperty("--leave-delay");
     dragHome = null;
     dragSection = null;
     $("dropbar").hidden = true;
@@ -6354,7 +6373,7 @@
 
     if (p.type === "drop") {
       clearDropUi();
-      landOn(target && dragPaths.length && !isHomeTarget(target) ? target : null);
+      landOn(target && dragPaths.length && !isHomeTarget(target) ? target : null, dragPaths, { x, y });
       const paths = dragPaths;
       dragPaths = [];
       if (!paths.length) return;

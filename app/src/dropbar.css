@@ -1,6 +1,6 @@
 /* dropbar.css — Active-Zones-Leiste am ganzen Mac (system.rs). Dieselbe Leiste
    wie beim Ziehen in der App (DESIGN.md 4.3): vier Glaskarten unten, Ziel
-   unter dem Zeiger mit Ring, Abgelegt mit Miniatur (0.40.22, Labor › Ablegen). Tokens aus palette.css. */
+   unter dem Zeiger mit Ring, Abgelegt: dropfx.css (0.40.22, Labor › Ablegen). Tokens aus palette.css. */
 
 :root {
   --menu-bg: rgba(40, 40, 40, 0.97);
@@ -89,112 +89,9 @@ html.light .db-hot {
   mask: var(--ring-in) 0 0 / 100% 100% no-repeat;
 }
 
-/* Abgelegt (0.40.22): Labor › Ablegen wählt, wie die Karte das Ankommen
-   zeigt. Ab Werk Miniatur; Glühen nur noch als Variante „glow“. */
-.db-hot.landed.db-s-glow {
-  box-shadow: 0 0 0 1px rgba(var(--glow-rgb), 0.9), 0 0 28px rgba(var(--glow-rgb), 0.45);
-}
-
 /* Nicht gesichert: Hinweis in --danger, kein Glühen (0.31.0) */
 .db-hot.failed .db-hint {
   color: var(--danger);
-}
-
-/* Miniatur: das Bild sitzt oben rechts in der Karte, bei mehreren „+N“ */
-.db-stamp {
-  position: absolute;
-  top: 14px;
-  right: 16px;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-direction: row-reverse;
-}
-
-.db-stamp img {
-  width: 36px;
-  height: 36px;
-  object-fit: cover;
-  border-radius: calc(var(--r-sm) * 0.6);
-}
-
-.db-more {
-  font-size: 11px;
-  color: var(--p-dim);
-}
-
-/* Haken vor „Gesichert“, in Textfarbe */
-.db-check {
-  display: inline-block;
-  width: 9px;
-  height: 5px;
-  margin: 0 7px 3px 1px;
-  border-left: 1.5px solid currentColor;
-  border-bottom: 1.5px solid currentColor;
-  transform: rotate(-45deg);
-  animation: db-in 0.18s ease-out;
-}
-
-/* Ring schließt sich: der gestrichelte Ring wird in einem Zug durchgezogen */
-.db-ring {
-  position: absolute;
-  inset: -3px;
-  width: calc(100% + 6px);
-  height: calc(100% + 6px);
-  overflow: visible;
-  pointer-events: none;
-}
-
-.db-ring rect {
-  fill: none;
-  stroke: var(--p-text);
-  stroke-width: 1;
-  stroke-dasharray: 1;
-}
-
-/* Zähler und Dateiname rollen in ihrer Zeile */
-.db-hot > .pal-mono {
-  display: block;
-  overflow: hidden;
-}
-
-.db-roll {
-  display: flex;
-  flex-direction: column;
-}
-
-.db-roll > span {
-  display: block;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.db-hot.landed.db-s-count > .pal-mono {
-  color: var(--p-text);
-}
-
-/* Nachbild: grauer Abdruck des Bildes, verblasst */
-.db-after {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  border-radius: inherit;
-  filter: grayscale(1);
-  opacity: 0.22;
-  pointer-events: none;
-}
-
-.db-hot.landed .db-after {
-  transition: opacity 1.6s ease-in;
-  opacity: 0;
-}
-
-.db-hot > span.pal-mono,
-.db-hot > div:not(.db-stamp) {
-  position: relative;
 }
 
 /* Nach dem Ablegen schnell weg (0.40.22): 0.35 s stehen, 0.18 s ausblenden;
@@ -211,8 +108,7 @@ html.light .db-hot {
 
 @media (prefers-reduced-motion: reduce) {
   .db-hot,
-  .db-bar.leaving,
-  .db-check {
+  .db-bar.leaving {
     animation: none;
   }
 
