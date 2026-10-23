@@ -1,6 +1,6 @@
 # Archiver – Design-System
 
-Stand: App 0.40.21 · Extension 3.29.7
+Stand: App 0.40.22 · Extension 3.29.7
 
 Diese Datei hält fest, wie Archiver aussieht und warum. Sie gilt für die Mac-App
 (`app/src`) und die Extension (`extension/`, in Chrome und in Safari). Wer an der Oberfläche
@@ -156,7 +156,8 @@ Ebenen vor: Navigation, Active-Zones-Leiste, Menüs und Ladeplatzhalter.
 | Ein- und Ausblenden, Toast, Wenden in der Lightbox (je Hälfte) | 0.18 s | `ease` / `ease-out` |
 | Seitenblatt, Gleiten | 0.28 s | `cubic-bezier(0.2, 0.7, 0.2, 1)` (`--sheet-ease`) |
 | Zonenleiste rein | 0.14 s | `ease-out` |
-| Zonenleiste raus | 0.2 s, 0.3 s verzögert | `ease` (Glühen auf dem Ziel bleibt kurz sichtbar). Am ganzen Mac erst, wenn gesichert ist; bei einem Fehler 2.5 s später (4.13) |
+| Zonenleiste raus | 0.2 s, 0.3 s verzögert | `ease` (Glühen auf dem Ziel bleibt kurz sichtbar). Am ganzen Mac (0.40.22) 0.18 s, 0.35 s nach „Gesichert“ (Labor „Kurz stehen“: 1.2 s), ohne Drop sofort; bei einem Fehler 2.5 s später (4.13) |
+| Miniatur, Ring und Rollen beim Ablegen (4.13) | 0.28 s | `--sheet-ease` |
 | Ring „Umlaufend“ | 1.6 s je Runde | `linear` |
 
 Für die Bewegung gilt:
@@ -484,12 +485,15 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
 ### 4.13 Zonenleiste am ganzen Mac (`dropbar.css`)
 - **Zweck:** Wie 4.3, aber beim Ziehen von Dateien in jedem Programm. Seit
   0.40.21 nur, wenn beim Ziehen ⌥ gehalten wird; ohne ⌥ bleibt alles frei.
-- **Form:** Volle Breite unten auf dem Bildschirm mit dem Zeiger, 280 px hoch,
-  dieselben vier Glaskarten, Ring und Glühen wie 4.3. Rand 10 px zu den
+- **Form:** Volle Breite unten auf dem Bildschirm mit dem Zeiger, dieselben
+  vier Glaskarten und derselbe Ring wie 4.3. Seit 0.40.22 im Format 2:1 wie
+  die Zonenkarte (2.3, 4.4): Die Höhe ergibt sich aus der Bildschirmbreite
+  (`dropbar_height`, Karte halb so hoch wie breit, plus 4 px oben und 10 px
+  unten, 120–320 px; 13-Zoll-Mac 192 px, vorher fest 280 px). Rand 10 px zu den
   Bildschirmkanten, 8 px zwischen den Karten (18.10., vorher 14 und 10),
   gleich in der App (4.3) und der Extension.
 - **Einblenden (0.40.21):** Dateien ziehen, ⌥ halten → die Leiste steht
-  sofort in voller Höhe (280 px), ohne Streifen und ohne Fenster-Animation;
+  sofort in voller Höhe, ohne Streifen und ohne Fenster-Animation;
   ⌥ darf danach losgelassen werden. Die Karten sind vorab gebaut und werden
   im Hintergrund nachgeladen, wenn sich die Bibliothek ändert; beim
   Einblenden wird nichts geladen. Ein Drop in einer Lücke oder am Rand zählt
@@ -507,9 +511,20 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
   deshalb gilt dort nur `--zone-alpha`.
 - **Ablauf (0.31.0):** Nach dem Loslassen zeigt das Ziel „Wird gesichert …“
   (`.busy`, kein Glühen). Erst wenn Import oder Verschieben fertig ist, kommt
-  „Gesichert in …“ mit Glühen (`.landed`). Scheitert es, steht „Nicht
+  „Gesichert in …“ (`.landed`). Scheitert es, steht „Nicht
   gesichert: …“ in `--danger` (`.failed`, kein Glühen) 2.5 s lang, dann
   blendet die Leiste aus. Die Leiste bleibt so lange stehen (`dropbar_hold`).
+- **Ablegen (0.40.22, statt Glühen):** Ab Werk „Miniatur“: Das erste Bild
+  fliegt vom Zeiger in die obere rechte Ecke der Karte (36 px, 0.28 s
+  `--sheet-ease`) und bleibt dort, bis die Leiste geht; bei mehreren Dateien
+  steht „+N“ in Mono davor. Das Bild kommt direkt aus der abgelegten Datei
+  (`dropbar_preview` gibt nur diese Bilddatei frei), noch bevor gesichert ist;
+  „Gesichert“ steht weiter erst danach. Ohne Bild (Video, PDF) bleibt nur der
+  Hinweis. Danach geht die Leiste schnell (2.5). Labor › Ablegen (4.24b)
+  bietet Varianten: Haken vor „Gesichert“, Ring schließt sich, Zähler (Nummer
+  rollt auf „+N“), Dateiname (Name rollt zum Dateinamen, mindestens 0.6 s, und
+  zurück), Nachbild (graues Bild × 0.22 verblasst in 1.6 s), Glühen (bisher).
+  Abweichung: Die Leiste in der App (4.3) und die Extension glühen noch.
 - **Ab Werk an (0.40.21, vorher ab 0.32.1 aus):** Weil sie nur mit ⌥ kommt,
   ist sie wieder an, auch wenn die alte Leiste ausgeschaltet war.
   Ausschalten unter Einstellungen › Mac & Browser; erst diese Wahl zählt
@@ -760,6 +775,10 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
   scrollen, Pfeile beim Hover). Eine Zone mit nur einem Bild bleibt A.
 - **Video-Vorschau:** Daumenkino (Standard, 8 Standbilder), Skim (Zeiger
   waagerecht = Zeit im Clip), Abspielen (stumm, Schleife), Aus.
+- **Ablegen (0.40.22):** Rückmeldung der Zonenleiste am ganzen Mac (4.13):
+  Miniatur (Standard), Haken, Ring, Zähler, Dateiname, Nachbild, Glühen.
+  „Danach“: Schnell weg (Standard) oder Kurz stehen. Die Leiste liest
+  `archiver.lab` selbst (`drop`, `dropLeave`).
 - **Bewegung:** Bei `prefers-reduced-motion` laufen G, Daumenkino und
   Abspielen nicht. Skim bleibt, weil es der Hand folgt.
 - **Regel:** Eine Variante, die bleibt, wandert aus dem Labor in die normale
@@ -843,6 +862,9 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
 Diese Punkte stehen hier, damit niemand sie für Absicht hält. Behoben werden
 sie nur auf ausdrückliches Go.
 
+- **Ablegen glüht noch in der App (4.3) und in der Extension (0.40.22).**
+  Nur die Zonenleiste am ganzen Mac zeigt die Miniatur (4.13). Nachziehen,
+  sobald eine Variante aus dem Labor feststeht.
 - **Die Extension hat ihre Farben fest im Code und nutzt keine Tokens.**
   Seit 3.22.0 stimmen die Werte mit der App überein (Hellgrund `#f4f4f4`,
   Sekundärtext `#5c5c5c`, Tertiär `#8f8f8f`, Karte schwarz × 0.045/0.07,

@@ -255,6 +255,16 @@ pub fn dropbar_hold(ms: u64) {
     DROPBAR_HOLD.store(crate::library::now_ms() as u64 + ms.min(60_000), Ordering::Relaxed);
 }
 
+/// Miniatur beim Ablegen (4.13): Die Zonenleiste darf das abgelegte Bild
+/// zeigen, bevor es in der Bibliothek liegt. Nur Bilder, nur diese Dateien.
+#[tauri::command]
+pub fn dropbar_preview(app: AppHandle, path: String) -> bool {
+    let p = std::path::Path::new(&path);
+    let ext = p.extension().and_then(|e| e.to_str()).unwrap_or("").to_ascii_lowercase();
+    let image = matches!(ext.as_str(), "jpg" | "jpeg" | "png" | "gif" | "webp" | "heic" | "heif" | "avif" | "tif" | "tiff" | "bmp");
+    image && p.is_file() && tauri::Manager::asset_protocol_scope(&app).allow_file(p).is_ok()
+}
+
 #[tauri::command]
 pub fn palette_hide(app: AppHandle) {
     hide_palette(&app);
@@ -417,9 +427,13 @@ fn watch_drags(app: AppHandle) {
     });
 }
 
-/// Zonenleiste (DESIGN.md 4.13): volle Höhe, sobald ⌥ gehalten wird
-#[cfg(target_os = "macos")]
-const DROPBAR_HEIGHT: f64 = 280.0;
+/// Zonenleiste (DESIGN.md 4.13): vier Karten im Format 2:1 wie in der App
+/// (Rand 10 px, Lücken 8 px, oben 4 px für den Ring), höchstens 320 px hoch
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+pub fn dropbar_height(screen_width: f64) -> f64 {
+    let card = (screen_width - 2.0 * 10.0 - 3.0 * 8.0) / 4.0;
+    (card / 2.0 + 4.0 + 10.0).round().clamp(120.0, 320.0)
+}
 
 #[cfg(target_os = "macos")]
 fn set_dropbar(app: &AppHandle, show: bool) {
@@ -430,7 +444,7 @@ fn set_dropbar(app: &AppHandle, show: bool) {
         let ns = ns.cast();
         unsafe {
             if show {
-                crate::macos::panel_bottom_of_mouse_screen(ns, DROPBAR_HEIGHT, false);
+                crate::macos::panel_bottom_of_mouse_screen(ns, dropbar_height, false);
                 crate::macos::panel_show(ns, false);
                 let _ = app2.emit_to(DROPBAR, "dropbar-show", ());
             } else {
@@ -443,6 +457,13 @@ fn set_dropbar(app: &AppHandle, show: bool) {
 #[cfg(test)]
 mod tests {
     use super::SystemPrefs;
+
+    #[test]
+    fn dropbar_cards_are_two_to_one() {
+        // MacBook Air 13": 1470 pt breit → Karten 356 × 178
+        assert_eq!(super::dropbar_height(1470.0), 192.0);
+        assert_eq!(super::dropbar_height(6000.0), 320.0);
+    }
 
     #[test]
     fn dropbar_with_option_is_on_unless_turned_off_again() {

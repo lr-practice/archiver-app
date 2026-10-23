@@ -704,8 +704,10 @@ pub unsafe fn panel_center_on_mouse_screen(window: *mut AnyObject) {
 }
 
 /// Zonenleiste: volle Breite unten auf dem Bildschirm mit dem Zeiger.
-pub unsafe fn panel_bottom_of_mouse_screen(window: *mut AnyObject, height: f64, animate: bool) {
+/// Die Höhe ergibt sich aus der Breite des Bildschirms (`height(breite)`).
+pub unsafe fn panel_bottom_of_mouse_screen(window: *mut AnyObject, height: impl Fn(f64) -> f64, animate: bool) {
     let Some(vf) = mouse_screen_frame() else { return };
+    let height = height(vf.size.width);
     let rect = NSRect::new(vf.origin, NSSize::new(vf.size.width, height.min(vf.size.height)));
     let _: () = msg_send![window, setFrame: rect, display: true, animate: animate];
 }

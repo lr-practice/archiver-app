@@ -1779,6 +1779,7 @@ pub fn run() {
             viewer::viewer_make_default,
             system::palette_hide,
             system::dropbar_hold,
+            system::dropbar_preview,
             log_error,
             system::palette_ghost,
             system::palette_place,

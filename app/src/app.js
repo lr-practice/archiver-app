@@ -105,6 +105,7 @@
   const LAB_SIZES = { S: 0.8, M: 1, L: 1.25, XL: 1.5 };
   const LAB_INKS = { text: "var(--p-text)", dim: "var(--p-dim)", faint: "var(--p-faint)", accent: "var(--accent)" };
   const LAB_FONTS = ["geist", "melange"];
+  const LAB_DROPS = ["mini", "check", "ring", "count", "name", "after", "glow"];
   function lab() {
     const v = pref("lab", null) || {};
     return {
@@ -115,6 +116,8 @@
       title: v.title in LAB_INKS ? v.title : "text",
       text: v.text in LAB_INKS ? v.text : "faint",
       font: LAB_FONTS.includes(v.font) ? v.font : "geist",
+      drop: LAB_DROPS.includes(v.drop) ? v.drop : "mini",
+      dropLeave: v.dropLeave === "calm" ? "calm" : "fast",
     };
   }
   function setLab(patch) {
@@ -2874,6 +2877,23 @@
         }))
       );
       wrap.appendChild(video);
+      // Ablegen in der Zonenleiste am ganzen Mac (4.13); die Leiste liest archiver.lab
+      const drops = block(t("labDrops"));
+      drops.appendChild(blockRow(el("div", "p-block-text", t("labDropsText"))));
+      drops.appendChild(
+        blockRow(t("labDrop"), choice(LAB_DROPS.map((id) => [id, t("labDrop_" + id)]), cur.drop, (id) => {
+          setLab({ drop: id });
+          rerender();
+        }))
+      );
+      drops.appendChild(blockRow(el("div", "p-block-text", t("labDropText_" + cur.drop))));
+      drops.appendChild(
+        blockRow(t("labDropLeave"), choice([["fast", t("labDropLeave_fast")], ["calm", t("labDropLeave_calm")]], cur.dropLeave, (id) => {
+          setLab({ dropLeave: id });
+          rerender();
+        }))
+      );
+      wrap.appendChild(drops);
       const head = block(t("labHeads"));
       head.appendChild(blockRow(el("div", "p-block-text", t("labHeadsText"))));
       // 14 Varianten in zwei Reihen, sonst passt die Zeile nicht ins Blatt

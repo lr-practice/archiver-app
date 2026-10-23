@@ -1,5 +1,18 @@
 # Changelog
 
+## App 0.40.22 (Vorabversion)
+
+- Zonenleiste am ganzen Mac: Die Karten haben jetzt das Format 2:1 wie die
+  Zonenkarten in der App. Die Leiste ist dadurch flacher (auf einem 13-Zoll-Mac
+  192 statt 280 px).
+- Ablegen ohne blaues Glühen: Das abgelegte Bild fliegt als Miniatur in die
+  obere rechte Ecke der Karte, bei mehreren Dateien mit „+N“. Danach geht die
+  Leiste schnell (0.35 s stehen, 0.18 s ausblenden). Lässt man ohne Drop los,
+  ist sie sofort weg.
+- Neu im Labor › Ablegen: Miniatur, Haken, Ring, Zähler, Dateiname, Nachbild
+  und das alte Glühen zum Vergleichen. Dazu „Danach“: schnell weg oder kurz
+  stehen.
+
 ## App 0.40.21 (Vorabversion)
 
 - Zonenleiste am ganzen Mac ist zurück: Dateien irgendwo ziehen (Finder,
