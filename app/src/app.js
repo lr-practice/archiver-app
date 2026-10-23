@@ -5921,10 +5921,25 @@
     showLightboxItem();
   }
 
-  // Wolke (0.39.1): weitere Referenzen um das offene Objekt sammeln (cloud.js)
+  // Atlas (0.39.1 als Wolke): weitere Referenzen um das offene Objekt sammeln (cloud.js)
   function openCloud() {
     const item = lightboxItem();
     if (item && window.ArchiverCloud) window.ArchiverCloud.open(item);
+  }
+
+  // Auswahl in der Zone › Im Atlas öffnen (0.42.0): das erste Bild ist die Mitte
+  function openAtlas(items) {
+    const list = items.filter((i) => kindOf(i) === "image" || i.thumb);
+    if (!list.length || !window.ArchiverCloud) return;
+    closeMenus();
+    window.ArchiverCloud.open(list[0], list.slice(1));
+  }
+
+  // Aus dem Atlas zurück: Zone öffnen, Bild wählen und zeigen
+  function showItemInZone(item) {
+    if (!$("lightbox").hidden) closeLightbox();
+    setFocus(item.zone);
+    requestAnimationFrame(() => selectAndShow(item.path));
   }
 
   function closeLightbox() {
@@ -7294,6 +7309,7 @@
     menu.appendChild(el("div", "p-more-label", t("markLabel")));
     menu.appendChild(markRow(items, closeMenus));
     rule();
+    if (window.ArchiverCloud && items.some((i) => kindOf(i) === "image" || i.thumb)) entry(menu, t("ctxAtlas"), () => openAtlas(items));
     if (isZone(state.focus) && !state.query.trim() && canEdit(state.focus)) entry(menu, t("newFolderWith"), () => newFolder(true));
     entry(menu, t("renameItems"), () => openRenameSheet(items));
     entry(menu, t("ctxCopy"), () => copyImages(items), "⌘C");
@@ -8719,7 +8735,19 @@
     modal.onEnter = onEnter || null;
   }
 
-  if (window.ArchiverCloud) window.ArchiverCloud.init({ el, button, thumbSrc, kindOf, toast, tones: QUOTE_TONES, fullSrc: (i) => (kindOf(i) === "image" ? fileSrc(i.abs) : thumbSrc(i)), items: () => state.items });
+  if (window.ArchiverCloud) window.ArchiverCloud.init({
+      el,
+      button,
+      thumbSrc,
+      kindOf,
+      toast,
+      invoke,
+      tones: QUOTE_TONES,
+      fullSrc: (i) => (kindOf(i) === "image" ? fileSrc(i.abs) : thumbSrc(i)),
+      imagePath: (i) => (kindOf(i) === "image" ? i.abs : null),
+      showInZone: showItemInZone,
+      items: () => state.items,
+    });
 
   async function boot() {
     applyBrand();

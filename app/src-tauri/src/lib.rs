@@ -6,6 +6,7 @@
 //   "library-changed"  Bestand hat sich geändert → Oberfläche lädt neu
 //   "thumbs-ready"     [{ hash, thumb }] neue Vorschaubilder
 
+pub mod atlas;
 pub mod bridge;
 pub mod http_bridge;
 pub mod library;
@@ -1013,6 +1014,24 @@ async fn export_moodboard(app: AppHandle, title: String, meta: String, file_name
     Ok(Some(path.to_string_lossy().into_owned()))
 }
 
+/// Atlas als Bild (0.42.0): PNG der ganzen Anordnung, Sichern-Dialog wie beim Moodboard
+#[tauri::command]
+async fn export_cloud_image(app: AppHandle, file_name: String, image: atlas::Sheet) -> Result<Option<String>, String> {
+    let mut dialog = app.dialog().file().add_filter("PNG", &["png"]).set_file_name(&file_name);
+    if let Some(dir) = dirs::download_dir() {
+        dialog = dialog.set_directory(dir);
+    }
+    let Some(path) = dialog.blocking_save_file().and_then(|p| p.into_path().ok()) else {
+        return Ok(None);
+    };
+    let target = path.clone();
+    tauri::async_runtime::spawn_blocking(move || atlas::write_png(&image, &target))
+        .await
+        .map_err(|e| e.to_string())??;
+    let _ = app.opener().reveal_item_in_dir(&path);
+    Ok(Some(path.to_string_lossy().into_owned()))
+}
+
 #[tauri::command]
 async fn move_items(app: AppHandle, state: State<'_, AppState>, paths: Vec<String>, zone: String, exact: Option<bool>) -> Result<Vec<String>, String> {
     let lib = current(&state)?;
@@ -1752,6 +1771,7 @@ pub fn run() {
             open_file,
             export_pdf,
             export_moodboard,
+            export_cloud_image,
             export_flow,
             export_package,
             set_note,

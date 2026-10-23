@@ -1,5 +1,28 @@
 # Changelog
 
+## App 0.42.0 (Vorabversion)
+
+- Die Wolke heißt jetzt Atlas, nach Warburgs Bildatlas.
+- Eine Leiste statt zwei: „Ansicht ▾“ öffnet ein Feld mit den neun Ansichten,
+  Abstand, Mischen und den Fassungen, das Quadrat daneben die Flächen. Dazu
+  + Referenz, Autoplay, Als Bild, Ausblenden und Schließen. „+5 ähnliche“
+  steht jetzt im Glas von + Referenz neben der Suche.
+- Rechtsklick auf ein Bild: Groß ansehen, In die Mitte oder Vergleichen,
+  Gruppe bilden oder lösen, Größe S M L XL, Eigener Atlas, In der Zone zeigen,
+  Aus dem Atlas nehmen.
+- In einer Zone mehrere Bilder wählen, Rechtsklick › Im Atlas öffnen: das
+  erste ist die Mitte, die anderen liegen gleich daneben.
+- Autoplay (P): Im Fokus wechselt die Mitte alle 3,2 Sekunden, mit Auswahl nur
+  durch die Auswahl. Ein Klick auf die Fläche hält an.
+- Leiste ausblenden mit H, zurück mit H oder Esc.
+- Als Bild: die ganze Anordnung als PNG, lange Seite bis 4000 px, mit
+  Sichern-Dialog.
+- Fassungen: beliebig viele benannte Stände je Atlas sichern und wieder
+  auslegen. Rechtsklick auf eine Fassung löscht sie.
+- Die Linien beim Überfahren bleiben und sagen jetzt, was sie verbinden:
+  unter den drei verbundenen Bildern steht „Farbe 94 %“, der Anteil gleicher
+  Farben.
+
 ## App 0.41.1 (Vorabversion)
 
 - Wolke, Gruppen: Ein Klick auf ein Bild einer Gruppe wählt die ganze Gruppe,

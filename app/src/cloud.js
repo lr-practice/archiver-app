@@ -1,13 +1,15 @@
-// cloud.js — Wolke (0.39.1, neu gedacht 0.41.0): Am offenen Objekt weitere
-// Referenzen andocken und sie wie auf einem Tisch ordnen. Neun Ansichten:
+// cloud.js — Atlas (bis 0.41 „Wolke“, 0.39.1, neu gedacht 0.41.0 und 0.42.0):
+// Am offenen Objekt weitere Referenzen andocken und sie wie auf einem Tisch
+// ordnen. Eine Leiste unten, Rechtsklick auf ein Bild, Fassungen. Neun Ansichten:
 // Wolke, Fokus, Raster, Spalten, Spektrum, Strang, Stapel, Vergleich, Frei.
 // Jede Ansicht rechnet ihre Lage einmal aus, die Objekte gleiten per CSS
 // dorthin. Mehrfachauswahl (⇧/⌘, Lasso, ⌘A), Größe S M L XL, Gruppen (G),
-// groß ansehen (Leertaste), Fäden zu den ähnlichsten beim Überfahren.
+// groß ansehen (Leertaste), Fäden zu den ähnlichsten beim Überfahren,
+// Autoplay im Fokus (P), Leiste ausblenden (H), als PNG sichern.
 // Ziehen legt Objekte frei ab und schaltet auf „Frei“.
 //
 // Gespeichert wird nur, wer zur Wolke gehört (Hash, Größe, Gruppe), die freie
-// Lage und die Fläche, lokal unter archiver.clouds. Siehe DESIGN.md 4.25.
+// Lage, die Fläche und die Fassungen, lokal unter archiver.clouds. Siehe DESIGN.md 4.25.
 
 (function () {
   const { t } = window.ArchiverI18n;
@@ -25,6 +27,8 @@
   const HUES = { red: 0, orange: 28, yellow: 55, green: 125, teal: 175, blue: 215, purple: 275, pink: 330, brown: 24 };
   const NEUTRAL = ["white", "gray", "black"];
   const MAX_CLOUDS = 300;
+  const MAX_VERSIONS = 12;
+  const AUTO_MS = 3200; // Autoplay: so lange bleibt ein Bild in der Mitte
   const reduce = () => window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
   const C = {
@@ -43,6 +47,11 @@
     hover: null,
     drag: null,
     look: null, // { list, at }
+    pop: null, // offenes Auswahlfeld über der Leiste: "view" oder "tone"
+    auto: 0, // Autoplay-Takt
+    barHidden: false,
+    ctx: false, // Rechtsklick-Menü offen
+    versions: [], // Fassungen: [{ n, m, t, p }]
     picker: false,
     query: "",
   };
@@ -67,7 +76,7 @@
     const refs = C.nodes.slice(1).map((n) => [keyOf(n.item), n.step, 0, n.group || 0]);
     const free = {};
     for (const [k, p] of C.free) free[k] = [Math.round(p[0] * 1000) / 1000, Math.round(p[1] * 1000) / 1000];
-    if (refs.length) all[key] = { m: C.view, g: C.gap, t: C.tone, s: C.nodes[0].step, r: refs, p: free, at: Date.now() };
+    if (refs.length) all[key] = { m: C.view, g: C.gap, t: C.tone, s: C.nodes[0].step, r: refs, p: free, v: C.versions, at: Date.now() };
     else delete all[key];
     const keys = Object.keys(all);
     if (keys.length > MAX_CLOUDS) keys.sort((a, b) => (all[a].at || 0) - (all[b].at || 0)).slice(0, keys.length - MAX_CLOUDS).forEach((k) => delete all[k]);
@@ -281,9 +290,10 @@
 
   function bounds() {
     const r = C.root.getBoundingClientRect();
-    const top = $("clTop").getBoundingClientRect().bottom - r.top + 24;
-    const lower = C.picker ? $("clPicker") : $("clNav");
-    const bottom = lower.getBoundingClientRect().top - r.top - 24;
+    // Oben nur Platz für die Fensterknöpfe; unten die Leiste, außer sie ist ausgeblendet
+    const top = 52;
+    const lower = C.barHidden ? null : C.picker ? $("clPicker") : $("clNav");
+    const bottom = lower ? lower.getBoundingClientRect().top - r.top - 24 : r.height - 28;
     const side = 24;
     return { x: side, y: top, w: r.width - 2 * side, h: Math.max(120, bottom - top), W: r.width, H: r.height };
   }
@@ -707,6 +717,8 @@
     threads();
   }
 
+  // Strang: Kette vom ähnlichsten zum nächsten. Überfahren: die drei Bilder
+  // mit der ähnlichsten Durchschnittsfarbe
   function threads() {
     const svg = $("clLinks");
     svg.replaceChildren();
@@ -716,7 +728,11 @@
       p.setAttribute("d", "M" + C.chain.map((n) => n.x + " " + n.y).join(" L"));
       svg.appendChild(p);
     }
-    for (const n of C.nodes) n.el.classList.remove("near");
+    for (const n of C.nodes) {
+      n.el.classList.remove("near");
+      const why = n.el.querySelector(".cl-why");
+      if (why) why.remove();
+    }
     const h = C.hover;
     if (!h || C.drag || !C.nodes.includes(h)) return;
     C.nodes
@@ -731,6 +747,8 @@
         l.setAttribute("y2", n.y);
         svg.appendChild(l);
         n.el.classList.add("near");
+        // Was die Linie meint: Anteil gleicher Farben (0.42.0)
+        n.el.appendChild(el("span", "cl-why", t("cloudWhy", { n: Math.round(colorSim(h, n) * 100) })));
       });
   }
 
@@ -768,8 +786,9 @@
     lasso.id = "clLasso";
     lasso.hidden = true;
     stage.append(svg, labels, lasso);
-    const top = el("nav", "lb-bar cl-top");
-    top.id = "clTop";
+    const pop = el("div", "cl-pop");
+    pop.id = "clPop";
+    pop.hidden = true;
     const picker = el("div", "cl-picker");
     picker.id = "clPicker";
     picker.hidden = true;
@@ -778,7 +797,10 @@
     const look = el("div", "cl-look");
     look.id = "clLook";
     look.hidden = true;
-    root.append(stage, top, picker, nav, look);
+    root.append(stage, pop, picker, nav, look);
+    root.addEventListener("pointerdown", (e) => {
+      if (C.ctx && !e.target.closest(".cl-ctx")) closeCtx();
+    }, true);
     document.body.appendChild(root);
     C.root = root;
     bindPointer(stage);
@@ -800,6 +822,7 @@
 
   function setView(v) {
     if (!VIEWS.includes(v)) return;
+    if (v !== "focus") stopAuto();
     C.view = v;
     if (v !== "piles") C.fan = null;
     layout();
@@ -813,23 +836,17 @@
     save();
   }
 
+  // Eine Leiste unten (0.41.2): Ansicht und Fläche öffnen ein Feld darüber
   function renderBar() {
-    const top = $("clTop");
-    top.replaceChildren();
-    for (const v of VIEWS) top.appendChild(lbBtn(t("cloudView_" + v), C.view === v, () => setView(v), t("cloudViewTitle_" + v)));
-    top.appendChild(sep());
-    top.appendChild(el("span", "cl-label", t("cloudGap")));
-    for (const g of Object.keys(GAPS))
-      top.appendChild(
-        lbBtn(t("cloudGap_" + g), C.gap === g, () => {
-          C.gap = g;
-          layout();
-          save();
-        })
-      );
-
     const nav = $("clNav");
+    nav.hidden = C.barHidden;
     nav.replaceChildren();
+    fillBar(nav);
+    // Feld erst setzen, wenn die Leiste steht: es richtet sich nach ihr
+    if (C.pop) renderPop();
+  }
+
+  function fillBar(nav) {
     const sel = selected();
     if (sel.length) {
       nav.appendChild(el("span", "cl-count", t("cloudSelected", { n: sel.length })));
@@ -854,34 +871,312 @@
       nav.appendChild(lbBtn("×", false, () => selectOnly(null), "esc"));
       return;
     }
+    const view = lbBtn(t("cloudView_" + C.view) + " ▾", C.pop === "view", () => togglePop("view"), t("cloudViewPick"));
+    view.classList.add("cl-pop-btn");
+    view.dataset.pop = "view";
+    nav.appendChild(view);
+    const tone = A.button("cl-tone cl-pop-btn" + (C.pop === "tone" ? " active" : ""), "", () => togglePop("tone"));
+    tone.dataset.tone = C.tone;
+    tone.dataset.pop = "tone";
+    if (A.tones && A.tones[C.tone]) tone.style.setProperty("--sw", A.tones[C.tone][0]);
+    tone.title = t("cloudTone_" + C.tone);
+    nav.appendChild(tone);
+    nav.appendChild(sep());
     nav.appendChild(lbBtn("+ " + t("cloudAdd"), C.picker, togglePicker, t("cloudAddTitle")));
-    nav.appendChild(lbBtn(t("cloudSimilar"), false, addSimilar, t("cloudSimilarTitle")));
-    nav.appendChild(
-      lbBtn(t("cloudShuffle"), false, () => {
-        C.shuffle++;
-        if (C.view === "free") C.free.clear();
-        layout();
-        save();
-      }, t("cloudShuffleTitle"))
-    );
     nav.appendChild(sep());
-    nav.appendChild(el("span", "cl-label", t("cloudSizeFocus")));
-    STEPS.forEach((s, i) => nav.appendChild(lbBtn(s, C.nodes[0] && C.nodes[0].step === i, () => resize(i))));
-    nav.appendChild(sep());
-    nav.appendChild(el("span", "cl-count", String(C.nodes.length - 1)));
+    nav.appendChild(lbBtn(t("cloudAuto"), !!C.auto, () => toggleAuto(), t("cloudAutoTitle")));
+    nav.appendChild(lbBtn(t("cloudSaveImage"), false, saveImage, t("cloudSaveImageTitle")));
     nav.appendChild(el("span", "cl-flex"));
-    const tones = el("span", "cl-tones");
-    for (const k of TONES) {
-      const b = A.button("cl-tone" + (C.tone === k ? " active" : ""), "", () => setTone(k));
-      b.dataset.tone = k;
-      if (A.tones && A.tones[k]) b.style.setProperty("--sw", A.tones[k][0]);
-      b.title = t("cloudTone_" + k);
-      b.setAttribute("aria-label", t("cloudTone_" + k));
-      tones.appendChild(b);
-    }
-    nav.appendChild(tones);
-    nav.appendChild(sep());
+    nav.appendChild(lbBtn(t("cloudHide"), false, () => hideBar(true), t("cloudHideTitle")));
     nav.appendChild(lbBtn(t("cloudClose"), false, close, "esc"));
+  }
+
+  // ---- Feld über der Leiste: Ansicht (mit Abstand und Mischen) oder Fläche ----
+
+  function togglePop(kind) {
+    C.pop = C.pop === kind ? null : kind;
+    renderBar();
+    if (!C.pop) $("clPop").hidden = true;
+  }
+
+  function closePop() {
+    if (!C.pop) return false;
+    C.pop = null;
+    $("clPop").hidden = true;
+    renderBar();
+    return true;
+  }
+
+  function renderPop() {
+    const box = $("clPop");
+    box.replaceChildren();
+    box.hidden = C.barHidden || !C.pop;
+    if (box.hidden) return;
+    if (C.pop === "view") {
+      box.appendChild(el("span", "cl-label", t("cloudViewLabel")));
+      const list = el("div", "cl-pop-row");
+      for (const v of VIEWS)
+        list.appendChild(
+          lbBtn(t("cloudView_" + v), C.view === v, () => {
+            setView(v);
+            closePop();
+          }, t("cloudViewTitle_" + v))
+        );
+      box.appendChild(list);
+      box.appendChild(el("span", "cl-label", t("cloudGap")));
+      const gaps = el("div", "cl-pop-row");
+      for (const g of Object.keys(GAPS))
+        gaps.appendChild(
+          lbBtn(t("cloudGap_" + g), C.gap === g, () => {
+            C.gap = g;
+            layout();
+            save();
+          })
+        );
+      gaps.appendChild(sep());
+      gaps.appendChild(
+        lbBtn(t("cloudShuffle"), false, () => {
+          C.shuffle++;
+          if (C.view === "free") C.free.clear();
+          layout();
+          save();
+        }, t("cloudShuffleTitle"))
+      );
+      box.appendChild(gaps);
+      box.appendChild(el("span", "cl-label", t("cloudVersions")));
+      const vs = el("div", "cl-pop-row");
+      C.versions.forEach((v, i) => {
+        const b = lbBtn(v.n, false, () => {
+          applyVersion(v);
+          closePop();
+        }, t("cloudVersionTitle"));
+        b.addEventListener("contextmenu", (e) => {
+          e.preventDefault();
+          C.versions.splice(i, 1);
+          save();
+          renderPop();
+        });
+        vs.appendChild(b);
+      });
+      vs.appendChild(lbBtn("+ " + t("cloudVersionSave"), false, saveVersion));
+      box.appendChild(vs);
+    } else {
+      box.appendChild(el("span", "cl-label", t("cloudTonePick")));
+      const row = el("div", "cl-pop-row cl-tones");
+      for (const k of TONES) {
+        const b = A.button("cl-tone big" + (C.tone === k ? " active" : ""), "", () => setTone(k));
+        b.dataset.tone = k;
+        if (A.tones && A.tones[k]) b.style.setProperty("--sw", A.tones[k][0]);
+        b.title = t("cloudTone_" + k);
+        b.setAttribute("aria-label", t("cloudTone_" + k));
+        row.appendChild(b);
+      }
+      box.appendChild(row);
+    }
+    // Über dem Knopf, der es geöffnet hat, aber nie über den Rand hinaus
+    const btn = $("clNav").querySelector(`[data-pop="${C.pop}"]`);
+    const r = C.root.getBoundingClientRect();
+    const nb = $("clNav").getBoundingClientRect();
+    box.style.bottom = r.bottom - nb.top + 10 + "px";
+    const x = btn ? btn.getBoundingClientRect().left - r.left - 6 : nb.left - r.left;
+    box.style.left = Math.max(16, Math.min(x, r.width - box.offsetWidth - 16)) + "px";
+  }
+
+  // ---- Fassungen: benannte Stände eines Atlas (Ansicht, Fläche, freie Lage) ----
+
+  function saveVersion() {
+    const b = bounds();
+    const p = {};
+    // Was gerade zu sehen ist, als freie Lage festhalten
+    for (const n of C.nodes) p[keyOf(n.item)] = [Math.round(((n.x - b.x) / b.w) * 1000) / 1000, Math.round(((n.y - b.y) / b.h) * 1000) / 1000];
+    let k = C.versions.length + 1;
+    while (C.versions.some((v) => v.n === t("cloudVersionName", { n: k }))) k++;
+    C.versions.push({ n: t("cloudVersionName", { n: k }), m: C.view, t: C.tone, p });
+    if (C.versions.length > MAX_VERSIONS) C.versions.shift();
+    save();
+    renderPop();
+    A.toast(t("cloudVersionSaved", { name: C.versions[C.versions.length - 1].n }));
+  }
+
+  function applyVersion(v) {
+    stopAuto();
+    C.free = new Map(Object.entries(v.p || {}));
+    C.tone = TONES.includes(v.t) ? v.t : C.tone;
+    applyTone();
+    // Eine Fassung liegt immer so, wie sie gesichert wurde
+    C.view = "free";
+    C.fan = null;
+    layout();
+    save();
+  }
+
+  // ---- Rechtsklick auf ein Bild: was mit ihm geht, und die Wege hinaus ----
+
+  // Das Menü entsteht bei jedem Öffnen neu: app.js räumt alle .zone-menu weg (closeMenus)
+  function closeCtx() {
+    const m = $("clCtx");
+    C.ctx = false;
+    if (!m) return false;
+    m.remove();
+    return true;
+  }
+
+  function openCtx(n, x, y) {
+    closePop();
+    stopAuto();
+    if (!C.sel.has(n)) selectGroup(n);
+    const sel = selected();
+    const one = sel.length === 1 ? sel[0] : null;
+    closeCtx();
+    const m = el("div", "zone-menu p-ctx-menu cl-ctx");
+    m.id = "clCtx";
+    m.addEventListener("contextmenu", (e) => e.preventDefault());
+    C.root.appendChild(m);
+    const entry = (text, fn, key, cls = "") => {
+      const b = A.button("zone-menu-item" + cls, text, () => {
+        closeCtx();
+        fn();
+      });
+      if (key) b.appendChild(el("span", "p-ctx-key", key));
+      m.appendChild(b);
+    };
+    const rule = () => m.appendChild(el("div", "p-more-rule"));
+    if (!one) m.appendChild(el("div", "p-more-label", t("cloudSelected", { n: sel.length })));
+    entry(t("cloudLookLong"), () => openLook(one || sel[0]), "␣");
+    if (one)
+      entry(t("cloudCenter"), () => {
+        C.center = one;
+        setView(C.view === "focus" || C.view === "strand" ? C.view : "focus");
+      });
+    else entry(t("cloudCompare"), () => setView("compare"));
+    if (sel.length > 1) entry(t("cloudGroupMake"), group, "G");
+    if (sel.some((x) => x.group)) entry(t("cloudUngroup"), ungroup);
+    m.appendChild(el("div", "p-more-label", t("cloudSizeSel")));
+    const sizes = el("div", "cl-ctx-sizes");
+    const same = sel.every((x) => x.step === sel[0].step) ? sel[0].step : -1;
+    STEPS.forEach((s, i) =>
+      sizes.appendChild(
+        A.button("lb-btn" + (same === i ? " active" : ""), s, () => {
+          closeCtx();
+          resize(i);
+        })
+      )
+    );
+    m.appendChild(sizes);
+    if (one) {
+      rule();
+      if (one !== C.nodes[0]) entry(t("cloudOwn"), () => open(one.item), "↩");
+      if (A.showInZone) entry(t("cloudShowInZone"), () => {
+        close();
+        A.showInZone(one.item);
+      });
+    }
+    if (sel.some((x) => x !== C.nodes[0])) {
+      rule();
+      entry(t("cloudRemoveLong"), () => removeRefs(sel), "⌫", " danger");
+    }
+    C.ctx = true;
+    const r = C.root.getBoundingClientRect();
+    const w = m.offsetWidth, h = m.offsetHeight;
+    m.style.left = Math.max(8, Math.min(x - r.left, r.width - w - 8)) + "px";
+    m.style.top = Math.max(8, Math.min(y - r.top, r.height - h - 8)) + "px";
+  }
+
+  // ---- Leiste ausblenden (H) ----
+
+  function hideBar(on) {
+    C.barHidden = on;
+    C.pop = null;
+    if (on && C.picker) togglePicker();
+    try {
+      localStorage.setItem("archiver.cloudBarHidden", JSON.stringify(on));
+    } catch {}
+    if (on) A.toast(t("cloudBarHint"));
+    renderBar();
+    layout();
+  }
+
+  // ---- Autoplay: im Fokus wechselt die Mitte im Takt (P) ----
+
+  function stopAuto() {
+    if (!C.auto) return false;
+    clearInterval(C.auto);
+    C.auto = 0;
+    if (C.root) renderBar();
+    return true;
+  }
+
+  function toggleAuto() {
+    if (stopAuto()) return;
+    if (C.nodes.length < 2) return;
+    if (C.view !== "focus") {
+      C.view = "focus";
+      C.fan = null;
+    }
+    C.auto = setInterval(() => {
+      // Mehrere gewählt: nur durch die Auswahl, sonst durch alle
+      const list = C.sel.size > 1 ? selected() : C.nodes;
+      const i = list.indexOf(centerNode());
+      C.center = list[(i + 1) % list.length];
+      layout();
+    }, AUTO_MS);
+    layout();
+    save();
+  }
+
+  // ---- Als Bild sichern: die ganze Anordnung als PNG (lib.rs export_cloud_image) ----
+
+  function background() {
+    const probe = el("span");
+    probe.style.color = C.root.style.getPropertyValue("--cl-bg") || "";
+    if (C.tone === "lightbox" || !probe.style.color) {
+      // Lightbox ist halbdurchsichtig: im Bild der deckende Grund dahinter
+      return document.documentElement.classList.contains("light") ? [235, 235, 235] : [10, 10, 10];
+    }
+    C.root.appendChild(probe);
+    const m = getComputedStyle(probe).color.match(/\d+(\.\d+)?/g) || [10, 10, 10];
+    probe.remove();
+    return m.slice(0, 3).map((v) => Math.round(Number(v)));
+  }
+
+  async function saveImage() {
+    if (!C.nodes.length) return;
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (const n of C.nodes) {
+      x0 = Math.min(x0, n.x - n.w / 2);
+      y0 = Math.min(y0, n.y - n.h / 2);
+      x1 = Math.max(x1, n.x + n.w / 2);
+      y1 = Math.max(y1, n.y + n.h / 2);
+    }
+    const pad = Math.max(24, Math.round(Math.max(x1 - x0, y1 - y0) * 0.06));
+    x0 -= pad;
+    y0 -= pad;
+    x1 += pad;
+    y1 += pad;
+    // Lange Seite höchstens 4000 px, dabei nie kleiner als auf dem Bildschirm
+    const k = Math.max(1, Math.min(4, 4000 / Math.max(x1 - x0, y1 - y0)));
+    const items = C.nodes
+      .map((n, i) => ({ n, i }))
+      .sort((a, b) => (a.n.z || 0) - (b.n.z || 0) || a.i - b.i)
+      .map(({ n }) => ({
+        path: A.imagePath(n.item),
+        thumb: n.item.thumb || null,
+        x: (n.x - n.w / 2 - x0) * k,
+        y: (n.y - n.h / 2 - y0) * k,
+        w: n.w * k,
+        h: n.h * k,
+        alpha: n.dim ? 0.4 : 1,
+      }));
+    const name = String(C.focus.filename || "Archiver").replace(/\.[^.]+$/, "") + " – " + t("cloud") + ".png";
+    try {
+      const out = await A.invoke("export_cloud_image", {
+        fileName: name,
+        image: { width: Math.round((x1 - x0) * k), height: Math.round((y1 - y0) * k), bg: background(), items },
+      });
+      if (out) A.toast(t("cloudSaved"));
+    } catch (err) {
+      A.toast(String(err), false);
+    }
   }
 
   function renderPicker() {
@@ -903,7 +1198,11 @@
           togglePicker();
         }
       });
-      box.appendChild(input);
+      const row = el("div", "cl-picker-row");
+      row.appendChild(input);
+      // Fünf ähnlichste auf einmal, seit 0.42.0 hier statt in der Leiste
+      row.appendChild(lbBtn(t("cloudSimilar"), false, addSimilar, t("cloudSimilarTitle")));
+      box.appendChild(row);
       box.appendChild(el("div", "cl-strip"));
     }
     renderStrip();
@@ -1009,6 +1308,8 @@
     };
     stage.addEventListener("pointerdown", (e) => {
       if (e.button !== 0) return;
+      closePop();
+      stopAuto();
       const p = at(e);
       const n = nodeOf(e);
       const multi = e.shiftKey || e.metaKey || e.ctrlKey;
@@ -1100,6 +1401,11 @@
       C.hover = null;
       threads();
     });
+    stage.addEventListener("contextmenu", (e) => {
+      e.preventDefault();
+      const n = nodeOf(e);
+      if (n) openCtx(n, e.clientX, e.clientY);
+    });
     stage.addEventListener("dblclick", (e) => {
       const n = nodeOf(e);
       if (n) openLook(n);
@@ -1108,8 +1414,10 @@
 
   // ---- Öffnen und Schließen ----
 
-  function open(item) {
+  // extra: weitere Bilder, die gleich dazukommen (Auswahl in der Zone › Im Atlas öffnen)
+  function open(item, extra = []) {
     if (!item) return;
+    closeCtx();
     if (!C.root) build();
     if (C.focus) save();
     for (const n of C.nodes) n.el.remove();
@@ -1119,12 +1427,14 @@
     C.fan = null;
     C.hover = null;
     C.focus = item;
+    C.barHidden = lastPref("cloudBarHidden", (v) => typeof v === "boolean", false);
     closeLook();
     const stored = load()[keyOf(item)];
     C.view = (stored && viewOf(stored.m)) || viewOf(lastPref("cloudMode", (v) => !!viewOf(v), "cloud"));
     C.gap = stored && GAPS[stored.g] ? stored.g : lastPref("cloudGap", (v) => !!GAPS[v], "mid");
     C.tone = stored && TONES.includes(stored.t) ? stored.t : lastPref("cloudTone", (v) => TONES.includes(v), "lightbox");
     C.free = new Map(stored && stored.p ? Object.entries(stored.p) : []);
+    C.versions = stored && Array.isArray(stored.v) ? stored.v.filter((v) => v && v.n && v.p) : [];
     C.shuffle = 0;
     C.root.hidden = false;
     document.body.classList.add("cloud-open");
@@ -1142,6 +1452,7 @@
         if (g) C.gid = Math.max(C.gid, g);
       }
     }
+    for (const it of extra) addRef(it, { quiet: true });
     applyTone();
     const b = bounds();
     for (const n of C.nodes) {
@@ -1150,12 +1461,16 @@
       place(n);
     }
     layout();
+    if (extra.length) save();
   }
 
   function close() {
     if (!C.root || C.root.hidden) return;
     save();
     closeLook();
+    closeCtx();
+    stopAuto();
+    C.pop = null;
     C.picker = false;
     C.query = "";
     C.root.hidden = true;
@@ -1186,6 +1501,20 @@
       return e.key !== "q" && e.key !== "w" && e.key !== "h" && e.key !== "m";
     }
     const sel = selected();
+    if (e.key === "h" || e.key === "H") {
+      hideBar(!C.barHidden);
+      return true;
+    }
+    if (e.key === "p" || e.key === "P") {
+      toggleAuto();
+      return true;
+    }
+    if (e.key === "Escape" && (closeCtx() || closePop() || stopAuto())) return true;
+    if (e.key === "Escape" && C.barHidden) {
+      hideBar(false);
+      return true;
+    }
+    stopAuto();
     if (e.key === "Escape") {
       if (C.picker) togglePicker();
       else if (sel.length) selectOnly(null);

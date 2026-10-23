@@ -1,6 +1,6 @@
 # Archiver – Design-System
 
-Stand: App 0.41.1 · Extension 3.29.7
+Stand: App 0.42.0 · Extension 3.29.7
 
 Diese Datei hält fest, wie Archiver aussieht und warum. Sie gilt für die Mac-App
 (`app/src`) und die Extension (`extension/`, in Chrome und in Safari). Wer an der Oberfläche
@@ -316,7 +316,7 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
   Die Info gibt es per `I` oder im Seitenblatt.
 
 ### 4.6a Farbmarke (App 0.41.0, `.card-mark`, `.p-marks`)
-- **Zweck:** Objekte gehören zusammen. Unabhängig von der Wolke, in jeder Zone.
+- **Zweck:** Objekte gehören zusammen. Unabhängig vom Atlas, in jeder Zone.
 - **Farben:** die fünf Farben der Textkarten (Rot, Grün, Violett, Cyan, Gelb,
   `QUOTE_TONES`), ein Objekt hat höchstens eine.
 - **Form:** Innenrand 4 px in der Farbe auf dem Bild (`box-shadow: inset`),
@@ -398,8 +398,8 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
   Dateiname nicht, kürzt `fitLbName` ihn in der Mitte („Anfang … Ende.png“),
   damit Anfang und Endung sichtbar bleiben. Der volle Name steht im Tooltip.
 - **Seitenblatt:** Details von rechts, `--sheet-w` = min(560 px, 46 vw).
-- **Wolke (0.39.1):** Knopf „Wolke“ in der Leiste und Taste W öffnen die
-  Wolke (4.25) über der Lightbox.
+- **Atlas (0.39.1 als Wolke):** Knopf „Atlas“ in der Leiste und Taste W
+  öffnen den Atlas (4.25) über der Lightbox.
 
 ### 4.11a Bildtext (`.card-cap`, `.lb-caption`, 0.29)
 - **Zweck:** Credits oder Unterschrift zu einem Bild, wie unter einem Bild im
@@ -722,22 +722,39 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
 - **Sichtbar:** nur mit Vorab-Kanal oder nach ⌥-Klick auf die Versionsnummer.
 - **Kürzel:** ⌘I öffnet Information.
 
-### 4.25 Wolke (App 0.39.1, neu 0.41.0, `cloud.css`, `cloud.js`)
+### 4.25 Atlas (App 0.39.1 als Wolke, neu 0.41.0, umbenannt und neu geführt 0.42.0, `cloud.css`, `cloud.js`)
 - **Zweck:** Am offenen Objekt weitere Referenzen andocken und sie wie auf einem
   Tisch ordnen, als Moodboard für genau dieses Objekt (Lukas 17.10.: „eine Wolke
   an Referenzen, die als Mood-Strang agieren“; 23.10.: „intuitiver, mehrere
-  auswählen, einzelne groß, mehr Zusammenspiel, mehr Ansichten“). Vorabversion.
+  auswählen, einzelne groß, mehr Zusammenspiel, mehr Ansichten“, dann „eine
+  Menübar, ausblendbar, als Bild speichern, Autoplay“). Vorabversion.
+- **Name:** Atlas, nach Warburgs Bildatlas (Lukas 23.10.). Englisch und Deutsch
+  gleich. Gesicherte Stände heißen Fassungen. Im Code bleibt `cloud`.
+- **Öffnen:** aus der Lightbox (Knopf Atlas, W) oder in der Zone: mehrere
+  wählen, Rechtsklick › Im Atlas öffnen. Das erste Bild ist die Mitte, die
+  anderen liegen gleich daneben. Kopf, Navigation und Ablage der App treten
+  weg wie bei der Lightbox.
 - **Fläche:** ab Werk wie die Lightbox (`--lightbox-bg`, `blur(24px)`). Wählbar
-  in der Leiste unten als Quadrate: Lightbox, Schwarz, Weiß, die fünf Farben der
+  im Feld über dem Flächen-Quadrat: Lightbox, Schwarz, Weiß, die fünf Farben der
   Textkarten (`QUOTE_TONES`) und Auto (gedämpfter Farbton des offenen Bildes,
   hsl × 32 % × 13 %). Schrift, Ring, Fäden und Lasso nehmen die Schriftfarbe der
-  Fläche (`--cl-fg`). Auf farbiger Fläche decken die Leisten wie ein Menü
+  Fläche (`--cl-fg`). Auf farbiger Fläche deckt die Leiste wie ein Menü
   (`--menu-bg`).
-- **Leisten:** im Maß der Lightbox-Leiste (4.11). Oben die neun Ansichten und
-  der Abstand. Unten ohne Auswahl „+ Referenz“, „+5 ähnliche“, „Mischen“, Größe
-  des Objekts, Anzahl, Fläche, Schließen; mit Auswahl „n gewählt“, S M L XL,
-  Groß, Gruppe, Vergleichen (ab zwei) bzw. In die Mitte (eins), Gruppe lösen,
-  Entfernen, ×. Aktiv = gefüllter Knopf (ink × 0.15).
+- **Eine Leiste (0.42.0):** unten, im Maß der Lightbox-Leiste (4.11). Ohne
+  Auswahl: „Ansicht ▾“, Flächen-Quadrat, „+ Referenz“, Autoplay, Als Bild,
+  rechts Ausblenden und Schließen. Mit Auswahl: „n gewählt“, S M L XL, Groß,
+  Gruppe und Vergleichen (ab zwei) bzw. In die Mitte (eins), Gruppe lösen,
+  rechts Entfernen und ×. Aktiv = gefüllter Knopf (ink × 0.15). Die obere
+  Leiste (0.41) ist weg; oben bleibt nur Platz für die Fensterknöpfe (52 px).
+- **Feld über der Leiste:** Glas wie das Menü (`--menu-bg`, `--menu-shadow`,
+  `--r-lg`), steht über dem Knopf, der es öffnet, nie über den Rand. „Ansicht ▾“:
+  die neun Ansichten, Abstand mit Mischen, Fassungen. Flächen-Quadrat: die neun
+  Flächen als Quadrate 20 px. Klick auf die Fläche oder Esc schließt.
+- **Rechtsklick auf ein Bild:** Menü wie in den Zonen (`.p-ctx-menu`): Groß
+  ansehen, In die Mitte (eins) oder Vergleichen (mehrere), Gruppe bilden, Gruppe
+  lösen, Größe S M L XL, Eigener Atlas (dieses Bild als Mitte, ↩), In der Zone
+  zeigen (schließt, öffnet die Zone und wählt das Bild), Aus dem Atlas nehmen
+  (rot, ⌫). Rechtsklick auf ein ungewähltes Bild wählt es samt Gruppe.
 - **Ansichten:** Jede rechnet ihre Lage einmal aus, die Objekte gleiten dorthin
   (`transform`, 0.45 s, cubic-bezier(.2,.7,.2,1)). Tab wechselt.
   - Wolke: dicht um die Mitte, Gruppen ziehen sich an
@@ -762,21 +779,40 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
   bewegt sie gemeinsam. Wolke: zieht sich zusammen. Raster: jede Gruppe beginnt
   eine eigene Zeile. Spalten: Bilder einer Gruppe stehen hintereinander.
   Stapel: jede Gruppe ist ein eigener Stapel („Gruppe 1“) neben den Zonen.
-- **Zusammenspiel:** Beim Überfahren zeigen gestrichelte Fäden die drei
-  ähnlichsten (Farbanteile), die drei tragen den Ring auf 45 %.
-- **Groß ansehen:** Leertaste oder Doppelklick; Fläche wie die Wolke, Bild
+- **Linien:** Beim Überfahren verbinden gestrichelte Fäden das Bild mit den drei
+  Bildern der ähnlichsten Farbanteile (Bildanalyse, nicht Zone oder Tags); die
+  drei tragen den Ring auf 45 %. Seit 0.42.0 steht links unter jedem der drei,
+  was die Linie meint: „Farbe 94 %“ (Mono 10 px, Label 4.7 auf `--menu-bg`).
+  Im Strang zeigt ein Faden die Kette.
+- **Autoplay (0.42.0):** P oder Knopf. Schaltet auf Fokus, die Mitte wechselt
+  alle 3,2 s, mit mehreren gewählten nur durch die Auswahl. Ein Klick auf die
+  Fläche, eine Taste oder Esc hält an. Knopf aktiv, solange es läuft.
+- **Ausblenden (0.42.0):** H oder Knopf, nur noch die Bilder auf der Fläche.
+  H oder Esc holt die Leiste zurück, ein Hinweis sagt das einmal. Bleibt für
+  den nächsten Atlas gemerkt (`archiver.cloudBarHidden`).
+- **Als Bild (0.42.0):** PNG der ganzen Anordnung, wie sie gerade liegt, mit
+  6 % Rand (mind. 24 px) im Ton der Fläche; Lightbox wird deckend (#0a0a0a
+  dunkel, #ebebeb hell). Lange Seite bis 4000 px, aus den Originalen, sonst der
+  Vorschau. Sichern-Dialog in Downloads, danach im Finder gezeigt
+  (`export_cloud_image`, `atlas.rs`).
+- **Fassungen (0.42.0):** „+ Fassung sichern“ hält die aktuelle Lage als freie
+  Lage fest, mit Ansicht und Fläche, Namen „Fassung 1, 2 …“, höchstens 12 je
+  Atlas. Klick legt sie wieder aus (Ansicht Frei), Rechtsklick löscht.
+- **Groß ansehen:** Leertaste oder Doppelklick; Fläche wie der Atlas, Bild
   `contain`, ← → blättert durch die Auswahl (bei einer: alle), Label unten mit
   Zone, Name und Stelle. Esc oder Leertaste schließt.
-- **Hinzufügen:** Glas über der Leiste (2.4) mit Suchfeld und Streifen 88 px,
-  ähnlichste Bilder zuerst (Farbanteile, gleiche Zone). Klick dockt an.
-  Enter macht die gewählte Referenz zur Mitte ihrer eigenen Wolke.
-- **Bewegung:** Bei `prefers-reduced-motion` springen die Objekte ohne Gleiten.
-- **Speichern:** Mitglieder, Größe, Gruppe, Ansicht, Abstand, Fläche und die
-  freie Lage (Anteile der Fläche) je Objekt, lokal unter `archiver.clouds`
-  (höchstens 300 Wolken). Keine Datei, keine Kopien. Alte Modi werden beim
-  Öffnen übersetzt: Orbit → Fokus, Farbe → Spektrum, Konstellation → Strang.
+- **Hinzufügen:** Glas über der Leiste (2.4) mit Suchfeld, daneben „+5
+  ähnliche“, darunter Streifen 88 px, ähnlichste Bilder zuerst (Farbanteile,
+  gleiche Zone). Klick dockt an. Enter macht die gewählte Referenz zur Mitte
+  ihres eigenen Atlas.
+- **Bewegung:** Bei `prefers-reduced-motion` springen die Objekte ohne Gleiten,
+  Feld und Glas erscheinen ohne Einblenden.
+- **Speichern:** Mitglieder, Größe, Gruppe, Ansicht, Abstand, Fläche, die
+  freie Lage (Anteile der Fläche) und die Fassungen je Objekt, lokal unter
+  `archiver.clouds` (höchstens 300). Keine Datei, keine Kopien. Alte Modi werden
+  beim Öffnen übersetzt: Orbit → Fokus, Farbe → Spektrum, Konstellation → Strang.
 - **Nicht:** Keine Rundung an Objekten, keine Akzentfarbe, keine Schatten an
-  den Objekten. Die Extension kennt die Wolke nicht.
+  den Objekten. Die Extension kennt den Atlas nicht.
 
 ### 4.24c Labor › Kopf (App 0.40.18, `html[data-head]`)
 - **Wozu:** Vierzehn Mechaniken für den Seitenkopf zum Ausprobieren, nur auf
