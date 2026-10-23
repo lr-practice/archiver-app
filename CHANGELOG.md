@@ -2,16 +2,24 @@
 
 ## App 0.42.1 (Vorabversion)
 
-- Atlas, Groß ansehen: hohe Bilder liefen unten aus dem Fenster. Jetzt passt
-  jedes Bild ganz hinein.
-- Die neun Ansichten stehen direkt links in der Leiste, daneben Mischen. Die
-  Leiste ist dafür länger (bis 1480 px), in schmalen Fenstern bricht sie in
-  eine zweite Zeile um.
+- Der Atlas heißt jetzt Collection.
+- Groß ansehen: hohe Bilder liefen unten aus dem Fenster. Jetzt passt jedes
+  Bild ganz hinein.
+- Zwei Leisten: oben die neun Ansichten und Mischen, unten die Werkzeuge.
 - Abstand ist raus, es gilt fest Mittel (26 px).
+- Gruppen sind raus.
+- „+ Referenz“ heißt „+ Objekte“. „Zonen ▾“ klappt das Glas auf und zeigt die
+  Zonen als Karten wie im Tray; ein Klick öffnet eine Zone.
+- Ziehen auf ein anderes Bild tauscht die Plätze, die Ansicht bleibt. Nur in
+  Frei bleibt liegen, was man zieht.
+- Größer und kleiner direkt am Bild beim Überfahren (− +), nicht mehr im Menü
+  oder in der Leiste.
 - Fassungen haben einen eigenen Knopf „Fassungen ▾“.
 - Neu: Linien. Der Knopf lässt von jedem Bild eine Linie zu seinem farblich
-  ähnlichsten stehen. Was dabei steht, kommt mit „Als Bild“ ins PNG, auch der
-  Faden im Strang.
+  ähnlichsten stehen. Sie kommen mit „Als Bild“ ins PNG, auch der Faden im
+  Strang.
+- Als Bild sichert unter einem festen Schema:
+  `collection_<zone>_<jjjj-mm-tt>_<hhmm>.png`.
 - Beim Überfahren steht kein „Farbe 62 %“ mehr unter den Bildern.
 
 ## App 0.42.0 (Vorabversion)

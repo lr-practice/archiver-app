@@ -8747,6 +8747,7 @@
       imagePath: (i) => (kindOf(i) === "image" ? i.abs : null),
       showInZone: showItemInZone,
       items: () => state.items,
+      zones: () => state.zones,
     });
 
   async function boot() {

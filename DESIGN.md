@@ -316,7 +316,7 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
   Die Info gibt es per `I` oder im Seitenblatt.
 
 ### 4.6a Farbmarke (App 0.41.0, `.card-mark`, `.p-marks`)
-- **Zweck:** Objekte gehören zusammen. Unabhängig vom Atlas, in jeder Zone.
+- **Zweck:** Objekte gehören zusammen. Unabhängig von der Collection, in jeder Zone.
 - **Farben:** die fünf Farben der Textkarten (Rot, Grün, Violett, Cyan, Gelb,
   `QUOTE_TONES`), ein Objekt hat höchstens eine.
 - **Form:** Innenrand 4 px in der Farbe auf dem Bild (`box-shadow: inset`),
@@ -398,8 +398,8 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
   Dateiname nicht, kürzt `fitLbName` ihn in der Mitte („Anfang … Ende.png“),
   damit Anfang und Endung sichtbar bleiben. Der volle Name steht im Tooltip.
 - **Seitenblatt:** Details von rechts, `--sheet-w` = min(560 px, 46 vw).
-- **Atlas (0.39.1 als Wolke):** Knopf „Atlas“ in der Leiste und Taste W
-  öffnen den Atlas (4.25) über der Lightbox.
+- **Collection (0.39.1 als Wolke, 0.42 Atlas):** Knopf „Collection“ in der Leiste und Taste W
+  öffnen die Collection (4.25) über der Lightbox.
 
 ### 4.11a Bildtext (`.card-cap`, `.lb-caption`, 0.29)
 - **Zweck:** Credits oder Unterschrift zu einem Bild, wie unter einem Bild im
@@ -722,16 +722,17 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
 - **Sichtbar:** nur mit Vorab-Kanal oder nach ⌥-Klick auf die Versionsnummer.
 - **Kürzel:** ⌘I öffnet Information.
 
-### 4.25 Atlas (App 0.39.1 als Wolke, neu 0.41.0, umbenannt und neu geführt 0.42.0, `cloud.css`, `cloud.js`)
+### 4.25 Collection (App 0.39.1 als Wolke, neu 0.41.0, als Atlas 0.42.0, Collection seit 0.42.1, `cloud.css`, `cloud.js`)
 - **Zweck:** Am offenen Objekt weitere Referenzen andocken und sie wie auf einem
   Tisch ordnen, als Moodboard für genau dieses Objekt (Lukas 17.10.: „eine Wolke
   an Referenzen, die als Mood-Strang agieren“; 23.10.: „intuitiver, mehrere
   auswählen, einzelne groß, mehr Zusammenspiel, mehr Ansichten“, dann „eine
   Menübar, ausblendbar, als Bild speichern, Autoplay“). Vorabversion.
-- **Name:** Atlas, nach Warburgs Bildatlas (Lukas 23.10.). Englisch und Deutsch
-  gleich. Gesicherte Stände heißen Fassungen. Im Code bleibt `cloud`.
-- **Öffnen:** aus der Lightbox (Knopf Atlas, W) oder in der Zone: mehrere
-  wählen, Rechtsklick › Im Atlas öffnen. Das erste Bild ist die Mitte, die
+- **Name:** Collection (Lukas 23.10., vorher Atlas nach Warburgs Bildatlas,
+  kurz Table). Englisch und Deutsch gleich, „die Collection“. Gesicherte Stände heißen Fassungen.
+  Im Code bleibt `cloud`.
+- **Öffnen:** aus der Lightbox (Knopf Collection, W) oder in der Zone: mehrere
+  wählen, Rechtsklick › In der Collection öffnen. Das erste Bild ist die Mitte, die
   anderen liegen gleich daneben. Kopf, Navigation und Ablage der App treten
   weg wie bei der Lightbox.
 - **Fläche:** ab Werk wie die Lightbox (`--lightbox-bg`, `blur(24px)`). Wählbar
@@ -740,27 +741,37 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
   hsl × 32 % × 13 %). Schrift, Ring, Fäden und Lasso nehmen die Schriftfarbe der
   Fläche (`--cl-fg`). Auf farbiger Fläche deckt die Leiste wie ein Menü
   (`--menu-bg`).
-- **Eine Leiste (0.42.0, 0.42.1):** unten, Knöpfe wie die Lightbox-Leiste
-  (4.11), aber 10 px Innenabstand. Breite bis 1480 px (Lukas 23.10.: „gerne
-  länger“), zu schmal bricht sie in eine zweite Zeile um. Ohne Auswahl: die neun
-  Ansichten direkt links (nicht in einem Feld, Lukas 23.10.), Mischen,
-  Flächen-Quadrat, „+ Referenz“, „Fassungen ▾“, Linien, Autoplay, Als Bild,
-  rechts Ausblenden und Schließen. Mit Auswahl: „n gewählt“, S M L XL, Groß,
-  Gruppe und Vergleichen (ab zwei) bzw. In die Mitte (eins), Gruppe lösen,
-  rechts Entfernen und ×. Aktiv = gefüllter Knopf (ink × 0.15). Die obere
-  Leiste (0.41) ist weg; oben bleibt nur Platz für die Fensterknöpfe (52 px).
+- **Zwei Leisten (0.42.1):** Knöpfe wie die Lightbox-Leiste (4.11), aber 10 px
+  Innenabstand. Oben (10 px unter der Fensterkante, mittig, so breit wie nötig,
+  höchstens Fensterbreite − 200 px, damit die Fensterknöpfe frei bleiben): die
+  neun Ansichten und Mischen, immer gleich. Unten (wie 4.11, bis 960 px): ohne
+  Auswahl Flächen-Quadrat, „+ Objekte“, „Fassungen ▾“, Linien, Autoplay, Als
+  Bild, rechts Ausblenden und Schließen; mit Auswahl „n gewählt“, Groß,
+  Vergleichen (ab zwei) bzw. In die Mitte (eins), rechts Entfernen und ×. Zu
+  schmal brechen beide in eine zweite Zeile um. Aktiv = gefüllter Knopf
+  (ink × 0.15). Lukas 23.10.: erst „Ansichten in die Leiste“, dann „doch zwei,
+  oben und unten, weil sie zu lang wird“.
 - **Feld über der Leiste:** Glas wie das Menü (`--menu-bg`, `--menu-shadow`,
   `--r-lg`), steht über dem Knopf, der es öffnet, nie über den Rand.
   „Fassungen ▾“: die Fassungen und „+ Fassung sichern“. Flächen-Quadrat: die
   neun Flächen als Quadrate 20 px. Klick auf die Fläche oder Esc schließt.
 - **Rechtsklick auf ein Bild:** Menü wie in den Zonen (`.p-ctx-menu`): Groß
-  ansehen, In die Mitte (eins) oder Vergleichen (mehrere), Gruppe bilden, Gruppe
-  lösen, Größe S M L XL, Eigener Atlas (dieses Bild als Mitte, ↩), In der Zone
-  zeigen (schließt, öffnet die Zone und wählt das Bild), Aus dem Atlas nehmen
-  (rot, ⌫). Rechtsklick auf ein ungewähltes Bild wählt es samt Gruppe.
+  ansehen, In die Mitte (eins) oder Vergleichen (mehrere), Eigene Collection
+  (dieses Bild als Mitte, ↩), In der Zone zeigen (schließt, öffnet die Zone und
+  wählt das Bild), Aus der Collection nehmen (rot, ⌫). Rechtsklick auf ein ungewähltes
+  Bild wählt es. Keine Größe im Menü (0.42.1).
+- **Größe am Bild (0.42.1):** Beim Überfahren unten rechts im Bild − und + (je
+  22 px, Glas wie das Menü, `--r-sm`, 6 px vom Rand). Nur in Wolke, Spektrum,
+  Strang und Frei, wo die Größe zählt; beim Ziehen weg.
+- **Tauschen (0.42.1):** Ziehen auf ein anderes Bild tauscht die Plätze, das
+  Ziel trägt währenddessen den Ring. Die Ansicht bleibt (vorher sprang sie auf
+  Frei). Ins Leere gleitet das Bild zurück. Mit der Mitte tauscht es in jeder
+  Ansicht; die Reihenfolge sonst in Wolke, Fokus, Raster und Spalten. Spektrum,
+  Strang, Stapel und Vergleich ordnen selbst. Nur in Frei bleibt liegen, was
+  man zieht.
 - **Ansichten:** Jede rechnet ihre Lage einmal aus, die Objekte gleiten dorthin
   (`transform`, 0.45 s, cubic-bezier(.2,.7,.2,1)). Tab wechselt.
-  - Wolke: dicht um die Mitte, Gruppen ziehen sich an
+  - Wolke: dicht um die Mitte
   - Fokus: Mitte groß (halbe Höhe), die anderen klein auf einer Ellipse; Klick tauscht
   - Raster: gleiche Zellen
   - Spalten: gleich breit, verschieden hoch
@@ -768,21 +779,18 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
   - Strang: Kette vom ähnlichsten zum nächsten, Schlangenzeilen, Faden gestrichelt
   - Stapel: je Zone ein Stapel mit Label (4.7), Klick fächert auf
   - Vergleich: zwei bis vier gewählte groß, der Rest klein und auf 40 %
-  - Frei: was gezogen wird, bleibt liegen. Ziehen in jeder Ansicht schaltet hierher
+  - Frei: was gezogen wird, bleibt liegen (in den anderen Ansichten tauscht Ziehen)
 - **Abstand:** fest 26 px. Die Wahl Eng/Mittel/Weit ist seit 0.42.1 raus
   (Lukas 23.10.: „erstmal rausnehmen“).
 - **Größe:** vier Stufen (0.62, 1, 1.45, 2.05 × Grundmaß = kürzere
   Fensterseite / 8, 56–140 px). Gilt in Wolke, Frei und allen Zeilen-Ansichten;
-  Raster, Spalten, Fokus, Stapel und Vergleich setzen die Größe selbst.
+  Raster, Spalten, Fokus, Stapel und Vergleich setzen die Größe selbst. Einstellen
+  am Bild (− +) oder mit 1–4 und − +.
 - **Auswahl:** Klick wählt, ⇧/⌘-Klick mehrere, Lasso (1 px gestrichelt) auf
   freier Fläche, ⌘A alles, Esc löst. Ring wie 4.1 (`--ring-0`, 4 px Abstand).
   1–4 und − + gelten für alles Gewählte, ohne Auswahl für das offene Objekt.
-  G bildet eine Gruppe, Kennung „G1“ als Label unter dem Objekt.
-- **Gruppe (0.41.1):** Klick auf ein Bild einer Gruppe wählt die ganze Gruppe,
-  ⌥-Klick nur das eine; ⇧/⌘-Klick nimmt die Gruppe dazu oder heraus. Ziehen
-  bewegt sie gemeinsam. Wolke: zieht sich zusammen. Raster: jede Gruppe beginnt
-  eine eigene Zeile. Spalten: Bilder einer Gruppe stehen hintereinander.
-  Stapel: jede Gruppe ist ein eigener Stapel („Gruppe 1“) neben den Zonen.
+- **Gruppen:** seit 0.42.1 entfernt (Lukas 23.10.). Gespeicherte Gruppen werden
+  beim Öffnen übergangen.
 - **Linien:** Beim Überfahren verbinden gestrichelte Fäden das Bild mit den drei
   Bildern der ähnlichsten Farbanteile (Bildanalyse, nicht Zone oder Tags); die
   drei tragen den Ring auf 45 %. Kein Label daran (das „Farbe 94 %“ aus 0.42.0
@@ -794,34 +802,41 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
   alle 3,2 s, mit mehreren gewählten nur durch die Auswahl. Ein Klick auf die
   Fläche, eine Taste oder Esc hält an. Knopf aktiv, solange es läuft.
 - **Ausblenden (0.42.0):** H oder Knopf, nur noch die Bilder auf der Fläche.
-  H oder Esc holt die Leiste zurück, ein Hinweis sagt das einmal. Bleibt für
-  den nächsten Atlas gemerkt (`archiver.cloudBarHidden`).
+  H oder Esc holt beide Leisten zurück, ein Hinweis sagt das einmal. Bleibt für
+  die nächste Collection gemerkt (`archiver.cloudBarHidden`).
 - **Als Bild (0.42.0):** PNG der ganzen Anordnung, wie sie gerade liegt, mit
   6 % Rand (mind. 24 px) im Ton der Fläche; Lightbox wird deckend (#0a0a0a
   dunkel, #ebebeb hell). Feste Linien und der Faden im Strang kommen mit, unter
   den Bildern, in der Schriftfarbe der Fläche auf 45 %, Strich 1 und 4/4
-  gestrichelt, im Maß des Bildes (0.42.1). Lange Seite bis 4000 px, aus den Originalen, sonst der
-  Vorschau. Sichern-Dialog in Downloads, danach im Finder gezeigt
+  gestrichelt, im Maß des Bildes (0.42.1). Lange Seite bis 4000 px, aus den
+  Originalen, sonst der Vorschau. Dateiname nach Schema (0.42.1):
+  `collection_<zone>_<jjjj-mm-tt>_<hhmm>.png`, Zone klein, ohne Akzente,
+  Leerzeichen als „-“. Sichern-Dialog in Downloads, danach im Finder gezeigt
   (`export_cloud_image`, `atlas.rs`).
 - **Fassungen (0.42.0):** „+ Fassung sichern“ hält die aktuelle Lage als freie
   Lage fest, mit Ansicht und Fläche, Namen „Fassung 1, 2 …“, höchstens 12 je
-  Atlas. Klick legt sie wieder aus (Ansicht Frei), Rechtsklick löscht.
-- **Groß ansehen:** Leertaste oder Doppelklick; Fläche wie der Atlas, Bild
+  Collection. Klick legt sie wieder aus (Ansicht Frei), Rechtsklick löscht.
+- **Groß ansehen:** Leertaste oder Doppelklick; Fläche wie die Collection, Bild
   `contain` in einer festen Zelle (`grid-template: minmax(0, 1fr) / minmax(0,
   1fr)`, sonst laufen hohe Bilder aus dem Fenster, 0.42.1), ← → blättert durch die Auswahl (bei einer: alle), Label unten mit
   Zone, Name und Stelle. Esc oder Leertaste schließt.
-- **Hinzufügen:** Glas über der Leiste (2.4) mit Suchfeld, daneben „+5
-  ähnliche“, darunter Streifen 88 px, ähnlichste Bilder zuerst (Farbanteile,
-  gleiche Zone). Klick dockt an. Enter macht die gewählte Referenz zur Mitte
-  ihres eigenen Atlas.
+- **Hinzufügen („+ Objekte“, 0.42.1, vorher „+ Referenz“):** Glas über der
+  Leiste (2.4) mit Suchfeld, daneben „+5 ähnliche“ und „Zonen ▾“, darunter
+  Streifen 88 px, ähnlichste Bilder zuerst (Farbanteile, gleiche Zone). Klick
+  dockt an. „Zonen ▾“ klappt auf (höchstens 52vh/460 px, liegt über den
+  Bildern): oben „Alle Zonen › Zone“, darunter die Zonen als Karten wie im Tray
+  (Cover aus bis zu drei Bildern 8:3, Name, Mono-Anzahl, vier je Zeile, unter
+  700 px zwei), Klick öffnet die Zone, ihre Bilder brechen um. Die Suche gilt
+  auch dort. Enter macht das gewählte Objekt zur Mitte seiner eigenen
+  Collection.
 - **Bewegung:** Bei `prefers-reduced-motion` springen die Objekte ohne Gleiten,
   Feld und Glas erscheinen ohne Einblenden.
-- **Speichern:** Mitglieder, Größe, Gruppe, Ansicht, Fläche, die
+- **Speichern:** Mitglieder, Größe, Platz (Tauschen), Ansicht, Fläche, die
   freie Lage (Anteile der Fläche) und die Fassungen je Objekt, lokal unter
   `archiver.clouds` (höchstens 300). Keine Datei, keine Kopien. Alte Modi werden
   beim Öffnen übersetzt: Orbit → Fokus, Farbe → Spektrum, Konstellation → Strang.
 - **Nicht:** Keine Rundung an Objekten, keine Akzentfarbe, keine Schatten an
-  den Objekten. Die Extension kennt den Atlas nicht.
+  den Objekten. Die Extension kennt die Collection nicht.
 
 ### 4.24c Labor › Kopf (App 0.40.18, `html[data-head]`)
 - **Wozu:** Vierzehn Mechaniken für den Seitenkopf zum Ausprobieren, nur auf

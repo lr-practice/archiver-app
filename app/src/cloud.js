@@ -1,14 +1,14 @@
-// cloud.js — Atlas (bis 0.41 „Wolke“, 0.39.1, neu gedacht 0.41.0 und 0.42.0):
+// cloud.js — Collection (0.39.1 „Wolke“, 0.42.0 „Atlas“, seit 0.42.1 Collection):
 // Am offenen Objekt weitere Referenzen andocken und sie wie auf einem Tisch
 // ordnen. Eine Leiste unten, Rechtsklick auf ein Bild, Fassungen. Neun Ansichten:
 // Wolke, Fokus, Raster, Spalten, Spektrum, Strang, Stapel, Vergleich, Frei.
 // Jede Ansicht rechnet ihre Lage einmal aus, die Objekte gleiten per CSS
-// dorthin. Mehrfachauswahl (⇧/⌘, Lasso, ⌘A), Größe S M L XL, Gruppen (G),
+// dorthin. Mehrfachauswahl (⇧/⌘, Lasso, ⌘A), Größe S M L XL,
 // groß ansehen (Leertaste), Fäden zu den ähnlichsten beim Überfahren,
 // Autoplay im Fokus (P), Leiste ausblenden (H), als PNG sichern.
 // Ziehen legt Objekte frei ab und schaltet auf „Frei“.
 //
-// Gespeichert wird nur, wer zur Wolke gehört (Hash, Größe, Gruppe), die freie
+// Gespeichert wird nur, wer zur Wolke gehört (Hash, Größe, Platz), die freie
 // Lage, die Fläche und die Fassungen, lokal unter archiver.clouds. Siehe DESIGN.md 4.25.
 
 (function () {
@@ -19,7 +19,6 @@
   // Modi bis 0.40: gehen in den neuen Ansichten auf
   const OLD_VIEWS = { orbit: "focus", magnet: "spectrum", constellation: "strand" };
   const GAP = 26; // Abstand fest (0.42.1: Wahl Eng/Mittel/Weit raus, Lukas)
-  const STEPS = ["S", "M", "L", "XL"];
   const SCALE = [0.62, 1, 1.45, 2.05];
   // Fläche: Lightbox wie bisher, Schwarz, Weiß, die fünf Farben der Textkarten, Auto aus dem Objekt
   const TONES = ["lightbox", "black", "white", "red", "green", "violet", "cyan", "yellow", "auto"];
@@ -42,7 +41,6 @@
     free: new Map(), // Schlüssel → [x, y] als Anteil der Fläche
     fan: null, // Stapel: aufgefächerte Zone
     shuffle: 0,
-    gid: 0,
     hover: null,
     drag: null,
     look: null, // { list, at }
@@ -54,6 +52,8 @@
     versions: [], // Fassungen: [{ n, m, t, p }]
     picker: false,
     query: "",
+    more: false, // + Objekte aufgeklappt: Zonen wie im Tray (0.42.1)
+    pickZone: null, // aufgeklappt: offene Zone, null = alle Zonen
   };
 
   const $ = (id) => document.getElementById(id);
@@ -73,10 +73,10 @@
     if (!C.focus) return;
     const all = load();
     const key = keyOf(C.focus);
-    const refs = C.nodes.slice(1).map((n) => [keyOf(n.item), n.step, 0, n.group || 0]);
+    const refs = C.nodes.slice(1).map((n) => [keyOf(n.item), n.step, n.rank != null ? n.rank : null]);
     const free = {};
     for (const [k, p] of C.free) free[k] = [Math.round(p[0] * 1000) / 1000, Math.round(p[1] * 1000) / 1000];
-    if (refs.length) all[key] = { m: C.view, t: C.tone, s: C.nodes[0].step, r: refs, p: free, v: C.versions, at: Date.now() };
+    if (refs.length) all[key] = { m: C.view, t: C.tone, s: C.nodes[0].step, o: C.nodes[0].rank != null ? C.nodes[0].rank : null, r: refs, p: free, v: C.versions, at: Date.now() };
     else delete all[key];
     const keys = Object.keys(all);
     if (keys.length > MAX_CLOUDS) keys.sort((a, b) => (all[a].at || 0) - (all[b].at || 0)).slice(0, keys.length - MAX_CLOUDS).forEach((k) => delete all[k]);
@@ -176,7 +176,20 @@
     img.src = A.thumbSrc(item);
     box.appendChild(img);
     box.title = item.filename || "";
-    const n = { item, el: box, step: Math.max(0, Math.min(3, step)), ar: ratio(item), x: 0, y: 0, w: 0, h: 0, group: 0 };
+    const n = { item, el: box, step: Math.max(0, Math.min(3, step)), ar: ratio(item), x: 0, y: 0, w: 0, h: 0 };
+    // Größer und kleiner direkt am Bild beim Überfahren (0.42.1), nicht im Menü
+    const size = el("div", "cl-size");
+    for (const [label, d] of [["−", -1], ["+", 1]]) {
+      const b = A.button("cl-size-btn", label, () => {
+        n.step = Math.max(0, Math.min(3, n.step + d));
+        layout();
+        save();
+      });
+      b.title = d < 0 ? t("cloudSmaller") : t("cloudBigger");
+      b.addEventListener("pointerdown", (e) => e.stopPropagation());
+      size.appendChild(b);
+    }
+    box.appendChild(size);
     $("clStage").appendChild(box);
     return n;
   }
@@ -184,7 +197,6 @@
   function addRef(item, opts = {}) {
     if (!item || C.nodes.some((n) => keyOf(n.item) === keyOf(item))) return null;
     const n = makeNode(item, opts.step != null ? opts.step : 1);
-    n.group = opts.group || 0;
     const from = C.nodes[0];
     if (from) {
       n.x = from.x;
@@ -236,21 +248,8 @@
     renderBar();
   }
 
-  // Gruppe: ein Klick wählt alle ihre Bilder, ⌥-Klick nur das eine
-  function members(n) {
-    return n.group ? C.nodes.filter((m) => m.group === n.group) : [n];
-  }
-
-  function selectGroup(n) {
-    C.sel = new Set(members(n));
-    paint();
-    renderBar();
-  }
-
-  function toggle(n, single) {
-    const list = single ? [n] : members(n);
-    const all = list.every((m) => C.sel.has(m));
-    for (const m of list) all ? C.sel.delete(m) : C.sel.add(m);
+  function toggle(n) {
+    C.sel.has(n) ? C.sel.delete(n) : C.sel.add(n);
     paint();
     renderBar();
   }
@@ -269,29 +268,14 @@
     save();
   }
 
-  function group() {
-    const list = selected();
-    if (list.length < 2) return;
-    const g = ++C.gid;
-    for (const n of list) n.group = g;
-    A.toast(t("cloudGrouped", { n: g }));
-    layout();
-    save();
-  }
-
-  function ungroup() {
-    for (const n of selected()) n.group = 0;
-    layout();
-    save();
-  }
-
   // ---- Lage: jede Ansicht setzt x, y (Mitte), w, h ----
 
   function bounds() {
     const r = C.root.getBoundingClientRect();
-    // Oben nur Platz für die Fensterknöpfe; unten die Leiste, außer sie ist ausgeblendet
-    const top = 52;
-    const lower = C.barHidden ? null : C.picker ? $("clPicker") : $("clNav");
+    // Oben die Leiste der Ansichten (sonst Platz für die Fensterknöpfe), unten die Werkzeuge
+    const top = C.barHidden ? 52 : Math.max(52, $("clTop").getBoundingClientRect().bottom - r.top + 24);
+    // Aufgeklappt liegt das Glas über den Bildern, die Fläche bleibt
+    const lower = C.barHidden ? null : C.picker && !C.more ? $("clPicker") : $("clNav");
     const bottom = lower ? lower.getBoundingClientRect().top - r.top - 24 : r.height - 28;
     const side = 24;
     return { x: side, y: top, w: r.width - 2 * side, h: Math.max(120, bottom - top), W: r.width, H: r.height };
@@ -310,8 +294,10 @@
   const kOf = (n) => SCALE[n.step] / SCALE[1];
 
   // Reihenfolge: Mischen tauscht fest (gleiche Zahl, gleiche Lage)
+  // Ohne Mischen: der Platz (rank), den Tauschen vergibt; neue Objekte hinten
+  const rankOf = (n) => (n.rank != null ? n.rank : 1e6 + C.nodes.indexOf(n));
   function ordered(list) {
-    if (!C.shuffle) return list.slice();
+    if (!C.shuffle) return list.slice().sort((a, b) => rankOf(a) - rankOf(b));
     const k = C.shuffle;
     const h = (n) => {
       const s = keyOf(n.item) + k;
@@ -322,29 +308,20 @@
     return list.slice().sort((a, b) => h(a) - h(b));
   }
 
-  // Gruppen als Block: alle Bilder einer Gruppe stehen hintereinander, am Platz des ersten
-  function blocks(list) {
-    const out = [], done = new Set();
-    for (const n of list) {
-      if (!n.group) out.push([n]);
-      else if (!done.has(n.group)) {
-        done.add(n.group);
-        out.push(list.filter((m) => m.group === n.group));
-      }
+  // Ziehen auf ein anderes Bild tauscht die Plätze (0.42.1). Die Mitte tauscht
+  // in jeder Ansicht, die Reihenfolge nur dort, wo sie zählt (ordered)
+  function swap(a, b) {
+    const c = centerNode();
+    if (a === c) C.center = b;
+    else if (b === c) C.center = a;
+    else {
+      ordered(C.nodes).forEach((n, i) => (n.rank = i));
+      C.shuffle = 0;
+      [a.rank, b.rank] = [b.rank, a.rank];
     }
-    // Lose Bilder hintereinander bilden zusammen einen Block
-    const merged = [];
-    for (const b of out) {
-      const last = merged[merged.length - 1];
-      if (!b[0].group && last && !last[0].group) last.push(...b);
-      else merged.push(b);
-    }
-    return merged;
+    layout();
+    save();
   }
-
-  // Stapel: eine Gruppe ist ihr eigener Stapel, sonst die Zone
-  const pileOf = (n) => (n.group ? "#" + n.group : n.item.zone || "");
-  const pileName = (z) => (z[0] === "#" ? t("cloudGrouped", { n: z.slice(1) }) : zoneName(z));
 
   function centerNode() {
     return C.nodes.includes(C.center) ? C.center : C.nodes[0];
@@ -361,11 +338,12 @@
     C.chain = null;
     const f = LAYOUTS[C.view] || LAYOUTS.cloud;
     f(C.nodes, b, base(b));
+    C.root.dataset.view = C.view;
     paint();
     renderBar();
   }
 
-  // Wolke: alles sammelt sich dicht um die Mitte, Gruppen halten zusammen
+  // Wolke: alles sammelt sich dicht um die Mitte
   function cloudLayout(ns, b, s) {
     const gap = GAP;
     const c = centerNode();
@@ -381,24 +359,10 @@
     const settle = 40; // zum Schluss nur noch Abstand halten, die Mitte steht
     for (let it = 0; it < rounds + settle; it++) {
       const last = it >= rounds;
-      const groups = new Map();
-      for (const n of list) {
-        if (!n.group) continue;
-        const v = groups.get(n.group) || { x: 0, y: 0, k: 0 };
-        v.x += n.x;
-        v.y += n.y;
-        v.k++;
-        groups.set(n.group, v);
-      }
       for (const n of last ? [] : list) {
         const pull = n === c ? 0.2 : 0.02;
         n.x += (cx - n.x) * pull;
         n.y += (cy - n.y) * pull * 1.25;
-        const g = n.group && groups.get(n.group);
-        if (g && g.k > 1) {
-          n.x += (g.x / g.k - n.x) * 0.06;
-          n.y += (g.y / g.k - n.y) * 0.06;
-        }
       }
       for (let i = 0; i < list.length; i++)
         for (let j = i + 1; j < list.length; j++) {
@@ -514,9 +478,9 @@
     },
 
     // Raster: gleiche Zellen, ruhig zum Sichten
-    // Jede Gruppe beginnt eine neue Zeile; so viele Spalten, dass die Zellen am größten werden
+    // So viele Spalten, dass die Zellen am größten werden
     grid(ns, b) {
-      const parts = blocks(ordered(ns));
+      const parts = [ordered(ns)];
       const gap = GAP;
       let cols = 1, lines = 1, cell = 0;
       for (let k = 1; k <= ns.length; k++) {
@@ -541,7 +505,7 @@
 
     // Spalten: gleich breit, unterschiedlich hoch
     masonry(ns, b) {
-      const list = blocks(ordered(ns)).flat();
+      const list = ordered(ns);
       const gap = GAP;
       let best = null;
       for (let cols = 2; cols <= 10; cols++) {
@@ -602,24 +566,24 @@
       rows(chain, b, b.h / 3, true);
     },
 
-    // Stapel: je Gruppe und je Zone ein Stapel; Klick fächert einen auf
+    // Stapel: je Zone ein Stapel; Klick fächert einen auf
     piles(ns, b, s) {
-      const zones = [...new Set(ns.map(pileOf))];
+      const zones = [...new Set(ns.map((n) => n.item.zone || ""))];
       if (C.fan != null && zones.includes(C.fan)) {
-        const fan = ns.filter((n) => pileOf(n) === C.fan);
+        const fan = ns.filter((n) => (n.item.zone || "") === C.fan);
         rows(fan, { ...b, h: b.h * 0.74 }, b.h * 0.45);
         const rest = zones.filter((z) => z !== C.fan);
         const sm = s * 0.5;
         rest.forEach((z, k) => {
           const px = b.x + (b.w * (k + 1)) / (rest.length + 1), py = b.y + b.h * 0.9;
-          ns.filter((n) => pileOf(n) === z).forEach((n, j) => {
+          ns.filter((n) => (n.item.zone || "") === z).forEach((n, j) => {
             n.w = sm * Math.sqrt(n.ar);
             n.h = sm / Math.sqrt(n.ar);
             n.x = px + Math.min(j, 6) * 3;
             n.y = py - Math.min(j, 6) * 3;
             n.z = j + 1;
           });
-          C.labels.push({ text: pileName(z), x: px, y: py + sm * 0.55 + 6, zone: z });
+          C.labels.push({ text: zoneName(z), x: px, y: py + sm * 0.55 + 6, zone: z });
         });
         return;
       }
@@ -633,7 +597,7 @@
       zones.forEach((z, k) => {
         const px = b.x + (b.w * ((k % cols) + 0.5)) / cols;
         const py = b.y + (b.h * (Math.floor(k / cols) + 0.5)) / lines - 10;
-        ns.filter((n) => pileOf(n) === z).forEach((n, j) => {
+        ns.filter((n) => (n.item.zone || "") === z).forEach((n, j) => {
           const off = Math.min(j, 8) * 6;
           n.w = pw * Math.sqrt(n.ar);
           n.h = pw / Math.sqrt(n.ar);
@@ -641,7 +605,7 @@
           n.y = py - off + 20;
           n.z = j + 1;
         });
-        C.labels.push({ text: pileName(z), x: px, y: py + pw * 0.62 + 26, zone: z });
+        C.labels.push({ text: zoneName(z), x: px, y: py + pw * 0.62 + 26, zone: z });
       });
     },
 
@@ -698,11 +662,6 @@
       s.zIndex = n.z ? String(n.z) : "";
       n.el.classList.toggle("selected", C.sel.has(n));
       n.el.classList.toggle("center", n === centerNode() && (C.view === "focus" || C.view === "strand"));
-      let tag = n.el.querySelector(".cl-group");
-      if (n.group && !["focus", "piles", "compare"].includes(C.view)) {
-        if (!tag) n.el.appendChild((tag = el("span", "cl-group")));
-        tag.textContent = "G" + n.group;
-      } else if (tag) tag.remove();
     }
     const box = $("clLabels");
     box.replaceChildren(
@@ -806,10 +765,13 @@
     picker.hidden = true;
     const nav = el("nav", "lb-bar cl-nav");
     nav.id = "clNav";
+    // 0.42.1: oben die Ansichten, unten die Werkzeuge (eine Leiste wurde zu lang)
+    const top = el("nav", "lb-bar cl-top");
+    top.id = "clTop";
     const look = el("div", "cl-look");
     look.id = "clLook";
     look.hidden = true;
-    root.append(stage, pop, picker, nav, look);
+    root.append(stage, pop, picker, top, nav, look);
     root.addEventListener("pointerdown", (e) => {
       if (C.ctx && !e.target.closest(".cl-ctx")) closeCtx();
     }, true);
@@ -848,14 +810,30 @@
     save();
   }
 
-  // Eine Leiste unten (0.41.2): Ansicht und Fläche öffnen ein Feld darüber
+  // Zwei Leisten (0.42.1): oben die Ansichten, unten Werkzeuge oder Auswahl
   function renderBar() {
     const nav = $("clNav");
-    nav.hidden = C.barHidden;
+    const top = $("clTop");
+    nav.hidden = top.hidden = C.barHidden;
     nav.replaceChildren();
+    top.replaceChildren();
+    fillTop(top);
     fillBar(nav);
     // Feld erst setzen, wenn die Leiste steht: es richtet sich nach ihr
     if (C.pop) renderPop();
+  }
+
+  function fillTop(top) {
+    for (const v of VIEWS) top.appendChild(lbBtn(t("cloudView_" + v), C.view === v, () => setView(v), t("cloudViewTitle_" + v)));
+    top.appendChild(sep());
+    top.appendChild(
+      lbBtn(t("cloudShuffle"), false, () => {
+        C.shuffle++;
+        if (C.view === "free") C.free.clear();
+        layout();
+        save();
+      }, t("cloudShuffleTitle"))
+    );
   }
 
   function fillBar(nav) {
@@ -863,12 +841,8 @@
     if (sel.length) {
       nav.appendChild(el("span", "cl-count", t("cloudSelected", { n: sel.length })));
       nav.appendChild(sep());
-      const same = sel.every((n) => n.step === sel[0].step) ? sel[0].step : -1;
-      STEPS.forEach((s, i) => nav.appendChild(lbBtn(s, same === i, () => resize(i))));
-      nav.appendChild(sep());
       nav.appendChild(lbBtn(t("cloudLook"), false, () => openLook(sel[0]), "␣"));
       if (sel.length > 1) {
-        nav.appendChild(lbBtn(t("cloudGroup"), false, group, "G"));
         nav.appendChild(lbBtn(t("cloudCompare"), C.view === "compare", () => setView("compare")));
       } else
         nav.appendChild(
@@ -877,23 +851,11 @@
             setView(C.view === "focus" || C.view === "strand" ? C.view : "focus");
           })
         );
-      if (sel.some((n) => n.group)) nav.appendChild(lbBtn(t("cloudUngroup"), false, ungroup));
       nav.appendChild(el("span", "cl-flex"));
       if (sel.some((n) => n !== C.nodes[0])) nav.appendChild(lbBtn(t("cloudRemove"), false, () => removeRefs(sel), "⌫"));
       nav.appendChild(lbBtn("×", false, () => selectOnly(null), "esc"));
       return;
     }
-    // 0.42.1: die Ansichten direkt in der Leiste, links (Lukas)
-    for (const v of VIEWS) nav.appendChild(lbBtn(t("cloudView_" + v), C.view === v, () => setView(v), t("cloudViewTitle_" + v)));
-    nav.appendChild(
-      lbBtn(t("cloudShuffle"), false, () => {
-        C.shuffle++;
-        if (C.view === "free") C.free.clear();
-        layout();
-        save();
-      }, t("cloudShuffleTitle"))
-    );
-    nav.appendChild(sep());
     const tone = A.button("cl-tone cl-pop-btn" + (C.pop === "tone" ? " active" : ""), "", () => togglePop("tone"));
     tone.dataset.tone = C.tone;
     tone.dataset.pop = "tone";
@@ -1027,7 +989,7 @@
   function openCtx(n, x, y) {
     closePop();
     stopAuto();
-    if (!C.sel.has(n)) selectGroup(n);
+    if (!C.sel.has(n)) selectOnly(n);
     const sel = selected();
     const one = sel.length === 1 ? sel[0] : null;
     closeCtx();
@@ -1052,20 +1014,6 @@
         setView(C.view === "focus" || C.view === "strand" ? C.view : "focus");
       });
     else entry(t("cloudCompare"), () => setView("compare"));
-    if (sel.length > 1) entry(t("cloudGroupMake"), group, "G");
-    if (sel.some((x) => x.group)) entry(t("cloudUngroup"), ungroup);
-    m.appendChild(el("div", "p-more-label", t("cloudSizeSel")));
-    const sizes = el("div", "cl-ctx-sizes");
-    const same = sel.every((x) => x.step === sel[0].step) ? sel[0].step : -1;
-    STEPS.forEach((s, i) =>
-      sizes.appendChild(
-        A.button("lb-btn" + (same === i ? " active" : ""), s, () => {
-          closeCtx();
-          resize(i);
-        })
-      )
-    );
-    m.appendChild(sizes);
     if (one) {
       rule();
       if (one !== C.nodes[0]) entry(t("cloudOwn"), () => open(one.item), "↩");
@@ -1184,7 +1132,10 @@
     const segs = linePairs();
     if (C.view === "strand" && C.chain) for (let i = 1; i < C.chain.length; i++) segs.push([C.chain[i - 1], C.chain[i]]);
     const lines = segs.map(([a, b]) => [(a.x - x0) * k, (a.y - y0) * k, (b.x - x0) * k, (b.y - y0) * k]);
-    const name = String(C.focus.filename || "Archiver").replace(/\.[^.]+$/, "") + " – " + t("cloud") + ".png";
+    // Schema (0.42.1): collection_<zone>_<jjjj-mm-tt>_<hhmm>.png, z. B. collection_mortar_2026-10-23_1836.png
+    const d = new Date(), two = (v) => String(v).padStart(2, "0");
+    const slug = zoneName(C.focus.zone).toLowerCase().normalize("NFKD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "archiver";
+    const name = `collection_${slug}_${d.getFullYear()}-${two(d.getMonth() + 1)}-${two(d.getDate())}_${two(d.getHours())}${two(d.getMinutes())}.png`;
     try {
       const out = await A.invoke("export_cloud_image", {
         fileName: name,
@@ -1219,33 +1170,112 @@
       row.appendChild(input);
       // Fünf ähnlichste auf einmal, seit 0.42.0 hier statt in der Leiste
       row.appendChild(lbBtn(t("cloudSimilar"), false, addSimilar, t("cloudSimilarTitle")));
+      const more = lbBtn("", false, toggleMore, t("cloudMoreTitle"));
+      more.classList.add("cl-more-btn");
+      row.appendChild(more);
       box.appendChild(row);
+      box.appendChild(el("div", "cl-crumb"));
       box.appendChild(el("div", "cl-strip"));
     }
     renderStrip();
   }
 
-  function renderStrip() {
-    const strip = $("clPicker").querySelector(".cl-strip");
-    strip.replaceChildren();
-    const list = suggestions();
-    if (!list.length) strip.appendChild(el("span", "cl-empty", t("cloudNone")));
-    for (const it of list) {
-      const b = A.button("cl-thumb", "", () => addRef(it));
+  // Aufklappen: reicht der Streifen nicht, zeigt das Glas die Zonen wie der Tray
+  function toggleMore() {
+    C.more = !C.more;
+    C.pickZone = null;
+    renderStrip();
+  }
+
+  function thumb(it) {
+    const b = A.button("cl-thumb", "", () => addRef(it));
+    const img = el("img");
+    img.alt = "";
+    img.loading = "lazy";
+    img.draggable = false;
+    img.src = A.thumbSrc(it);
+    b.appendChild(img);
+    b.title = it.filename || "";
+    return b;
+  }
+
+  // Bilder einer Zone, die noch nicht im Atlas sind, passend zur Suche
+  function zoneItems(zone) {
+    const inCloud = new Set(C.nodes.map((n) => keyOf(n.item)));
+    const q = C.query.trim().toLowerCase();
+    return A.items().filter(
+      (it) =>
+        it.zone === zone &&
+        A.kindOf(it) === "image" &&
+        !inCloud.has(keyOf(it)) &&
+        (!q || [it.filename, it.pageTitle, it.pageUrl, it.tags && it.tags.join(" ")].join(" ").toLowerCase().includes(q))
+    );
+  }
+
+  function zoneCard(z) {
+    const list = zoneItems(z.path);
+    const b = A.button("cl-zone", "", () => {
+      C.pickZone = z.path;
+      renderStrip();
+    });
+    const cover = el("div", "cl-zone-cover");
+    for (const it of list.slice(0, 3)) {
       const img = el("img");
       img.alt = "";
       img.loading = "lazy";
       img.draggable = false;
       img.src = A.thumbSrc(it);
-      b.appendChild(img);
-      b.title = it.filename || "";
-      strip.appendChild(b);
+      cover.appendChild(img);
     }
+    b.appendChild(cover);
+    b.appendChild(el("span", "cl-zone-name", zoneName(z.path)));
+    b.appendChild(el("span", "cl-zone-count", String(list.length)));
+    return b;
+  }
+
+  function renderStrip() {
+    const box = $("clPicker");
+    const strip = box.querySelector(".cl-strip");
+    const crumb = box.querySelector(".cl-crumb");
+    const more = box.querySelector(".cl-more-btn");
+    more.textContent = t(C.more ? "cloudLess" : "cloudMore");
+    more.classList.toggle("active", C.more);
+    box.classList.toggle("open", C.more);
+    strip.replaceChildren();
+    crumb.replaceChildren();
+    crumb.hidden = !C.more;
+    if (!C.more) {
+      const list = suggestions();
+      if (!list.length) strip.appendChild(el("span", "cl-empty", t("cloudNone")));
+      for (const it of list) strip.appendChild(thumb(it));
+      return;
+    }
+    crumb.appendChild(
+      lbBtn(t("cloudZones"), !C.pickZone, () => {
+        C.pickZone = null;
+        renderStrip();
+      })
+    );
+    if (C.pickZone) {
+      crumb.appendChild(el("span", "cl-crumb-sep", "›"));
+      crumb.appendChild(el("span", "cl-crumb-here", zoneName(C.pickZone)));
+      const list = zoneItems(C.pickZone);
+      if (!list.length) strip.appendChild(el("span", "cl-empty", t("cloudNone")));
+      for (const it of list) strip.appendChild(thumb(it));
+      return;
+    }
+    const zones = (A.zones ? A.zones() : []).filter((z) => zoneItems(z.path).length);
+    if (!zones.length) strip.appendChild(el("span", "cl-empty", t("cloudNone")));
+    for (const z of zones) strip.appendChild(zoneCard(z));
   }
 
   function togglePicker() {
     C.picker = !C.picker;
-    if (!C.picker) C.query = "";
+    if (!C.picker) {
+      C.query = "";
+      C.more = false;
+      C.pickZone = null;
+    }
     renderPicker();
     renderBar();
     layout();
@@ -1333,13 +1363,12 @@
       if (C.picker && !n) togglePicker();
       if (n) {
         if (C.view === "piles" && C.fan == null) {
-          C.fan = pileOf(n);
+          C.fan = (n.item.zone || "");
           layout();
           return;
         }
-        if (multi) toggle(n, e.altKey);
-        else if (e.altKey) selectOnly(n);
-        else if (!C.sel.has(n)) selectGroup(n);
+        if (multi) toggle(n);
+        else if (!C.sel.has(n)) selectOnly(n);
         C.drag = { mode: "move", n, p, moved: false, start: selected().map((m) => ({ m, x: m.x, y: m.y })) };
       } else {
         if (C.view === "piles" && C.fan != null) {
@@ -1369,20 +1398,20 @@
         if (!d.moved) {
           d.moved = true;
           C.hover = null;
+          // 0.42.1: außer in Frei bleibt die Ansicht; nur das eine Bild wandert mit
           if (C.view !== "free") {
-            // Was gerade zu sehen ist, wird zur freien Lage
-            const b = bounds();
-            for (const m of C.nodes) C.free.set(keyOf(m.item), [(m.x - b.x) / b.w, (m.y - b.y) / b.h]);
-            C.view = "free";
-            C.fan = null;
-            renderBar();
-            A.toast(t("cloudFreeHint"));
+            d.start = d.start.filter((x) => x.m === d.n);
+            d.n.z = 50;
           }
           C.root.classList.add("dragging");
         }
         for (const s of d.start) {
           s.m.x = s.x + dx;
           s.m.y = s.y + dy;
+        }
+        if (C.view !== "free") {
+          d.over = C.nodes.find((m) => m !== d.n && Math.abs(m.x - p.x) < m.w / 2 && Math.abs(m.y - p.y) < m.h / 2) || null;
+          for (const m of C.nodes) m.el.classList.toggle("swap", m === d.over);
         }
         paint();
       } else {
@@ -1401,7 +1430,11 @@
       $("clLasso").hidden = true;
       C.root.classList.remove("dragging");
       if (!d) return;
-      if (d.mode === "move" && d.moved) {
+      if (d.mode === "move" && d.moved && C.view !== "free") {
+        for (const m of C.nodes) m.el.classList.remove("swap");
+        if (d.over) swap(d.n, d.over);
+        else layout(); // ins Leere: zurück an den Platz
+      } else if (d.mode === "move" && d.moved) {
         const b = bounds();
         for (const s of d.start) C.free.set(keyOf(s.m.item), [(s.m.x - b.x) / b.w, (s.m.y - b.y) / b.h]);
         save();
@@ -1460,13 +1493,13 @@
     const f = makeNode(item, stored ? stored.s : 3);
     f.el.classList.add("focus");
     C.nodes.push(f);
-    C.gid = 0;
     if (stored) {
       const map = byKey();
-      for (const [k, s, , g] of stored.r) {
+      if (stored.o != null) f.rank = stored.o;
+      for (const [k, s, r] of stored.r) {
         const it = map.get(k);
-        if (it) addRef(it, { quiet: true, step: s, group: g || 0 });
-        if (g) C.gid = Math.max(C.gid, g);
+        const n = it && addRef(it, { quiet: true, step: s });
+        if (n && typeof r === "number") n.rank = r;
       }
     }
     for (const it of extra) addRef(it, { quiet: true });
@@ -1546,7 +1579,6 @@
     else if (e.key === "-") nudge(-1);
     else if (e.key === "Backspace" || e.key === "Delete") removeRefs(sel);
     else if (e.key === "a" || e.key === "A") togglePicker();
-    else if (e.key === "g" || e.key === "G") group();
     else if (e.key === "Tab") {
       const i = VIEWS.indexOf(C.view);
       setView(VIEWS[(i + (e.shiftKey ? VIEWS.length - 1 : 1)) % VIEWS.length]);

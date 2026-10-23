@@ -80,7 +80,8 @@
 /* Auswahl: Ring (4.1), eckig, 4 px Abstand; auf farbiger Fläche in deren Schriftfarbe.
    Die drei ähnlichsten beim Überfahren tragen denselben Ring, halb so stark. */
 .cl-ref.selected::after,
-.cl-ref.near::after {
+.cl-ref.near::after,
+.cl-ref.swap::after {
   content: "";
   position: absolute;
   inset: -4px;
@@ -94,8 +95,52 @@
   opacity: 0.45;
 }
 
-/* Gruppe: Kennung unter dem Objekt, Label wie 4.7 */
-.cl-group,
+/* Größer und kleiner beim Überfahren, unten rechts im Bild (0.42.1). Nur wo die
+   Größe zählt: Wolke, Spektrum, Strang, Frei */
+.cl-size {
+  position: absolute;
+  right: 6px;
+  bottom: 6px;
+  z-index: 1;
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  border-radius: var(--r-sm);
+  background: var(--menu-bg);
+  box-shadow: var(--menu-shadow);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.12s ease;
+}
+
+.cl-ref:hover .cl-size {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.cloud.dragging .cl-size,
+.cloud:is([data-view="grid"], [data-view="masonry"], [data-view="focus"], [data-view="piles"], [data-view="compare"]) .cl-size {
+  display: none;
+}
+
+.cl-size-btn {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--p-text);
+  font-size: 14px;
+  line-height: 1;
+  cursor: default;
+}
+
+.cl-size-btn:hover {
+  background: rgba(var(--ink-rgb), 0.1);
+}
+
+/* Stapel: Label wie 4.7 */
 .cl-pile-label {
   position: absolute;
   font-family: var(--mono);
@@ -106,11 +151,6 @@
   opacity: 0.7;
   pointer-events: none;
   white-space: nowrap;
-}
-
-.cl-group {
-  right: 0;
-  bottom: -16px;
 }
 
 .cl-labels {
@@ -234,16 +274,26 @@
   background: var(--menu-bg);
 }
 
-/* 0.42.1: länger, die Ansichten stehen links in der Leiste. Zu schmal: zweite Zeile */
+/* 0.42.1: zwei Leisten. Unten die Werkzeuge im Maß der Lightbox-Leiste,
+   oben die Ansichten, so breit wie nötig, frei von den Fensterknöpfen */
 .cl-nav {
   bottom: 22px;
-  width: min(1480px, calc(100% - 32px));
+  width: min(960px, calc(100% - 32px));
   flex-wrap: wrap;
   row-gap: 2px;
 }
 
-/* Knöpfe enger als in der Lightbox, damit 1440 px in einer Zeile reichen */
-.cl-nav .lb-btn {
+.cl-top {
+  top: 10px;
+  width: max-content;
+  flex-wrap: wrap;
+  justify-content: center;
+  row-gap: 2px;
+  max-width: calc(100% - 200px);
+}
+
+.cl-nav .lb-btn,
+.cl-top .lb-btn {
   padding: 0 10px;
 }
 
@@ -309,12 +359,6 @@
 
 .cl-ctx {
   color: var(--p-text);
-}
-
-.cl-ctx-sizes {
-  display: flex;
-  gap: 2px;
-  padding: 0 4px 4px;
 }
 
 /* ---- Referenz hinzufügen: Glas über der Leiste ---- */
@@ -388,6 +432,94 @@
   pointer-events: none;
 }
 
+/* Aufgeklappt (0.42.1): Zonen als Karten wie im Tray (pal-card), Klick öffnet
+   die Zone, ihre Bilder umbrechen statt seitlich zu laufen */
+.cl-picker.open .cl-strip {
+  height: auto;
+  max-height: min(52vh, 460px);
+  flex-wrap: wrap;
+  align-content: flex-start;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.cl-crumb {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.cl-crumb-sep {
+  color: var(--p-faint);
+}
+
+.cl-crumb-here {
+  padding: 0 8px;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.cl-zone {
+  flex: 0 0 calc((100% - 18px) / 4);
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0 8px;
+  padding: 0 0 8px;
+  border: 0;
+  border-radius: var(--r-lg);
+  background: rgba(var(--ink-rgb), 0.055);
+  color: var(--p-text);
+  text-align: left;
+  cursor: default;
+  overflow: hidden;
+}
+
+.cl-zone:hover {
+  background: rgba(var(--ink-rgb), 0.1);
+}
+
+.cl-zone-cover {
+  grid-column: 1 / -1;
+  aspect-ratio: 8 / 3;
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  gap: 2px;
+  margin-bottom: 8px;
+  background: rgba(var(--ink-rgb), 0.04);
+}
+
+.cl-zone-cover img {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  display: block;
+  object-fit: cover;
+  background: var(--thumb-bg);
+}
+
+.cl-zone-name {
+  padding-left: 12px;
+  font-size: 14px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cl-zone-count {
+  padding-right: 12px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--p-dim);
+}
+
+@media (max-width: 700px) {
+  .cl-zone {
+    flex-basis: calc((100% - 6px) / 2);
+  }
+}
+
 .cl-empty {
   align-self: center;
   font-family: var(--mono);
@@ -418,7 +550,8 @@ body.cloud-open .p-lib-tab {
     animation: none;
   }
   .cl-ref,
-  .cl-thumb {
+  .cl-thumb,
+  .cl-size {
     transition: none;
   }
 }
