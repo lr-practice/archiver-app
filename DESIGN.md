@@ -1,6 +1,6 @@
 # Archiver – Design-System
 
-Stand: App 0.40.20 · Extension 3.29.7
+Stand: App 0.40.21 · Extension 3.29.7
 
 Diese Datei hält fest, wie Archiver aussieht und warum. Sie gilt für die Mac-App
 (`app/src`) und die Extension (`extension/`, in Chrome und in Safari). Wer an der Oberfläche
@@ -482,17 +482,19 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
   Schließen hinter alle Fenster zurückgelegt (0.28).
 
 ### 4.13 Zonenleiste am ganzen Mac (`dropbar.css`)
-- **Zweck:** Wie 4.3, aber beim Ziehen von Dateien in jedem Programm.
+- **Zweck:** Wie 4.3, aber beim Ziehen von Dateien in jedem Programm. Seit
+  0.40.21 nur, wenn beim Ziehen ⌥ gehalten wird; ohne ⌥ bleibt alles frei.
 - **Form:** Volle Breite unten auf dem Bildschirm mit dem Zeiger, 280 px hoch,
   dieselben vier Glaskarten, Ring und Glühen wie 4.3. Rand 10 px zu den
   Bildschirmkanten, 8 px zwischen den Karten (18.10., vorher 14 und 10),
   gleich in der App (4.3) und der Extension.
-- **Streifen (0.32, 90 px seit 0.32.1 / 3.25.2):** Beim Ziehen ragen die
-  Karten erst nur 90 px herein (`.strip`): dieselbe Karte, oben gerundet, unten
-  bündig, ohne Hinweis. Darüber
-  bleibt alles frei, etwa das Eingabefeld eines Chats. Fährt der Zeiger in den
-  Streifen, wird das Fenster mit macOS-Animation 280 px hoch; steht er mehr
-  als 24 px darüber, wird es wieder Streifen. Die Extension im Browser zeigt
+- **Einblenden (0.40.21):** Dateien ziehen, ⌥ halten → die Leiste steht
+  sofort in voller Höhe (280 px), ohne Streifen und ohne Fenster-Animation;
+  ⌥ darf danach losgelassen werden. Die Karten sind vorab gebaut und werden
+  im Hintergrund nachgeladen, wenn sich die Bibliothek ändert; beim
+  Einblenden wird nichts geladen. Ein Drop in einer Lücke oder am Rand zählt
+  für die Karte derselben Spalte. Der Streifen (0.32 bis 0.40.20: erst 90 px,
+  volle Höhe erst unter dem Zeiger) ist weg. Die Extension im Browser zeigt
   seit 3.29.7 keinen Streifen mehr: Ihre Leiste steht beim Ziehen gleich in
   voller Höhe (`overlay.css` `.zones-bar`, 30vh, höchstens 260 px), mit Hinweis
   unten auf der Karte. Die Leiste der Extension hat
@@ -508,9 +510,10 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
   „Gesichert in …“ mit Glühen (`.landed`). Scheitert es, steht „Nicht
   gesichert: …“ in `--danger` (`.failed`, kein Glühen) 2.5 s lang, dann
   blendet die Leiste aus. Die Leiste bleibt so lange stehen (`dropbar_hold`).
-- **Ab Werk aus (0.32.1):** Einschalten unter Einstellungen › Mac & Browser. Erst die
-  eigene Wahl zählt (`dropbarChosen`); ein `dropbar: true` aus älteren
-  Versionen ohne Wahl gilt als aus. Im Browser übernimmt die Extension.
+- **Ab Werk an (0.40.21, vorher ab 0.32.1 aus):** Weil sie nur mit ⌥ kommt,
+  ist sie wieder an, auch wenn die alte Leiste ausgeschaltet war.
+  Ausschalten unter Einstellungen › Mac & Browser; erst diese Wahl zählt
+  (`dropbarAltChosen`). Im Browser übernimmt die Extension.
 - **Nicht:** Erscheint nicht, wenn Archiver selbst vorne ist, und nicht bei
   Text oder Links ohne Datei. Zeigt nie „Gesichert“, bevor es gesichert ist.
   Im Browser (Extension 3.29.5) erscheint sie nur, wenn das Ziehen auf der

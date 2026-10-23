@@ -2592,7 +2592,7 @@
         ),
         blockRow(
           t("setDropbarSys"),
-          choice([["on", t("setOn")], ["off", t("setOff")]], prefs.dropbar ? "on" : "off", (id) => save({ ...prefs, dropbar: id === "on", dropbarChosen: true }))
+          choice([["on", t("setOn")], ["off", t("setOff")]], prefs.dropbar ? "on" : "off", (id) => save({ ...prefs, dropbar: id === "on", dropbarAltChosen: true }))
         )
       );
     };

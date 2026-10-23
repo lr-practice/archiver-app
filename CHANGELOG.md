@@ -1,5 +1,16 @@
 # Changelog
 
+## App 0.40.21 (Vorabversion)
+
+- Zonenleiste am ganzen Mac ist zurück: Dateien irgendwo ziehen (Finder,
+  Schreibtisch, Mail …) und ⌥ halten, dann stehen unten die vier Active Zones
+  in voller Höhe. Ohne ⌥ kommt nichts. Ab Werk an, auch wenn die alte Leiste
+  aus war; ausschalten unter Einstellungen › Mac & Browser.
+- Schneller und verlässlicher: Die Karten liegen schon bereit, bevor gezogen
+  wird, statt erst beim Einblenden zu laden. Kein Streifen mehr und keine
+  Fenster-Animation beim Hochfahren. Ein Drop in einer Lücke zwischen zwei
+  Karten landet in der Zone darunter, statt verloren zu gehen.
+
 ## App 0.40.20 (Vorabversion, Safari-Extension)
 
 - Die Extension läuft auch in Safari am Mac, aus demselben Code wie in

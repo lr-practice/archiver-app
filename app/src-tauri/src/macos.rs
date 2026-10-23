@@ -710,15 +710,6 @@ pub unsafe fn panel_bottom_of_mouse_screen(window: *mut AnyObject, height: f64, 
     let _: () = msg_send![window, setFrame: rect, display: true, animate: animate];
 }
 
-/// Höhe des Zeigers über der Unterkante des sichtbaren Bildschirms (über dem
-/// Dock); negativ, wenn er im Dock steht (Zonenleiste als Streifen, 0.32)
-pub fn mouse_above_bottom() -> Option<f64> {
-    unsafe {
-        let mouse: NSPoint = msg_send![class!(NSEvent), mouseLocation];
-        mouse_screen_frame().map(|vf| mouse.y - vf.origin.y)
-    }
-}
-
 /// Linke Maustaste gedrückt? Und der Zähler der Drag-Zwischenablage.
 pub fn drag_probe() -> (bool, isize) {
     objc2::rc::autoreleasepool(|_| unsafe {
@@ -728,6 +719,14 @@ pub fn drag_probe() -> (bool, isize) {
         let count: isize = if board.is_null() { 0 } else { msg_send![board, changeCount] };
         (buttons & 1 == 1, count)
     })
+}
+
+/// Wird ⌥ gehalten? (NSEventModifierFlagOption, ohne Bedienungshilfen-Freigabe)
+pub fn option_held() -> bool {
+    unsafe {
+        let flags: usize = msg_send![class!(NSEvent), modifierFlags];
+        flags & (1 << 19) != 0
+    }
 }
 
 /// Werden gerade Dateien gezogen (nicht nur Text oder ein Link)?

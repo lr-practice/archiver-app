@@ -1,7 +1,11 @@
 // dropbar.js — Active-Zones-Leiste am ganzen Mac (system.rs blendet sie ein,
-// sobald irgendwo Dateien gezogen werden). Loslassen auf einer Zone sichert die
-// Dateien dort: Dateien von außen werden importiert, Dateien aus der eigenen
-// Bibliothek verschoben.
+// sobald irgendwo Dateien gezogen werden und ⌥ gehalten wird). Loslassen auf
+// einer Zone sichert die Dateien dort: Dateien von außen werden importiert,
+// Dateien aus der eigenen Bibliothek verschoben.
+//
+// 0.40.21: Die Karten stehen schon fertig im (unsichtbaren) Fenster, bevor
+// gezogen wird. Beim Einblenden wird nichts mehr geladen; vorher kam die Leiste
+// leer oder spät, und ein Drop auf die leere Leiste sicherte nichts.
 
 (function () {
   const TAURI = window.__TAURI__;
@@ -12,7 +16,7 @@
 
   document.documentElement.lang = lang;
 
-  const state = { snap: null, dirty: true, zones: [], target: null };
+  const state = { snap: null, dirty: true, zones: [], target: null, visible: false };
 
   function el(tag, cls, text) {
     const node = document.createElement(tag);
@@ -77,11 +81,26 @@
     );
   }
 
+  // Karte unter dem Zeiger; in den Lücken und am Rand die Karte in derselben Spalte
   function cardAt(pos) {
     if (!pos) return null;
     const ratio = window.devicePixelRatio || 1;
-    const hit = document.elementFromPoint(pos.x / ratio, pos.y / ratio);
-    return hit ? hit.closest(".db-hot") : null;
+    const x = pos.x / ratio;
+    const hit = document.elementFromPoint(x, pos.y / ratio);
+    const card = hit ? hit.closest(".db-hot") : null;
+    if (card) return card;
+    const cards = [...document.querySelectorAll(".db-hot")];
+    let best = null;
+    let dist = Infinity;
+    for (const c of cards) {
+      const r = c.getBoundingClientRect();
+      const d = x < r.left ? r.left - x : x > r.right ? x - r.right : 0;
+      if (d < dist) {
+        dist = d;
+        best = c;
+      }
+    }
+    return best;
   }
 
   function mark(card) {
@@ -128,20 +147,37 @@
     if (p.type === "drop") return drop(p.paths || [], cardAt(p.position) || state.target);
   });
 
-  TAURI.event.listen("library-changed", () => (state.dirty = true));
-  TAURI.event.listen("library-switched", () => (state.dirty = true));
-  TAURI.event.listen("dropbar-show", async () => {
-    await load();
-    render();
-    $("bar").classList.add("strip");
+  // Zonen im Hintergrund nachladen, solange die Leiste nicht zu sehen ist
+  let refreshTimer = 0;
+  function stale() {
+    state.dirty = true;
+    clearTimeout(refreshTimer);
+    refreshTimer = setTimeout(() => {
+      // steht die Leiste noch (Drop läuft, Bestätigung), später noch einmal
+      if (state.visible || document.querySelector(".busy, .landed, .failed")) return stale();
+      load().then(() => !state.visible && render());
+    }, 400);
+  }
+
+  TAURI.event.listen("library-changed", stale);
+  TAURI.event.listen("library-switched", stale);
+  TAURI.event.listen("dropbar-show", () => {
+    state.visible = true;
+    // Stand von eben zeigen; nur wenn noch nie geladen wurde, jetzt laden
+    // (render baut die Karten neu, ihr Einblenden läuft damit jedes Mal)
+    if (!state.snap) load().then(render);
+    else render();
   });
-  // 0.32: Zeiger im Streifen → volle Leiste, darüber hinaus → wieder Streifen
-  TAURI.event.listen("dropbar-tall", (e) => $("bar").classList.toggle("strip", !e.payload));
   TAURI.event.listen("dropbar-release", () => {
     if (!document.querySelector(".landed, .busy, .failed")) $("bar").classList.add("leaving");
+    // nach dem Ausblenden den neuen Stand vorbereiten (der Drop hat Zonen gefüllt)
+    setTimeout(() => {
+      state.visible = false;
+      if (state.dirty) stale();
+    }, 1500);
   });
   window.addEventListener("storage", (e) => {
-    if (e.key === "archiver.zoneOrder") state.dirty = true;
+    if (e.key === "archiver.zoneOrder" || e.key === "archiver.radius") stale();
   });
 
   load().then(render);

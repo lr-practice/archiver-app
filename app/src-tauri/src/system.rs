@@ -7,8 +7,8 @@
 //                 darunter bleibt vorne. Beim Herausziehen wird sie fast
 //                 unsichtbar und lässt Klicks durch.
 //   Zonenleiste (V1)  Zieht man irgendwo am Mac Dateien (Finder, Schreibtisch,
-//                 Mail …), fahren unten die Active Zones ein. Loslassen auf einer
-//                 Zone sichert die Dateien dort.
+//                 Mail …) und hält dabei ⌥, fahren unten die Active Zones ein
+//                 (0.40.21). Loslassen auf einer Zone sichert die Dateien dort.
 //
 // Beide Fenster sind NSPanel ohne Aktivierung (wie Spotlight), schweben über
 // allen Spaces und Vollbild-Programmen.
@@ -30,7 +30,7 @@ pub const DROPBAR: &str = "dropbar";
 pub const DEFAULT_SHORTCUT: &str = "Alt+Space";
 
 /// Zonenleiste beim Ziehen eingeschaltet
-static DROPBAR_ON: AtomicBool = AtomicBool::new(false);
+static DROPBAR_ON: AtomicBool = AtomicBool::new(true);
 /// Gerade wird aus der Palette gezogen: keine Leiste, Palette nicht schließen
 static PALETTE_DRAG: AtomicBool = AtomicBool::new(false);
 /// Zonenleiste nach dem Loslassen stehen lassen bis zu diesem Zeitpunkt (ms):
@@ -55,23 +55,28 @@ pub struct SystemPrefs {
     pub shortcut: String,
     /// Zonenleiste beim Ziehen am ganzen Mac
     pub dropbar: bool,
-    /// Leiste selbst in den Einstellungen gewählt (0.32.1). Ohne Wahl ist sie
-    /// aus, auch wenn eine ältere Version `dropbar: true` gespeichert hat.
+    /// Leiste selbst in den Einstellungen gewählt (0.32.1). Gilt nur noch für
+    /// die alte Leiste ohne ⌥ und wird beim Laden nicht mehr ausgewertet.
     #[serde(default)]
     pub dropbar_chosen: bool,
+    /// Leiste mit ⌥ (0.40.21) selbst gewählt. Ohne Wahl ist sie an, auch wenn
+    /// die alte Leiste (ohne ⌥) ausgeschaltet war.
+    #[serde(default)]
+    pub dropbar_alt_chosen: bool,
 }
 
 impl Default for SystemPrefs {
     fn default() -> Self {
-        SystemPrefs { shortcut: DEFAULT_SHORTCUT.into(), dropbar: false, dropbar_chosen: false }
+        SystemPrefs { shortcut: DEFAULT_SHORTCUT.into(), dropbar: true, dropbar_chosen: false, dropbar_alt_chosen: false }
     }
 }
 
 impl SystemPrefs {
-    /// Ab Werk aus: nur an, wenn jemand sie in den Einstellungen eingeschaltet hat
+    /// Ab Werk an (0.40.21, mit ⌥): aus nur, wenn jemand sie seitdem selbst
+    /// ausgeschaltet hat
     pub fn settle(&mut self) {
-        if !self.dropbar_chosen {
-            self.dropbar = false;
+        if !self.dropbar_alt_chosen {
+            self.dropbar = true;
         }
     }
 }
@@ -339,21 +344,24 @@ end run"#;
 }
 
 /// Beobachtet das Ziehen am ganzen Mac. Kein Ereignis-Hook (der bräuchte die
-/// Bedienungshilfen-Freigabe), sondern ein Blick alle 50 ms: Maustaste gedrückt
+/// Bedienungshilfen-Freigabe), sondern ein Blick alle 30 ms: Maustaste gedrückt
 /// und die Drag-Zwischenablage hat sich seit dem Drücken geändert → es wird
 /// gezogen. Nur Dateien zählen, und nicht, wenn Archiver selbst vorne ist
-/// (dort hat das Hauptfenster seine eigene Leiste).
+/// (dort hat das Hauptfenster seine eigene Leiste). Die Leiste kommt erst,
+/// wenn während des Ziehens ⌥ gehalten wird (0.40.21), dann gleich in voller
+/// Höhe; ⌥ darf danach wieder losgelassen werden.
 #[cfg(target_os = "macos")]
 fn watch_drags(app: AppHandle) {
     use std::time::{Duration, Instant};
     std::thread::spawn(move || {
         let mut base: Option<isize> = None;
         let mut showing = false;
-        let mut tall = false;
+        // dieses Ziehen hat Dateien und wartet nur noch auf ⌥
+        let mut armed = false;
         let mut released: Option<Instant> = None;
         let mut was_hidden = false;
         loop {
-            std::thread::sleep(Duration::from_millis(50));
+            std::thread::sleep(Duration::from_millis(30));
             let hidden = crate::macos::app_hidden();
             if was_hidden && !hidden {
                 UNHIDDEN_AT.store(crate::library::now_ms() as u64, Ordering::Relaxed);
@@ -362,6 +370,7 @@ fn watch_drags(app: AppHandle) {
             let (pressed, count) = crate::macos::drag_probe();
             if !pressed {
                 base = Some(count);
+                armed = false;
                 if showing {
                     let at = *released.get_or_insert_with(|| {
                         let _ = app.emit_to(DROPBAR, "dropbar-release", ());
@@ -378,56 +387,39 @@ fn watch_drags(app: AppHandle) {
                 continue;
             }
             released = None;
-            // 0.32: erst nur ein Streifen am Rand, damit darüber alles frei bleibt
-            // (z. B. das Eingabefeld eines Chats). Fährt der Zeiger hinein, kommt
-            // die volle Leiste, verlässt er sie nach oben, wird sie wieder Streifen.
             if showing {
-                if let Some(y) = crate::macos::mouse_above_bottom() {
-                    let want = if tall { y < DROPBAR_TALL + 24.0 } else { y < DROPBAR_STRIP };
-                    if want != tall {
-                        tall = want;
-                        resize_dropbar(&app, tall);
-                    }
-                }
+                continue;
             }
             let Some(b) = base else {
                 base = Some(count);
                 continue;
             };
-            if showing || count == b {
-                continue;
+            if !armed {
+                if count == b {
+                    continue;
+                }
+                // dieses Ziehen ist entschieden, egal ob die Leiste kommt
+                base = Some(count);
+                if !DROPBAR_ON.load(Ordering::Relaxed) || PALETTE_DRAG.load(Ordering::Relaxed) {
+                    continue;
+                }
+                if crate::macos::app_active() || !crate::macos::drag_has_files() {
+                    continue;
+                }
+                armed = true;
             }
-            // dieses Ziehen ist entschieden, egal ob die Leiste kommt
-            base = Some(count);
-            if !DROPBAR_ON.load(Ordering::Relaxed) || PALETTE_DRAG.load(Ordering::Relaxed) {
-                continue;
+            if crate::macos::option_held() {
+                armed = false;
+                showing = true;
+                set_dropbar(&app, true);
             }
-            if crate::macos::app_active() || !crate::macos::drag_has_files() {
-                continue;
-            }
-            showing = true;
-            tall = false;
-            set_dropbar(&app, true);
         }
     });
 }
 
-/// Zonenleiste (DESIGN.md 4.13): Streifen beim Ziehen, volle Höhe unter dem Zeiger
+/// Zonenleiste (DESIGN.md 4.13): volle Höhe, sobald ⌥ gehalten wird
 #[cfg(target_os = "macos")]
-const DROPBAR_STRIP: f64 = 90.0;
-#[cfg(target_os = "macos")]
-const DROPBAR_TALL: f64 = 280.0;
-
-#[cfg(target_os = "macos")]
-fn resize_dropbar(app: &AppHandle, tall: bool) {
-    let Some(win) = app.get_webview_window(DROPBAR) else { return };
-    let app2 = app.clone();
-    let _ = app.run_on_main_thread(move || {
-        let Ok(ns) = win.ns_window() else { return };
-        unsafe { crate::macos::panel_bottom_of_mouse_screen(ns.cast(), if tall { DROPBAR_TALL } else { DROPBAR_STRIP }, tall) };
-        let _ = app2.emit_to(DROPBAR, "dropbar-tall", tall);
-    });
-}
+const DROPBAR_HEIGHT: f64 = 280.0;
 
 #[cfg(target_os = "macos")]
 fn set_dropbar(app: &AppHandle, show: bool) {
@@ -438,7 +430,7 @@ fn set_dropbar(app: &AppHandle, show: bool) {
         let ns = ns.cast();
         unsafe {
             if show {
-                crate::macos::panel_bottom_of_mouse_screen(ns, DROPBAR_STRIP, false);
+                crate::macos::panel_bottom_of_mouse_screen(ns, DROPBAR_HEIGHT, false);
                 crate::macos::panel_show(ns, false);
                 let _ = app2.emit_to(DROPBAR, "dropbar-show", ());
             } else {
@@ -453,15 +445,17 @@ mod tests {
     use super::SystemPrefs;
 
     #[test]
-    fn dropbar_is_off_unless_chosen() {
-        // Ältere Versionen haben `dropbar: true` ohne Wahl gespeichert
-        let mut old: SystemPrefs = serde_json::from_str(r#"{"shortcut":"Alt+Space","dropbar":true}"#).unwrap();
+    fn dropbar_with_option_is_on_unless_turned_off_again() {
+        // Die alte Leiste war aus (ab Werk oder selbst gewählt): mit ⌥ wieder an
+        let mut old: SystemPrefs =
+            serde_json::from_str(r#"{"shortcut":"Alt+Space","dropbar":false,"dropbarChosen":true}"#).unwrap();
         old.settle();
-        assert!(!old.dropbar);
-        let mut chosen: SystemPrefs =
-            serde_json::from_str(r#"{"shortcut":"Alt+Space","dropbar":true,"dropbarChosen":true}"#).unwrap();
-        chosen.settle();
-        assert!(chosen.dropbar);
-        assert!(!SystemPrefs::default().dropbar);
+        assert!(old.dropbar);
+        // Seit 0.40.21 selbst ausgeschaltet: bleibt aus
+        let mut off: SystemPrefs =
+            serde_json::from_str(r#"{"shortcut":"Alt+Space","dropbar":false,"dropbarAltChosen":true}"#).unwrap();
+        off.settle();
+        assert!(!off.dropbar);
+        assert!(SystemPrefs::default().dropbar);
     }
 }

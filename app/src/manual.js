@@ -77,7 +77,7 @@ const MANUAL = {
           { t: "Herausziehen", d: "Objekt direkt in InDesign, Figma, Mail oder den Finder ziehen. Der Tray wird dabei fast unsichtbar." },
           { t: "Kopieren und zeigen", d: "`↵` kopiert, `⌘↵` zeigt im Finder, die Leertaste zeigt das Objekt groß.", k: ["↵", "⌘↵", "Space"] },
           { t: "InDesign", d: "Rahmen markieren, Tray öffnen, Doppelklick oder `↵` auf ein Bild: Es landet verknüpft im Rahmen, proportional gefüllt und zentriert." },
-          { t: "Zonenleiste", d: "Wer irgendwo auf dem Mac Dateien zieht, sieht unten die Active Zones. Loslassen sichert. Ab Werk aus, einschalten unter Einstellungen › Mac & Browser." },
+          { t: "Zonenleiste", d: "Wer irgendwo auf dem Mac Dateien zieht und dabei `⌥` hält, sieht unten die Active Zones. Loslassen sichert. Ausschalten unter Einstellungen › Mac & Browser." },
         ],
       },
       {
