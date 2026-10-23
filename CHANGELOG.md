@@ -1,5 +1,13 @@
 # Changelog
 
+## App 0.40.25 (Vorabversion)
+
+- Zonenleiste, Observer und Tray holen nicht mehr das ganze Archiver-Fenster
+  nach vorne. War Archiver mit ⌘H ausgeblendet, kommt nur die Leiste. Öffnet
+  der Observer ein Bild aus dem Finder, bleibt das Hauptfenster weg, statt
+  hinten mit aufzugehen; schließt der Observer, liegt es wieder dort, wo es
+  war. Ein „Reopen“ von macOS direkt beim Öffnen holt es auch nicht mehr.
+
 ## App 0.40.24 (Vorabversion)
 
 - Zonenleiste am ganzen Mac mit echtem Glas: Hinter jeder Karte liegt jetzt

@@ -480,6 +480,15 @@ fn set_dropbar(app: &AppHandle, show: bool) {
         let ns = ns.cast();
         unsafe {
             if show {
+                // Archiver ist mit ⌘H ausgeblendet (0.40.25): nur die Leiste
+                // einblenden, das Hauptfenster bleibt weg (wie der Tray, 0.37.1).
+                // Vorher holte die Leiste dabei das ganze Programm nach vorne.
+                if crate::macos::app_hidden() {
+                    if let Some(Ok(main)) = app2.get_webview_window("main").map(|w| w.ns_window()) {
+                        crate::macos::panel_hide(main.cast());
+                    }
+                    crate::macos::unhide_without_activation();
+                }
                 crate::macos::panel_bottom_of_mouse_screen(ns, dropbar_height, false);
                 crate::macos::panel_show(ns, false);
                 let _ = app2.emit_to(DROPBAR, "dropbar-show", ());

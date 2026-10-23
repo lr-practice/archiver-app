@@ -1688,6 +1688,15 @@ pub fn run() {
                     api.prevent_close();
                     let _ = window.hide();
                 }
+                // Observer zu: ein dafür weggelegtes Hauptfenster kommt hinten zurück
+                #[cfg(target_os = "macos")]
+                tauri::WindowEvent::Destroyed if window.label() == viewer::LABEL => {
+                    if system::MAIN_TUCKED.swap(false, std::sync::atomic::Ordering::Relaxed) {
+                        if let Some(Ok(main)) = window.app_handle().get_webview_window("main").map(|w| w.ns_window()) {
+                            unsafe { macos::order_back(main.cast()) };
+                        }
+                    }
+                }
                 tauri::WindowEvent::Focused(false) if window.label() == system::PALETTE => {
                     system::palette_blurred(window.app_handle());
                 }
@@ -1822,7 +1831,9 @@ pub fn run() {
             // Hauptfenster fehlt)
             tauri::RunEvent::Reopen { has_visible_windows, .. } => {
                 let main_shown = app.get_webview_window("main").and_then(|w| w.is_visible().ok()).unwrap_or(false);
-                if !has_visible_windows || !main_shown {
+                // 0.40.25: gehört zum Öffnen eines Bildes im Observer, kein Klick aufs Dock
+                let opening = library::now_ms() as u64 <= viewer::OPENED_AT.load(std::sync::atomic::Ordering::Relaxed) + 1500;
+                if (!has_visible_windows || !main_shown) && !opening {
                     viewer::show_main(app);
                 }
             }

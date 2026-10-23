@@ -14,6 +14,10 @@ use tauri::{AppHandle, Emitter, Manager, State, WebviewUrl, WebviewWindowBuilder
 
 pub const LABEL: &str = "viewer";
 
+/// Wann zuletzt ein Bild im Observer geöffnet wurde (ms): Ein „Reopen“ von
+/// macOS kurz danach gehört zu diesem Öffnen und holt nicht das Hauptfenster.
+pub static OPENED_AT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
 /// Öffnet ein Bild im Betrachter (neues Fenster oder das vorhandene).
 pub fn open(app: &AppHandle, path: PathBuf) {
     if !path.is_file() || !(library::is_media(&path) && !library::is_text(&path)) {
@@ -56,8 +60,8 @@ pub fn open(app: &AppHandle, path: PathBuf) {
 }
 
 /// Öffnet man ein Bild aus dem Finder, während Archiver im Hintergrund läuft,
-/// holt das Aktivieren alle Fenster nach vorne. Das Hauptfenster geht danach
-/// wieder nach hinten, damit nur der Betrachter vorne steht. War Archiver mit
+/// holt das Aktivieren alle Fenster nach vorne. Das Hauptfenster wird danach
+/// weggelegt (0.40.25, vorher nur nach hinten), damit nur der Observer steht. War Archiver mit
 /// ⌘H ausgeblendet (0.37.1), bleibt das Hauptfenster ganz weg; das Dock holt es.
 fn keep_main_behind(app: &AppHandle) {
     #[cfg(target_os = "macos")]
@@ -65,11 +69,18 @@ fn keep_main_behind(app: &AppHandle) {
         use std::sync::atomic::Ordering;
         let Some(main) = app.get_webview_window("main") else { return };
         let hidden = crate::macos::app_hidden();
-        if hidden {
-            let _ = main.hide();
-        }
         let active = crate::macos::app_active();
         let visible = main.is_visible().unwrap_or(false);
+        crate::viewer::OPENED_AT.store(crate::library::now_ms() as u64, Ordering::Relaxed);
+        // 0.40.25: Archiver lag hinten → das Hauptfenster gleich weglegen statt
+        // nach hinten zu schieben; es blieb sonst sichtbar hinter dem Observer.
+        // Schließt der Observer, kommt es hinten zurück (MAIN_TUCKED).
+        if hidden || (!active && visible) {
+            let _ = main.hide();
+        }
+        if !hidden && !active && visible {
+            crate::system::MAIN_TUCKED.store(true, Ordering::Relaxed);
+        }
         let opened = crate::library::now_ms() as u64;
         let app = app.clone();
         std::thread::spawn(move || {
@@ -77,12 +88,10 @@ fn keep_main_behind(app: &AppHandle) {
             let _ = app.run_on_main_thread(move || {
                 // macOS hat Archiver für dieses Bild aus ⌘H geholt (vor oder nach dem Öffnen)
                 let unhidden = crate::system::UNHIDDEN_AT.load(Ordering::Relaxed) + 500 >= opened;
-                if hidden || unhidden {
+                // war das Hauptfenster vorher nicht vorne, bleibt es weg, auch
+                // wenn das Aktivieren es inzwischen wieder geholt hat
+                if hidden || unhidden || !active {
                     let _ = main.hide();
-                } else if !active && visible {
-                    if let Ok(ns) = main.ns_window() {
-                        unsafe { crate::macos::send_to_back(ns.cast()) };
-                    }
                 }
             });
         });
