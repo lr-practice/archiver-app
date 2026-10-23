@@ -1,5 +1,23 @@
 # Changelog
 
+## App 0.41.0 (Vorabversion)
+
+- Farbmarken: Objekte in einer Zone bekommen eine von fünf Farben (Rot, Grün,
+  Violett, Cyan, Gelb), über Rechtsklick › Farbmarke oder ⌥1–5, ⌥0 nimmt sie
+  weg. Markierte Objekte tragen einen 4 px Innenrand in ihrer Farbe. Im Kopf
+  der Zone steht je Farbe ein Quadrat mit Anzahl, ein Klick zeigt nur diese.
+  Die Marke liegt in der Bibliothek (metadata.json) und geht mit auf andere Macs.
+- Wolke neu gedacht: neun Ansichten (Wolke, Fokus, Raster, Spalten, Spektrum,
+  Strang, Stapel, Vergleich, Frei), die Objekte gleiten beim Wechsel an ihren
+  Platz. Mehrere wählen mit ⇧ oder ⌘, Lasso auf freier Fläche, ⌘A. Die Leiste
+  unten zeigt dann Größe, Groß, Gruppe, Vergleichen, In die Mitte und Entfernen.
+  Leertaste oder Doppelklick zeigt groß, ← → blättert. G bildet eine Gruppe,
+  die zusammenhält. Beim Überfahren zeigen Fäden die drei ähnlichsten. Ziehen
+  legt frei ab. Die Fläche gibt es in Lightbox, Schwarz, Weiß, den fünf Farben
+  und „Auto“ aus dem offenen Bild. Orbit, Farbe und Konstellation gehen in
+  Fokus, Spektrum und Strang auf. Doppelklick macht ein Bild nicht mehr zur
+  Mitte einer neuen Wolke, dafür bleibt Enter.
+
 ## App 0.40.25 (Vorabversion)
 
 - Zonenleiste, Observer und Tray holen nicht mehr das ganze Archiver-Fenster

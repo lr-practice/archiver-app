@@ -1,4 +1,5 @@
-/* cloud.css — Wolke (0.39.1): Referenzen um das offene Objekt, per Physik.
+/* cloud.css — Wolke (0.39.1, neu 0.41.0): Referenzen um das offene Objekt,
+   neun Ansichten, Fläche in sieben Farben.
    Baut auf app.css auf: Lightbox-Grund und -Leiste (4.11), Ring (4.1),
    Glas (2.4), Chips (4.7). Siehe DESIGN.md 4.25. */
 
@@ -6,7 +7,9 @@
   position: fixed;
   inset: 0;
   z-index: 25;
-  background: var(--lightbox-bg);
+  background: var(--cl-bg, var(--lightbox-bg));
+  color: var(--cl-fg, var(--p-text));
+  transition: background-color 0.28s ease;
   -webkit-backdrop-filter: blur(24px);
   backdrop-filter: blur(24px);
   animation: cl-in 0.18s ease;
@@ -35,8 +38,11 @@
   pointer-events: none;
 }
 
-.cl-links line {
-  stroke: var(--dash);
+.cl-links line,
+.cl-links path {
+  fill: none;
+  stroke: var(--cl-fg, var(--p-text));
+  stroke-opacity: 0.45;
   stroke-width: 1;
   stroke-dasharray: 4 4;
 }
@@ -49,7 +55,14 @@
   background: var(--thumb-bg);
   cursor: grab;
   will-change: transform;
-  transition: width 0.18s ease, height 0.18s ease;
+  /* Ansichten wechseln: jedes Objekt gleitet an seinen neuen Platz (2.5) */
+  transition: transform 0.45s cubic-bezier(0.2, 0.7, 0.2, 1), width 0.45s cubic-bezier(0.2, 0.7, 0.2, 1),
+    height 0.45s cubic-bezier(0.2, 0.7, 0.2, 1), opacity 0.28s ease;
+}
+
+.cl-ref.still,
+.cloud.dragging .cl-ref.selected {
+  transition: none;
 }
 
 .cl-ref:active {
@@ -64,29 +77,159 @@
   pointer-events: none;
 }
 
-.cl-ref.new {
-  animation: cl-pop 0.28s cubic-bezier(0.2, 0.7, 0.2, 1);
-}
-
-@keyframes cl-pop {
-  from {
-    opacity: 0;
-    scale: 0.6;
-  }
-}
-
-/* Auswahl: Ring (4.1), eckig, 4 px Abstand */
-.cl-ref.selected::after {
+/* Auswahl: Ring (4.1), eckig, 4 px Abstand; auf farbiger Fläche in deren Schriftfarbe.
+   Die drei ähnlichsten beim Überfahren tragen denselben Ring, halb so stark. */
+.cl-ref.selected::after,
+.cl-ref.near::after {
   content: "";
   position: absolute;
   inset: -4px;
   pointer-events: none;
-  background: var(--p-text, var(--ink));
+  background: var(--cl-fg, var(--p-text));
   -webkit-mask: var(--ring-0) 0 0 / 100% 100% no-repeat;
   mask: var(--ring-0) 0 0 / 100% 100% no-repeat;
 }
 
+.cl-ref.near:not(.selected)::after {
+  opacity: 0.45;
+}
+
+/* Gruppe: Kennung unter dem Objekt, Label wie 4.7 */
+.cl-group,
+.cl-pile-label {
+  position: absolute;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--cl-fg, var(--p-text));
+  opacity: 0.7;
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+.cl-group {
+  right: 0;
+  bottom: -16px;
+}
+
+.cl-labels {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.cl-pile-label {
+  left: 0;
+  top: 0;
+}
+
+.cl-lasso {
+  position: absolute;
+  pointer-events: none;
+  border: 1px dashed var(--cl-fg, var(--p-text));
+  background: color-mix(in srgb, var(--cl-fg, var(--p-text)) 6%, transparent);
+}
+
+/* ---- Groß ansehen (Leertaste) ---- */
+
+.cl-look {
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  display: grid;
+  place-items: center;
+  background: color-mix(in srgb, var(--cl-bg, var(--lightbox-bg)) 94%, transparent);
+  -webkit-backdrop-filter: blur(24px);
+  backdrop-filter: blur(24px);
+  animation: cl-in 0.18s ease;
+}
+
+.cl-look img {
+  max-width: calc(100% - 160px);
+  max-height: calc(100% - 140px);
+  object-fit: contain;
+}
+
+.cl-look-nav {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  padding: 20px;
+  border: 0;
+  background: none;
+  color: var(--cl-fg, var(--p-text));
+  font-size: 22px;
+  opacity: 0.6;
+  cursor: default;
+}
+
+.cl-look-nav:hover {
+  opacity: 1;
+}
+
+.cl-look-nav.prev {
+  left: 12px;
+}
+
+.cl-look-nav.next {
+  right: 12px;
+}
+
+.cl-look-cap {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 28px;
+  text-align: center;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--cl-fg, var(--p-text));
+  opacity: 0.7;
+}
+
+/* ---- Fläche: Quadrate in der Leiste, eckig wie die Objekte ---- */
+
+.cl-tones {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 8px;
+}
+
+.cl-tone {
+  width: 13px;
+  height: 13px;
+  padding: 0;
+  border: 0;
+  background: var(--sw, var(--lightbox-bg));
+  box-shadow: inset 0 0 0 1px rgba(var(--ink-rgb), 0.25);
+  cursor: default;
+}
+
+/* Lightbox: halb dunkel; Auto: Verlauf als Zeichen für „aus dem Bild“ */
+.cl-tone[data-tone="lightbox"] {
+  background: linear-gradient(135deg, var(--lightbox-bg) 50%, transparent 50%);
+}
+
+.cl-tone[data-tone="auto"] {
+  background: linear-gradient(90deg, #ff0000, #ffff00, #00b050, #00b0f0, #7030a0);
+}
+
+.cl-tone.active {
+  outline: 1px dashed var(--p-text);
+  outline-offset: 3px;
+}
+
 /* ---- Leisten: wie die Lightbox-Leiste ---- */
+
+/* Auf farbiger Fläche decken die Leisten wie ein Menü, damit sie lesbar bleiben */
+.cloud:not([data-tone="lightbox"]) .lb-bar,
+.cloud:not([data-tone="lightbox"]) .cl-picker {
+  background: var(--menu-bg);
+}
 
 .cl-top {
   top: 22px;
@@ -197,7 +340,7 @@ body.cloud-open .lb-zones {
 @media (prefers-reduced-motion: reduce) {
   .cloud,
   .cl-picker,
-  .cl-ref.new {
+  .cl-look {
     animation: none;
   }
   .cl-ref,

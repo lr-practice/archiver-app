@@ -7904,3 +7904,76 @@ html[data-head="14"] :is(.p-page > .p-home-hero > .p-head, .p-page > .p-head, .p
 }
 html[data-head="14"] :is(.p-page > .p-home-hero > .p-head, .p-page > .p-head, .p-page > .p-head-row > .p-head) .p-head-text { display: inline; }
 html[data-head="14"] .p-head-row .p-folder-cards { display: none; }
+
+/* ---- 0.41.0: Farbmarken (DESIGN.md 4.6a) ----
+   Innenrand 4 px in der Farbe auf dem Bild (Lukas 23.10.: Variante B). Liegt
+   innen, damit das Raster ruhig bleibt und die Marke den Ring (außen, 4.1)
+   nie berührt. */
+.card-mark {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  pointer-events: none;
+  box-shadow: inset 0 0 0 4px var(--mk);
+}
+.card-mark[hidden] {
+  display: none;
+}
+/* Liste: ein Strich links an der Zeile */
+.listview .card-mark {
+  inset: 6px auto 6px 0;
+  width: 3px;
+  box-shadow: none;
+  background: var(--mk);
+}
+.mark-sw {
+  display: inline-block;
+  flex: none;
+  width: 9px;
+  height: 9px;
+  background: var(--mk);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.12);
+}
+.p-marks {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: 14px;
+}
+.p-mark-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.p-mark-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 10px 8px;
+}
+.p-mark-row .mark-sw.big {
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: 0;
+  cursor: default;
+}
+.p-mark-row .mark-sw.active {
+  outline: 1px dashed rgba(var(--ink-rgb), 0.7);
+  outline-offset: 3px;
+}
+.p-mark-none {
+  margin-left: 4px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--p-dim);
+  font-family: var(--p-mono);
+  font-size: 10px;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  cursor: default;
+}
+.p-mark-none:hover {
+  color: var(--p-text);
+}

@@ -447,6 +447,8 @@
   // 0.30: eine Farbreihe für Textkarten und Notizen, aus den bestehenden Farben
   const TONES = ["red", "green", "violet", "cyan", "yellow", "white", "black"];
   const RANDOM_TONES = ["red", "green", "violet", "cyan", "yellow"];
+  // 0.41.0: Farbmarken in der Übersicht, dieselben fünf Farben (studio.rs MARKS)
+  const MARKS = RANDOM_TONES;
   // Eigene Farbe (beim Markieren im Web bestimmt oder in den Details gewählt),
   // sonst fest aus dem Inhalt abgeleitet
   function quoteTone(item) {
@@ -1399,6 +1401,61 @@
 
   let lastViewKey = "";
 
+  // ---- Farbmarken (0.41.0): Objekte einer Farbe gehören zusammen ----
+  // Chips im Kopf der Zone: je vergebene Farbe ein Quadrat mit Anzahl, Klick filtert
+  function markChips(items) {
+    const counts = MARKS.map((k) => [k, items.filter((i) => i.mark === k).length]).filter(([, n]) => n);
+    if (!counts.length) {
+      state.markFilter = null;
+      return null;
+    }
+    const wrap = el("div", "p-marks");
+    for (const [k, n] of counts) {
+      const on = state.markFilter === k;
+      const c = chip("", on, () => {
+        state.markFilter = on ? null : k;
+        renderZones();
+      });
+      c.classList.add("p-mark-chip");
+      const sw = el("i", "mark-sw");
+      sw.style.setProperty("--mk", QUOTE_TONES[k][0]);
+      c.append(sw, document.createTextNode(String(n)));
+      c.title = t("markFilter", { tone: t("tone_" + k) });
+      wrap.appendChild(c);
+    }
+    return wrap;
+  }
+
+  // Farbe für die Auswahl setzen; dieselbe Farbe noch einmal nimmt sie wieder weg
+  function setMark(items, key) {
+    items = items.filter((i) => i.hash);
+    if (!items.length) return;
+    const next = key && items.every((i) => i.mark === key) ? "" : key || "";
+    for (const i of items) i.mark = next || null;
+    if (state.markFilter && !state.items.some((i) => i.zone === state.focus && i.mark === state.markFilter)) state.markFilter = null;
+    renderZones();
+    invoke("set_note", { hashes: items.map((i) => i.hash), patch: { mark: next } }).catch(fail);
+  }
+
+  function markRow(items, done) {
+    const row = el("div", "p-mark-row");
+    const current = items.every((i) => i.mark === items[0].mark) ? items[0].mark : null;
+    MARKS.forEach((k, n) => {
+      const b = button("mark-sw big" + (current === k ? " active" : ""), "", () => {
+        done();
+        setMark(items, k);
+      });
+      b.style.setProperty("--mk", QUOTE_TONES[k][0]);
+      b.title = t("tone_" + k) + "  ⌥" + (n + 1);
+      row.appendChild(b);
+    });
+    if (items.some((i) => i.mark)) row.appendChild(button("p-mark-none", t("markNone"), () => {
+      done();
+      setMark(items, "");
+    }));
+    return row;
+  }
+
   function renderZones() {
     document.body.classList.toggle("has-selection", state.selection.size > 0);
     const words = queryWords();
@@ -1420,6 +1477,7 @@
     if (isZone(state.focus) && !words.length && state.lists.has(state.focus)) {
       let list = state.lists.get(state.focus);
       if (state.folder != null) list = list.filter((i) => inFolder(i, state.folder));
+      if (state.markFilter) list = list.filter((i) => i.mark === state.markFilter);
       if (zoneLayout(state.focus) === "sections") {
         const base = state.folder || null;
         const rank = new Map(zoneFolders(list, base).map(([f], i) => [f, i]));
@@ -3585,6 +3643,10 @@
     else if (single && shown[0]) bar.appendChild(mono(t("allLabel") + " (" + shown[0].count + ")", "strong"));
     else if (state.found) bar.appendChild(mono(t("foundLabel") + " (" + state.found.length + ")", "strong"));
     else bar.appendChild(mono(t("allZonesLabel") + " (" + state.zones.length + ")", "strong"));
+    if (single && shown[0]) {
+      const marks = markChips(here);
+      if (marks) bar.appendChild(marks);
+    }
     bar.appendChild(el("span", "p-flex"));
     if (single && shown[0]) {
       const copies = cloudCopies(all);
@@ -4103,6 +4165,7 @@
       card.appendChild(el("span", "card-fresh"));
       card.appendChild(el("div", "card-days"));
       card.appendChild(el("span", "card-dot"));
+      card.appendChild(el("span", "card-mark"));
       // Liste: Dateiname und Angaben neben bzw. unter dem Bild
       const info = el("div", "card-info");
       info.appendChild(el("span", "card-name"));
@@ -4163,6 +4226,10 @@
     const dot = card.querySelector(".card-dot");
     dot.hidden = !hasCaption(item) || !!quote || isNote(item);
     if (!dot.hidden) dot.style.setProperty("--ts-bg", quoteTone(item)[0]);
+    // 0.41.0: Farbmarke als Kontur (DESIGN.md 4.6a)
+    const mark = card.querySelector(".card-mark");
+    mark.hidden = !MARKS.includes(item.mark);
+    if (!mark.hidden) mark.style.setProperty("--mk", QUOTE_TONES[item.mark][0]);
     // 0.33: In Unsorted die letzten zwei Tage vor „Zuletzt gelöscht“ zeigen
     const days = card.querySelector(".card-days");
     const left = inboxDaysLeft(item);
@@ -4245,6 +4312,7 @@
     if (path !== state.focus && isZone(state.focus) && state.shared) markSeen(zoneItems(state.focus));
     if (path !== state.focus) {
       state.folder = null;
+      state.markFilter = null;
       state.level = null;
       state.folderKbd = null;
     }
@@ -7223,6 +7291,9 @@
     });
     menu.appendChild(grid);
     rule();
+    menu.appendChild(el("div", "p-more-label", t("markLabel")));
+    menu.appendChild(markRow(items, closeMenus));
+    rule();
     if (isZone(state.focus) && !state.query.trim() && canEdit(state.focus)) entry(menu, t("newFolderWith"), () => newFolder(true));
     entry(menu, t("renameItems"), () => openRenameSheet(items));
     entry(menu, t("ctxCopy"), () => copyImages(items), "⌘C");
@@ -8104,6 +8175,10 @@
       }
     } else if (e.key === " " || e.key === "Enter") {
       openLightbox(selectedItems()[0] || allVisible()[0]);
+    } else if (e.altKey && !mod && /^Digit[0-5]$/.test(e.code) && state.selection.size) {
+      // ⌥1–5 gibt der Auswahl eine Farbmarke, ⌥0 nimmt sie weg
+      const n = Number(e.code.slice(5));
+      setMark(selectedItems(), n ? MARKS[n - 1] : "");
     } else if (/^[1-4]$/.test(e.key) && !mod) {
       const zone = state.zones[Number(e.key) - 1];
       if (zone) moveSelection(zone.path);
@@ -8644,7 +8719,7 @@
     modal.onEnter = onEnter || null;
   }
 
-  if (window.ArchiverCloud) window.ArchiverCloud.init({ el, button, thumbSrc, kindOf, items: () => state.items });
+  if (window.ArchiverCloud) window.ArchiverCloud.init({ el, button, thumbSrc, kindOf, toast, tones: QUOTE_TONES, fullSrc: (i) => (kindOf(i) === "image" ? fileSrc(i.abs) : thumbSrc(i)), items: () => state.items });
 
   async function boot() {
     applyBrand();

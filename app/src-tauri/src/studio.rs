@@ -43,6 +43,9 @@ pub struct Note {
     /// Notiz-Objekt (0.29): verknüpfte Objekte als Hashes
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub links: Option<Vec<String>>,
+    /// Farbmarke in der Übersicht (0.41.0): gehört zu einer Auswahl in dieser Farbe
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mark: Option<String>,
     #[serde(default)]
     pub updated_at: i64,
 }
@@ -58,6 +61,8 @@ pub struct NotePatch {
     pub tone: Option<String>,
     pub caption: Option<String>,
     pub links: Option<Vec<String>>,
+    /// Farbmarke, leer heißt keine
+    pub mark: Option<String>,
 }
 
 /// Erlaubte Farben einer Textkarte; alles andere heißt „keine eigene Farbe“.
@@ -74,6 +79,13 @@ pub(crate) fn links_of(json: Option<String>) -> Option<Vec<String>> {
 
 pub fn clean_tone(t: Option<&str>) -> Option<String> {
     t.filter(|t| TONES.contains(t)).map(String::from)
+}
+
+/// Farbmarken: die fünf Farben der Textkarten ohne Weiß und Schwarz
+pub const MARKS: [&str; 5] = ["red", "green", "violet", "cyan", "yellow"];
+
+pub fn clean_mark(t: Option<&str>) -> Option<String> {
+    t.filter(|t| MARKS.contains(t)).map(String::from)
 }
 
 /// Inhalt von metadata.json und den Personen-Dateien.
@@ -196,12 +208,12 @@ impl Library {
         for (hash, n) in notes {
             let rows = conn
                 .execute(
-                    "INSERT INTO note (hash, note, credit, license, internal, added_by, updated_at, tone, caption, links)
-                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
+                    "INSERT INTO note (hash, note, credit, license, internal, added_by, updated_at, tone, caption, links, mark)
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
                      ON CONFLICT(hash) DO UPDATE SET note=?2, credit=?3, license=?4,
-                       internal=?5, added_by=COALESCE(?6, note.added_by), updated_at=?7, tone=?8, caption=?9, links=?10
+                       internal=?5, added_by=COALESCE(?6, note.added_by), updated_at=?7, tone=?8, caption=?9, links=?10, mark=?11
                      WHERE ?7 > note.updated_at",
-                    params![hash, n.note, n.credit, n.license, n.internal as i64, n.added_by, n.updated_at, n.tone, n.caption, links_json(&n.links)],
+                    params![hash, n.note, n.credit, n.license, n.internal as i64, n.added_by, n.updated_at, n.tone, n.caption, links_json(&n.links), clean_mark(n.mark.as_deref())],
                 )
                 .map_err(err)?;
             changed |= rows > 0;
@@ -212,7 +224,7 @@ impl Library {
     pub(crate) fn all_notes(&self) -> Result<serde_json::Map<String, serde_json::Value>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn
-            .prepare("SELECT hash, note, credit, license, internal, added_by, updated_at, tone, caption, links FROM note ORDER BY hash")
+            .prepare("SELECT hash, note, credit, license, internal, added_by, updated_at, tone, caption, links, mark FROM note ORDER BY hash")
             .map_err(err)?;
         let rows = stmt
             .query_map([], |r| {
@@ -228,6 +240,7 @@ impl Library {
                         tone: r.get(7)?,
                         caption: r.get(8)?,
                         links: links_of(r.get(9)?),
+                        mark: r.get(10)?,
                     },
                 ))
             })
@@ -244,7 +257,7 @@ impl Library {
         let conn = self.conn.lock().unwrap();
         let n = conn
             .query_row(
-                "SELECT note, credit, license, internal, added_by, updated_at, tone, caption, links FROM note WHERE hash = ?1",
+                "SELECT note, credit, license, internal, added_by, updated_at, tone, caption, links, mark FROM note WHERE hash = ?1",
                 params![hash],
                 |r| {
                     Ok(Note {
@@ -257,6 +270,7 @@ impl Library {
                         tone: r.get(6)?,
                         caption: r.get(7)?,
                         links: links_of(r.get(8)?),
+                        mark: r.get(9)?,
                     })
                 },
             )
@@ -289,6 +303,9 @@ impl Library {
             }
             if let Some(v) = &patch.caption {
                 n.caption = clean(Some(v.chars().take(4000).collect()));
+            }
+            if let Some(v) = &patch.mark {
+                n.mark = clean_mark(Some(v));
             }
             if let Some(v) = &patch.links {
                 let mut seen = HashSet::new();
@@ -599,6 +616,18 @@ mod tests {
         // Leere Notiz löscht
         lib.set_note(&[item.hash.clone()], &NotePatch { note: Some(" ".into()), ..Default::default() }).unwrap();
         assert_eq!(lib.items().unwrap()[0].note, None);
+
+        // Farbmarke: nur die fünf Farben, leer löscht, übersteht den Verlust der Datenbank
+        lib.set_note(&[item.hash.clone()], &NotePatch { mark: Some("white".into()), ..Default::default() }).unwrap();
+        assert_eq!(lib.items().unwrap()[0].mark, None);
+        lib.set_note(&[item.hash.clone()], &NotePatch { mark: Some("cyan".into()), ..Default::default() }).unwrap();
+        drop(lib);
+        fs::remove_file(root.join(".archiver/library.db")).unwrap();
+        let lib = Library::open(&root).unwrap();
+        lib.scan().unwrap();
+        assert_eq!(lib.items().unwrap()[0].mark.as_deref(), Some("cyan"));
+        lib.set_note(&[item.hash.clone()], &NotePatch { mark: Some(String::new()), ..Default::default() }).unwrap();
+        assert_eq!(lib.items().unwrap()[0].mark, None);
     }
 
     #[test]

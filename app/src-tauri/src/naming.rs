@@ -617,6 +617,7 @@ mod tests {
             tone: None,
             caption: None,
             links: None,
+            mark: None,
         }
     }
 

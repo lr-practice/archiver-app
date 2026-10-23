@@ -1,33 +1,48 @@
-// cloud.js — Wolke (0.39.1): Am offenen Objekt weitere Referenzen andocken.
-// Sie ziehen sich per Physik an, halten Abstand und bilden ein Moodboard für
-// genau dieses Objekt. Sechs Modi zum Ausprobieren: Wolke, Orbit, Strang,
-// Farbe, Konstellation, Raster. Jedes Objekt hat vier Größen (S M L XL).
+// cloud.js — Wolke (0.39.1, neu gedacht 0.41.0): Am offenen Objekt weitere
+// Referenzen andocken und sie wie auf einem Tisch ordnen. Neun Ansichten:
+// Wolke, Fokus, Raster, Spalten, Spektrum, Strang, Stapel, Vergleich, Frei.
+// Jede Ansicht rechnet ihre Lage einmal aus, die Objekte gleiten per CSS
+// dorthin. Mehrfachauswahl (⇧/⌘, Lasso, ⌘A), Größe S M L XL, Gruppen (G),
+// groß ansehen (Leertaste), Fäden zu den ähnlichsten beim Überfahren.
+// Ziehen legt Objekte frei ab und schaltet auf „Frei“.
 //
-// Gespeichert wird nur, wer zur Wolke gehört (Hash, Größe, Anker), lokal unter
-// archiver.clouds. Lagen rechnet die Physik bei jedem Öffnen neu. Siehe
-// DESIGN.md 4.25.
+// Gespeichert wird nur, wer zur Wolke gehört (Hash, Größe, Gruppe), die freie
+// Lage und die Fläche, lokal unter archiver.clouds. Siehe DESIGN.md 4.25.
 
 (function () {
   const { t } = window.ArchiverI18n;
   let A = null; // Bausteine aus app.js (init)
 
-  const MODES = ["cloud", "orbit", "strand", "magnet", "constellation", "grid"];
+  const VIEWS = ["cloud", "focus", "grid", "masonry", "spectrum", "strand", "piles", "compare", "free"];
+  // Modi bis 0.40: gehen in den neuen Ansichten auf
+  const OLD_VIEWS = { orbit: "focus", magnet: "spectrum", constellation: "strand" };
   const GAPS = { tight: 12, mid: 26, wide: 44 };
   const STEPS = ["S", "M", "L", "XL"];
   const SCALE = [0.62, 1, 1.45, 2.05];
+  // Fläche: Lightbox wie bisher, Schwarz, Weiß, die fünf Farben der Textkarten, Auto aus dem Objekt
+  const TONES = ["lightbox", "black", "white", "red", "green", "violet", "cyan", "yellow", "auto"];
   const COLOR_NAMES = ["red", "orange", "yellow", "green", "teal", "blue", "purple", "pink", "brown", "black", "gray", "white"];
+  const HUES = { red: 0, orange: 28, yellow: 55, green: 125, teal: 175, blue: 215, purple: 275, pink: 330, brown: 24 };
+  const NEUTRAL = ["white", "gray", "black"];
   const MAX_CLOUDS = 300;
   const reduce = () => window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
   const C = {
     root: null,
     focus: null, // Objekt aus der Bibliothek
-    mode: "cloud",
+    view: "cloud",
     gap: "mid",
+    tone: "lightbox",
     nodes: [], // [0] ist das offene Objekt
-    sel: null,
+    sel: new Set(),
+    center: null, // Mitte in Fokus, Strang und Vergleich (ab Werk das offene Objekt)
+    free: new Map(), // Schlüssel → [x, y] als Anteil der Fläche
+    fan: null, // Stapel: aufgefächerte Zone
+    shuffle: 0,
+    gid: 0,
+    hover: null,
     drag: null,
-    raf: 0,
+    look: null, // { list, at }
     picker: false,
     query: "",
   };
@@ -49,15 +64,18 @@
     if (!C.focus) return;
     const all = load();
     const key = keyOf(C.focus);
-    const refs = C.nodes.slice(1).map((n) => [keyOf(n.item), n.step, n.parent ? C.nodes.indexOf(n.parent) : 0]);
-    if (refs.length) all[key] = { m: C.mode, g: C.gap, s: C.nodes[0].step, r: refs, at: Date.now() };
+    const refs = C.nodes.slice(1).map((n) => [keyOf(n.item), n.step, 0, n.group || 0]);
+    const free = {};
+    for (const [k, p] of C.free) free[k] = [Math.round(p[0] * 1000) / 1000, Math.round(p[1] * 1000) / 1000];
+    if (refs.length) all[key] = { m: C.view, g: C.gap, t: C.tone, s: C.nodes[0].step, r: refs, p: free, at: Date.now() };
     else delete all[key];
     const keys = Object.keys(all);
     if (keys.length > MAX_CLOUDS) keys.sort((a, b) => (all[a].at || 0) - (all[b].at || 0)).slice(0, keys.length - MAX_CLOUDS).forEach((k) => delete all[k]);
     try {
       localStorage.setItem("archiver.clouds", JSON.stringify(all));
-      localStorage.setItem("archiver.cloudMode", JSON.stringify(C.mode));
+      localStorage.setItem("archiver.cloudMode", JSON.stringify(C.view));
       localStorage.setItem("archiver.cloudGap", JSON.stringify(C.gap));
+      localStorage.setItem("archiver.cloudTone", JSON.stringify(C.tone));
     } catch {}
   }
 
@@ -69,6 +87,8 @@
       return fallback;
     }
   }
+
+  const viewOf = (m) => (VIEWS.includes(m) ? m : OLD_VIEWS[m] || null);
 
   const keyOf = (item) => item.hash || item.path;
   function byKey() {
@@ -92,9 +112,13 @@
     return v;
   }
 
+  function vecOf(n) {
+    return n.vec || (n.vec = colorVec(n.item));
+  }
+
   function colorSim(a, b) {
-    const va = a.vec || (a.vec = colorVec(a.item));
-    const vb = b.vec || (b.vec = colorVec(b.item));
+    const va = vecOf(a);
+    const vb = vecOf(b);
     let dot = 0, na = 0, nb = 0;
     for (let i = 0; i < va.length; i++) {
       dot += va[i] * vb[i];
@@ -102,6 +126,19 @@
       nb += vb[i] * vb[i];
     }
     return na && nb ? dot / Math.sqrt(na * nb) : 0.3;
+  }
+
+  // Stärkste bunte Farbe eines Bildes, sonst null (unbunt)
+  function mainHue(n) {
+    const v = vecOf(n);
+    let best = null, share = 0.12;
+    COLOR_NAMES.forEach((name, i) => {
+      if (HUES[name] != null && v[i] > share) {
+        share = v[i];
+        best = name;
+      }
+    });
+    return best;
   }
 
   function suggestions() {
@@ -119,268 +156,556 @@
 
   // ---- Knoten ----
 
-  function base() {
-    const r = C.root.getBoundingClientRect();
-    return Math.max(56, Math.min(140, Math.min(r.width, r.height) / 8));
+  function ratio(item) {
+    return Math.max(0.4, Math.min(2.5, item.width && item.height ? item.width / item.height : 1));
   }
 
-  function setStep(n, step) {
-    n.step = Math.max(0, Math.min(3, step));
-    const ar = Math.max(0.5, Math.min(2, n.item.width && n.item.height ? n.item.width / n.item.height : 1));
-    const b = base() * SCALE[n.step];
-    n.w = Math.round(b * Math.sqrt(ar));
-    n.h = Math.round(b / Math.sqrt(ar));
-    n.r = Math.hypot(n.w, n.h) / 2;
-    n.el.style.width = n.w + "px";
-    n.el.style.height = n.h + "px";
-  }
-
-  function makeNode(item, step, fresh) {
-    const box = el("div", "cl-ref" + (fresh && !reduce() ? " new" : ""));
+  function makeNode(item, step) {
+    const box = el("div", "cl-ref");
     const img = el("img");
     img.alt = "";
     img.draggable = false;
     img.src = A.thumbSrc(item);
     box.appendChild(img);
     box.title = item.filename || "";
-    const n = { item, el: box, x: 0, y: 0, vx: 0, vy: 0, parent: null, line: null };
-    setStep(n, step);
+    const n = { item, el: box, step: Math.max(0, Math.min(3, step)), ar: ratio(item), x: 0, y: 0, w: 0, h: 0, group: 0 };
     $("clStage").appendChild(box);
     return n;
   }
 
-  function link(n) {
-    const l = document.createElementNS("http://www.w3.org/2000/svg", "line");
-    $("clLinks").appendChild(l);
-    n.line = l;
-  }
-
-  function wantsLine(n) {
-    return !!n.parent && (C.mode === "strand" || (C.mode === "constellation" && n.parent !== C.nodes[0]));
-  }
-
-  function relink() {
-    $("clLinks").replaceChildren();
-    for (const n of C.nodes) {
-      n.line = null;
-      if (wantsLine(n)) link(n);
-    }
-  }
-
   function addRef(item, opts = {}) {
     if (!item || C.nodes.some((n) => keyOf(n.item) === keyOf(item))) return null;
-    const focus = C.nodes[0];
-    let from = focus;
-    if (C.mode === "strand") from = C.sel || C.nodes[C.nodes.length - 1];
-    if (C.mode === "constellation") from = C.sel || focus;
-    if (opts.parent) from = opts.parent;
-    const n = makeNode(item, opts.step != null ? opts.step : 1, !opts.quiet);
-    const a = Math.random() * Math.PI * 2;
-    const gap = GAPS[C.gap];
-    n.x = from.x + Math.cos(a) * (from.r + n.r + gap);
-    n.y = from.y + Math.sin(a) * (from.r + n.r + gap);
-    if (C.mode === "strand") {
-      n.x = from.x + (Math.random() - 0.5) * 20;
-      n.y = from.y + from.h / 2 + n.h / 2 + gap;
+    const n = makeNode(item, opts.step != null ? opts.step : 1);
+    n.group = opts.group || 0;
+    const from = C.nodes[0];
+    if (from) {
+      n.x = from.x;
+      n.y = from.y;
     }
-    n.vx = Math.cos(a) * 2;
-    n.vy = Math.sin(a) * 2;
-    n.parent = from;
     C.nodes.push(n);
-    if (wantsLine(n)) link(n);
     if (!opts.quiet) {
-      if (C.mode === "strand" && C.sel) select(n);
+      place(n);
+      layout();
       save();
-      renderBar();
       if (C.picker) renderPicker();
     }
     return n;
   }
 
-  function removeRef(n) {
-    if (!n || n === C.nodes[0]) return;
-    for (const m of C.nodes) if (m.parent === n) m.parent = n.parent || C.nodes[0];
-    n.el.remove();
-    C.nodes = C.nodes.filter((x) => x !== n);
-    if (C.sel === n) C.sel = null;
-    relink();
+  // Neues Objekt erst ohne Übergang an seinen Startpunkt setzen, dann gleitet es
+  function place(n) {
+    n.el.classList.add("still");
+    n.el.style.transform = `translate(${n.x - 10}px, ${n.y - 10}px)`;
+    n.el.style.width = n.el.style.height = "20px";
+    void n.el.offsetWidth;
+    n.el.classList.remove("still");
+  }
+
+  function removeRefs(list) {
+    const gone = list.filter((n) => n && n !== C.nodes[0]);
+    if (!gone.length) return;
+    for (const n of gone) {
+      n.el.remove();
+      C.sel.delete(n);
+      C.free.delete(keyOf(n.item));
+      if (C.center === n) C.center = null;
+    }
+    C.nodes = C.nodes.filter((x) => !gone.includes(x));
+    layout();
     save();
-    renderBar();
     if (C.picker) renderPicker();
   }
 
-  function select(n) {
-    if (C.sel) C.sel.el.classList.remove("selected");
-    C.sel = n || null;
-    if (C.sel) C.sel.el.classList.add("selected");
+  // ---- Auswahl ----
+
+  function selected() {
+    return C.nodes.filter((n) => C.sel.has(n));
+  }
+
+  function selectOnly(n) {
+    C.sel = new Set(n ? [n] : []);
+    paint();
+    renderBar();
+  }
+
+  function toggle(n) {
+    if (C.sel.has(n)) C.sel.delete(n);
+    else C.sel.add(n);
+    paint();
     renderBar();
   }
 
   function resize(step) {
-    const n = C.sel || C.nodes[0];
-    if (!n) return;
-    setStep(n, step);
-    for (const m of C.nodes) {
-      m.vx += (Math.random() - 0.5) * 0.6;
-      m.vy += (Math.random() - 0.5) * 0.6;
-    }
+    const list = C.sel.size ? selected() : [C.nodes[0]];
+    for (const n of list) n.step = Math.max(0, Math.min(3, step));
+    layout();
     save();
-    renderBar();
   }
 
-  // ---- Physik ----
+  function nudge(d) {
+    const list = C.sel.size ? selected() : [C.nodes[0]];
+    for (const n of list) n.step = Math.max(0, Math.min(3, n.step + d));
+    layout();
+    save();
+  }
+
+  function group() {
+    const list = selected();
+    if (list.length < 2) return;
+    const g = ++C.gid;
+    for (const n of list) n.group = g;
+    A.toast(t("cloudGrouped", { n: g }));
+    layout();
+    save();
+  }
+
+  function ungroup() {
+    for (const n of selected()) n.group = 0;
+    layout();
+    save();
+  }
+
+  // ---- Lage: jede Ansicht setzt x, y (Mitte), w, h ----
 
   function bounds() {
     const r = C.root.getBoundingClientRect();
-    const top = $("clTop").getBoundingClientRect().bottom - r.top + 16;
+    const top = $("clTop").getBoundingClientRect().bottom - r.top + 24;
     const lower = C.picker ? $("clPicker") : $("clNav");
-    const bottom = lower.getBoundingClientRect().top - r.top - 16;
-    return { W: r.width, top, bottom: Math.max(top + 120, bottom) };
+    const bottom = lower.getBoundingClientRect().top - r.top - 24;
+    const side = 24;
+    return { x: side, y: top, w: r.width - 2 * side, h: Math.max(120, bottom - top), W: r.width, H: r.height };
   }
 
-  function center(b) {
-    const f = C.nodes[0];
-    if (C.mode === "strand") return { x: b.W / 2, y: b.top + f.h / 2 + 12 };
-    return { x: b.W / 2, y: (b.top + b.bottom) / 2 };
+  function base(b) {
+    return Math.max(56, Math.min(140, Math.min(b.W, b.H) / 8));
   }
 
-  function gridSlots(c, gap) {
-    const focus = C.nodes[0];
-    const cell = Math.max(40, ...C.nodes.slice(1).map((n) => Math.max(n.w, n.h))) + gap;
-    const fx = Math.ceil((focus.w + gap) / cell / 2);
-    const fy = Math.ceil((focus.h + gap) / cell / 2);
-    const slots = [];
-    for (let ring = 1; slots.length < C.nodes.length && ring < 14; ring++)
-      for (let gx = -fx - ring + 1; gx <= fx + ring - 1; gx++)
-        for (let gy = -fy - ring + 1; gy <= fy + ring - 1; gy++) {
-          if (Math.abs(gx) !== fx + ring - 1 && Math.abs(gy) !== fy + ring - 1) continue;
-          if (Math.abs(gx) <= fx - 1 && Math.abs(gy) <= fy - 1) continue;
-          slots.push({ x: c.x + gx * cell, y: c.y + gy * cell, d: Math.hypot(gx, gy * 1.2) });
-        }
-    return slots.sort((a, b) => a.d - b.d);
+  function sizeOf(n, s) {
+    const v = s * SCALE[n.step];
+    n.w = v * Math.sqrt(n.ar);
+    n.h = v / Math.sqrt(n.ar);
   }
 
-  function step() {
-    const nodes = C.nodes;
-    if (!nodes.length) return;
+  const gapPx = () => GAPS[C.gap];
+  const kOf = (n) => SCALE[n.step] / SCALE[1];
+
+  // Reihenfolge: Mischen tauscht fest (gleiche Zahl, gleiche Lage)
+  function ordered(list) {
+    if (!C.shuffle) return list.slice();
+    const k = C.shuffle;
+    const h = (n) => {
+      const s = keyOf(n.item) + k;
+      let v = 0;
+      for (let i = 0; i < s.length; i++) v = (v * 31 + s.charCodeAt(i)) >>> 0;
+      return v;
+    };
+    return list.slice().sort((a, b) => h(a) - h(b));
+  }
+
+  function centerNode() {
+    return C.nodes.includes(C.center) ? C.center : C.nodes[0];
+  }
+
+  function layout() {
+    if (!C.root || C.root.hidden || !C.nodes.length) return;
     const b = bounds();
-    const gap = GAPS[C.gap];
-    const focus = nodes[0];
-    const c = center(b);
-    focus.x = c.x;
-    focus.y = c.y;
-    const held = (n) => n === focus || (C.drag && C.drag.n === n && C.drag.moved);
-    const slots = C.mode === "grid" ? gridSlots(c, gap) : null;
-    for (let i = 1; i < nodes.length; i++) {
-      const n = nodes[i];
-      if (held(n)) continue;
-      let fx = 0, fy = 0;
-      if (C.mode === "cloud") {
-        fx += (focus.x - n.x) * 0.004;
-        fy += (focus.y - n.y) * 0.004;
-      } else if (C.mode === "orbit") {
-        const want = focus.r + n.r + gap + (1 - colorSim(n, focus)) * 170;
-        const dx = n.x - focus.x, dy = n.y - focus.y, d = Math.hypot(dx, dy) || 1;
-        const k = (want - d) * 0.015;
-        fx += (dx / d) * k;
-        fy += (dy / d) * k;
-        if (!reduce()) {
-          fx += (-dy / d) * 0.03;
-          fy += (dx / d) * 0.03;
-        }
-      } else if (C.mode === "strand") {
-        const p = n.parent || focus;
-        const want = (p.r + n.r) * 0.85 + gap;
-        const dx = n.x - p.x, dy = n.y - p.y, d = Math.hypot(dx, dy) || 1;
-        const k = (want - d) * 0.04;
-        fx += (dx / d) * k;
-        fy += (dy / d) * k + 0.18;
-      } else if (C.mode === "magnet") {
-        fx += (focus.x - n.x) * 0.0018;
-        fy += (focus.y - n.y) * 0.0018;
-        for (let j = 1; j < nodes.length; j++) {
-          if (j === i) continue;
-          const m = nodes[j];
-          const dx = m.x - n.x, dy = m.y - n.y, d = Math.hypot(dx, dy) || 1;
-          const pull = (colorSim(n, m) - 0.55) * 0.05 * Math.min(1, 220 / d);
-          fx += (dx / d) * pull;
-          fy += (dy / d) * pull;
-        }
-      } else if (C.mode === "constellation") {
-        const p = n.parent || focus;
-        const want = p.r + n.r + gap * 1.2 + (p === focus ? 70 : 0);
-        const dx = n.x - p.x, dy = n.y - p.y, d = Math.hypot(dx, dy) || 1;
-        const k = (want - d) * 0.02;
-        fx += (dx / d) * k;
-        fy += (dy / d) * k;
-        if (p === focus) {
-          const kids = nodes.filter((m) => m.parent === n).length;
-          fx += (dx / d) * kids * 0.05;
-          fy += (dy / d) * kids * 0.05;
-        }
-      } else if (C.mode === "grid") {
-        const s = slots[i - 1];
-        if (s) {
-          fx += (s.x - n.x) * 0.03;
-          fy += (s.y - n.y) * 0.03;
+    for (const n of C.nodes) {
+      n.dim = false;
+      n.z = 0;
+    }
+    C.labels = [];
+    C.chain = null;
+    const f = LAYOUTS[C.view] || LAYOUTS.cloud;
+    f(C.nodes, b, base(b));
+    paint();
+    renderBar();
+  }
+
+  // Wolke: alles sammelt sich dicht um die Mitte, Gruppen halten zusammen
+  function cloudLayout(ns, b, s) {
+    const gap = gapPx();
+    const c = centerNode();
+    const list = [c, ...ordered(ns.filter((n) => n !== c))];
+    const cx = b.x + b.w / 2, cy = b.y + b.h / 2;
+    list.forEach((n, k) => {
+      sizeOf(n, s);
+      const a = k * 2.399, r = k ? Math.sqrt(k) * s * 0.9 : 0;
+      n.x = cx + Math.cos(a) * r;
+      n.y = cy + Math.sin(a) * r;
+    });
+    const rounds = list.length > 120 ? 90 : 220;
+    const settle = 40; // zum Schluss nur noch Abstand halten, die Mitte steht
+    for (let it = 0; it < rounds + settle; it++) {
+      const last = it >= rounds;
+      const groups = new Map();
+      for (const n of list) {
+        if (!n.group) continue;
+        const v = groups.get(n.group) || { x: 0, y: 0, k: 0 };
+        v.x += n.x;
+        v.y += n.y;
+        v.k++;
+        groups.set(n.group, v);
+      }
+      for (const n of last ? [] : list) {
+        const pull = n === c ? 0.2 : 0.02;
+        n.x += (cx - n.x) * pull;
+        n.y += (cy - n.y) * pull * 1.25;
+        const g = n.group && groups.get(n.group);
+        if (g && g.k > 1) {
+          n.x += (g.x / g.k - n.x) * 0.06;
+          n.y += (g.y / g.k - n.y) * 0.06;
         }
       }
-      const damp = C.mode === "strand" ? 0.93 : 0.85;
-      n.vx = (n.vx + fx) * damp;
-      n.vy = (n.vy + fy) * damp;
-    }
-    for (let i = 1; i < nodes.length; i++) {
-      const n = nodes[i];
-      if (!held(n)) {
-        n.x += n.vx;
-        n.y += n.vy;
-      }
-      const mx = n.w / 2 + 12;
-      if (n.x < mx) (n.x = mx), (n.vx *= -0.3);
-      if (n.x > b.W - mx) (n.x = b.W - mx), (n.vx *= -0.3);
-      if (n.y < b.top + n.h / 2) (n.y = b.top + n.h / 2), (n.vy *= -0.3);
-      if (n.y > b.bottom - n.h / 2) (n.y = b.bottom - n.h / 2), (n.vy *= -0.3);
-    }
-    // Abstand halten: Rechtecke plus Abstand überlappen nie
-    const soft = C.mode === "grid" ? 0.3 : 0.5;
-    for (let pass = 0; pass < 4; pass++)
-      for (let i = 0; i < nodes.length; i++)
-        for (let j = i + 1; j < nodes.length; j++) {
-          const a = nodes[i], o = nodes[j];
-          const dx = o.x - a.x, dy = o.y - a.y;
-          const ox = (a.w + o.w) / 2 + gap - Math.abs(dx);
-          const oy = (a.h + o.h) / 2 + gap - Math.abs(dy);
+      for (let i = 0; i < list.length; i++)
+        for (let j = i + 1; j < list.length; j++) {
+          const p = list[i], q = list[j];
+          const ox = (p.w + q.w) / 2 + gap - Math.abs(p.x - q.x);
+          const oy = (p.h + q.h) / 2 + gap - Math.abs(p.y - q.y);
           if (ox <= 0 || oy <= 0) continue;
-          const push = ox < oy ? [Math.sign(dx || Math.random() - 0.5) * ox, 0] : [0, Math.sign(dy || Math.random() - 0.5) * oy];
-          const wa = held(a) ? 0 : 1, wb = held(o) ? 0 : 1, s = wa + wb || 1;
-          a.x -= ((push[0] * wa) / s) * soft;
-          a.y -= ((push[1] * wa) / s) * soft;
-          o.x += ((push[0] * wb) / s) * soft;
-          o.y += ((push[1] * wb) / s) * soft;
+          const fixed = last ? 0 : 0.05;
+          const wp = p === c ? fixed : q === c && last ? 1 : 0.5, wq = q === c ? fixed : p === c && last ? 1 : 0.5;
+          if (ox < oy) {
+            const d = Math.sign(p.x - q.x) || (i % 2 ? 1 : -1);
+            p.x += d * ox * wp;
+            q.x -= d * ox * wq;
+          } else {
+            const d = Math.sign(p.y - q.y) || (j % 2 ? 1 : -1);
+            p.y += d * oy * wp;
+            q.y -= d * oy * wq;
+          }
         }
-    for (let i = 1; i < nodes.length; i++) clampIn(nodes[i], b);
+    }
+    fit(list, b);
   }
 
-  function clampIn(n, b) {
-    n.x = Math.max(n.w / 2 + 12, Math.min(b.W - n.w / 2 - 12, n.x));
-    n.y = Math.max(b.top + n.h / 2, Math.min(b.bottom - n.h / 2, n.y));
+  // Alles in die Fläche skalieren, nie größer
+  function fit(ns, b) {
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (const n of ns) {
+      x0 = Math.min(x0, n.x - n.w / 2);
+      y0 = Math.min(y0, n.y - n.h / 2);
+      x1 = Math.max(x1, n.x + n.w / 2);
+      y1 = Math.max(y1, n.y + n.h / 2);
+    }
+    const k = Math.min(1, b.w / (x1 - x0 || 1), b.h / (y1 - y0 || 1));
+    const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
+    for (const n of ns) {
+      n.x = b.x + b.w / 2 + (n.x - cx) * k;
+      n.y = b.y + b.h / 2 + (n.y - cy) * k;
+      n.w *= k;
+      n.h *= k;
+    }
   }
 
-  function draw() {
-    for (const n of C.nodes) n.el.style.transform = `translate(${n.x - n.w / 2}px, ${n.y - n.h / 2}px)`;
-    for (const n of C.nodes)
-      if (n.line && n.parent) {
-        n.line.setAttribute("x1", n.parent.x);
-        n.line.setAttribute("y1", n.parent.y);
-        n.line.setAttribute("x2", n.x);
-        n.line.setAttribute("y2", n.y);
+  // Zeilen gleicher Grundhöhe, Größe S–XL skaliert je Objekt; so groß, wie es passt
+  function rows(ns, b, maxH, snake) {
+    const gap = Math.min(gapPx(), 26);
+    const pack = (h) => {
+      const out = [[]];
+      let x = 0;
+      for (const n of ns) {
+        const w = n.ar * h * kOf(n);
+        if (x && x + w > b.w) {
+          out.push([]);
+          x = 0;
+        }
+        out[out.length - 1].push(n);
+        x += w + gap;
       }
+      const hs = out.map((r) => Math.max(...r.map((n) => h * kOf(n))));
+      return { out, hs, H: hs.reduce((a, v) => a + v, 0) + gap * (out.length - 1) };
+    };
+    let lo = 8, hi = maxH, best = null;
+    for (let k = 0; k < 22; k++) {
+      const h = (lo + hi) / 2;
+      const p = pack(h);
+      if (p.H <= b.h) {
+        best = { h, p };
+        lo = h;
+      } else hi = h;
+    }
+    if (!best) best = { h: lo, p: pack(lo) };
+    const { out, hs, H } = best.p;
+    let y = b.y + (b.h - H) / 2;
+    out.forEach((row, ri) => {
+      const ws = row.map((n) => n.ar * best.h * kOf(n));
+      let x = b.x + (b.w - (ws.reduce((a, v) => a + v, 0) + gap * (row.length - 1))) / 2;
+      const seq = snake && ri % 2 ? row.slice().reverse() : row;
+      for (const n of seq) {
+        n.h = best.h * kOf(n);
+        n.w = n.ar * n.h;
+        n.x = x + n.w / 2;
+        n.y = y + hs[ri] / 2;
+        x += n.w + gap;
+      }
+      y += hs[ri] + gap;
+    });
   }
 
-  function loop() {
-    step();
-    draw();
-    C.raf = requestAnimationFrame(loop);
+  const LAYOUTS = {
+    cloud: cloudLayout,
+
+    // Fokus: ein Objekt groß in der Mitte, die anderen im Kreis darum
+    focus(ns, b, s) {
+      const c = centerNode();
+      const rest = ordered(ns.filter((n) => n !== c));
+      c.h = b.h * 0.5;
+      c.w = c.h * c.ar;
+      if (c.w > b.w * 0.42) {
+        c.w = b.w * 0.42;
+        c.h = c.w / c.ar;
+      }
+      c.x = b.x + b.w / 2;
+      c.y = b.y + b.h / 2;
+      const around = 2 * Math.PI * Math.sqrt((b.w * b.w + b.h * b.h) / 8);
+      const sm = Math.max(28, Math.min(s * 0.62 * 1.2, around / Math.max(1, rest.length) / 1.5));
+      const rx = b.w / 2 - sm * 0.7, ry = b.h / 2 - sm * 0.6;
+      rest.forEach((n, k) => {
+        const a = -Math.PI / 2 + (k / rest.length) * Math.PI * 2;
+        n.w = sm * Math.sqrt(n.ar);
+        n.h = sm / Math.sqrt(n.ar);
+        n.x = c.x + Math.cos(a) * rx;
+        n.y = c.y + Math.sin(a) * ry;
+      });
+    },
+
+    // Raster: gleiche Zellen, ruhig zum Sichten
+    grid(ns, b) {
+      const list = ordered(ns);
+      const gap = Math.min(gapPx(), 26);
+      const cols = Math.max(2, Math.round(Math.sqrt((list.length * b.w) / b.h)));
+      const lines = Math.ceil(list.length / cols);
+      const cw = (b.w - gap * (cols - 1)) / cols, ch = (b.h - gap * (lines - 1)) / lines;
+      const cell = Math.min(cw, ch);
+      const top = b.y + (b.h - (lines * cell + gap * (lines - 1))) / 2;
+      const left = b.x + (b.w - (cols * cell + gap * (cols - 1))) / 2;
+      list.forEach((n, k) => {
+        const side = cell * Math.min(1, 0.7 + 0.3 * kOf(n) * 0.5);
+        n.w = n.ar >= 1 ? side : side * n.ar;
+        n.h = n.ar >= 1 ? side / n.ar : side;
+        n.x = left + (k % cols) * (cell + gap) + cell / 2;
+        n.y = top + Math.floor(k / cols) * (cell + gap) + cell / 2;
+      });
+    },
+
+    // Spalten: gleich breit, unterschiedlich hoch
+    masonry(ns, b) {
+      const list = ordered(ns);
+      const gap = Math.min(gapPx(), 26);
+      let best = null;
+      for (let cols = 2; cols <= 10; cols++) {
+        const cw = (b.w - gap * (cols - 1)) / cols;
+        const hs = new Array(cols).fill(0);
+        const pos = list.map((n) => {
+          const c = hs.indexOf(Math.min(...hs));
+          const h = cw / n.ar;
+          const p = [c, hs[c], h];
+          hs[c] += h + gap;
+          return p;
+        });
+        const H = Math.max(...hs) - gap;
+        const k = Math.min(1, b.h / H);
+        if (!best || k * cw > best.score) best = { cols, cw, pos, H, k, score: k * cw };
+      }
+      const { cols, cw, pos, H, k } = best;
+      const x0 = b.x + (b.w - (cols * cw + gap * (cols - 1)) * k) / 2, y0 = b.y + (b.h - H * k) / 2;
+      list.forEach((n, i) => {
+        const [c, y, h] = pos[i];
+        n.w = cw * k;
+        n.h = h * k;
+        n.x = x0 + c * (cw + gap) * k + n.w / 2;
+        n.y = y0 + y * k + n.h / 2;
+      });
+    },
+
+    // Spektrum: nach Farbton, Unbuntes von Weiß nach Schwarz am Ende
+    spectrum(ns, b) {
+      const key = (n) => {
+        const h = mainHue(n);
+        if (h) return (HUES[h] + 15) % 360;
+        const v = vecOf(n);
+        return 400 + NEUTRAL.reduce((a, name, i) => a + v[COLOR_NAMES.indexOf(name)] * i * 30, 0);
+      };
+      rows(ns.slice().sort((p, q) => key(p) - key(q)), b, b.h / 2.2);
+    },
+
+    // Strang: jedes Objekt hängt am ähnlichsten, ein Faden läuft durch
+    strand(ns, b) {
+      const start = centerNode();
+      const left = new Set(ns.filter((n) => n !== start));
+      const chain = [start];
+      while (left.size) {
+        const last = chain[chain.length - 1];
+        let next = null, best = -1;
+        for (const n of left) {
+          const v = colorSim(last, n);
+          if (v > best) {
+            best = v;
+            next = n;
+          }
+        }
+        chain.push(next);
+        left.delete(next);
+      }
+      C.chain = chain;
+      rows(chain, b, b.h / 3, true);
+    },
+
+    // Stapel: je Zone ein Stapel; Klick fächert einen auf
+    piles(ns, b, s) {
+      const zones = [...new Set(ns.map((n) => n.item.zone || ""))];
+      if (C.fan != null && zones.includes(C.fan)) {
+        const fan = ns.filter((n) => (n.item.zone || "") === C.fan);
+        rows(fan, { ...b, h: b.h * 0.74 }, b.h * 0.45);
+        const rest = zones.filter((z) => z !== C.fan);
+        const sm = s * 0.5;
+        rest.forEach((z, k) => {
+          const px = b.x + (b.w * (k + 1)) / (rest.length + 1), py = b.y + b.h * 0.9;
+          ns.filter((n) => (n.item.zone || "") === z).forEach((n, j) => {
+            n.w = sm * Math.sqrt(n.ar);
+            n.h = sm / Math.sqrt(n.ar);
+            n.x = px + Math.min(j, 6) * 3;
+            n.y = py - Math.min(j, 6) * 3;
+            n.z = j + 1;
+          });
+          C.labels.push({ text: zoneName(z), x: px, y: py + sm * 0.55 + 6, zone: z });
+        });
+        return;
+      }
+      // So viele Spalten, dass die Stapel am größten werden
+      let cols = 1, lines = 1, pw = 0;
+      for (let k = 1; k <= zones.length; k++) {
+        const l = Math.ceil(zones.length / k);
+        const v = Math.min(s * 1.3, (b.h / l) * 0.6, (b.w / k) * 0.6);
+        if (v > pw + 0.5) [cols, lines, pw] = [k, l, v];
+      }
+      zones.forEach((z, k) => {
+        const px = b.x + (b.w * ((k % cols) + 0.5)) / cols;
+        const py = b.y + (b.h * (Math.floor(k / cols) + 0.5)) / lines - 10;
+        ns.filter((n) => (n.item.zone || "") === z).forEach((n, j) => {
+          const off = Math.min(j, 8) * 6;
+          n.w = pw * Math.sqrt(n.ar);
+          n.h = pw / Math.sqrt(n.ar);
+          n.x = px + off - 20;
+          n.y = py - off + 20;
+          n.z = j + 1;
+        });
+        C.labels.push({ text: zoneName(z), x: px, y: py + pw * 0.62 + 26, zone: z });
+      });
+    },
+
+    // Vergleich: zwei bis vier gewählte groß nebeneinander, der Rest klein darunter
+    compare(ns, b, s) {
+      let pick = selected().slice(0, 4);
+      if (pick.length < 2) {
+        const c = centerNode();
+        pick = [c, ...ns.filter((n) => n !== c).sort((p, q) => colorSim(c, q) - colorSim(c, p)).slice(0, 2)];
+      }
+      const rest = ns.filter((n) => !pick.includes(n));
+      const saved = pick.map((n) => n.step);
+      pick.forEach((n) => (n.step = 1));
+      rows(pick, { ...b, h: rest.length ? b.h * 0.78 : b.h }, b.h * 0.76);
+      pick.forEach((n, i) => (n.step = saved[i]));
+      const sm = Math.min(s * 0.42, b.w / Math.max(1, rest.length * 1.25));
+      let x = b.x + (b.w - rest.length * sm * 1.2) / 2 + sm * 0.6;
+      for (const n of rest) {
+        n.w = sm * Math.sqrt(n.ar);
+        n.h = sm / Math.sqrt(n.ar);
+        n.x = x;
+        n.y = b.y + b.h - sm * 0.55;
+        x += sm * 1.2;
+        n.dim = true;
+      }
+    },
+
+    // Frei: was gezogen wurde, bleibt liegen; der Rest steht wie in der Wolke
+    free(ns, b, s) {
+      cloudLayout(ns, b, s);
+      for (const n of ns) {
+        const p = C.free.get(keyOf(n.item));
+        if (!p) continue;
+        sizeOf(n, s);
+        n.x = b.x + p[0] * b.w;
+        n.y = b.y + p[1] * b.h;
+      }
+    },
+  };
+
+  function zoneName(z) {
+    return (z || "").split("/").pop() || "—";
+  }
+
+  // ---- Zeichnen ----
+
+  function paint() {
+    for (const n of C.nodes) {
+      const s = n.el.style;
+      s.width = n.w + "px";
+      s.height = n.h + "px";
+      s.transform = `translate(${n.x - n.w / 2}px, ${n.y - n.h / 2}px)`;
+      s.opacity = n.dim ? 0.4 : "";
+      s.zIndex = n.z ? String(n.z) : "";
+      n.el.classList.toggle("selected", C.sel.has(n));
+      n.el.classList.toggle("center", n === centerNode() && (C.view === "focus" || C.view === "strand"));
+      let tag = n.el.querySelector(".cl-group");
+      if (n.group && (C.view === "cloud" || C.view === "free")) {
+        if (!tag) n.el.appendChild((tag = el("span", "cl-group")));
+        tag.textContent = "G" + n.group;
+      } else if (tag) tag.remove();
+    }
+    const box = $("clLabels");
+    box.replaceChildren(
+      ...C.labels.map((l) => {
+        const d = el("span", "cl-pile-label", l.text);
+        d.style.transform = `translate(${l.x}px, ${l.y}px) translateX(-50%)`;
+        return d;
+      })
+    );
+    threads();
+  }
+
+  function threads() {
+    const svg = $("clLinks");
+    svg.replaceChildren();
+    const ns = "http://www.w3.org/2000/svg";
+    if (C.view === "strand" && C.chain && C.chain.length > 1) {
+      const p = document.createElementNS(ns, "path");
+      p.setAttribute("d", "M" + C.chain.map((n) => n.x + " " + n.y).join(" L"));
+      svg.appendChild(p);
+    }
+    for (const n of C.nodes) n.el.classList.remove("near");
+    const h = C.hover;
+    if (!h || C.drag || !C.nodes.includes(h)) return;
+    C.nodes
+      .filter((n) => n !== h)
+      .sort((p, q) => colorSim(h, q) - colorSim(h, p))
+      .slice(0, 3)
+      .forEach((n) => {
+        const l = document.createElementNS(ns, "line");
+        l.setAttribute("x1", h.x);
+        l.setAttribute("y1", h.y);
+        l.setAttribute("x2", n.x);
+        l.setAttribute("y2", n.y);
+        svg.appendChild(l);
+        n.el.classList.add("near");
+      });
+  }
+
+  function applyTone() {
+    const root = C.root;
+    root.dataset.tone = C.tone;
+    let bg = "", fg = "";
+    const tones = A.tones || {};
+    if (tones[C.tone]) [bg, fg] = tones[C.tone];
+    else if (C.tone === "auto") {
+      const h = mainHue(C.nodes[0] || { item: C.focus });
+      if (h) {
+        bg = `hsl(${HUES[h]} 32% 13%)`;
+        fg = "#ededed";
+      }
+    }
+    root.style.setProperty("--cl-bg", bg || "var(--lightbox-bg)");
+    root.style.setProperty("--cl-fg", fg || "var(--p-text, var(--ink))");
   }
 
   // ---- Oberfläche ----
@@ -394,7 +719,12 @@
     const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
     svg.id = "clLinks";
     svg.classList.add("cl-links");
-    stage.appendChild(svg);
+    const labels = el("div", "cl-labels");
+    labels.id = "clLabels";
+    const lasso = el("div", "cl-lasso");
+    lasso.id = "clLasso";
+    lasso.hidden = true;
+    stage.append(svg, labels, lasso);
     const top = el("nav", "lb-bar cl-top");
     top.id = "clTop";
     const picker = el("div", "cl-picker");
@@ -402,10 +732,17 @@
     picker.hidden = true;
     const nav = el("nav", "lb-bar cl-nav");
     nav.id = "clNav";
-    root.append(stage, top, picker, nav);
+    const look = el("div", "cl-look");
+    look.id = "clLook";
+    look.hidden = true;
+    root.append(stage, top, picker, nav, look);
     document.body.appendChild(root);
     C.root = root;
     bindPointer(stage);
+    bindLook(look);
+    window.addEventListener("resize", () => {
+      if (isOpen()) layout();
+    });
   }
 
   function lbBtn(label, on, fn, title) {
@@ -418,29 +755,89 @@
     return el("span", "lb-sep");
   }
 
+  function setView(v) {
+    if (!VIEWS.includes(v)) return;
+    C.view = v;
+    if (v !== "piles") C.fan = null;
+    layout();
+    save();
+  }
+
+  function setTone(k) {
+    C.tone = k;
+    applyTone();
+    renderBar();
+    save();
+  }
+
   function renderBar() {
     const top = $("clTop");
     top.replaceChildren();
-    for (const m of MODES)
-      top.appendChild(
-        lbBtn(t("cloudMode_" + m), C.mode === m, () => setMode(m), t("cloudModeTitle_" + m))
-      );
+    for (const v of VIEWS) top.appendChild(lbBtn(t("cloudView_" + v), C.view === v, () => setView(v), t("cloudViewTitle_" + v)));
     top.appendChild(sep());
     top.appendChild(el("span", "cl-label", t("cloudGap")));
-    for (const g of Object.keys(GAPS)) top.appendChild(lbBtn(t("cloudGap_" + g), C.gap === g, () => setGap(g)));
+    for (const g of Object.keys(GAPS))
+      top.appendChild(
+        lbBtn(t("cloudGap_" + g), C.gap === g, () => {
+          C.gap = g;
+          layout();
+          save();
+        })
+      );
 
     const nav = $("clNav");
     nav.replaceChildren();
+    const sel = selected();
+    if (sel.length) {
+      nav.appendChild(el("span", "cl-count", t("cloudSelected", { n: sel.length })));
+      nav.appendChild(sep());
+      const same = sel.every((n) => n.step === sel[0].step) ? sel[0].step : -1;
+      STEPS.forEach((s, i) => nav.appendChild(lbBtn(s, same === i, () => resize(i))));
+      nav.appendChild(sep());
+      nav.appendChild(lbBtn(t("cloudLook"), false, () => openLook(sel[0]), "␣"));
+      if (sel.length > 1) {
+        nav.appendChild(lbBtn(t("cloudGroup"), false, group, "G"));
+        nav.appendChild(lbBtn(t("cloudCompare"), C.view === "compare", () => setView("compare")));
+      } else
+        nav.appendChild(
+          lbBtn(t("cloudCenter"), false, () => {
+            C.center = sel[0];
+            setView(C.view === "focus" || C.view === "strand" ? C.view : "focus");
+          })
+        );
+      if (sel.some((n) => n.group)) nav.appendChild(lbBtn(t("cloudUngroup"), false, ungroup));
+      nav.appendChild(el("span", "cl-flex"));
+      if (sel.some((n) => n !== C.nodes[0])) nav.appendChild(lbBtn(t("cloudRemove"), false, () => removeRefs(sel), "⌫"));
+      nav.appendChild(lbBtn("×", false, () => selectOnly(null), "esc"));
+      return;
+    }
     nav.appendChild(lbBtn("+ " + t("cloudAdd"), C.picker, togglePicker, t("cloudAddTitle")));
     nav.appendChild(lbBtn(t("cloudSimilar"), false, addSimilar, t("cloudSimilarTitle")));
+    nav.appendChild(
+      lbBtn(t("cloudShuffle"), false, () => {
+        C.shuffle++;
+        if (C.view === "free") C.free.clear();
+        layout();
+        save();
+      }, t("cloudShuffleTitle"))
+    );
     nav.appendChild(sep());
-    const target = C.sel || C.nodes[0];
-    nav.appendChild(el("span", "cl-label", t(C.sel ? "cloudSizeSel" : "cloudSizeFocus")));
-    STEPS.forEach((s, i) => nav.appendChild(lbBtn(s, target && target.step === i, () => resize(i))));
+    nav.appendChild(el("span", "cl-label", t("cloudSizeFocus")));
+    STEPS.forEach((s, i) => nav.appendChild(lbBtn(s, C.nodes[0] && C.nodes[0].step === i, () => resize(i))));
     nav.appendChild(sep());
     nav.appendChild(el("span", "cl-count", String(C.nodes.length - 1)));
     nav.appendChild(el("span", "cl-flex"));
-    if (C.sel) nav.appendChild(lbBtn(t("cloudRemove"), false, () => removeRef(C.sel), "⌫"));
+    const tones = el("span", "cl-tones");
+    for (const k of TONES) {
+      const b = A.button("cl-tone" + (C.tone === k ? " active" : ""), "", () => setTone(k));
+      b.dataset.tone = k;
+      if (A.tones && A.tones[k]) b.style.setProperty("--sw", A.tones[k][0]);
+      b.title = t("cloudTone_" + k);
+      b.setAttribute("aria-label", t("cloudTone_" + k));
+      tones.appendChild(b);
+    }
+    nav.appendChild(tones);
+    nav.appendChild(sep());
     nav.appendChild(lbBtn(t("cloudClose"), false, close, "esc"));
   }
 
@@ -492,6 +889,7 @@
     if (!C.picker) C.query = "";
     renderPicker();
     renderBar();
+    layout();
     if (C.picker) {
       const input = $("clPicker").querySelector("input");
       input.value = C.query;
@@ -500,65 +898,167 @@
   }
 
   function addSimilar() {
-    for (const it of suggestions().slice(0, 5)) addRef(it);
-  }
-
-  function setMode(m) {
-    // Strang: hängt alles nur an der Mitte, wird daraus eine Kette in der Reihenfolge des Hinzufügens
-    if (m === "strand" && C.nodes.slice(1).every((n) => n.parent === C.nodes[0]))
-      C.nodes.forEach((n, i) => i > 1 && (n.parent = C.nodes[i - 1]));
-    C.mode = m;
-    relink();
-    for (const n of C.nodes) {
-      n.vx += (Math.random() - 0.5) * 2;
-      n.vy += (Math.random() - 0.5) * 2;
+    const list = suggestions().slice(0, 5);
+    for (const it of list) {
+      const n = addRef(it, { quiet: true });
+      if (n) place(n);
     }
+    layout();
     save();
-    renderBar();
+    if (C.picker) renderPicker();
   }
 
-  function setGap(g) {
-    C.gap = g;
-    save();
-    renderBar();
+  // ---- Groß ansehen (Leertaste) ----
+
+  function openLook(n) {
+    const sel = selected();
+    const list = sel.length > 1 ? sel : C.nodes.slice();
+    C.look = { list, at: Math.max(0, list.indexOf(n)) };
+    showLook();
+    $("clLook").hidden = false;
   }
 
-  // Klick wählt, Ziehen wirft, Doppelklick macht ein Objekt zur Mitte
+  function showLook() {
+    const box = $("clLook");
+    const n = C.look.list[C.look.at];
+    let img = box.querySelector("img");
+    if (!img) {
+      img = el("img");
+      img.alt = "";
+      img.draggable = false;
+      const prev = A.button("cl-look-nav prev", "←", () => stepLook(-1));
+      const next = A.button("cl-look-nav next", "→", () => stepLook(1));
+      box.append(img, prev, next, el("div", "cl-look-cap"));
+    }
+    img.src = A.fullSrc(n.item);
+    const many = C.look.list.length > 1;
+    box.querySelectorAll(".cl-look-nav").forEach((b) => (b.hidden = !many));
+    box.querySelector(".cl-look-cap").textContent = [zoneName(n.item.zone), n.item.filename, many ? C.look.at + 1 + " / " + C.look.list.length : ""].filter(Boolean).join("  ·  ");
+  }
+
+  function stepLook(d) {
+    const L = C.look;
+    L.at = (L.at + d + L.list.length) % L.list.length;
+    showLook();
+  }
+
+  function closeLook() {
+    C.look = null;
+    $("clLook").hidden = true;
+  }
+
+  function bindLook(box) {
+    box.addEventListener("click", (e) => {
+      if (!e.target.closest(".cl-look-nav")) closeLook();
+    });
+  }
+
+  // ---- Zeiger: Klick wählt, ⇧/⌘ mehrere, Lasso auf freier Fläche, Ziehen legt frei ab ----
+
   function bindPointer(stage) {
+    const at = (e) => {
+      const r = stage.getBoundingClientRect();
+      return { x: e.clientX - r.left, y: e.clientY - r.top };
+    };
+    const nodeOf = (e) => {
+      const box = e.target.closest(".cl-ref");
+      return box ? C.nodes.find((x) => x.el === box) : null;
+    };
     stage.addEventListener("pointerdown", (e) => {
       if (e.button !== 0) return;
-      const n = C.nodes.find((x) => x.el === e.target.closest(".cl-ref"));
-      if (!n) {
-        select(null);
-        if (C.picker) togglePicker();
-        return;
+      const p = at(e);
+      const n = nodeOf(e);
+      const multi = e.shiftKey || e.metaKey || e.ctrlKey;
+      if (C.picker && !n) togglePicker();
+      if (n) {
+        if (C.view === "piles" && C.fan == null) {
+          C.fan = n.item.zone || "";
+          layout();
+          return;
+        }
+        if (multi) toggle(n);
+        else if (!C.sel.has(n)) selectOnly(n);
+        C.drag = { mode: "move", n, p, moved: false, start: selected().map((m) => ({ m, x: m.x, y: m.y })) };
+      } else {
+        if (C.view === "piles" && C.fan != null) {
+          C.fan = null;
+          layout();
+          return;
+        }
+        if (!multi) selectOnly(null);
+        C.drag = { mode: "lasso", p, base: new Set(C.sel) };
       }
-      const r = stage.getBoundingClientRect();
-      C.drag = { n, dx: e.clientX - r.left - n.x, dy: e.clientY - r.top - n.y, lx: e.clientX, ly: e.clientY, sx: e.clientX, sy: e.clientY, moved: false };
       stage.setPointerCapture(e.pointerId);
     });
     stage.addEventListener("pointermove", (e) => {
       const d = C.drag;
-      if (!d) return;
-      if (Math.hypot(e.clientX - d.sx, e.clientY - d.sy) > 4) d.moved = true;
-      if (!d.moved || d.n === C.nodes[0]) return;
-      const r = stage.getBoundingClientRect();
-      d.n.x = e.clientX - r.left - d.dx;
-      d.n.y = e.clientY - r.top - d.dy;
-      d.n.vx = (e.clientX - d.lx) * 0.8;
-      d.n.vy = (e.clientY - d.ly) * 0.8;
-      d.lx = e.clientX;
-      d.ly = e.clientY;
+      if (!d) {
+        const n = nodeOf(e);
+        if (n !== C.hover) {
+          C.hover = n;
+          threads();
+        }
+        return;
+      }
+      const p = at(e);
+      const dx = p.x - d.p.x, dy = p.y - d.p.y;
+      if (d.mode === "move") {
+        if (!d.moved && Math.hypot(dx, dy) < 4) return;
+        if (!d.moved) {
+          d.moved = true;
+          C.hover = null;
+          if (C.view !== "free") {
+            // Was gerade zu sehen ist, wird zur freien Lage
+            const b = bounds();
+            for (const m of C.nodes) C.free.set(keyOf(m.item), [(m.x - b.x) / b.w, (m.y - b.y) / b.h]);
+            C.view = "free";
+            C.fan = null;
+            renderBar();
+            A.toast(t("cloudFreeHint"));
+          }
+          C.root.classList.add("dragging");
+        }
+        for (const s of d.start) {
+          s.m.x = s.x + dx;
+          s.m.y = s.y + dy;
+        }
+        paint();
+      } else {
+        const x0 = Math.min(p.x, d.p.x), y0 = Math.min(p.y, d.p.y), x1 = Math.max(p.x, d.p.x), y1 = Math.max(p.y, d.p.y);
+        const box = $("clLasso");
+        box.hidden = Math.hypot(dx, dy) < 4;
+        Object.assign(box.style, { left: x0 + "px", top: y0 + "px", width: x1 - x0 + "px", height: y1 - y0 + "px" });
+        C.sel = new Set(d.base);
+        for (const n of C.nodes) if (n.x + n.w / 2 > x0 && n.x - n.w / 2 < x1 && n.y + n.h / 2 > y0 && n.y - n.h / 2 < y1) C.sel.add(n);
+        paint();
+      }
     });
-    stage.addEventListener("pointerup", () => {
+    const end = () => {
       const d = C.drag;
       C.drag = null;
-      if (d && !d.moved) select(C.sel === d.n ? null : d.n);
+      $("clLasso").hidden = true;
+      C.root.classList.remove("dragging");
+      if (!d) return;
+      if (d.mode === "move" && d.moved) {
+        const b = bounds();
+        for (const s of d.start) C.free.set(keyOf(s.m.item), [(s.m.x - b.x) / b.w, (s.m.y - b.y) / b.h]);
+        save();
+      } else if (d.mode === "move" && C.view === "focus" && d.n !== centerNode() && C.sel.size === 1) {
+        C.center = d.n; // Klick im Fokus tauscht in die Mitte
+        layout();
+      }
+      renderBar();
+    };
+    stage.addEventListener("pointerup", end);
+    stage.addEventListener("pointercancel", end);
+    stage.addEventListener("pointerleave", () => {
+      if (C.drag || !C.hover) return;
+      C.hover = null;
+      threads();
     });
-    stage.addEventListener("pointercancel", () => (C.drag = null));
     stage.addEventListener("dblclick", (e) => {
-      const n = C.nodes.find((x) => x.el === e.target.closest(".cl-ref"));
-      if (n && n !== C.nodes[0]) open(n.item);
+      const n = nodeOf(e);
+      if (n) openLook(n);
     });
   }
 
@@ -568,42 +1068,50 @@
     if (!item) return;
     if (!C.root) build();
     if (C.focus) save();
-    cancelAnimationFrame(C.raf);
     for (const n of C.nodes) n.el.remove();
-    $("clLinks").replaceChildren();
     C.nodes = [];
-    C.sel = null;
+    C.sel = new Set();
+    C.center = null;
+    C.fan = null;
+    C.hover = null;
     C.focus = item;
+    closeLook();
     const stored = load()[keyOf(item)];
-    C.mode = stored && MODES.includes(stored.m) ? stored.m : lastPref("cloudMode", (v) => MODES.includes(v), "cloud");
+    C.view = (stored && viewOf(stored.m)) || viewOf(lastPref("cloudMode", (v) => !!viewOf(v), "cloud"));
     C.gap = stored && GAPS[stored.g] ? stored.g : lastPref("cloudGap", (v) => !!GAPS[v], "mid");
+    C.tone = stored && TONES.includes(stored.t) ? stored.t : lastPref("cloudTone", (v) => TONES.includes(v), "lightbox");
+    C.free = new Map(stored && stored.p ? Object.entries(stored.p) : []);
+    C.shuffle = 0;
     C.root.hidden = false;
     document.body.classList.add("cloud-open");
     renderBar();
     renderPicker();
-    const f = makeNode(item, stored ? stored.s : 3, false);
+    const f = makeNode(item, stored ? stored.s : 3);
     f.el.classList.add("focus");
-    const b = bounds();
-    const c = center(b);
-    f.x = c.x;
-    f.y = c.y;
     C.nodes.push(f);
+    C.gid = 0;
     if (stored) {
       const map = byKey();
-      for (const [k, s, p] of stored.r) {
+      for (const [k, s, , g] of stored.r) {
         const it = map.get(k);
-        if (it) addRef(it, { quiet: true, step: s, parent: C.nodes[p] || f });
+        if (it) addRef(it, { quiet: true, step: s, group: g || 0 });
+        if (g) C.gid = Math.max(C.gid, g);
       }
     }
-    renderBar();
-    if (reduce()) for (let i = 0; i < 300; i++) step();
-    loop();
+    applyTone();
+    const b = bounds();
+    for (const n of C.nodes) {
+      n.x = b.x + b.w / 2;
+      n.y = b.y + b.h / 2;
+      place(n);
+    }
+    layout();
   }
 
   function close() {
     if (!C.root || C.root.hidden) return;
     save();
-    cancelAnimationFrame(C.raf);
+    closeLook();
     C.picker = false;
     C.query = "";
     C.root.hidden = true;
@@ -618,21 +1126,41 @@
   function key(e, mod) {
     if (!isOpen()) return false;
     if (e.target && e.target.tagName === "INPUT") return false;
-    if (mod) return e.key !== "q" && e.key !== "w" && e.key !== "h" && e.key !== "m";
+    if (C.look) {
+      if (e.key === "Escape" || e.key === " ") closeLook();
+      else if (e.key === "ArrowRight") stepLook(1);
+      else if (e.key === "ArrowLeft") stepLook(-1);
+      return true;
+    }
+    if (mod) {
+      if (e.key === "a" || e.key === "A") {
+        C.sel = new Set(C.nodes);
+        paint();
+        renderBar();
+        return true;
+      }
+      return e.key !== "q" && e.key !== "w" && e.key !== "h" && e.key !== "m";
+    }
+    const sel = selected();
     if (e.key === "Escape") {
       if (C.picker) togglePicker();
-      else if (C.sel) select(null);
-      else close();
+      else if (sel.length) selectOnly(null);
+      else if (C.fan != null) {
+        C.fan = null;
+        layout();
+      } else close();
     } else if (e.key === "w" || e.key === "W") close();
+    else if (e.key === " ") openLook(sel[0] || centerNode());
     else if (/^[1-4]$/.test(e.key)) resize(Number(e.key) - 1);
-    else if (e.key === "+" || e.key === "=") resize((C.sel || C.nodes[0]).step + 1);
-    else if (e.key === "-") resize((C.sel || C.nodes[0]).step - 1);
-    else if (e.key === "Backspace" || e.key === "Delete") removeRef(C.sel);
+    else if (e.key === "+" || e.key === "=") nudge(1);
+    else if (e.key === "-") nudge(-1);
+    else if (e.key === "Backspace" || e.key === "Delete") removeRefs(sel);
     else if (e.key === "a" || e.key === "A") togglePicker();
+    else if (e.key === "g" || e.key === "G") group();
     else if (e.key === "Tab") {
-      const i = MODES.indexOf(C.mode);
-      setMode(MODES[(i + (e.shiftKey ? MODES.length - 1 : 1)) % MODES.length]);
-    } else if (e.key === "Enter" && C.sel) open(C.sel.item);
+      const i = VIEWS.indexOf(C.view);
+      setView(VIEWS[(i + (e.shiftKey ? VIEWS.length - 1 : 1)) % VIEWS.length]);
+    } else if (e.key === "Enter" && sel.length === 1 && sel[0] !== C.nodes[0]) open(sel[0].item);
     return true;
   }
 

@@ -1,6 +1,6 @@
 # Archiver – Design-System
 
-Stand: App 0.40.25 · Extension 3.29.7
+Stand: App 0.41.0 · Extension 3.29.7
 
 Diese Datei hält fest, wie Archiver aussieht und warum. Sie gilt für die Mac-App
 (`app/src`) und die Extension (`extension/`, in Chrome und in Safari). Wer an der Oberfläche
@@ -314,6 +314,24 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
   zum Umstellen aus.
 - **Nicht:** Keine Rundung, kein Schatten und keine Bildunterschrift im Raster.
   Die Info gibt es per `I` oder im Seitenblatt.
+
+### 4.6a Farbmarke (App 0.41.0, `.card-mark`, `.p-marks`)
+- **Zweck:** Objekte gehören zusammen. Unabhängig von der Wolke, in jeder Zone.
+- **Farben:** die fünf Farben der Textkarten (Rot, Grün, Violett, Cyan, Gelb,
+  `QUOTE_TONES`), ein Objekt hat höchstens eine.
+- **Form:** Innenrand 4 px in der Farbe auf dem Bild (`box-shadow: inset`),
+  eckig wie das Objekt (Lukas 23.10.: Variante B). Er liegt innen, berührt den
+  Ring (außen, 4.1) nie und hält das Raster ruhig. In der Liste ein Strich 3 px
+  links an der Zeile.
+- **Setzen:** Rechtsklick › Farbmarke (Quadrate 16 px, gewählte mit gestricheltem
+  Abstand wie `.tone-dot`, „Ohne“ als Label), ⌥1–5, ⌥0 nimmt sie weg. Dieselbe
+  Farbe noch einmal nimmt sie auch weg.
+- **Filtern:** Im Kopf der Zone neben „(Alle)“ je vergebene Farbe ein Chip mit
+  Quadrat 9 px und Anzahl. Klick zeigt nur diese Farbe, noch ein Klick alles.
+- **Speichern:** in der Bibliothek (`note.mark`, `metadata.json`), wie Bildtext
+  und Rechte, also auch auf anderen Macs und in geteilten Bibliotheken.
+- **Nicht:** Keine Farbe für Auswahl oder Fokus: Farbe heißt „gehört zusammen“,
+  der Ring heißt „ausgewählt“.
 
 ### 4.7 Chip (`.p-chip`)
 - **Zweck:** Filter und Ansichtswahl.
@@ -704,34 +722,54 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
 - **Sichtbar:** nur mit Vorab-Kanal oder nach ⌥-Klick auf die Versionsnummer.
 - **Kürzel:** ⌘I öffnet Information.
 
-### 4.25 Wolke (App 0.39.1, `cloud.css`, `cloud.js`)
-- **Zweck:** Am offenen Objekt weitere Referenzen andocken. Sie ziehen sich
-  per Physik an und bilden ein Moodboard für genau dieses Objekt (Lukas
-  17.10.: „eine Wolke an Referenzen, die als Mood-Strang agieren“). Zum
-  Ausprobieren, Vorabversion.
-- **Fläche:** wie die Lightbox (`--lightbox-bg`, `blur(24px)`), darüber
-  zwei Leisten im Maß der Lightbox-Leiste (4.11): oben die Modi und der
-  Abstand, unten „+ Referenz“, „+5 ähnliche“, Größe S M L XL, Anzahl,
-  Entfernen und Schließen. Aktiv = gefüllter Knopf (ink × 0.15).
-- **Modi:** Wolke (alles zur Mitte), Orbit (Nähe nach Farbähnlichkeit, kreist
-  langsam), Strang (jede Referenz hängt an der gewählten, Fäden gestrichelt
-  in `--dash`), Farbe (gruppiert nach Farbanteilen der Bildanalyse),
-  Konstellation (gewähltes Objekt wird Anker, Fäden zwischen Unterwolken),
-  Raster (Plätze in einem unsichtbaren Raster). Tab wechselt.
-- **Abstand:** Eng 12, Mittel 26, Weit 44 px. Kein Objekt überlappt ein
-  anderes, auch nicht beim Ändern der Größe.
+### 4.25 Wolke (App 0.39.1, neu 0.41.0, `cloud.css`, `cloud.js`)
+- **Zweck:** Am offenen Objekt weitere Referenzen andocken und sie wie auf einem
+  Tisch ordnen, als Moodboard für genau dieses Objekt (Lukas 17.10.: „eine Wolke
+  an Referenzen, die als Mood-Strang agieren“; 23.10.: „intuitiver, mehrere
+  auswählen, einzelne groß, mehr Zusammenspiel, mehr Ansichten“). Vorabversion.
+- **Fläche:** ab Werk wie die Lightbox (`--lightbox-bg`, `blur(24px)`). Wählbar
+  in der Leiste unten als Quadrate: Lightbox, Schwarz, Weiß, die fünf Farben der
+  Textkarten (`QUOTE_TONES`) und Auto (gedämpfter Farbton des offenen Bildes,
+  hsl × 32 % × 13 %). Schrift, Ring, Fäden und Lasso nehmen die Schriftfarbe der
+  Fläche (`--cl-fg`). Auf farbiger Fläche decken die Leisten wie ein Menü
+  (`--menu-bg`).
+- **Leisten:** im Maß der Lightbox-Leiste (4.11). Oben die neun Ansichten und
+  der Abstand. Unten ohne Auswahl „+ Referenz“, „+5 ähnliche“, „Mischen“, Größe
+  des Objekts, Anzahl, Fläche, Schließen; mit Auswahl „n gewählt“, S M L XL,
+  Groß, Gruppe, Vergleichen (ab zwei) bzw. In die Mitte (eins), Gruppe lösen,
+  Entfernen, ×. Aktiv = gefüllter Knopf (ink × 0.15).
+- **Ansichten:** Jede rechnet ihre Lage einmal aus, die Objekte gleiten dorthin
+  (`transform`, 0.45 s, cubic-bezier(.2,.7,.2,1)). Tab wechselt.
+  - Wolke: dicht um die Mitte, Gruppen ziehen sich an
+  - Fokus: Mitte groß (halbe Höhe), die anderen klein auf einer Ellipse; Klick tauscht
+  - Raster: gleiche Zellen
+  - Spalten: gleich breit, verschieden hoch
+  - Spektrum: Zeilen nach Farbton der Bildanalyse, Unbuntes am Ende
+  - Strang: Kette vom ähnlichsten zum nächsten, Schlangenzeilen, Faden gestrichelt
+  - Stapel: je Zone ein Stapel mit Label (4.7), Klick fächert auf
+  - Vergleich: zwei bis vier gewählte groß, der Rest klein und auf 40 %
+  - Frei: was gezogen wird, bleibt liegen. Ziehen in jeder Ansicht schaltet hierher
+- **Abstand:** Eng 12, Mittel 26, Weit 44 px; in Zeilen höchstens 26.
 - **Größe:** vier Stufen (0.62, 1, 1.45, 2.05 × Grundmaß = kürzere
-  Fensterseite / 8, 56–140 px), Fläche je Seitenverhältnis gleich. Klick
-  wählt (Ring 4.1, `--ring-0`, 4 px Abstand), 1–4 oder − + ändern die Größe;
-  ohne Auswahl gilt sie für das offene Objekt.
+  Fensterseite / 8, 56–140 px). Gilt in Wolke, Frei und allen Zeilen-Ansichten;
+  Raster, Spalten, Fokus, Stapel und Vergleich setzen die Größe selbst.
+- **Auswahl:** Klick wählt, ⇧/⌘-Klick mehrere, Lasso (1 px gestrichelt) auf
+  freier Fläche, ⌘A alles, Esc löst. Ring wie 4.1 (`--ring-0`, 4 px Abstand).
+  1–4 und − + gelten für alles Gewählte, ohne Auswahl für das offene Objekt.
+  G bildet eine Gruppe, Kennung „G1“ als Label unter dem Objekt.
+- **Zusammenspiel:** Beim Überfahren zeigen gestrichelte Fäden die drei
+  ähnlichsten (Farbanteile), die drei tragen den Ring auf 45 %.
+- **Groß ansehen:** Leertaste oder Doppelklick; Fläche wie die Wolke, Bild
+  `contain`, ← → blättert durch die Auswahl (bei einer: alle), Label unten mit
+  Zone, Name und Stelle. Esc oder Leertaste schließt.
 - **Hinzufügen:** Glas über der Leiste (2.4) mit Suchfeld und Streifen 88 px,
   ähnlichste Bilder zuerst (Farbanteile, gleiche Zone). Klick dockt an.
-  Doppelklick auf eine Referenz macht sie zur Mitte ihrer eigenen Wolke.
-- **Bewegung:** Federn mit Dämpfung, Ziehen wirft. Bei
-  `prefers-reduced-motion` ist die Lage sofort fertig, Orbit kreist nicht,
-  Ein- und Aufpoppen entfallen.
-- **Speichern:** nur Mitglieder, Größe und Anker je Objekt, lokal unter
-  `archiver.clouds` (höchstens 300 Wolken). Keine Datei, keine Kopien.
+  Enter macht die gewählte Referenz zur Mitte ihrer eigenen Wolke.
+- **Bewegung:** Bei `prefers-reduced-motion` springen die Objekte ohne Gleiten.
+- **Speichern:** Mitglieder, Größe, Gruppe, Ansicht, Abstand, Fläche und die
+  freie Lage (Anteile der Fläche) je Objekt, lokal unter `archiver.clouds`
+  (höchstens 300 Wolken). Keine Datei, keine Kopien. Alte Modi werden beim
+  Öffnen übersetzt: Orbit → Fokus, Farbe → Spektrum, Konstellation → Strang.
 - **Nicht:** Keine Rundung an Objekten, keine Akzentfarbe, keine Schatten an
   den Objekten. Die Extension kennt die Wolke nicht.
 
@@ -876,6 +914,8 @@ sie nur auf ausdrückliches Go.
 - **Ablegen glüht noch in der Extension (0.40.23).**
   App und Zonenleiste am ganzen Mac zeigen die Variante aus dem Labor (4.13). Nachziehen,
   sobald eine Variante aus dem Labor feststeht.
+- **Farbmarken fehlen in der Extension (0.41.0).** Die Galerie der Extension
+  zeigt den Innenrand (4.6a) noch nicht; die Brücke liefert `mark` noch nicht mit.
 - **Die Extension hat ihre Farben fest im Code und nutzt keine Tokens.**
   Seit 3.22.0 stimmen die Werte mit der App überein (Hellgrund `#f4f4f4`,
   Sekundärtext `#5c5c5c`, Tertiär `#8f8f8f`, Karte schwarz × 0.045/0.07,
@@ -903,7 +943,8 @@ sie nur auf ausdrückliches Go.
       außerhalb der Stufen.
 - [ ] Sie funktioniert in Dunkel und Hell sowie mit und ohne `html.mac`.
 - [ ] Hervorhebungen laufen über den Ring (4.1) und nicht über Farbe. Es gibt
-      keine farbigen Highlights im Text (4.26).
+      keine farbigen Highlights im Text (4.26). Einzige Ausnahme: die
+      Farbmarke (4.6a), sie heißt „gehört zusammen“, nicht „ausgewählt“.
 - [ ] Entwürfe und neue Flächen sind mit der Rundung „Weich“ gestaltet.
 - [ ] Wenn die Komponente auch in der Extension vorkommt, ist sie dort gleich
       oder als Abweichung in Abschnitt 5 notiert.

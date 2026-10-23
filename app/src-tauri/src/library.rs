@@ -121,6 +121,8 @@ pub struct Item {
     pub caption: Option<String>,
     /// Notiz-Objekt: verknüpfte Objekte (Hashes, 0.29)
     pub links: Option<Vec<String>>,
+    /// Farbmarke in der Übersicht (0.41.0)
+    pub mark: Option<String>,
 }
 
 /// Seitenzahl, Dauer und Maße eines PDFs oder Videos, bei Audio dazu Titel und Format.
@@ -852,7 +854,8 @@ CREATE TABLE IF NOT EXISTS note (
   updated_at INTEGER NOT NULL DEFAULT 0,
   tone       TEXT,
   caption    TEXT,
-  links      TEXT
+  links      TEXT,
+  mark       TEXT
 );
 ";
 
@@ -912,6 +915,8 @@ impl Library {
         );
         // ab 0.29: Verknüpfungen einer Notiz
         let _ = conn.execute("ALTER TABLE note ADD COLUMN links TEXT", []);
+        // ab 0.41.0: Farbmarke in der Übersicht
+        let _ = conn.execute("ALTER TABLE note ADD COLUMN mark TEXT", []);
         // ab 0.12: Audio-Eckdaten (ältere Datenbanken bekommen die Spalten nachgereicht)
         for col in ["title TEXT", "artist TEXT", "album TEXT", "sample_rate INTEGER", "bit_depth INTEGER", "channels INTEGER"] {
             let _ = conn.execute(&format!("ALTER TABLE media ADD COLUMN {col}"), []);
@@ -1428,7 +1433,7 @@ impl Library {
                         s.image_url, s.page_url, s.page_title, s.captured_at, t.file,
                         a.labels, a.text, a.colors, m.pages, m.duration, s.quote,
                         m.title, m.artist, m.album, m.sample_rate, m.bit_depth, m.channels,
-                        n.note, n.credit, n.license, n.internal, n.added_by, n.tone, n.caption, n.links
+                        n.note, n.credit, n.license, n.internal, n.added_by, n.tone, n.caption, n.links, n.mark
                  FROM item i
                  LEFT JOIN note n ON n.hash = i.hash
                  LEFT JOIN source s ON s.hash = i.hash
@@ -1482,6 +1487,7 @@ impl Library {
                     tone: r.get(30)?,
                     caption: r.get(31)?,
                     links: crate::studio::links_of(r.get(32)?),
+                    mark: r.get(33)?,
                     path,
                 })
             })
@@ -2787,8 +2793,8 @@ impl Library {
             let conn = self.conn.lock().unwrap();
             let n: i64 = conn.query_row("SELECT COUNT(*) FROM item WHERE hash = ?1", params![old], |r| r.get(0)).map_err(err)?;
             conn.execute(
-                "INSERT OR IGNORE INTO note (hash, note, credit, license, internal, added_by, updated_at, tone, caption, links)
-                 SELECT ?2, note, credit, license, internal, added_by, ?3, tone, caption, links FROM note WHERE hash = ?1",
+                "INSERT OR IGNORE INTO note (hash, note, credit, license, internal, added_by, updated_at, tone, caption, links, mark)
+                 SELECT ?2, note, credit, license, internal, added_by, ?3, tone, caption, links, mark FROM note WHERE hash = ?1",
                 params![old, new, now_ms()],
             )
             .map_err(err)?;
