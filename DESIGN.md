@@ -1,6 +1,6 @@
 # Archiver – Design-System
 
-Stand: App 0.41.0 · Extension 3.29.7
+Stand: App 0.41.1 · Extension 3.29.7
 
 Diese Datei hält fest, wie Archiver aussieht und warum. Sie gilt für die Mac-App
 (`app/src`) und die Extension (`extension/`, in Chrome und in Safari). Wer an der Oberfläche
@@ -757,6 +757,11 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
   freier Fläche, ⌘A alles, Esc löst. Ring wie 4.1 (`--ring-0`, 4 px Abstand).
   1–4 und − + gelten für alles Gewählte, ohne Auswahl für das offene Objekt.
   G bildet eine Gruppe, Kennung „G1“ als Label unter dem Objekt.
+- **Gruppe (0.41.1):** Klick auf ein Bild einer Gruppe wählt die ganze Gruppe,
+  ⌥-Klick nur das eine; ⇧/⌘-Klick nimmt die Gruppe dazu oder heraus. Ziehen
+  bewegt sie gemeinsam. Wolke: zieht sich zusammen. Raster: jede Gruppe beginnt
+  eine eigene Zeile. Spalten: Bilder einer Gruppe stehen hintereinander.
+  Stapel: jede Gruppe ist ein eigener Stapel („Gruppe 1“) neben den Zonen.
 - **Zusammenspiel:** Beim Überfahren zeigen gestrichelte Fäden die drei
   ähnlichsten (Farbanteile), die drei tragen den Ring auf 45 %.
 - **Groß ansehen:** Leertaste oder Doppelklick; Fläche wie die Wolke, Bild

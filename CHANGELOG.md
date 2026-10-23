@@ -1,5 +1,13 @@
 # Changelog
 
+## App 0.41.1 (Vorabversion)
+
+- Wolke, Gruppen: Ein Klick auf ein Bild einer Gruppe wählt die ganze Gruppe,
+  ⌥-Klick nur das eine. Ziehen bewegt die Gruppe gemeinsam. Im Raster beginnt
+  jede Gruppe eine eigene Zeile, in Spalten stehen ihre Bilder hintereinander,
+  in Stapel ist jede Gruppe ein eigener Stapel. Die Kennung „G1“ steht jetzt
+  auch in Raster, Spalten, Spektrum und Strang.
+
 ## App 0.41.0 (Vorabversion)
 
 - Farbmarken: Objekte in einer Zone bekommen eine von fünf Farben (Rot, Grün,

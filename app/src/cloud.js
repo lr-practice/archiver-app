@@ -228,9 +228,21 @@
     renderBar();
   }
 
-  function toggle(n) {
-    if (C.sel.has(n)) C.sel.delete(n);
-    else C.sel.add(n);
+  // Gruppe: ein Klick wählt alle ihre Bilder, ⌥-Klick nur das eine
+  function members(n) {
+    return n.group ? C.nodes.filter((m) => m.group === n.group) : [n];
+  }
+
+  function selectGroup(n) {
+    C.sel = new Set(members(n));
+    paint();
+    renderBar();
+  }
+
+  function toggle(n, single) {
+    const list = single ? [n] : members(n);
+    const all = list.every((m) => C.sel.has(m));
+    for (const m of list) all ? C.sel.delete(m) : C.sel.add(m);
     paint();
     renderBar();
   }
@@ -301,6 +313,30 @@
     };
     return list.slice().sort((a, b) => h(a) - h(b));
   }
+
+  // Gruppen als Block: alle Bilder einer Gruppe stehen hintereinander, am Platz des ersten
+  function blocks(list) {
+    const out = [], done = new Set();
+    for (const n of list) {
+      if (!n.group) out.push([n]);
+      else if (!done.has(n.group)) {
+        done.add(n.group);
+        out.push(list.filter((m) => m.group === n.group));
+      }
+    }
+    // Lose Bilder hintereinander bilden zusammen einen Block
+    const merged = [];
+    for (const b of out) {
+      const last = merged[merged.length - 1];
+      if (!b[0].group && last && !last[0].group) last.push(...b);
+      else merged.push(b);
+    }
+    return merged;
+  }
+
+  // Stapel: eine Gruppe ist ihr eigener Stapel, sonst die Zone
+  const pileOf = (n) => (n.group ? "#" + n.group : n.item.zone || "");
+  const pileName = (z) => (z[0] === "#" ? t("cloudGrouped", { n: z.slice(1) }) : zoneName(z));
 
   function centerNode() {
     return C.nodes.includes(C.center) ? C.center : C.nodes[0];
@@ -470,27 +506,34 @@
     },
 
     // Raster: gleiche Zellen, ruhig zum Sichten
+    // Jede Gruppe beginnt eine neue Zeile; so viele Spalten, dass die Zellen am größten werden
     grid(ns, b) {
-      const list = ordered(ns);
+      const parts = blocks(ordered(ns));
       const gap = Math.min(gapPx(), 26);
-      const cols = Math.max(2, Math.round(Math.sqrt((list.length * b.w) / b.h)));
-      const lines = Math.ceil(list.length / cols);
-      const cw = (b.w - gap * (cols - 1)) / cols, ch = (b.h - gap * (lines - 1)) / lines;
-      const cell = Math.min(cw, ch);
+      let cols = 1, lines = 1, cell = 0;
+      for (let k = 1; k <= ns.length; k++) {
+        const l = parts.reduce((a, p) => a + Math.ceil(p.length / k), 0);
+        const c = Math.min((b.w - gap * (k - 1)) / k, (b.h - gap * (l - 1)) / l);
+        if (c > cell + 0.5) [cols, lines, cell] = [k, l, c];
+      }
       const top = b.y + (b.h - (lines * cell + gap * (lines - 1))) / 2;
       const left = b.x + (b.w - (cols * cell + gap * (cols - 1))) / 2;
-      list.forEach((n, k) => {
-        const side = cell * Math.min(1, 0.7 + 0.3 * kOf(n) * 0.5);
-        n.w = n.ar >= 1 ? side : side * n.ar;
-        n.h = n.ar >= 1 ? side / n.ar : side;
-        n.x = left + (k % cols) * (cell + gap) + cell / 2;
-        n.y = top + Math.floor(k / cols) * (cell + gap) + cell / 2;
-      });
+      let line = 0;
+      for (const part of parts) {
+        part.forEach((n, k) => {
+          const side = cell * Math.min(1, 0.7 + 0.3 * kOf(n) * 0.5);
+          n.w = n.ar >= 1 ? side : side * n.ar;
+          n.h = n.ar >= 1 ? side / n.ar : side;
+          n.x = left + (k % cols) * (cell + gap) + cell / 2;
+          n.y = top + (line + Math.floor(k / cols)) * (cell + gap) + cell / 2;
+        });
+        line += Math.ceil(part.length / cols);
+      }
     },
 
     // Spalten: gleich breit, unterschiedlich hoch
     masonry(ns, b) {
-      const list = ordered(ns);
+      const list = blocks(ordered(ns)).flat();
       const gap = Math.min(gapPx(), 26);
       let best = null;
       for (let cols = 2; cols <= 10; cols++) {
@@ -551,24 +594,24 @@
       rows(chain, b, b.h / 3, true);
     },
 
-    // Stapel: je Zone ein Stapel; Klick fächert einen auf
+    // Stapel: je Gruppe und je Zone ein Stapel; Klick fächert einen auf
     piles(ns, b, s) {
-      const zones = [...new Set(ns.map((n) => n.item.zone || ""))];
+      const zones = [...new Set(ns.map(pileOf))];
       if (C.fan != null && zones.includes(C.fan)) {
-        const fan = ns.filter((n) => (n.item.zone || "") === C.fan);
+        const fan = ns.filter((n) => pileOf(n) === C.fan);
         rows(fan, { ...b, h: b.h * 0.74 }, b.h * 0.45);
         const rest = zones.filter((z) => z !== C.fan);
         const sm = s * 0.5;
         rest.forEach((z, k) => {
           const px = b.x + (b.w * (k + 1)) / (rest.length + 1), py = b.y + b.h * 0.9;
-          ns.filter((n) => (n.item.zone || "") === z).forEach((n, j) => {
+          ns.filter((n) => pileOf(n) === z).forEach((n, j) => {
             n.w = sm * Math.sqrt(n.ar);
             n.h = sm / Math.sqrt(n.ar);
             n.x = px + Math.min(j, 6) * 3;
             n.y = py - Math.min(j, 6) * 3;
             n.z = j + 1;
           });
-          C.labels.push({ text: zoneName(z), x: px, y: py + sm * 0.55 + 6, zone: z });
+          C.labels.push({ text: pileName(z), x: px, y: py + sm * 0.55 + 6, zone: z });
         });
         return;
       }
@@ -582,7 +625,7 @@
       zones.forEach((z, k) => {
         const px = b.x + (b.w * ((k % cols) + 0.5)) / cols;
         const py = b.y + (b.h * (Math.floor(k / cols) + 0.5)) / lines - 10;
-        ns.filter((n) => (n.item.zone || "") === z).forEach((n, j) => {
+        ns.filter((n) => pileOf(n) === z).forEach((n, j) => {
           const off = Math.min(j, 8) * 6;
           n.w = pw * Math.sqrt(n.ar);
           n.h = pw / Math.sqrt(n.ar);
@@ -590,7 +633,7 @@
           n.y = py - off + 20;
           n.z = j + 1;
         });
-        C.labels.push({ text: zoneName(z), x: px, y: py + pw * 0.62 + 26, zone: z });
+        C.labels.push({ text: pileName(z), x: px, y: py + pw * 0.62 + 26, zone: z });
       });
     },
 
@@ -648,7 +691,7 @@
       n.el.classList.toggle("selected", C.sel.has(n));
       n.el.classList.toggle("center", n === centerNode() && (C.view === "focus" || C.view === "strand"));
       let tag = n.el.querySelector(".cl-group");
-      if (n.group && (C.view === "cloud" || C.view === "free")) {
+      if (n.group && !["focus", "piles", "compare"].includes(C.view)) {
         if (!tag) n.el.appendChild((tag = el("span", "cl-group")));
         tag.textContent = "G" + n.group;
       } else if (tag) tag.remove();
@@ -972,12 +1015,13 @@
       if (C.picker && !n) togglePicker();
       if (n) {
         if (C.view === "piles" && C.fan == null) {
-          C.fan = n.item.zone || "";
+          C.fan = pileOf(n);
           layout();
           return;
         }
-        if (multi) toggle(n);
-        else if (!C.sel.has(n)) selectOnly(n);
+        if (multi) toggle(n, e.altKey);
+        else if (e.altKey) selectOnly(n);
+        else if (!C.sel.has(n)) selectGroup(n);
         C.drag = { mode: "move", n, p, moved: false, start: selected().map((m) => ({ m, x: m.x, y: m.y })) };
       } else {
         if (C.view === "piles" && C.fan != null) {
