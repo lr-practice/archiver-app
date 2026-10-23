@@ -3,6 +3,29 @@
    App: Übersicht als abgerundete Karten, eine geöffnete Zone als Raster mit
    großem Titel, unten eine schwebende Navigation. */
 
+/* Ecken wie in der App (Einstellungen › Aussehen › Ecken), über die Bibliothek
+   gemeldet. Ohne Angabe gelten die Werte von „Rund“ (Rückfallwerte unten). */
+html[data-radius="square"],
+:host([data-radius="square"]) {
+  --r-lg: 0px;
+  --r-md: 0px;
+  --r-sm: 0px;
+}
+
+html[data-radius="soft"],
+:host([data-radius="soft"]) {
+  --r-lg: 4px;
+  --r-md: 3px;
+  --r-sm: 3px;
+}
+
+html[data-radius="xl"],
+:host([data-radius="xl"]) {
+  --r-lg: 14px;
+  --r-md: 10px;
+  --r-sm: 9px;
+}
+
 .zones-grid {
   flex: 1 1 auto;
   min-height: 0;
@@ -22,7 +45,7 @@
 
 .zone-card {
   position: relative;
-  border-radius: 8px;
+  border-radius: var(--r-lg, 8px);
   overflow: hidden;
   background: rgba(255, 255, 255, 0.055);
   transition: background 0.12s ease, box-shadow 0.12s ease;
@@ -39,7 +62,7 @@
 }
 
 .zone-card.reorder-target {
-  box-shadow: inset 0 0 0 1px #7c86ff;
+  box-shadow: inset 0 0 0 1px #5b7cff;
 }
 
 .zone-card-cover {
@@ -199,7 +222,7 @@
   width: 22px;
   height: 22px;
   border: none;
-  border-radius: 4px;
+  border-radius: var(--r-sm, 4px);
   background: rgba(0, 0, 0, 0.6);
   color: #ffffff;
   font-size: 13px;
@@ -256,7 +279,7 @@
   gap: 4px;
   max-width: calc(100vw - 32px);
   padding: 6px;
-  border-radius: 8px;
+  border-radius: var(--r-lg, 8px);
   background: rgba(52, 52, 52, 0.82);
   backdrop-filter: blur(24px) saturate(1.4);
   -webkit-backdrop-filter: blur(24px) saturate(1.4);
@@ -270,7 +293,7 @@
   align-items: center;
   padding: 0 16px;
   border: none;
-  border-radius: 5px;
+  border-radius: var(--r-sm, 5px);
   background: transparent;
   color: #ededed;
   font-family: inherit;
@@ -351,7 +374,7 @@
   display: flex;
   flex-direction: column;
   padding: 4px;
-  border-radius: 6px;
+  border-radius: var(--r-md, 6px);
   background: rgba(40, 40, 40, 0.96);
   box-shadow: 0 14px 44px rgba(0, 0, 0, 0.5), inset 0 0 0 1px rgba(255, 255, 255, 0.06);
 }
@@ -359,7 +382,7 @@
 .more-item {
   padding: 8px 10px;
   border: none;
-  border-radius: 4px;
+  border-radius: var(--r-sm, 4px);
   background: transparent;
   color: #ededed;
   font: inherit;
@@ -392,7 +415,7 @@
   gap: 4px;
   max-width: calc(100vw - 48px);
   padding: 6px;
-  border-radius: 6px;
+  border-radius: var(--r-md, 6px);
   background: rgba(78, 78, 78, 0.5);
   -webkit-backdrop-filter: blur(28px) saturate(1.6);
   backdrop-filter: blur(28px) saturate(1.6);
@@ -402,7 +425,7 @@
 
 .zone-chip {
   padding: 9px 14px;
-  border-radius: 4px;
+  border-radius: var(--r-sm, 4px);
   background: rgba(255, 255, 255, 0.07);
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.2);
   font-size: 13px;
@@ -550,7 +573,7 @@
 }
 
 .lightbox-source {
-  color: #7c86ff;
+  color: #5b7cff;
   text-decoration: none;
 }
 
@@ -599,16 +622,16 @@
 }
 
 /* ---- Hell (erzeugt) ---- */
-/* Hell: Papierweiß, fast schwarze Schrift. Abgeleitet aus den Regeln oben. */
+/* Hell: Werte wie das Hell der App (DESIGN.md 2.1, seit 3.22.0). */
 
 html.light .zone-card,
 :host(.light) .zone-card {
-  background: rgba(17, 17, 17, 0.055);
+  background: rgba(17, 17, 17, 0.045);
 }
 
 html.light .zone-card:hover,
 :host(.light) .zone-card:hover {
-  background: rgba(17, 17, 17, 0.085);
+  background: rgba(17, 17, 17, 0.07);
 }
 
 html.light .zone-card-cover[hidden],
@@ -618,7 +641,7 @@ html.light .zone-card-cover[hidden],
 
 html.light .zone-card-cover img,
 :host(.light) .zone-card-cover img {
-  background: #e4e4e4;
+  background: #e8e8e8;
 }
 
 html.light .zone-card-name,
@@ -628,22 +651,22 @@ html.light .zone-card-name,
 
 html.light .zone-parent,
 :host(.light) .zone-parent {
-  color: #707070;
+  color: #5c5c5c;
 }
 
 html.light .zone-card-count,
 :host(.light) .zone-card-count {
-  color: #707070;
+  color: #5c5c5c;
 }
 
 html.light .zone-card-handle,
 :host(.light) .zone-card-handle {
-  color: #707070;
+  color: #5c5c5c;
 }
 
 html.light .zone-card-item,
 :host(.light) .zone-card-item {
-  background: #e4e4e4;
+  background: #e8e8e8;
 }
 
 html.light .zone-card-item.selected,
@@ -653,29 +676,31 @@ html.light .zone-card-item.selected,
 
 html.light .zoom-btn,
 :host(.light) .zoom-btn {
-  background: rgba(245, 245, 245, 0.6);
+  background: rgba(244, 244, 244, 0.6);
   color: #111111;
 }
 
 html.light .zoom-btn:hover,
 :host(.light) .zoom-btn:hover {
-  background: rgba(245, 245, 245, 0.85);
+  background: rgba(244, 244, 244, 0.85);
 }
 
 html.light .zone-card-item.broken span,
 :host(.light) .zone-card-item.broken span {
-  color: #707070;
+  color: #5c5c5c;
 }
 
 html.light .zone-card-empty,
 :host(.light) .zone-card-empty {
-  color: #707070;
+  color: #5c5c5c;
 }
 
 html.light .gallery-toolbar,
 :host(.light) .gallery-toolbar {
-  background: rgba(245, 245, 245, 0.82);
-  box-shadow: 0 14px 44px rgba(0, 0, 0, 0.15), inset 0 0 0 1px rgba(17, 17, 17, 0.06);
+  background: rgba(255, 255, 255, 0.78);
+  -webkit-backdrop-filter: blur(28px) saturate(0);
+  backdrop-filter: blur(28px) saturate(0);
+  box-shadow: 0 14px 44px rgba(0, 0, 0, 0.16), inset 0 0 0 1px rgba(17, 17, 17, 0.08);
 }
 
 html.light .nav-btn,
@@ -695,12 +720,12 @@ html.light .nav-btn.active,
 
 html.light .nav-sep,
 :host(.light) .nav-sep {
-  color: #707070;
+  color: #5c5c5c;
 }
 
 html.light .more-menu,
 :host(.light) .more-menu {
-  background: rgba(245, 245, 245, 0.96);
+  background: rgba(250, 250, 250, 0.97);
   box-shadow: 0 14px 44px rgba(0, 0, 0, 0.15), inset 0 0 0 1px rgba(17, 17, 17, 0.06);
 }
 
@@ -722,7 +747,7 @@ html.light .more-item.on,
 
 html.light .zone-strip,
 :host(.light) .zone-strip {
-  background: rgba(245, 245, 245, 0.5);
+  background: rgba(244, 244, 244, 0.5);
   box-shadow: 0 14px 44px rgba(0, 0, 0, 0.105), inset 0 0 0 1px rgba(17, 17, 17, 0.12),
     inset 0 1px 0 rgba(17, 17, 17, 0.1);
 }
@@ -736,7 +761,7 @@ html.light .zone-chip,
 
 html.light .lightbox-backdrop,
 :host(.light) .lightbox-backdrop {
-  background: rgba(245, 245, 245, 0.85);
+  background: rgba(244, 244, 244, 0.98);
 }
 
 html.light .lightbox-close,
@@ -764,18 +789,18 @@ html.light .lightbox-nav:hover,
 html.light .lightbox-caption,
 :host(.light) .lightbox-caption {
   color: #111111;
-  background: rgba(245, 245, 245, 0.5);
+  background: rgba(244, 244, 244, 0.5);
 }
 
 html.light .gallery-toast,
 :host(.light) .gallery-toast {
-  background: rgba(245, 245, 245, 0.95);
+  background: rgba(244, 244, 244, 0.95);
   color: #111111;
 }
 
 html.light .zone-strip-label,
 :host(.light) .zone-strip-label {
-  color: #707070;
+  color: #5c5c5c;
 }
 
 /* Hinweis auf die App: ganz rechts in der Leiste, nach dem Menü */
@@ -790,7 +815,7 @@ html.light .zone-strip-label,
 
 .zones-grid {
   padding: 96px 40px 140px;
-  font-family: "Geist", -apple-system, BlinkMacSystemFont, sans-serif;
+  font-family: "KMR Melange Grotesk", "Geist", -apple-system, BlinkMacSystemFont, sans-serif;
   -webkit-font-smoothing: antialiased;
 }
 
@@ -845,7 +870,7 @@ html.light .zone-strip-label,
 
 .x-key .x-mono {
   padding: 2px 6px;
-  border-radius: 5px;
+  border-radius: var(--r-sm, 5px);
   background: rgba(0, 0, 0, 0.55);
   color: #ffffff;
 }
@@ -900,7 +925,7 @@ html.light .zone-strip-label,
   top: 17px;
   right: 40px;
   padding: 4px;
-  border-radius: 6px;
+  border-radius: var(--r-md, 6px);
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04);
 }
 

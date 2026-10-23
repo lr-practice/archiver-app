@@ -378,7 +378,7 @@
 
   // Eckenrundung wie in der App (Einstellungen › Anzeige › Radien)
   {
-    const r = pref("radius", "round");
+    const r = pref("radius", "soft");
     if (r !== "round") document.documentElement.dataset.radius = r;
   }
 

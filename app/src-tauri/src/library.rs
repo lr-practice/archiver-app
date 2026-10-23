@@ -43,7 +43,9 @@ pub const VIDEO_EXTS: &[&str] = &["mp4", "m4v", "mov", "webm"];
 pub const AUDIO_EXTS: &[&str] = &["wav", "mp3", "aif", "aiff", "m4a", "flac"];
 /// Textkarten liegen als reine Textdatei in der Zone; die Oberfläche zeigt
 /// sie als farbige Karte (Text aus der Quelle oder aus der Datei selbst).
-pub const TEXT_EXTS: &[&str] = &["txt"];
+pub const TEXT_EXTS: &[&str] = &["txt", "md"];
+/// Notiz-Objekte (0.29): eigene Texte als Markdown in der Zone
+pub const NOTE_EXTS: &[&str] = &["md"];
 const TEXT_MAX_CHARS: usize = 20_000;
 
 pub type Result<T> = std::result::Result<T, String>;
@@ -58,6 +60,10 @@ pub struct Zone {
     pub path: String,
     pub name: String,
     pub count: usize,
+    /// Liegt in einem verknüpften Ordner außerhalb der Bibliothek (0.39.1):
+    /// lässt sich nur trennen, nie löschen
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub external: bool,
 }
 
 #[derive(Serialize, Clone, Debug)]
@@ -111,6 +117,12 @@ pub struct Item {
     pub added_by: Option<String>,
     /// Farbe der Textkarte, falls gewählt
     pub tone: Option<String>,
+    /// Bildtext: Credits oder Unterschrift (0.29)
+    pub caption: Option<String>,
+    /// Notiz-Objekt: verknüpfte Objekte (Hashes, 0.29)
+    pub links: Option<Vec<String>>,
+    /// Farbmarke in der Übersicht (0.41.0)
+    pub mark: Option<String>,
 }
 
 /// Seitenzahl, Dauer und Maße eines PDFs oder Videos, bei Audio dazu Titel und Format.
@@ -150,6 +162,49 @@ pub struct Source {
     pub quote: Option<String>,
 }
 
+/// Zwischenablage für ⌘V (macos.rs read_pasteboard liest sie aus)
+#[derive(Default)]
+pub struct Pasted {
+    pub files: Vec<PathBuf>,
+    pub image: Option<Vec<u8>>,
+    pub text: Option<String>,
+}
+
+/// Name für Eingefügtes: Text nach seinen ersten Wörtern, sonst „Eingefügt“ mit Datum
+fn paste_name(text: &str) -> String {
+    let words: Vec<&str> = text.split_whitespace().take(6).collect();
+    let mut name = clean_segment(&words.join(" "));
+    if name.chars().count() > 48 {
+        name = name.chars().take(48).collect::<String>().trim_end().to_string();
+    }
+    if !name.is_empty() {
+        return name;
+    }
+    let days = now_ms().div_euclid(86_400_000);
+    // Tage seit 1970 → Datum (Howard Hinnant, civil_from_days), UTC
+    let z = days + 719_468;
+    let era = z.div_euclid(146_097);
+    let doe = z - era * 146_097;
+    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = doy - (153 * mp + 2) / 5 + 1;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 };
+    let y = yoe + era * 400 + i64::from(m <= 2);
+    format!("Eingefügt {y}-{m:02}-{d:02}")
+}
+
+#[derive(Serialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct NamePlan {
+    pub path: String,
+    pub hash: String,
+    pub old: String,
+    pub new: String,
+    pub suggestion: Option<String>,
+    pub messy: bool,
+}
+
 #[derive(Serialize, Clone, Debug, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct ImportReport {
@@ -158,6 +213,21 @@ pub struct ImportReport {
     pub missing: usize,
     pub with_source: usize,
 }
+
+/// In den Papierkorb des Macs, ohne Finder: Der Finder fragt bei Ordnern in
+/// geteilten iCloud-Ordnern jedes Mal nach („Möchtest du diesen geteilten
+/// Ordner wirklich bewegen?“) und blockiert damit den Start.
+pub fn to_trash(p: &Path) -> std::result::Result<(), trash::Error> {
+    #[allow(unused_mut)]
+    let mut ctx = trash::TrashContext::default();
+    #[cfg(target_os = "macos")]
+    {
+        use trash::macos::{DeleteMethod, TrashContextExtMacos};
+        ctx.set_delete_method(DeleteMethod::NsFileManager);
+    }
+    ctx.delete(p)
+}
+
 
 pub struct Library {
     pub root: PathBuf,
@@ -208,6 +278,16 @@ fn is_av(path: &Path) -> bool {
 
 pub fn is_text(path: &Path) -> bool {
     TEXT_EXTS.contains(&ext_of(path).as_str())
+}
+
+pub fn is_note(path: &Path) -> bool {
+    NOTE_EXTS.contains(&ext_of(path).as_str())
+}
+
+/// Titel einer Notiz: erste Zeile mit Text, ohne Markdown-Raute
+pub fn note_title(text: &str) -> String {
+    let line = text.lines().map(str::trim).find(|l| !l.is_empty()).unwrap_or("");
+    line.trim_start_matches('#').trim().chars().take(80).collect()
 }
 
 /// Alles, was in die Bibliothek gehört: Bilder, PDFs, Videos, Audio, Textkarten.
@@ -288,6 +368,17 @@ fn parent_rel(rel: &str) -> String {
 
 /// Zone eines Ordners: nur die ersten `depth` Ebenen. Tiefere Unterordner
 /// gehören zu ihrer Zone (bestehende Projektordner werden nicht zerfasert).
+/// Zone, die sich nach 7 Tagen leert (0.36.0): jeder Ordner namens Unsorted,
+/// auch selbst angelegt, klein geschrieben, mit Nummer davor (00_Unsorted) oder
+/// als Unterzone (Projekt/Unsorted), dazu alles darin.
+pub fn is_unsorted(zone: &str) -> bool {
+    zone.split('/').any(|seg| {
+        seg.trim()
+            .trim_start_matches(|c: char| c.is_ascii_digit() || matches!(c, '_' | '-' | '.' | ' '))
+            .eq_ignore_ascii_case(INBOX)
+    })
+}
+
 fn zone_at(dir: &str, depth: usize) -> String {
     if dir.is_empty() {
         return String::new();
@@ -337,6 +428,11 @@ pub const DEFAULT_DEPTH: usize = 2;
 /// Pakete, die im Finder wie Dateien aussehen (Programme, Mediatheken, Projekte)
 const PACKAGE_EXTS: &[&str] = &["app", "photoslibrary", "logicx", "fcpbundle", "band", "rtfd", "pages", "key", "numbers", "imovielibrary", "lrdata", "bundle", "framework", "plugin"];
 
+fn is_package_dir(e: &walkdir::DirEntry) -> bool {
+    e.file_type().is_dir()
+        && e.path().extension().and_then(|x| x.to_str()).is_some_and(|x| PACKAGE_EXTS.contains(&x.to_lowercase().as_str()))
+}
+
 /// Ordnerregeln einer Bibliothek: Zonentiefe und übersprungene Ordner
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Structure {
@@ -374,6 +470,172 @@ impl Structure {
     }
 }
 
+/// Tage unter „Zuletzt gelöscht“, bevor eine Datei in den Papierkorb des Macs geht
+pub const DELETED_DAYS: i64 = 7;
+/// .archiver/unsorted-seen.json: seit wann ein Objekt in Unsorted liegt (expire_inbox)
+const INBOX_SEEN: &str = "unsorted-seen.json";
+const DELETED_HASHES: &str = ".hashes.json";
+
+/// Eintrag unter „Zuletzt gelöscht“: alter Pfad in der Bibliothek, Ort unter
+/// .archiver/deleted, Zeitpunkt des Löschens
+#[derive(Serialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct DeletedItem {
+    pub path: String,
+    pub abs: String,
+    pub zone: String,
+    pub filename: String,
+    pub hash: String,
+    pub format: String,
+    pub width: Option<i64>,
+    pub height: Option<i64>,
+    pub thumb: Option<String>,
+    pub quote: Option<String>,
+    pub tone: Option<String>,
+    pub deleted_at: i64,
+    /// Keine Mediendatei (PSD, AI, INDD, ZIP …), kam mit einer gelöschten Zone
+    pub other: bool,
+}
+
+/// Schreibt über eine eigene Temp-Datei und benennt dann um. App und Brücke
+/// (eigener Prozess) können gleichzeitig schreiben, darum ist der Name je
+/// Prozess und Aufruf eindeutig (0.31.0).
+pub(crate) fn write_atomic(target: &Path, body: &[u8]) -> Result<()> {
+    static SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let n = SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let name = target.file_name().and_then(|n| n.to_str()).unwrap_or("datei");
+    let tmp = target.with_file_name(format!(".{name}.{}-{n}.tmp", std::process::id()));
+    if let Err(e) = fs::write(&tmp, body).and_then(|_| fs::rename(&tmp, target)) {
+        let _ = fs::remove_file(&tmp);
+        return Err(format!("{}: {e}", target.display()));
+    }
+    Ok(())
+}
+
+/// Dieselbe Datei auf der Platte (gleiches Gerät und gleicher Inode)
+fn same_file(a: &Path, b: &Path) -> bool {
+    match (a.canonicalize(), b.canonicalize()) {
+        (Ok(a), Ok(b)) => a == b,
+        _ => false,
+    }
+}
+
+/// Verknüpfung (Symlink), ohne ihr zu folgen
+fn is_link(p: &Path) -> bool {
+    fs::symlink_metadata(p).map(|m| m.file_type().is_symlink()).unwrap_or(false)
+}
+
+/// Verschieben, notfalls über Volumegrenzen (kopieren, dann löschen)
+/// Verschiebt eine Datei oder einen Ordner nach `dst` (das es noch nicht gibt).
+/// Nur über Laufwerksgrenzen (EXDEV, etwa externe Zonen) wird kopiert und erst
+/// danach gelöscht. Dabei gilt: Was nicht vollständig kopiert ist, bleibt am
+/// alten Ort, und es wird nur gelöscht, was kopiert wurde (0.31.0). Andere
+/// Fehler (Rechte, schreibgeschützt) werden gemeldet, nicht umgangen.
+pub(crate) fn move_file(src: &Path, dst: &Path) -> Result<()> {
+    match fs::rename(src, dst) {
+        Ok(()) => return Ok(()),
+        Err(e) if e.kind() == std::io::ErrorKind::CrossesDevices => {}
+        Err(e) => return Err(format!("{}: {e}", src.display())),
+    }
+    if fs::symlink_metadata(src).map_err(err)?.is_dir() {
+        copy_dir_then_remove(src, dst)
+    } else {
+        copy_file(src, dst)?;
+        if let Err(e) = fs::remove_file(src) {
+            // Original lässt sich nicht entfernen (schreibgeschützt): Kopie zurücknehmen
+            let _ = fs::remove_file(dst);
+            return Err(format!("{}: {e}", src.display()));
+        }
+        Ok(())
+    }
+}
+
+/// Kopiert über eine versteckte Teildatei und benennt erst um, wenn alles da ist.
+fn copy_file(src: &Path, dst: &Path) -> Result<()> {
+    let name = dst.file_name().and_then(|n| n.to_str()).unwrap_or("datei");
+    let part = dst.with_file_name(format!(".{name}.archiver-part"));
+    let done = fs::copy(src, &part).map_err(err).and_then(|n| {
+        let want = fs::metadata(src).map_err(err)?.len();
+        if n == want {
+            Ok(())
+        } else {
+            Err(format!("{}: unvollständig kopiert ({n} von {want} Byte)", src.display()))
+        }
+    });
+    if let Err(e) = done.and_then(|_| fs::rename(&part, dst).map_err(err)) {
+        let _ = fs::remove_file(&part);
+        return Err(e);
+    }
+    Ok(())
+}
+
+fn copy_dir_then_remove(src: &Path, dst: &Path) -> Result<()> {
+    let mut copied = Vec::new();
+    let mut dirs = Vec::new();
+    let result = (|| -> Result<()> {
+        fs::create_dir_all(dst).map_err(err)?;
+        for entry in WalkDir::new(src).min_depth(1) {
+            let entry = entry.map_err(err)?;
+            let to = dst.join(entry.path().strip_prefix(src).map_err(err)?);
+            let kind = entry.file_type();
+            if kind.is_dir() {
+                fs::create_dir_all(&to).map_err(err)?;
+                dirs.push(entry.path().to_path_buf());
+            } else if kind.is_symlink() {
+                #[cfg(unix)]
+                std::os::unix::fs::symlink(fs::read_link(entry.path()).map_err(err)?, &to).map_err(err)?;
+                copied.push(entry.path().to_path_buf());
+            } else {
+                copy_file(entry.path(), &to)?;
+                copied.push(entry.path().to_path_buf());
+            }
+        }
+        Ok(())
+    })();
+    if let Err(e) = result {
+        // Nichts halb verschoben: die neue Kopie verwerfen, das Original bleibt
+        let _ = fs::remove_dir_all(dst);
+        return Err(e);
+    }
+    // Nur löschen, was kopiert wurde. Was währenddessen neu hinzukam, bleibt liegen.
+    for f in &copied {
+        let _ = fs::remove_file(f);
+    }
+    dirs.sort_by_key(|d| std::cmp::Reverse(d.components().count()));
+    for d in dirs {
+        let _ = fs::remove_dir(d);
+    }
+    let _ = fs::remove_dir(src);
+    Ok(())
+}
+
+fn write_deleted_hashes(stamp: &Path, hashes: &HashMap<String, String>) -> Result<()> {
+    if hashes.is_empty() {
+        return Ok(());
+    }
+    let mut all = read_deleted_hashes(stamp);
+    all.extend(hashes.iter().map(|(k, v)| (k.clone(), v.clone())));
+    fs::write(stamp.join(DELETED_HASHES), serde_json::to_vec(&all).map_err(err)?).map_err(err)
+}
+
+fn read_deleted_hashes(stamp: &Path) -> HashMap<String, String> {
+    fs::read(stamp.join(DELETED_HASHES)).ok().and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or_default()
+}
+
+/// Leere Ordner von unten nach oben entfernen, samt `dir` selbst. Eine Liste
+/// der Hashes allein hält einen Ordner nicht am Leben.
+fn prune_empty(dir: &Path) {
+    let mut dirs: Vec<PathBuf> = WalkDir::new(dir).into_iter().filter_map(|e| e.ok()).filter(|e| e.file_type().is_dir()).map(|e| e.into_path()).collect();
+    dirs.sort_by_key(|d| std::cmp::Reverse(d.components().count()));
+    for d in dirs {
+        let only_meta = fs::read_dir(&d).map(|rd| rd.filter_map(|e| e.ok()).all(|e| e.file_name() == DELETED_HASHES)).unwrap_or(false);
+        if only_meta {
+            let _ = fs::remove_file(d.join(DELETED_HASHES));
+            let _ = fs::remove_dir(&d);
+        }
+    }
+}
+
 /// Ordner ohne sichtbaren Inhalt
 fn dir_is_empty(dir: &Path) -> bool {
     fs::read_dir(dir).map(|rd| rd.filter_map(|e| e.ok()).all(|e| is_hidden(&e.file_name()))).unwrap_or(true)
@@ -385,6 +647,14 @@ fn file_name(rel: &str) -> String {
 
 /// Prüft einen relativen Pfad aus der Oberfläche: keine "..", keine absoluten
 /// Pfade, nichts Verstecktes. Gibt den absoluten Pfad in der Bibliothek zurück.
+/// Relativer Pfad in der Bibliothek ohne `..`, versteckte oder absolute Teile.
+pub fn check_rel(rel: &str) -> Result<()> {
+    if rel.starts_with('/') {
+        return Err(format!("Ungültiger Pfad: {rel}"));
+    }
+    safe_join(Path::new(""), rel).map(|_| ())
+}
+
 fn safe_join(root: &Path, rel: &str) -> Result<PathBuf> {
     let mut out = root.to_path_buf();
     for seg in rel.split('/').filter(|s| !s.is_empty()) {
@@ -582,9 +852,30 @@ CREATE TABLE IF NOT EXISTS note (
   internal   INTEGER,
   added_by   TEXT,
   updated_at INTEGER NOT NULL DEFAULT 0,
-  tone       TEXT
+  tone       TEXT,
+  caption    TEXT,
+  links      TEXT,
+  mark       TEXT
 );
 ";
+
+/// Verbindung öffnen, einstellen, Schema anlegen und kurz auf Schäden prüfen
+fn open_db(db: &Path) -> rusqlite::Result<Connection> {
+    let conn = Connection::open(db)?;
+    // Die Brücke zur Extension öffnet dieselbe Datenbank parallel zur App.
+    conn.busy_timeout(std::time::Duration::from_secs(5))?;
+    conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL;")?;
+    conn.execute_batch(SCHEMA)?;
+    let check: String = conn.query_row("PRAGMA quick_check(1)", [], |r| r.get(0))?;
+    if check != "ok" {
+        return Err(rusqlite::Error::SqliteFailure(rusqlite::ffi::Error::new(rusqlite::ffi::SQLITE_CORRUPT), Some(check)));
+    }
+    Ok(conn)
+}
+
+fn is_corrupt(e: &rusqlite::Error) -> bool {
+    matches!(e.sqlite_error_code(), Some(rusqlite::ErrorCode::DatabaseCorrupt) | Some(rusqlite::ErrorCode::NotADatabase))
+}
 
 impl Library {
     /// Öffnet (und legt bei Bedarf an) eine Bibliothek in `root`.
@@ -593,15 +884,39 @@ impl Library {
         let shared = crate::studio::is_shared(root);
         // Geteilt: SQLite gehört nicht auf ein Netzlaufwerk, jede Person hat ihren eigenen Cache.
         let db = if shared { crate::studio::local_db(root)? } else { root.join(META_DIR).join("library.db") };
-        let conn = Connection::open(db).map_err(err)?;
-        // Die Brücke zur Extension öffnet dieselbe Datenbank parallel zur App.
-        conn.busy_timeout(std::time::Duration::from_secs(5)).map_err(err)?;
-        conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL;").map_err(err)?;
-        conn.execute_batch(SCHEMA).map_err(err)?;
+        // Die Datenbank ist nur ein Zwischenspeicher: Ordner und .archiver/metadata.json
+        // sind die Wahrheit. Ist sie beschädigt, wird sie beiseitegelegt und neu
+        // aufgebaut, statt die Bibliothek gar nicht mehr zu öffnen (0.31.0).
+        let conn = match open_db(&db) {
+            Err(e) if is_corrupt(&e) => {
+                let aside = db.with_extension(format!("db.broken-{}", now_ms()));
+                crate::log::error("db", format!("{} beschädigt ({e}), neu aufgebaut, alte Datei: {}", db.display(), aside.display()));
+                fs::rename(&db, &aside).map_err(err)?;
+                for ext in ["db-wal", "db-shm"] {
+                    let _ = fs::remove_file(db.with_extension(ext));
+                }
+                open_db(&db).map_err(err)?
+            }
+            r => r.map_err(err)?,
+        };
         // ab 0.9: Text der Zitat-Karten (ältere Datenbanken bekommen die Spalte nachgereicht)
         let _ = conn.execute("ALTER TABLE source ADD COLUMN quote TEXT", []);
         // ab 0.20.1: Farbe der Textkarten
         let _ = conn.execute("ALTER TABLE note ADD COLUMN tone TEXT", []);
+        // ab 0.29: Bildtext
+        let _ = conn.execute("ALTER TABLE note ADD COLUMN caption TEXT", []);
+        // ab 0.30: Das Feld „Notiz“ geht im Bildtext auf (hängt sich an einen vorhandenen
+        // Bildtext an). Läuft bei jedem Öffnen, betrifft nur noch nicht übernommene Zeilen.
+        let _ = conn.execute(
+            "UPDATE note SET caption = CASE WHEN caption IS NULL OR trim(caption) = '' THEN note \
+             ELSE caption || char(10) || char(10) || note END, note = NULL \
+             WHERE note IS NOT NULL AND trim(note) <> ''",
+            [],
+        );
+        // ab 0.29: Verknüpfungen einer Notiz
+        let _ = conn.execute("ALTER TABLE note ADD COLUMN links TEXT", []);
+        // ab 0.41.0: Farbmarke in der Übersicht
+        let _ = conn.execute("ALTER TABLE note ADD COLUMN mark TEXT", []);
         // ab 0.12: Audio-Eckdaten (ältere Datenbanken bekommen die Spalten nachgereicht)
         for col in ["title TEXT", "artist TEXT", "album TEXT", "sample_rate INTEGER", "bit_depth INTEGER", "channels INTEGER"] {
             let _ = conn.execute(&format!("ALTER TABLE media ADD COLUMN {col}"), []);
@@ -617,6 +932,24 @@ impl Library {
             let _ = conn.execute("DELETE FROM thumb WHERE hash IN (SELECT hash FROM media WHERE sample_rate IS NOT NULL OR title IS NOT NULL)", []);
             let _ = conn.execute_batch("PRAGMA user_version = 2;");
         }
+        // ab 0.31.1: Motive mit Sicherheit („poster:0.92“). Ältere Analysen ohne
+        // Sicherheit laufen einmal neu, damit die Suche unsichere Motive auslässt.
+        if version < 3 {
+            let _ = conn.execute("DELETE FROM analysis WHERE labels <> '' AND labels NOT LIKE '%:%'", []);
+            let _ = conn.execute_batch("PRAGMA user_version = 3;");
+        }
+        // ab 0.31.2: Gesichter und Personen eigens erkannt. Alle Bilder laufen
+        // einmal neu durch die Analyse (Hintergrund, Farben gleich mit).
+        if version < 4 {
+            let _ = conn.execute("DELETE FROM analysis", []);
+            let _ = conn.execute_batch("PRAGMA user_version = 4;");
+        }
+        // ab 0.36.3: Analyse am Original statt an der Vorschau, dazu Tiere, Gruppen und
+        // mehr Sprachen im Bildtext. Alles läuft einmal neu (Hintergrund).
+        if version < 5 {
+            let _ = conn.execute("DELETE FROM analysis", []);
+            let _ = conn.execute_batch("PRAGMA user_version = 5;");
+        }
         let lib = Library {
             root: root.to_path_buf(),
             conn: Mutex::new(conn),
@@ -626,15 +959,16 @@ impl Library {
             user: Mutex::new(None),
             people_sig: Mutex::new(0),
         };
-        // Inbox nur in einer neuen Bibliothek. In einem bestehenden Ordnersystem
-        // entsteht sie erst, wenn wirklich etwas ohne Ziel hereinkommt.
+        // Unsorted (Standard-Zone) gibt es in jeder eigenen Bibliothek von Anfang
+        // an, auch in einem bestehenden Ordnersystem (0.33.1). Geteilte
+        // Bibliotheken bekommen sie nur, wenn sie noch leer sind.
         let has_folders = fs::read_dir(root)
             .map(|rd| rd.filter_map(|e| e.ok()).any(|e| e.path().is_dir() && !is_hidden(&e.file_name())))
             .unwrap_or(false);
-        if !has_folders {
+        lib.migrate_inbox()?;
+        if !shared || !has_folders {
             fs::create_dir_all(root.join(lib.default_zone())).map_err(err)?;
         }
-        lib.migrate_inbox()?;
         lib.restore_metadata()?;
         lib.merge_people()?;
         Ok(lib)
@@ -719,6 +1053,37 @@ impl Library {
         self.write_zone_file(&v)
     }
 
+    /// Zone, die sich nach 7 Tagen selbst leert: immer Unsorted (0.35, vorher
+    /// wählbar und an die Standard-Zone gebunden). "" heißt aus (Einstellungen ›
+    /// Bibliothek); jede frühere Wahl einer anderen Zone gilt als Unsorted.
+    /// Welche Ordner als Unsorted zählen, sagt is_unsorted (0.36.0).
+    pub fn expire_zone(&self) -> Option<String> {
+        let set = self.zone_file().get("expire").and_then(|z| z.as_str()).map(str::to_string);
+        if set.as_deref() == Some("") {
+            return None;
+        }
+        // Geteilte Bibliotheken räumen nur, wenn das dort ausdrücklich angeschaltet wurde
+        if self.shared && set.as_deref() != Some(INBOX) {
+            return None;
+        }
+        Some(INBOX.to_string())
+    }
+
+    pub fn set_expire_zone(&self, zone: &str) -> Result<()> {
+        if !zone.is_empty() && zone != INBOX {
+            return Err(format!("Nur Unsorted leert sich nach 7 Tagen: {zone}"));
+        }
+        // Wieder an: Fristen beginnen neu. Sonst wanderte alles, was schon vor
+        // dem Ausschalten in Unsorted lag, beim nächsten Lauf sofort nach
+        // „Zuletzt gelöscht“.
+        if !zone.is_empty() && self.expire_zone().is_none() {
+            let _ = fs::remove_file(self.root.join(META_DIR).join(INBOX_SEEN));
+        }
+        let mut v = self.zone_file();
+        v["expire"] = serde_json::json!(zone);
+        self.write_zone_file(&v)
+    }
+
     pub fn set_default_zone(&self, zone: &str) -> Result<()> {
         let dir = safe_join(&self.root, zone)?;
         if zone.is_empty() || !dir.is_dir() {
@@ -751,14 +1116,25 @@ impl Library {
         Ok(())
     }
 
-    /// Deckkraft der Zonen beim Ziehen (0.3–1.0), gilt in App und Extension.
-    pub fn drag_alpha(&self) -> Option<f64> {
+    /// Ecken (square, soft, round, xl) und Deckkraft der Zonenkarten (Glas-Regler,
+    /// None = Standard) aus Einstellungen › Aussehen. Die App trägt sie hier ein,
+    /// damit die Extension dieselben Werte zeigt.
+    pub fn look_radius(&self) -> Option<String> {
+        self.zone_file().get("radius").and_then(|r| r.as_str()).map(String::from)
+    }
+
+    pub fn look_alpha(&self) -> Option<f64> {
         self.zone_file().get("alpha").and_then(|a| a.as_f64())
     }
 
-    pub fn set_drag_alpha(&self, alpha: f64) -> Result<()> {
+    pub fn set_look(&self, radius: &str, alpha: Option<f64>) -> Result<()> {
+        let alpha = alpha.map(|a| a.clamp(0.3, 1.0));
+        if self.look_radius().as_deref() == Some(radius) && self.look_alpha() == alpha {
+            return Ok(());
+        }
         let mut v = self.zone_file();
-        v["alpha"] = serde_json::json!(alpha.clamp(0.3, 1.0));
+        v["radius"] = serde_json::json!(radius);
+        v["alpha"] = serde_json::json!(alpha);
         self.write_zone_file(&v)
     }
 
@@ -776,7 +1152,7 @@ impl Library {
 
     pub(crate) fn write_zone_file(&self, v: &serde_json::Value) -> Result<()> {
         let body = serde_json::to_vec_pretty(v).map_err(err)?;
-        fs::write(self.zone_order_path(), body).map_err(err)
+        write_atomic(&self.zone_order_path(), &body)
     }
 
     fn thumbs_dir(&self) -> PathBuf {
@@ -848,9 +1224,7 @@ impl Library {
         if let Some(dir) = target.parent() {
             fs::create_dir_all(dir).map_err(err)?;
         }
-        let tmp = target.with_extension("json.tmp");
-        fs::write(&tmp, serde_json::to_vec_pretty(&doc).map_err(err)?).map_err(err)?;
-        fs::rename(tmp, target).map_err(err)?;
+        write_atomic(target, &serde_json::to_vec_pretty(&doc).map_err(err)?)?;
         if self.shared {
             *self.people_sig.lock().unwrap() = self.people_signature();
         }
@@ -870,33 +1244,65 @@ impl Library {
             rows.collect::<std::result::Result<_, _>>().map_err(err)?
         };
 
+        // Fehlt der Bibliotheksordner selbst (Netz weg, Laufwerk ab), wäre alles
+        // „verschwunden“. Dann lieber gar nichts ändern.
+        if !self.root.is_dir() {
+            return Err("library-missing".into());
+        }
         let mut seen = HashSet::new();
         let mut changed = false;
         let st = self.structure();
         let root = self.root.clone();
-        let walker = WalkDir::new(&self.root)
-            .min_depth(1)
-            .into_iter()
-            .filter_entry(|e| !is_hidden(e.file_name()) && !(e.file_type().is_dir() && st.skips(&rel_path(&root, e.path()))));
-        for entry in walker.filter_map(|e| e.ok()) {
-            if !entry.file_type().is_file() || !is_media(entry.path()) {
-                continue;
+        // Bibliothek, dazu jede externe Zone (Verknüpfung auf einen Ordner
+        // außerhalb, 0.30.1); deren Pfade bleiben „Zone/…“ unter der Bibliothek.
+        // Was sich nicht lesen ließ (offline, keine Rechte), gilt nicht als gelöscht.
+        let mut blind: Vec<String> = Vec::new();
+        let mut starts: Vec<PathBuf> = vec![self.root.clone()];
+        for (zone, _, online) in self.external_zones() {
+            if online {
+                starts.push(self.root.join(zone));
+            } else {
+                blind.push(zone);
             }
-            let Ok(meta) = entry.metadata() else { continue };
-            let rel = rel_path(&self.root, entry.path());
-            let bytes = meta.len() as i64;
-            let mtime = time_ms(meta.modified()).unwrap_or(0);
-            seen.insert(rel.clone());
-            if known.get(&rel) == Some(&(bytes, mtime)) {
-                continue;
+        }
+        for start in starts {
+            let filter_root = root.clone();
+            let filter_st = st.clone();
+            let walker = WalkDir::new(&start)
+                .min_depth(1)
+                .into_iter()
+                .filter_entry(move |e| !is_hidden(e.file_name()) && !(e.file_type().is_dir() && filter_st.skips(&rel_path(&filter_root, e.path()))));
+            for entry in walker {
+                let entry = match entry {
+                    Ok(entry) => entry,
+                    Err(e) => {
+                        blind.push(rel_path(&self.root, e.path().unwrap_or(&start)));
+                        continue;
+                    }
+                };
+                if !entry.file_type().is_file() || !is_media(entry.path()) {
+                    continue;
+                }
+                let rel = rel_path(&self.root, entry.path());
+                let Ok(meta) = entry.metadata() else {
+                    blind.push(rel);
+                    continue;
+                };
+                let bytes = meta.len() as i64;
+                let mtime = time_ms(meta.modified()).unwrap_or(0);
+                seen.insert(rel.clone());
+                if known.get(&rel) == Some(&(bytes, mtime)) {
+                    continue;
+                }
+                let Ok(hash) = hash_file(entry.path()) else { continue };
+                let added = time_ms(meta.created()).unwrap_or(mtime);
+                self.upsert_item(&rel, &hash, bytes, mtime, added, entry.path())?;
+                changed = true;
             }
-            let Ok(hash) = hash_file(entry.path()) else { continue };
-            let added = time_ms(meta.created()).unwrap_or(mtime);
-            self.upsert_item(&rel, &hash, bytes, mtime, added, entry.path())?;
-            changed = true;
         }
 
-        let gone: Vec<&String> = known.keys().filter(|p| !seen.contains(*p)).collect();
+        let unseen = |p: &String| blind.iter().any(|b| b.is_empty() || p == b || p.starts_with(&format!("{b}/")));
+        let gone: Vec<&String> = known.keys().filter(|p| !seen.contains(*p) && !unseen(p)).collect();
         if !gone.is_empty() {
             let conn = self.conn.lock().unwrap();
             for p in gone {
@@ -957,22 +1363,46 @@ impl Library {
             }
         }
         let root = self.root.clone();
-        let mut zones: Vec<Zone> = WalkDir::new(&self.root)
+        let links = self.external_zones();
+        let offline: HashSet<String> = links.iter().filter(|(_, _, on)| !on).map(|(z, _, _)| z.clone()).collect();
+        let mut dirs: Vec<PathBuf> = WalkDir::new(&self.root)
             .min_depth(1)
             .max_depth(st.zone_depth())
             .into_iter()
             .filter_entry(|e| !is_hidden(e.file_name()) && !(e.file_type().is_dir() && st.skips(&rel_path(&root, e.path()))))
             .filter_map(|e| e.ok())
-            .filter(|e| e.file_type().is_dir())
-            .filter_map(|e| {
-                let path = rel_path(&self.root, e.path());
+            .filter(|e| e.file_type().is_dir() || (e.depth() == 1 && links.iter().any(|(z, _, _)| e.file_name().to_str() == Some(z))))
+            .map(|e| e.into_path())
+            .collect();
+        // Unterzonen in externen Zonen: WalkDir folgt der Verknüpfung nicht,
+        // darum jede erreichbare externe Zone eigens durchgehen (wie im Scan)
+        if st.zone_depth() > 1 {
+            for (zone, _, _) in links.iter().filter(|(_, _, on)| *on) {
+                dirs.extend(
+                    WalkDir::new(self.root.join(zone))
+                        .min_depth(1)
+                        .max_depth(st.zone_depth() - 1)
+                        .into_iter()
+                        .filter_entry(|e| !is_hidden(e.file_name()) && !(e.file_type().is_dir() && st.skips(&rel_path(&root, e.path()))))
+                        .filter_map(|e| e.ok())
+                        .filter(|e| e.file_type().is_dir())
+                        .map(|e| e.into_path()),
+                );
+            }
+        }
+        let mut zones: Vec<Zone> = dirs
+            .into_iter()
+            .filter_map(|dir| {
+                let path = rel_path(&self.root, &dir);
                 let count = counts.get(&path).copied().unwrap_or(0);
                 // Ordner ohne Bilder & Co., in denen aber anderes liegt (Projekt-
                 // ordner, Technik): keine Zone. Ganz leere Ordner (neue Zonen) bleiben.
-                if count == 0 && path != default && !dir_is_empty(e.path()) {
+                // Externe Zonen offline bleiben stehen, ihre Vorschauen liegen hier.
+                if count == 0 && path != default && !offline.contains(&path) && !dir_is_empty(&dir) {
                     return None;
                 }
-                Some(Zone { count, name: path.clone(), path })
+                let external = links.iter().any(|(z, _, _)| path == *z || path.starts_with(&format!("{z}/")));
+                Some(Zone { count, name: path.clone(), path, external })
             })
             .collect();
         zones.sort_by(|a, b| {
@@ -981,13 +1411,19 @@ impl Library {
         });
         if let Some(&count) = counts.get("") {
             let name = self.root.file_name().and_then(|n| n.to_str()).unwrap_or("Archiver").to_string();
-            zones.insert(1.min(zones.len()), Zone { path: String::new(), name, count });
+            zones.insert(1.min(zones.len()), Zone { path: String::new(), name, count, external: false });
         }
         Ok(zones)
     }
 
     /// Alle Einträge mit Quelle und Vorschaubild, neueste zuerst.
     pub fn items(&self) -> Result<Vec<Item>> {
+        self.items_under(None)
+    }
+
+    /// Nur Objekte unter diesem Ordner (Zone), für die Brücke: die Galerie der
+    /// Extension braucht nicht die ganze Bibliothek (0.31.0)
+    pub fn items_under(&self, prefix: Option<&str>) -> Result<Vec<Item>> {
         let depth = self.structure().zone_depth();
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn
@@ -997,19 +1433,20 @@ impl Library {
                         s.image_url, s.page_url, s.page_title, s.captured_at, t.file,
                         a.labels, a.text, a.colors, m.pages, m.duration, s.quote,
                         m.title, m.artist, m.album, m.sample_rate, m.bit_depth, m.channels,
-                        n.note, n.credit, n.license, n.internal, n.added_by, n.tone
+                        n.note, n.credit, n.license, n.internal, n.added_by, n.tone, n.caption, n.links, n.mark
                  FROM item i
                  LEFT JOIN note n ON n.hash = i.hash
                  LEFT JOIN source s ON s.hash = i.hash
                  LEFT JOIN thumb t ON t.hash = i.hash
                  LEFT JOIN analysis a ON a.hash = i.hash
                  LEFT JOIN media m ON m.hash = i.hash
+                 WHERE ?1 IS NULL OR i.path = ?1 OR substr(i.path, 1, length(?1) + 1) = ?1 || '/'
                  ORDER BY COALESCE(s.captured_at, i.added_at) DESC, i.path",
             )
             .map_err(err)?;
         let thumbs = self.thumbs_dir();
         let rows = stmt
-            .query_map([], |r| {
+            .query_map([prefix], |r| {
                 let path: String = r.get(0)?;
                 let thumb: Option<String> = r.get(12)?;
                 let zone = zone_at(&parent_rel(&path), depth);
@@ -1048,6 +1485,9 @@ impl Library {
                     internal: r.get::<_, Option<i64>>(28)?.unwrap_or(0) != 0,
                     added_by: r.get(29)?,
                     tone: r.get(30)?,
+                    caption: r.get(31)?,
+                    links: crate::studio::links_of(r.get(32)?),
+                    mark: r.get(33)?,
                     path,
                 })
             })
@@ -1146,10 +1586,15 @@ impl Library {
         match result {
             Ok(p) => Some(p),
             Err(_) => {
-                self.failed_thumbs.lock().unwrap().insert(hash.to_string());
+                self.mark_thumb_failed(hash);
                 None
             }
         }
+    }
+
+    /// Diese Datei nicht noch einmal versuchen (bis zum nächsten Start)
+    pub fn mark_thumb_failed(&self, hash: &str) {
+        self.failed_thumbs.lock().unwrap_or_else(|e| e.into_inner()).insert(hash.to_string());
     }
 
     /// Audio: eingebettetes Cover, sonst der Standard-Platzhalter. Eckdaten aus AVFoundation.
@@ -1239,6 +1684,18 @@ impl Library {
             .query_map([], |r| Ok((r.get::<_, String>(0)?, thumbs.join(r.get::<_, String>(1)?))))
             .map_err(err)?;
         rows.collect::<std::result::Result<_, _>>().map_err(err)
+    }
+
+    /// Die Bilddatei selbst, wenn sie ein Bild ist und in der Bibliothek liegt: Vision
+    /// liest daran kleine Schrift und Details, die in der Vorschau fehlen (0.36.3).
+    pub fn original_for_hash(&self, hash: &str) -> Option<PathBuf> {
+        let rel: String = {
+            let conn = self.conn.lock().unwrap();
+            conn.query_row("SELECT path FROM item WHERE hash = ?1 ORDER BY path LIMIT 1", params![hash], |r| r.get(0)).optional().ok()??
+        };
+        let abs = safe_join(&self.root, &rel).ok()?;
+        let small_enough = fs::metadata(&abs).map(|m| m.len() <= 60 * 1024 * 1024).unwrap_or(false);
+        (is_image(&abs) && THUMB_EXTS.contains(&ext_of(&abs).as_str()) && small_enough).then_some(abs)
     }
 
     pub fn save_analysis(&self, a: &Analysis) -> Result<()> {
@@ -1362,7 +1819,13 @@ impl Library {
     // ---- Sortieren ----
 
     /// Verschiebt Dateien in eine Zone. Gibt die neuen relativen Pfade zurück.
+    /// `exact`: nur überspringen, was schon genau in diesem Ordner liegt (⌘Z,
+    /// Ordnerkarten). Sonst gilt: was schon in der Zone liegt, bleibt, wo es ist.
     pub fn move_items(&self, paths: &[String], zone: &str) -> Result<Vec<String>> {
+        self.move_items_to(paths, zone, false)
+    }
+
+    pub fn move_items_to(&self, paths: &[String], zone: &str, exact: bool) -> Result<Vec<String>> {
         let target = safe_join(&self.root, zone)?;
         if !target.is_dir() {
             return Err(format!("Zone nicht gefunden: {zone}"));
@@ -1371,11 +1834,13 @@ impl Library {
         let mut moved = Vec::new();
         for rel in paths {
             let src = safe_join(&self.root, rel)?;
-            if zone_at(&parent_rel(rel), depth) == zone || !src.is_file() {
+            let dir = parent_rel(rel);
+            let in_zone = !exact && zone_at(zone, depth) == zone && zone_at(&dir, depth) == zone;
+            if dir == zone || in_zone || !src.is_file() {
                 continue;
             }
             let dst = unique_path(&target, &file_name(rel));
-            fs::rename(&src, &dst).map_err(err)?;
+            move_file(&src, &dst)?; // externe Zonen liegen evtl. auf einem anderen Volume
             let new_rel = rel_path(&self.root, &dst);
             let mtime = fs::metadata(&dst).ok().and_then(|m| time_ms(m.modified()));
             let conn = self.conn.lock().unwrap();
@@ -1389,35 +1854,135 @@ impl Library {
         Ok(moved)
     }
 
-    /// Legt Dateien in den macOS-Papierkorb (wiederherstellbar). Gibt je Datei
-    /// (Pfad in der Bibliothek, Ort im Papierkorb) zurück, soweit bekannt (für ⌘Z).
-    pub fn trash_items(&self, paths: &[String]) -> Result<Vec<(String, String)>> {
-        #[allow(unused_mut)]
+    // ---- Dateinamen (F10, F11, 0.36.0) ----
+
+    /// Plan fürs Umbenennen-Blatt: je Objekt alter Name, neuer Name nach Schema
+    /// (leer bei „Original behalten“), Vorschlag aus dem Inhalt und ob der alte
+    /// Name uneinheitlich ist. Die Nummer zählt pro Zone nach Ablagedatum.
+    pub fn name_plan(&self, paths: &[String], naming: &crate::naming::Naming, library: &str) -> Result<Vec<NamePlan>> {
+        let items = self.items()?;
+        let mut by_zone: HashMap<&str, Vec<&Item>> = HashMap::new();
+        for it in &items {
+            by_zone.entry(it.zone.as_str()).or_default().push(it);
+        }
+        let mut nr: HashMap<&str, usize> = HashMap::new();
+        for list in by_zone.values_mut() {
+            list.sort_by(|a, b| (a.captured_at.unwrap_or(a.added_at), &a.path).cmp(&(b.captured_at.unwrap_or(b.added_at), &b.path)));
+            for (i, it) in list.iter().enumerate() {
+                nr.insert(it.path.as_str(), i + 1);
+            }
+        }
+        let wanted: HashSet<&str> = paths.iter().map(|p| p.as_str()).collect();
+        let mut out = Vec::new();
+        let mut taken: HashSet<String> = HashSet::new();
+        for it in items.iter().filter(|i| wanted.contains(i.path.as_str())) {
+            let ctx = crate::naming::Ctx { item: it, library, nr: nr.get(it.path.as_str()).copied().unwrap_or(1) };
+            let ext = it.filename.rsplit_once('.').map(|(_, e)| e.to_string());
+            let mut new = crate::naming::render(naming, &ctx).unwrap_or_default();
+            // zwei Objekte im selben Ordner mit gleichem Namen: hinten zählen
+            if !new.is_empty() {
+                let dir = parent_rel(&it.path);
+                let base = new.clone();
+                let mut k = 2;
+                while !taken.insert(format!("{dir}/{new}")) {
+                    new = format!("{base}-{k}");
+                    k += 1;
+                }
+            }
+            out.push(NamePlan {
+                path: it.path.clone(),
+                hash: it.hash.clone(),
+                old: it.filename.clone(),
+                new: if new.is_empty() { String::new() } else { ext.as_ref().map(|e| format!("{new}.{e}")).unwrap_or(new) },
+                suggestion: crate::naming::suggest(it, &naming.lang),
+                messy: crate::naming::messy(&it.filename),
+            });
+        }
+        out.sort_by_key(|p| paths.iter().position(|q| q == &p.path).unwrap_or(usize::MAX));
+        Ok(out)
+    }
+
+    /// Objekte umbenennen: (Pfad, neuer Name ohne oder mit alter Endung). Bleibt
+    /// im selben Ordner, die Endung bleibt immer die alte. Gibt (alt, neu) zurück.
+    pub fn rename_items(&self, list: &[(String, String)]) -> Result<Vec<(String, String)>> {
         let mut done = Vec::new();
-        let mut plain = Vec::new();
+        for (rel, wanted) in list {
+            let src = safe_join(&self.root, rel)?;
+            if !src.is_file() {
+                continue;
+            }
+            let old = file_name(rel);
+            let ext = old.rsplit_once('.').map(|(_, e)| e.to_string());
+            let mut stem = crate::naming::clean_stem(wanted);
+            if let Some(e) = &ext {
+                if let Some(s) = stem.strip_suffix(&format!(".{e}")) {
+                    stem = s.trim().to_string();
+                }
+            }
+            if stem.is_empty() {
+                continue;
+            }
+            let name = ext.as_ref().map(|e| format!("{stem}.{e}")).unwrap_or(stem);
+            if name == old {
+                continue;
+            }
+            let dir = src.parent().ok_or("Kein Ordner")?.to_path_buf();
+            // Nur Groß/klein geändert: auf dem Mac ist das dieselbe Datei
+            let dst = if name.to_lowercase() == old.to_lowercase() { dir.join(&name) } else { unique_path(&dir, &name) };
+            fs::rename(&src, &dst).map_err(err)?;
+            let new_rel = rel_path(&self.root, &dst);
+            {
+                let conn = self.conn.lock().unwrap();
+                conn.execute("UPDATE item SET path = ?2 WHERE path = ?1", params![rel, new_rel]).map_err(err)?;
+            }
+            done.push((rel.clone(), new_rel));
+        }
+        if !done.is_empty() {
+            self.write_metadata()?;
+        }
+        Ok(done)
+    }
+
+    /// Legt Dateien unter „Zuletzt gelöscht“ ab (.archiver/deleted/<Zeit>/<Pfad>).
+    /// Nach 7 Tagen wandern sie in den Papierkorb des Macs (purge_deleted).
+    /// Gibt je Datei (Pfad in der Bibliothek, neuer Ort) zurück, für ⌘Z.
+    pub fn trash_items(&self, paths: &[String]) -> Result<Vec<(String, String)>> {
+        let stamp = self.deleted_stamp()?;
+        let mut done = Vec::new();
+        let mut hashes = HashMap::new();
+        let mut failed: Option<String> = None;
         for rel in paths {
             let abs = safe_join(&self.root, rel)?;
             if !abs.is_file() {
                 continue;
             }
-            #[cfg(target_os = "macos")]
-            {
-                if let Some(at) = crate::macos::trash_with_location(&abs)? {
-                    done.push((rel.clone(), at));
-                    continue;
-                }
-                plain.push(rel.clone());
+            let dst = stamp.join(rel);
+            // Scheitert eine Datei (schreibgeschützt), gehen die übrigen trotzdem,
+            // und für alle Erledigten werden Hashes und ⌘Z-Liste geschrieben
+            let moved = dst.parent().map_or(Ok(()), |d| fs::create_dir_all(d).map_err(err)).and_then(|_| move_file(&abs, &dst));
+            if let Err(e) = moved {
+                failed.get_or_insert(e);
+                continue;
             }
-            #[cfg(not(target_os = "macos"))]
-            {
-                trash::delete(&abs).map_err(err)?;
-                plain.push(rel.clone());
+            if let Some(h) = self.hash_of(rel) {
+                hashes.insert(rel.clone(), h);
             }
+            done.push((rel.clone(), dst.to_string_lossy().into_owned()));
         }
+        if done.is_empty() {
+            prune_empty(&stamp);
+            return match failed {
+                Some(e) => Err(e),
+                None => Ok(done),
+            };
+        }
+        write_deleted_hashes(&stamp, &hashes)?;
         let conn = self.conn.lock().unwrap();
-        for p in done.iter().map(|(p, _)| p).chain(plain.iter()) {
+        for (p, _) in &done {
             conn.execute("DELETE FROM item WHERE path = ?1", params![p]).map_err(err)?;
         }
+        drop(conn);
+        prune_empty(&stamp);
         Ok(done)
     }
 
@@ -1425,7 +1990,8 @@ impl Library {
     pub fn restore_items(&self, items: &[(String, String)]) -> Result<usize> {
         let mut n = 0;
         for (rel, from) in items {
-            let src = PathBuf::from(from);
+            // Nur aus „Zuletzt gelöscht“ zurückholen, nie einen beliebigen Pfad
+            let Some(src) = self.inside_deleted(from) else { continue };
             let dst = safe_join(&self.root, rel)?;
             if !src.is_file() {
                 continue;
@@ -1434,13 +2000,11 @@ impl Library {
                 fs::create_dir_all(dir).map_err(err)?;
             }
             let dst = if dst.exists() { unique_path(dst.parent().unwrap_or(&self.root), &file_name(rel)) } else { dst };
-            if fs::rename(&src, &dst).is_err() {
-                fs::copy(&src, &dst).map_err(err)?;
-                let _ = fs::remove_file(&src);
-            }
+            move_file(&src, &dst)?;
             n += 1;
         }
         if n > 0 {
+            self.prune_deleted();
             self.scan()?;
         }
         Ok(n)
@@ -1466,21 +2030,168 @@ impl Library {
         }
         let src = safe_join(&self.root, zone)?;
         let parent = src.parent().unwrap_or(&self.root).to_path_buf();
-        if src.file_name().and_then(|n| n.to_str()) == Some(name.as_str()) {
+        let current = src.file_name().and_then(|n| n.to_str()).unwrap_or("").to_string();
+        if current == name {
             return Ok(zone.to_string());
         }
-        let dst = unique_path(&parent, &name);
+        // Nur Groß-/Kleinschreibung anders: macOS sieht denselben Ordner, also
+        // direkt umbenennen statt „Fotos 2“ (0.31.0)
+        let dst = if current.to_lowercase() == name.to_lowercase() { parent.join(&name) } else { unique_path(&parent, &name) };
         fs::rename(&src, &dst).map_err(err)?;
         let new_zone = rel_path(&self.root, &dst);
         let conn = self.conn.lock().unwrap();
         conn.execute(
-            "UPDATE item SET path = ?2 || substr(path, length(?1) + 1) WHERE path LIKE ?1 || '/%'",
+            "UPDATE item SET path = ?2 || substr(path, length(?1) + 1) WHERE substr(path, 1, length(?1) + 1) = ?1 || '/'",
             params![zone, new_zone],
         )
         .map_err(err)?;
         drop(conn);
         self.rename_item_order(zone, &new_zone)?;
         Ok(new_zone)
+    }
+
+    /// Verschiebt einen Unterordner samt Inhalt in einen anderen Ordner (0.28).
+    /// Gibt den neuen Pfad zurück; gleichnamige Ziele bekommen eine Nummer.
+    pub fn move_folder(&self, from: &str, into: &str) -> Result<String> {
+        if from.is_empty() || !from.contains('/') {
+            return Err("Nur Unterordner lassen sich verschieben".into());
+        }
+        if into == from || into.starts_with(&format!("{from}/")) {
+            return Err("Ein Ordner kann nicht in sich selbst liegen".into());
+        }
+        let src = safe_join(&self.root, from)?;
+        let parent = safe_join(&self.root, into)?;
+        if !src.is_dir() || !parent.is_dir() {
+            return Err(format!("Ordner nicht gefunden: {from}"));
+        }
+        if src.parent() == Some(parent.as_path()) {
+            return Ok(from.to_string());
+        }
+        let name = src.file_name().and_then(|n| n.to_str()).unwrap_or("Ordner").to_string();
+        let dst = unique_path(&parent, &name);
+        move_file(&src, &dst)?;
+        let new_path = rel_path(&self.root, &dst);
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "UPDATE item SET path = ?2 || substr(path, length(?1) + 1) WHERE substr(path, 1, length(?1) + 1) = ?1 || '/'",
+            params![from, new_path],
+        )
+        .map_err(err)?;
+        drop(conn);
+        self.rename_item_order(from, &new_path)?;
+        Ok(new_path)
+    }
+
+    // ---- Externe Zonen (0.30.1) ----
+    // Ein Ordner außerhalb der Bibliothek wird Zone über eine Verknüpfung
+    // (Symlink) im Bibliotheksordner. Dateien bleiben, wo sie sind; Archiver
+    // liest und sichert direkt dort. Lösen entfernt nur die Verknüpfung.
+
+    /// Externe Zonen: (Zone, Ordner draußen, erreichbar). Eine Verknüpfung, deren
+    /// Ziel gerade fehlt (Laufwerk ausgeworfen, Netz weg), bleibt Zone und gilt als
+    /// offline; ihre Objekte bleiben in der Datenbank, bis das Ziel zurück ist (0.31.0).
+    pub fn external_zones(&self) -> Vec<(String, String, bool)> {
+        let Ok(rd) = fs::read_dir(&self.root) else { return Vec::new() };
+        let mut out: Vec<(String, String, bool)> = rd
+            .filter_map(|e| e.ok())
+            .filter(|e| is_link(&e.path()) && !is_hidden(&e.file_name()))
+            .filter_map(|e| {
+                let path = e.path();
+                // Verknüpfung auf eine Datei ist keine Zone; fehlendes Ziel schon
+                let online = match fs::metadata(&path) {
+                    Ok(m) if m.is_dir() => fs::read_dir(&path).is_ok(),
+                    Ok(_) => return None,
+                    Err(_) => false,
+                };
+                let target = fs::read_link(&path).ok()?;
+                Some((e.file_name().to_string_lossy().into_owned(), target.to_string_lossy().into_owned(), online))
+            })
+            .collect();
+        out.sort_by(|a, b| a.0.to_lowercase().cmp(&b.0.to_lowercase()));
+        out
+    }
+
+    /// Ziele der erreichbaren externen Zonen, aufgelöst (für Asset-Freigabe und Watcher)
+    pub fn external_targets(&self) -> Vec<PathBuf> {
+        self.external_zones()
+            .into_iter()
+            .filter(|(_, _, online)| *online)
+            .filter_map(|(zone, _, _)| self.root.join(zone).canonicalize().ok())
+            .collect()
+    }
+
+    /// Ordner außerhalb als Zone verknüpfen. Gibt den Zonennamen zurück.
+    pub fn link_folder(&self, folder: &Path) -> Result<String> {
+        let folder = folder.canonicalize().map_err(err)?;
+        let root = self.root.canonicalize().map_err(err)?;
+        if !folder.is_dir() {
+            return Err("Kein Ordner".into());
+        }
+        if folder.starts_with(&root) {
+            return Err("Der Ordner liegt schon in der Bibliothek".into());
+        }
+        if root.starts_with(&folder) {
+            return Err("Die Bibliothek liegt in diesem Ordner".into());
+        }
+        let existing = self.external_targets();
+        if let Some((zone, _, _)) = self
+            .external_zones()
+            .into_iter()
+            .find(|(z, _, _)| self.root.join(z).canonicalize().ok().as_deref() == Some(folder.as_path()))
+        {
+            return Ok(zone);
+        }
+        // Ineinander verschachtelte Ziele führten jedes Objekt doppelt
+        if existing.iter().any(|t| folder.starts_with(t) || t.starts_with(&folder)) {
+            return Err("zone-overlap".into());
+        }
+        let name = clean_segment(folder.file_name().and_then(|n| n.to_str()).unwrap_or("Ordner"));
+        let name = if name.is_empty() { "Ordner".to_string() } else { name };
+        let dst = unique_path(&self.root, &name);
+        #[cfg(unix)]
+        std::os::unix::fs::symlink(&folder, &dst).map_err(err)?;
+        #[cfg(not(unix))]
+        return Err("Externe Zonen gibt es nur auf dem Mac".into());
+        #[allow(unreachable_code)]
+        {
+            self.scan()?;
+            Ok(rel_path(&self.root, &dst))
+        }
+    }
+
+    /// Liegt `rel` in einer externen Zone (die Verknüpfung selbst ausgenommen)?
+    pub fn in_external(&self, rel: &str) -> bool {
+        let mut parts = rel.split('/');
+        let (Some(top), Some(_)) = (parts.next(), parts.next()) else { return false };
+        is_link(&self.root.join(top))
+    }
+
+    /// Verknüpfung lösen: die Zone verschwindet, der Ordner draußen bleibt.
+    pub fn unlink_folder(&self, zone: &str) -> Result<()> {
+        let link = safe_join(&self.root, zone)?;
+        if zone.contains('/') || !is_link(&link) {
+            return Err(format!("Keine externe Zone: {zone}"));
+        }
+        fs::remove_file(&link).map_err(err)?;
+        let conn = self.conn.lock().unwrap();
+        conn.execute("DELETE FROM item WHERE substr(path, 1, length(?1) + 1) = ?1 || '/'", params![zone]).map_err(err)?;
+        Ok(())
+    }
+
+    /// Dateien in einer Zone, die Archiver nicht zeigt (PSD, AI, ZIP …). Die
+    /// Rückfrage beim Löschen nennt sie, denn sie wandern mit.
+    pub fn zone_other_files(&self, zone: &str) -> usize {
+        let Ok(dir) = safe_join(&self.root, zone) else { return 0 };
+        if is_link(&dir) {
+            return 0;
+        }
+        WalkDir::new(&dir)
+            .min_depth(1)
+            .into_iter()
+            .filter_entry(|e| !is_hidden(e.file_name()) && !is_package_dir(e))
+            .filter_map(|e| e.ok())
+            .filter(|e| e.file_type().is_file() && !is_media(e.path()))
+            .count()
     }
 
     /// Legt eine Zone samt Inhalt in den Papierkorb. Inbox und Bibliotheksordner bleiben.
@@ -1492,10 +2203,245 @@ impl Library {
         if !dir.is_dir() {
             return Err(format!("Zone nicht gefunden: {zone}"));
         }
-        trash::delete(&dir).map_err(err)?;
+        // Externe Zone: nur die Verknüpfung lösen, der Ordner draußen bleibt unberührt
+        if is_link(&dir) {
+            return self.unlink_folder(zone);
+        }
+        // Ordner in einer externen Zone gehören nicht der Bibliothek: nie löschen (0.39.1)
+        if self.in_external(zone) {
+            return Err("external-folder".into());
+        }
+        let stamp = self.deleted_stamp()?;
+        let hashes: HashMap<String, String> = {
+            let conn = self.conn.lock().unwrap();
+            let mut stmt = conn.prepare("SELECT path, hash FROM item WHERE substr(path, 1, length(?1) + 1) = ?1 || '/'").map_err(err)?;
+            let rows = stmt.query_map(params![zone], |r| Ok((r.get(0)?, r.get(1)?))).map_err(err)?;
+            rows.filter_map(|r| r.ok()).collect()
+        };
+        let dst = stamp.join(zone);
+        if let Some(parent) = dst.parent() {
+            fs::create_dir_all(parent).map_err(err)?;
+        }
+        move_file(&dir, &dst)?;
+        write_deleted_hashes(&stamp, &hashes)?;
         let conn = self.conn.lock().unwrap();
-        conn.execute("DELETE FROM item WHERE path LIKE ?1 || '/%'", params![zone]).map_err(err)?;
+        conn.execute("DELETE FROM item WHERE substr(path, 1, length(?1) + 1) = ?1 || '/'", params![zone]).map_err(err)?;
         Ok(())
+    }
+
+    // ---- Zuletzt gelöscht (0.27) ----
+
+    fn deleted_dir(&self) -> PathBuf {
+        self.root.join(META_DIR).join("deleted")
+    }
+
+    /// Neuer Ordner für einen Löschvorgang, benannt nach der Zeit in ms
+    fn deleted_stamp(&self) -> Result<PathBuf> {
+        let base = self.deleted_dir();
+        let mut t = now_ms();
+        loop {
+            let dir = base.join(t.to_string());
+            if !dir.exists() {
+                fs::create_dir_all(&dir).map_err(err)?;
+                return Ok(dir);
+            }
+            t += 1;
+        }
+    }
+
+    fn hash_of(&self, rel: &str) -> Option<String> {
+        let conn = self.conn.lock().unwrap();
+        conn.query_row("SELECT hash FROM item WHERE path = ?1", params![rel], |r| r.get(0)).optional().ok().flatten()
+    }
+
+    /// Alles unter „Zuletzt gelöscht“, zuletzt Gelöschtes zuerst
+    pub fn deleted_items(&self) -> Result<Vec<DeletedItem>> {
+        self.purge_deleted(DELETED_DAYS);
+        let thumbs = self.thumbs_dir();
+        let mut out = Vec::new();
+        let Ok(rd) = fs::read_dir(self.deleted_dir()) else { return Ok(out) };
+        for stamp in rd.filter_map(|e| e.ok()).map(|e| e.path()).filter(|p| p.is_dir()) {
+            let Some(at) = stamp.file_name().and_then(|n| n.to_str()).and_then(|n| n.parse::<i64>().ok()) else { continue };
+            let hashes = read_deleted_hashes(&stamp);
+            // Auch Nicht-Medien (PSD, AI, ZIP …): Sie kommen mit einer gelöschten
+            // Zone hierher und müssen sich ebenso zurückholen lassen.
+            for entry in WalkDir::new(&stamp).min_depth(1).into_iter().filter_entry(|e| !is_package_dir(e)).filter_map(|e| e.ok()) {
+                if !entry.file_type().is_file() || is_hidden(entry.file_name()) {
+                    continue;
+                }
+                let rel = rel_path(&stamp, entry.path());
+                let hash = hashes.get(&rel).cloned().unwrap_or_default();
+                let (thumb, w, h, tone) = {
+                    let conn = self.conn.lock().unwrap();
+                    let thumb: Option<String> = conn.query_row("SELECT file FROM thumb WHERE hash = ?1", params![hash], |r| r.get(0)).optional().ok().flatten();
+                    let (w, h): (Option<i64>, Option<i64>) = conn
+                        .query_row("SELECT width, height FROM media WHERE hash = ?1", params![hash], |r| Ok((r.get(0)?, r.get(1)?)))
+                        .optional()
+                        .ok()
+                        .flatten()
+                        .unwrap_or((None, None));
+                    let tone: Option<String> = conn.query_row("SELECT tone FROM note WHERE hash = ?1", params![hash], |r| r.get(0)).optional().ok().flatten();
+                    (thumb, w, h, tone)
+                };
+                let (w, h) = match (w, h) {
+                    (Some(w), Some(h)) => (Some(w), Some(h)),
+                    _ => match image::image_dimensions(entry.path()) {
+                        Ok((w, h)) => (Some(w as i64), Some(h as i64)),
+                        Err(_) => (None, None),
+                    },
+                };
+                let format = ext_of(entry.path());
+                let quote = if TEXT_EXTS.contains(&format.as_str()) {
+                    fs::read_to_string(entry.path()).ok().map(|t| t.trim().chars().take(TEXT_MAX_CHARS).collect())
+                } else {
+                    None
+                };
+                out.push(DeletedItem {
+                    abs: entry.path().to_string_lossy().into_owned(),
+                    zone: zone_at(&parent_rel(&rel), self.structure().zone_depth()),
+                    filename: file_name(&rel),
+                    path: rel,
+                    hash,
+                    format,
+                    width: w,
+                    height: h,
+                    thumb: thumb.map(|f| thumbs.join(f).to_string_lossy().into_owned()),
+                    quote,
+                    tone,
+                    deleted_at: at,
+                    other: !is_media(entry.path()),
+                });
+            }
+        }
+        out.sort_by(|a, b| b.deleted_at.cmp(&a.deleted_at).then_with(|| a.path.cmp(&b.path)));
+        Ok(out)
+    }
+
+    pub fn deleted_count(&self) -> usize {
+        WalkDir::new(self.deleted_dir())
+            .min_depth(2)
+            .into_iter()
+            .filter_entry(|e| !is_package_dir(e))
+            .filter_map(|e| e.ok())
+            .filter(|e| e.file_type().is_file() && !is_hidden(e.file_name()))
+            .count()
+    }
+
+    /// Gelöschte Dateien (absolute Pfade unter .archiver/deleted) zurück an ihren Platz
+    pub fn restore_deleted(&self, files: &[String]) -> Result<usize> {
+        let base = self.deleted_dir();
+        let mut n = 0;
+        for f in files {
+            let Some(src) = self.inside_deleted(f) else { continue };
+            let Ok(inside) = src.strip_prefix(&base) else { continue };
+            let rel = rel_path(Path::new(""), inside);
+            let Some((_, rel)) = rel.split_once('/') else { continue };
+            if !src.is_file() {
+                continue;
+            }
+            let dst = safe_join(&self.root, rel)?;
+            if let Some(dir) = dst.parent() {
+                fs::create_dir_all(dir).map_err(err)?;
+            }
+            let dst = if dst.exists() { unique_path(dst.parent().unwrap_or(&self.root), &file_name(rel)) } else { dst };
+            move_file(&src, &dst)?;
+            n += 1;
+        }
+        self.prune_deleted();
+        if n > 0 {
+            self.scan()?;
+        }
+        Ok(n)
+    }
+
+    /// Pfad aus der Oberfläche, der wirklich unter .archiver/deleted liegt.
+    /// `Path::starts_with` allein ließe `deleted/../../x` durch.
+    fn inside_deleted(&self, f: &str) -> Option<PathBuf> {
+        let p = PathBuf::from(f);
+        if p.components().any(|c| matches!(c, std::path::Component::ParentDir)) {
+            return None;
+        }
+        let base = self.deleted_dir();
+        let real = p.canonicalize().ok()?;
+        let real_base = base.canonicalize().ok()?;
+        if !real.starts_with(&real_base) {
+            return None;
+        }
+        // mit dem Pfad weiterarbeiten, wie ihn die Bibliothek kennt
+        Some(base.join(real.strip_prefix(&real_base).ok()?))
+    }
+
+    /// Gelöschte Dateien endgültig entfernen: sie gehen in den Papierkorb des Macs
+    pub fn remove_deleted(&self, files: &[String]) -> Result<usize> {
+        let base = self.deleted_dir();
+        let mut n = 0;
+        for f in files {
+            let Some(p) = self.inside_deleted(f) else { continue };
+            if p != base && p.exists() {
+                to_trash(&p).map_err(err)?;
+                n += 1;
+            }
+        }
+        self.prune_deleted();
+        Ok(n)
+    }
+
+    /// Löschvorgänge, die älter als `days` Tage sind, wandern in den Papierkorb des Macs
+    pub fn purge_deleted(&self, days: i64) -> usize {
+        let limit = now_ms() - days * 24 * 3600 * 1000;
+        let mut n = 0;
+        let Ok(rd) = fs::read_dir(self.deleted_dir()) else { return 0 };
+        for stamp in rd.filter_map(|e| e.ok()).map(|e| e.path()) {
+            let at = stamp.file_name().and_then(|n| n.to_str()).and_then(|n| n.parse::<i64>().ok());
+            if at.map(|t| t < limit).unwrap_or(false) && to_trash(&stamp).is_ok() {
+                n += 1;
+            }
+        }
+        n
+    }
+
+    /// Unsorted räumt sich selbst auf (0.32): Was länger als `days` Tage in der
+    /// Standardzone liegt, kommt unter „Zuletzt gelöscht“ (dort weitere 7 Tage
+    /// wiederherstellbar). Gezählt wird ab dem Tag, an dem Archiver das Objekt
+    /// dort zuerst gesehen hat (.archiver/unsorted-seen.json), nicht ab Datei-
+    /// oder Importdatum: Wer etwas Altes nach Unsorted zieht, hat 7 Tage Zeit,
+    /// und beim ersten Start mit dieser Version beginnt die Frist für alles neu.
+    /// Geteilte Bibliotheken bleiben unberührt, solange dort nicht ausdrücklich
+    /// „An“ gewählt wurde (0.36.1): sonst räumt niemand für andere auf.
+    /// Seit wann jedes Objekt in Unsorted liegt (Hash → ms), für „noch n T.“ im Raster (0.33)
+    pub fn inbox_seen(&self) -> HashMap<String, i64> {
+        fs::read(self.root.join(META_DIR).join(INBOX_SEEN)).ok().and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or_default()
+    }
+
+    pub fn expire_inbox(&self, days: i64) -> Result<usize> {
+        if self.expire_zone().is_none() {
+            return Ok(0);
+        }
+        let seen_path = self.root.join(META_DIR).join(INBOX_SEEN);
+        let seen: HashMap<String, i64> = fs::read(&seen_path).ok().and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or_default();
+        let now = now_ms();
+        let limit = days * 24 * 3600 * 1000;
+        let mut keep = HashMap::new();
+        let mut old = Vec::new();
+        for item in self.items()?.into_iter().filter(|i| is_unsorted(&i.zone)) {
+            let since = seen.get(&item.hash).copied().unwrap_or(now);
+            if now - since > limit {
+                old.push(item.path);
+            } else {
+                keep.insert(item.hash, since);
+            }
+        }
+        let n = if old.is_empty() { 0 } else { self.trash_items(&old)?.len() };
+        fs::write(&seen_path, serde_json::to_vec(&keep).map_err(err)?).map_err(err)?;
+        Ok(n)
+    }
+
+    /// Leere Löschordner aufräumen
+    fn prune_deleted(&self) {
+        let Ok(rd) = fs::read_dir(self.deleted_dir()) else { return };
+        for stamp in rd.filter_map(|e| e.ok()).map(|e| e.path()).filter(|p| p.is_dir()) {
+            prune_empty(&stamp);
+        }
     }
 
     // ---- Import ----
@@ -1545,6 +2491,47 @@ impl Library {
         Ok(true)
     }
 
+    /// Gesicherte Webseite zu einer Linkkarte (0.30.1): .archiver/web/<hash>.mhtml
+    pub fn web_archive(&self, hash: &str) -> Option<PathBuf> {
+        if hash.is_empty() || !hash.chars().all(|c| c.is_ascii_alphanumeric()) {
+            return None;
+        }
+        let p = self.root.join(".archiver").join("web").join(format!("{hash}.mhtml"));
+        p.is_file().then_some(p)
+    }
+
+    /// Legt die von der Extension gesicherte Seite (MHTML) zur Karte mit `hash`.
+    pub fn attach_web_archive(&self, hash: &str, src: &Path) -> Result<()> {
+        if !src.is_file() || hash.is_empty() || !hash.chars().all(|c| c.is_ascii_alphanumeric()) {
+            return Ok(());
+        }
+        let dir = self.root.join(".archiver").join("web");
+        fs::create_dir_all(&dir).map_err(err)?;
+        let dst = dir.join(format!("{hash}.mhtml"));
+        let _ = fs::remove_file(&dst); // ältere Fassung derselben Seite
+        move_file(src, &dst)
+    }
+
+    /// Text einer Textkarte ändern (0.30.1, in der Lightbox editierbar).
+    /// Das PNG bleibt, wie es gesichert wurde; die App zeigt den Text.
+    pub fn set_quote(&self, hash: &str, quote: &str) -> Result<()> {
+        let quote: String = quote.trim().chars().take(20_000).collect();
+        if quote.is_empty() {
+            return Ok(());
+        }
+        {
+            // Auch ohne Quelle (Textkarte aus dem Finder, Sicherung ohne URL):
+            // sonst verpuffte die Änderung still (0.31.0)
+            let conn = self.conn.lock().unwrap();
+            conn.execute(
+                "INSERT INTO source (hash, quote) VALUES (?1, ?2) ON CONFLICT(hash) DO UPDATE SET quote = ?2",
+                params![hash, quote],
+            )
+            .map_err(err)?;
+        }
+        self.write_metadata()
+    }
+
     /// Kopiert eine Datei in eine Zone. Bereits vorhandene Bilder (gleicher Hash)
     /// werden nicht doppelt angelegt; ihre Quelle wird trotzdem ergänzt.
     fn import_one(&self, src: &Path, zone: &str, source: Option<&Source>, report: &mut ImportReport) -> Result<()> {
@@ -1570,7 +2557,8 @@ impl Library {
         let meta = fs::metadata(&dst).map_err(err)?;
         let mtime = time_ms(meta.modified()).unwrap_or(0);
         let added = source.and_then(|s| s.captured_at).unwrap_or_else(now_ms);
-        self.upsert_item(&rel_path(&self.root, &dst), &hash, meta.len() as i64, mtime, added, &dst)?;
+        let rel = rel_path(&self.root, &dst);
+        self.upsert_item(&rel, &hash, meta.len() as i64, mtime, added, &dst)?;
         self.mark_added_by(&hash)?;
         report.imported += 1;
         Ok(())
@@ -1592,7 +2580,10 @@ impl Library {
                 .map_err(err)?
         };
         if let Some(path) = existing {
-            if self.root.join(&path).is_file() {
+            let known = self.root.join(&path);
+            // Ist `src` selbst die bekannte Datei (Transfer-Ordner liegt in einer
+            // Zone), darf sie nicht als Duplikat gelöscht werden (0.31.0)
+            if known.is_file() && !same_file(&known, src) {
                 let _ = fs::remove_file(src);
                 self.write_metadata()?;
                 return Ok((path, true));
@@ -1602,11 +2593,7 @@ impl Library {
         fs::create_dir_all(&dir).map_err(err)?;
         let name = image_file_name(src, name);
         let dst = unique_path(&dir, &name);
-        if fs::rename(src, &dst).is_err() {
-            // anderes Volume: kopieren, dann Original entfernen
-            fs::copy(src, &dst).map_err(err)?;
-            let _ = fs::remove_file(src);
-        }
+        move_file(src, &dst)?; // anderes Volume: kopieren, dann Original entfernen
         let meta = fs::metadata(&dst).map_err(err)?;
         let mtime = time_ms(meta.modified()).unwrap_or(0);
         let added = source.captured_at.unwrap_or_else(now_ms);
@@ -1618,15 +2605,256 @@ impl Library {
     }
 
     /// Einzelne Dateien (z. B. aus dem Finder hereingezogen) in eine Zone kopieren.
+    /// Dateien und ganze Ordner (0.27) übernehmen. Ein Ordner wird mit seinen
+    /// Unterordnern zum Unterordner der Zone, ohne Zone (`""`) zur neuen Zone.
+    /// Lose Dateien ohne Zone landen in der Standard-Zone.
     pub fn import_files(&self, files: &[PathBuf], zone: &str) -> Result<ImportReport> {
         let mut report = ImportReport::default();
-        for f in files.iter().filter(|f| is_media(f)) {
-            self.import_one(f, zone, None, &mut report)?;
+        let loose = if zone.is_empty() { self.default_zone() } else { zone.to_string() };
+        for f in files {
+            if f.is_dir() {
+                self.import_tree(f, zone, &mut report)?;
+            } else if is_media(f) {
+                self.import_one(f, &loose, None, &mut report)?;
+            }
         }
         if report.imported > 0 && self.user.lock().unwrap().is_some() {
             self.write_metadata()?;
         }
         Ok(report)
+    }
+
+    /// ⌘V (0.32): Inhalt der Zwischenablage in eine Zone. Dateien aus dem
+    /// Finder gehen wie beim Hineinziehen; sonst Bilddaten (PNG oder TIFF, als
+    /// PNG gesichert), sonst Text als Textkarte. Bild und Text bekommen einen
+    /// Namen (Text: seine ersten Wörter) und laufen über einen Zwischenordner.
+    pub fn paste_into(&self, zone: &str, pasted: Pasted) -> Result<ImportReport> {
+        if !pasted.files.is_empty() {
+            return self.import_files(&pasted.files, zone);
+        }
+        let tmp = self.root.join(META_DIR).join("paste");
+        fs::create_dir_all(&tmp).map_err(err)?;
+        let file = if let Some(bytes) = pasted.image {
+            let png = if bytes.starts_with(b"\x89PNG") {
+                bytes
+            } else {
+                let img = image::load_from_memory(&bytes).map_err(err)?;
+                let mut out = std::io::Cursor::new(Vec::new());
+                img.write_to(&mut out, image::ImageFormat::Png).map_err(err)?;
+                out.into_inner()
+            };
+            let f = tmp.join(format!("{}.png", paste_name("")));
+            fs::write(&f, png).map_err(err)?;
+            f
+        } else if let Some(text) = pasted.text.filter(|t| !t.trim().is_empty()) {
+            let text: String = text.trim().chars().take(TEXT_MAX_CHARS).collect();
+            let f = tmp.join(format!("{}.txt", paste_name(&text)));
+            fs::write(&f, text).map_err(err)?;
+            f
+        } else {
+            return Ok(ImportReport::default());
+        };
+        let report = self.import_files(&[file.clone()], zone);
+        let _ = fs::remove_file(&file);
+        report
+    }
+
+    /// Ordner aus dem Finder: Struktur bleibt erhalten, Name wird bereinigt.
+    fn import_tree(&self, dir: &Path, zone: &str, report: &mut ImportReport) -> Result<()> {
+        let name = clean_segment(dir.file_name().and_then(|n| n.to_str()).unwrap_or("Ordner"));
+        if name.is_empty() {
+            return Ok(());
+        }
+        let dest = if zone.is_empty() { name } else { format!("{zone}/{name}") };
+        fs::create_dir_all(safe_join(&self.root, &dest)?).map_err(err)?;
+        let st = self.structure();
+        let walker = WalkDir::new(dir)
+            .min_depth(1)
+            .into_iter()
+            .filter_entry(|e| !is_hidden(e.file_name()) && !(e.file_type().is_dir() && st.skips(&e.file_name().to_string_lossy())));
+        for entry in walker.filter_map(|e| e.ok()) {
+            if !entry.file_type().is_file() || !is_media(entry.path()) {
+                continue;
+            }
+            let sub = parent_rel(&rel_path(dir, entry.path()));
+            let target = if sub.is_empty() { dest.clone() } else { format!("{dest}/{}", sub.split('/').map(clean_segment).collect::<Vec<_>>().join("/")) };
+            self.import_one(entry.path(), &target, None, report)?;
+        }
+        Ok(())
+    }
+
+    /// Neuer Unterordner in einer Zone (bzw. in einem ihrer Ordner)
+    pub fn create_folder(&self, parent: &str, name: &str) -> Result<String> {
+        let name = clean_segment(name);
+        if parent.is_empty() || name.is_empty() {
+            return Err("Leerer Name".into());
+        }
+        let base = safe_join(&self.root, parent)?;
+        if !base.is_dir() {
+            return Err(format!("Zone nicht gefunden: {parent}"));
+        }
+        let dir = unique_path(&base, &name);
+        fs::create_dir(&dir).map_err(err)?;
+        Ok(rel_path(&self.root, &dir))
+    }
+
+    // ---- Notiz-Objekte (0.29): eigene Texte als .md in der Zone ----
+
+    /// Neue Notiz in einer Zone (bzw. einem ihrer Ordner). Gibt den relativen Pfad zurück.
+    pub fn create_note(&self, dir: &str, title: &str) -> Result<String> {
+        let base = safe_join(&self.root, dir)?;
+        if !base.is_dir() {
+            return Err(format!("Zone nicht gefunden: {dir}"));
+        }
+        let title = title.trim();
+        let name = match clean_segment(title) {
+            n if n.is_empty() => "Notiz".to_string(),
+            n => n,
+        };
+        let path = unique_path(&base, &format!("{name}.md"));
+        fs::write(&path, format!("# {}\n", if title.is_empty() { &name } else { title })).map_err(err)?;
+        let rel = rel_path(&self.root, &path);
+        let hash = self.record_note(&rel, &path)?;
+        self.mark_added_by(&hash)?;
+        Ok(rel)
+    }
+
+    /// Ganzer Text einer Notiz (ohne die Kürzung der Kartenvorschau)
+    pub fn read_note(&self, rel: &str) -> Result<String> {
+        let abs = safe_join(&self.root, rel)?;
+        if !is_note(&abs) {
+            return Err("Keine Notiz".into());
+        }
+        fs::read_to_string(abs).map_err(err)
+    }
+
+    /// Text einer Notiz speichern. Mit `rename` bekommt die Datei den Titel
+    /// (erste Zeile) als Namen. Der Inhalt ändert den Hash: Farbe, Verknüpfungen
+    /// und Reihenfolge wandern zum neuen Hash mit. Gibt (Pfad, Hash) zurück.
+    pub fn write_note(&self, rel: &str, text: &str, rename: bool) -> Result<(String, String)> {
+        let abs = safe_join(&self.root, rel)?;
+        if !is_note(&abs) || !abs.is_file() {
+            return Err("Keine Notiz".into());
+        }
+        let old: Option<String> = {
+            let conn = self.conn.lock().unwrap();
+            conn.query_row("SELECT hash FROM item WHERE path = ?1", params![rel], |r| r.get(0)).optional().map_err(err)?
+        };
+        let body = text.trim_end();
+        fs::write(&abs, if body.trim().is_empty() { String::new() } else { format!("{body}\n") }).map_err(err)?;
+        let mut target = abs.clone();
+        let name = clean_segment(&note_title(text));
+        let stem = abs.file_stem().and_then(|s| s.to_str()).unwrap_or("").to_string();
+        // „Titel 2“ bleibt, wenn „Titel“ schon vergeben war
+        let same = stem == name || stem.strip_prefix(&format!("{name} ")).map(|n| n.parse::<u32>().is_ok()).unwrap_or(false);
+        if rename && !name.is_empty() && !same {
+            let dir = abs.parent().unwrap_or(&self.root);
+            let file = format!("{name}.md");
+            // Nur Groß-/Kleinschreibung anders: direkt umbenennen (macOS sieht dieselbe Datei)
+            target = if stem.to_lowercase() == name.to_lowercase() { dir.join(&file) } else { unique_path(dir, &file) };
+            fs::rename(&abs, &target).map_err(err)?;
+        }
+        let new_rel = rel_path(&self.root, &target);
+        let hash = self.record_note_at(rel, &new_rel, &target)?;
+        if let Some(old) = old.filter(|o| *o != hash) {
+            self.move_note_hash(&old, &hash)?;
+        }
+        Ok((new_rel, hash))
+    }
+
+    fn record_note(&self, rel: &str, abs: &Path) -> Result<String> {
+        self.record_note_at(rel, rel, abs)
+    }
+
+    /// Eintrag einer Notiz nachführen (wie der Scan, aber ohne auf ihn zu warten)
+    fn record_note_at(&self, old_rel: &str, rel: &str, abs: &Path) -> Result<String> {
+        let meta = fs::metadata(abs).map_err(err)?;
+        let hash = hash_file(abs)?;
+        let mtime = time_ms(meta.modified()).unwrap_or(0);
+        let updated = {
+            let conn = self.conn.lock().unwrap();
+            conn.execute(
+                "UPDATE item SET path = ?1, hash = ?2, bytes = ?3, mtime = ?4 WHERE path = ?5",
+                params![rel, hash, meta.len() as i64, mtime, old_rel],
+            )
+            .map_err(err)?
+        };
+        if updated == 0 {
+            self.upsert_item(rel, &hash, meta.len() as i64, mtime, now_ms(), abs)?;
+        }
+        Ok(hash)
+    }
+
+    /// Angaben einer Notiz vom alten zum neuen Hash: Notizzeile, Verweise aus
+    /// anderen Notizen und die eigene Reihenfolge. Teilt sich ein anderes
+    /// Objekt den alten Hash noch, wird nur kopiert.
+    fn move_note_hash(&self, old: &str, new: &str) -> Result<()> {
+        let still_used = {
+            let conn = self.conn.lock().unwrap();
+            let n: i64 = conn.query_row("SELECT COUNT(*) FROM item WHERE hash = ?1", params![old], |r| r.get(0)).map_err(err)?;
+            conn.execute(
+                "INSERT OR IGNORE INTO note (hash, note, credit, license, internal, added_by, updated_at, tone, caption, links, mark)
+                 SELECT ?2, note, credit, license, internal, added_by, ?3, tone, caption, links, mark FROM note WHERE hash = ?1",
+                params![old, new, now_ms()],
+            )
+            .map_err(err)?;
+            if n == 0 {
+                conn.execute("DELETE FROM note WHERE hash = ?1", params![old]).map_err(err)?;
+                // Verweise anderer Notizen umschreiben
+                let mut stmt = conn.prepare("SELECT hash, links FROM note WHERE links LIKE ?1").map_err(err)?;
+                let rows: Vec<(String, Option<String>)> = stmt
+                    .query_map(params![format!("%{old}%")], |r| Ok((r.get(0)?, r.get(1)?)))
+                    .map_err(err)?
+                    .collect::<std::result::Result<_, _>>()
+                    .map_err(err)?;
+                for (h, links) in rows {
+                    let list: Vec<String> = crate::studio::links_of(links)
+                        .unwrap_or_default()
+                        .into_iter()
+                        .map(|l| if l == old { new.to_string() } else { l })
+                        .collect();
+                    conn.execute(
+                        "UPDATE note SET links = ?2, updated_at = MAX(updated_at + 1, ?3) WHERE hash = ?1",
+                        params![h, crate::studio::links_json(&Some(list)), now_ms()],
+                    )
+                    .map_err(err)?;
+                }
+            }
+            n > 0
+        };
+        if !still_used {
+            self.replace_in_order(old, new)?;
+        }
+        self.write_metadata()
+    }
+
+    /// Alle Ordner unterhalb der Zonen (auch leere), für Ordnerkarten und Chips
+    pub fn folders(&self) -> Vec<String> {
+        let st = self.structure();
+        let root = self.root.clone();
+        // Bibliothek ab Tiefe zone_depth + 1; externe Zonen beginnen eine Ebene tiefer
+        let starts = std::iter::once((self.root.clone(), 0)).chain(
+            self.external_zones().into_iter().filter(|(_, _, on)| *on).map(|(zone, _, _)| (self.root.join(zone), 1)),
+        );
+        let mut out = Vec::new();
+        for (start, offset) in starts {
+            out.extend(
+                WalkDir::new(&start)
+                    .min_depth(st.zone_depth() + 1 - offset)
+                    .max_depth(st.zone_depth() + 4 - offset)
+                    .into_iter()
+                    // Unterhalb von min_depth prüft WalkDir den Filter nicht: .archiver/thumbs
+                    // kam sonst als Ordner mit, deshalb den ganzen Pfad prüfen (0.31.0)
+                    .filter_entry(|e| {
+                        let rel = rel_path(&root, e.path());
+                        !rel.split('/').any(|s| s.starts_with('.')) && !(e.file_type().is_dir() && st.skips(&rel))
+                    })
+                    .filter_map(|e| e.ok())
+                    .filter(|e| e.file_type().is_dir())
+                    .map(|e| rel_path(&self.root, e.path())),
+            );
+        }
+        out
     }
 
     /// Einen ganzen Ordner übernehmen: Unterordner werden zu Zonen, lose Bilder landen in der Inbox.
@@ -1736,6 +2964,485 @@ mod tests {
     fn write_png(path: &Path, w: u32, h: u32, shade: u8) {
         fs::create_dir_all(path.parent().unwrap()).unwrap();
         image::RgbImage::from_pixel(w, h, image::Rgb([shade, 0, 0])).save(path).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn external_zones_offline_subzones_and_overlap() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path().join("Bib");
+        let outside = tmp.path().join("Projekt");
+        write_png(&root.join("Typo/a.png"), 4, 4, 10);
+        write_png(&outside.join("x.png"), 4, 4, 30);
+        write_png(&outside.join("Entwurf/y.png"), 4, 4, 40);
+        let lib = Library::open(&root).unwrap();
+        lib.scan().unwrap();
+        let zone = lib.link_folder(&outside).unwrap();
+        assert_eq!(zone, "Projekt");
+        let paths = |lib: &Library| {
+            let mut p: Vec<String> = lib.items().unwrap().into_iter().map(|i| i.path).collect();
+            p.sort();
+            p
+        };
+        assert_eq!(paths(&lib), ["Projekt/Entwurf/y.png", "Projekt/x.png", "Typo/a.png"]);
+        assert!(lib.folders().contains(&"Projekt/Entwurf".to_string()), "Unterordner der externen Zone");
+        assert_eq!(lib.external_targets(), vec![outside.canonicalize().unwrap()]);
+
+        // Verschachtelte Ziele führten Objekte doppelt
+        assert_eq!(lib.link_folder(&outside.join("Entwurf")).unwrap_err(), "zone-overlap");
+        // Derselbe Ordner noch einmal: dieselbe Zone, keine zweite
+        assert_eq!(lib.link_folder(&outside).unwrap(), "Projekt");
+
+        // Unterzonen: „Projekt/Entwurf“ ist eine Zone, „Projekt“ bleibt sichtbar
+        lib.set_structure(&Structure { depth: 2, skip: vec![], subzones: true }).unwrap();
+        let zones: Vec<String> = lib.zones().unwrap().into_iter().map(|z| z.path).collect();
+        assert!(zones.contains(&"Projekt/Entwurf".to_string()), "{zones:?}");
+        lib.set_structure(&Structure { depth: 2, skip: vec![], subzones: false }).unwrap();
+
+        // Laufwerk weg: die Zone bleibt (offline), ihre Objekte bleiben in der Datenbank
+        // Gespeichert wird das echte Ziel (auf dem Mac liegt /var unter /private/var)
+        let target = outside.canonicalize().unwrap().to_string_lossy().into_owned();
+        let parked = tmp.path().join("Projekt-weg");
+        fs::rename(&outside, &parked).unwrap();
+        assert_eq!(lib.external_zones(), vec![("Projekt".to_string(), target, false)]);
+        lib.scan().unwrap();
+        assert_eq!(paths(&lib).len(), 3, "offline heißt nicht gelöscht");
+        let zones: Vec<String> = lib.zones().unwrap().into_iter().map(|z| z.path).collect();
+        assert!(zones.contains(&"Projekt".to_string()), "{zones:?}");
+        // zurück: alles wieder da, ohne neu zu hashen
+        fs::rename(&parked, &outside).unwrap();
+        assert!(!lib.scan().unwrap(), "nichts geändert");
+        assert_eq!(paths(&lib).len(), 3);
+
+        // Ordner in der externen Zone löscht Archiver nie, die Zone selbst wird nur getrennt (0.39.1)
+        assert!(lib.zones().unwrap().iter().any(|z| z.path == "Projekt" && z.external));
+        assert!(lib.in_external("Projekt/Entwurf"));
+        assert!(!lib.in_external("Projekt") && !lib.in_external("Typo/x"));
+        assert_eq!(lib.trash_zone("Projekt/Entwurf").unwrap_err(), "external-folder");
+        assert!(outside.join("Entwurf/y.png").exists());
+
+        // Lösen entfernt nur die Verknüpfung
+        lib.unlink_folder("Projekt").unwrap();
+        assert!(outside.join("x.png").exists());
+        assert_eq!(paths(&lib), ["Typo/a.png"]);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn unreadable_folder_is_not_deleted() {
+        use std::os::unix::fs::PermissionsExt;
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path().join("Bib");
+        write_png(&root.join("Typo/a.png"), 4, 4, 10);
+        write_png(&root.join("Geheim/b.png"), 4, 4, 20);
+        let lib = Library::open(&root).unwrap();
+        lib.scan().unwrap();
+        assert_eq!(lib.items().unwrap().len(), 2);
+        let secret = root.join("Geheim");
+        fs::set_permissions(&secret, fs::Permissions::from_mode(0o000)).unwrap();
+        let readable = fs::read_dir(&secret).is_ok(); // als root lässt sich alles lesen
+        lib.scan().unwrap();
+        fs::set_permissions(&secret, fs::Permissions::from_mode(0o755)).unwrap();
+        if !readable {
+            assert_eq!(lib.items().unwrap().len(), 2, "ohne Leserecht heißt nicht gelöscht");
+        }
+        // Bibliotheksordner fehlt ganz: Fehler statt leerer Bibliothek
+        let parked = tmp.path().join("Bib-weg");
+        fs::rename(&root, &parked).unwrap();
+        assert!(lib.scan().is_err());
+        fs::rename(&parked, &root).unwrap();
+        assert_eq!(lib.items().unwrap().len(), 2);
+    }
+
+    #[test]
+    fn copy_keeps_original_until_complete() {
+        let tmp = tempfile::tempdir().unwrap();
+        let src = tmp.path().join("Zone");
+        write_png(&src.join("a.png"), 4, 4, 10);
+        write_png(&src.join("Sub/b.png"), 4, 4, 20);
+        #[cfg(unix)]
+        std::os::unix::fs::symlink("/nirgends", src.join("link")).unwrap();
+        let dst = tmp.path().join("Ziel");
+        copy_dir_then_remove(&src, &dst).unwrap();
+        assert!(dst.join("a.png").is_file() && dst.join("Sub/b.png").is_file());
+        #[cfg(unix)]
+        assert!(is_link(&dst.join("link")), "Verknüpfung bleibt Verknüpfung");
+        assert!(!src.exists());
+        // Ziel nicht beschreibbar (existiert als Datei): nichts gelöscht, keine Reste
+        let src2 = tmp.path().join("Zwei");
+        write_png(&src2.join("c.png"), 4, 4, 30);
+        let blocked = tmp.path().join("Blockiert");
+        fs::write(&blocked, b"x").unwrap();
+        assert!(copy_dir_then_remove(&src2, &blocked.join("Ziel")).is_err());
+        assert!(src2.join("c.png").is_file(), "Original bleibt");
+        // Einzeldatei: keine Teildatei bleibt liegen
+        let f = tmp.path().join("d.png");
+        write_png(&f, 4, 4, 40);
+        copy_file(&f, &tmp.path().join("Ziel/d.png")).unwrap();
+        assert!(fs::read_dir(tmp.path().join("Ziel")).unwrap().all(|e| !e.unwrap().file_name().to_string_lossy().ends_with(".archiver-part")));
+    }
+
+    #[test]
+    fn prefix_match_is_literal() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path().join("Bib");
+        write_png(&root.join("A_1/x.png"), 4, 4, 10);
+        write_png(&root.join("A 1/y.png"), 4, 4, 20);
+        write_png(&root.join("a_1b/z.png"), 4, 4, 30);
+        let lib = Library::open(&root).unwrap();
+        lib.scan().unwrap();
+        let new = lib.rename_zone("A_1", "Neu").unwrap();
+        let mut paths: Vec<String> = lib.items().unwrap().into_iter().map(|i| i.path).collect();
+        paths.sort();
+        assert_eq!(paths, ["A 1/y.png", "Neu/x.png", "a_1b/z.png"], "nur die umbenannte Zone ändert sich");
+        lib.trash_zone(&new).unwrap();
+        assert_eq!(lib.items().unwrap().len(), 2);
+    }
+
+    #[test]
+    fn quote_without_source_and_adopt_of_known_file() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path().join("Bib");
+        write_png(&root.join("Typo/a.png"), 4, 4, 10);
+        let lib = Library::open(&root).unwrap();
+        lib.scan().unwrap();
+        let (_, hash) = lib.locate("Typo/a.png").unwrap();
+        lib.set_quote(&hash, "Neuer Text").unwrap();
+        let item = lib.items().unwrap().into_iter().next().unwrap();
+        assert_eq!(item.quote.as_deref(), Some("Neuer Text"), "ohne Quelle nicht verpufft");
+
+        // Transfer-Ordner liegt in einer Zone und ist schon indiziert: nicht löschen
+        let transfer = root.join("Typo").join(TRANSFER_DIR);
+        write_png(&transfer.join("b.png"), 4, 4, 50);
+        lib.scan().unwrap();
+        let (path, duplicate) = lib.adopt_file(&transfer.join("b.png"), None, "Typo", &Source::default()).unwrap();
+        assert!(root.join(&path).is_file(), "einzige Kopie bleibt erhalten: {path} {duplicate}");
+    }
+
+    #[test]
+    fn broken_database_is_rebuilt() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path().join("Bib");
+        write_png(&root.join("Typo/a.png"), 4, 4, 10);
+        let hash = {
+            let lib = Library::open(&root).unwrap();
+            lib.scan().unwrap();
+            let hash = lib.items().unwrap()[0].hash.clone();
+            lib.set_quote(&hash, "bleibt").unwrap();
+            hash
+        };
+        let db = root.join(META_DIR).join("library.db");
+        let _ = fs::remove_file(db.with_extension("db-wal"));
+        let _ = fs::remove_file(db.with_extension("db-shm"));
+        fs::write(&db, b"kein SQLite, sondern Datenmuell".repeat(200)).unwrap();
+        let lib = Library::open(&root).expect("öffnet trotz kaputter Datenbank");
+        lib.scan().unwrap();
+        let items = lib.items().unwrap();
+        assert_eq!(items.len(), 1, "Bestand neu eingelesen");
+        assert_eq!(items[0].hash, hash);
+        let aside = fs::read_dir(root.join(META_DIR)).unwrap().filter_map(|e| e.ok()).any(|e| e.file_name().to_string_lossy().starts_with("library.db.broken-"));
+        assert!(aside, "alte Datei liegt daneben");
+    }
+
+    #[test]
+    fn deleted_paths_stay_inside() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path().join("Bib");
+        write_png(&root.join("Typo/a.png"), 4, 4, 10);
+        let outside = tmp.path().join("privat.png");
+        write_png(&outside, 4, 4, 99);
+        let lib = Library::open(&root).unwrap();
+        lib.scan().unwrap();
+        lib.trash_items(&["Typo/a.png".into()]).unwrap();
+        let sneaky = format!("{}/../../../privat.png", lib.deleted_dir().display());
+        assert_eq!(lib.remove_deleted(&[sneaky.clone()]).unwrap(), 0);
+        assert_eq!(lib.restore_deleted(&[sneaky.clone()]).unwrap(), 0);
+        assert_eq!(lib.restore_items(&[("Typo/p.png".into(), outside.to_string_lossy().into_owned())]).unwrap(), 0);
+        assert!(outside.is_file(), "Datei außerhalb unberührt");
+    }
+
+    #[test]
+    fn deleted_restore_purge_and_folders() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path().join("Bib");
+        write_png(&root.join("Typo/a.png"), 4, 4, 10);
+        write_png(&root.join("Typo/Serif/b.png"), 4, 4, 20);
+        let lib = Library::open(&root).unwrap();
+        lib.scan().unwrap();
+        // Ordner, auch leere
+        lib.create_folder("Typo", "Grotesk").unwrap();
+        let folders = lib.folders();
+        assert!(folders.contains(&"Typo/Serif".to_string()) && folders.contains(&"Typo/Grotesk".to_string()));
+        // in einen Unterordner verschieben und genau zurück (⌘Z)
+        assert_eq!(lib.move_items_to(&["Typo/a.png".into()], "Typo/Grotesk", true).unwrap(), vec!["Typo/Grotesk/a.png".to_string()]);
+        assert!(lib.move_items(&["Typo/Grotesk/a.png".into()], "Typo").unwrap().is_empty(), "in der Zone bleibt es");
+        assert_eq!(lib.move_items_to(&["Typo/Grotesk/a.png".into()], "Typo", true).unwrap(), vec!["Typo/a.png".to_string()]);
+        // Löschen: unter „Zuletzt gelöscht“, nicht mehr in der Bibliothek
+        let done = lib.trash_items(&["Typo/Serif/b.png".into()]).unwrap();
+        assert_eq!(done.len(), 1);
+        assert!(!root.join("Typo/Serif/b.png").exists());
+        assert_eq!(lib.items().unwrap().len(), 1);
+        let del = lib.deleted_items().unwrap();
+        assert_eq!(del.len(), 1);
+        assert_eq!(del[0].path, "Typo/Serif/b.png");
+        assert!(!del[0].hash.is_empty());
+        assert_eq!(lib.deleted_count(), 1);
+        // Wiederherstellen
+        assert_eq!(lib.restore_deleted(&[del[0].abs.clone()]).unwrap(), 1);
+        assert!(root.join("Typo/Serif/b.png").is_file());
+        assert_eq!(lib.deleted_count(), 0);
+        assert_eq!(fs::read_dir(lib.deleted_dir()).unwrap().count(), 0, "leere Löschordner sind weg");
+        // Zone löschen und ⌘Z über restore_items
+        let done = lib.trash_items(&["Typo/a.png".into()]).unwrap();
+        lib.restore_items(&done).unwrap();
+        assert!(root.join("Typo/a.png").is_file());
+        fs::write(root.join("Typo/layout.psd"), b"8BPS").unwrap();
+        assert_eq!(lib.zone_other_files("Typo"), 1);
+        lib.trash_zone("Typo").unwrap();
+        assert!(!root.join("Typo").exists());
+        // Die PSD ist sichtbar und lässt sich zurückholen (BC2)
+        let del = lib.deleted_items().unwrap();
+        assert_eq!(del.len(), 3);
+        assert_eq!(lib.deleted_count(), 3);
+        let psd = del.iter().find(|d| d.other).unwrap();
+        assert_eq!(psd.filename, "layout.psd");
+        assert_eq!(lib.restore_deleted(&[psd.abs.clone()]).unwrap(), 1);
+        assert!(root.join("Typo/layout.psd").is_file());
+        assert_eq!(lib.deleted_items().unwrap().len(), 2);
+        // Alt genug: wandert aus „Zuletzt gelöscht“ (in den Papierkorb des Macs)
+        let stamp = fs::read_dir(lib.deleted_dir()).unwrap().next().unwrap().unwrap().path();
+        fs::rename(&stamp, lib.deleted_dir().join("1000")).unwrap();
+        let _ = lib.purge_deleted(DELETED_DAYS);
+        // Ordner aus dem Finder: wird zur Zone bzw. zum Unterordner
+        let ext = tmp.path().join("Extern/Projekt X");
+        write_png(&ext.join("c.png"), 4, 4, 30);
+        write_png(&ext.join("Sub/d.png"), 4, 4, 40);
+        let r = lib.import_files(&[ext.clone()], "").unwrap();
+        assert_eq!(r.imported, 2);
+        assert!(root.join("Projekt X/Sub/d.png").is_file());
+        write_png(&ext.join("e.png"), 4, 4, 50);
+        lib.import_files(&[ext], "Unsorted").unwrap();
+        assert!(root.join("Unsorted/Projekt X/e.png").is_file());
+        // Unterordner in einen anderen Ordner ziehen (0.28)
+        assert_eq!(lib.move_folder("Projekt X/Sub", "Unsorted/Projekt X").unwrap(), "Unsorted/Projekt X/Sub");
+        assert!(root.join("Unsorted/Projekt X/Sub/d.png").is_file());
+        assert!(lib.items().unwrap().iter().any(|i| i.path == "Unsorted/Projekt X/Sub/d.png"));
+        assert!(lib.move_folder("Unsorted/Projekt X", "Unsorted/Projekt X/Sub").is_err(), "nicht in sich selbst");
+    }
+
+    #[test]
+    fn older_analyses_run_again_once() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path().join("Bib");
+        {
+            let lib = Library::open(&root).unwrap();
+            for (hash, labels) in [("alt", "poster, art"), ("neu", "poster:0.92, art:0.41"), ("leer", "")] {
+                let a = Analysis { hash: hash.into(), labels: labels.into(), text: String::new(), colors: String::new() };
+                lib.save_analysis(&a).unwrap();
+            }
+            lib.conn.lock().unwrap().execute_batch("PRAGMA user_version = 2;").unwrap();
+        }
+        let lib = Library::open(&root).unwrap();
+        let conn = lib.conn.lock().unwrap();
+        let mut stmt = conn.prepare("SELECT hash FROM analysis ORDER BY hash").unwrap();
+        let left: Vec<String> = stmt.query_map([], |r| r.get(0)).unwrap().map(|r| r.unwrap()).collect();
+        assert!(left.is_empty(), "vor 0.31.2 ohne Gesichter und Personen: alles neu, {left:?}");
+        drop(stmt);
+        drop(conn);
+        // danach bleibt eine neue Analyse beim Öffnen stehen
+        let a = Analysis { hash: "x".into(), labels: "people:0.91".into(), text: String::new(), colors: String::new() };
+        lib.save_analysis(&a).unwrap();
+        drop(lib);
+        let lib = Library::open(&root).unwrap();
+        let n: i64 = lib.conn.lock().unwrap().query_row("SELECT COUNT(*) FROM analysis", [], |r| r.get(0)).unwrap();
+        assert_eq!(n, 1);
+    }
+
+    #[test]
+    fn expire_zone_is_a_setting() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path().join("Bib");
+        let lib = Library::open(&root).unwrap();
+        assert_eq!(lib.expire_zone().as_deref(), Some(INBOX), "ab Werk Unsorted");
+        std::fs::create_dir_all(root.join("Downloads")).unwrap();
+        assert!(lib.set_expire_zone("Downloads").is_err(), "nur Unsorted");
+        lib.set_default_zone("Downloads").unwrap();
+        assert_eq!(lib.expire_zone().as_deref(), Some(INBOX), "auch mit anderer Standard-Zone");
+        let mut v = lib.zone_file();
+        v["expire"] = serde_json::json!("Downloads");
+        lib.write_zone_file(&v).unwrap();
+        assert_eq!(lib.expire_zone().as_deref(), Some(INBOX), "alte Wahl gilt als Unsorted");
+        lib.set_expire_zone(INBOX).unwrap();
+        assert_eq!(lib.expire_zone().as_deref(), Some(INBOX));
+        lib.set_expire_zone("").unwrap();
+        assert_eq!(lib.expire_zone(), None);
+        assert_eq!(lib.expire_inbox(DELETED_DAYS).unwrap(), 0);
+        assert!(lib.set_expire_zone("Gibtsnicht").is_err());
+    }
+
+    #[test]
+    fn unsorted_empties_itself_after_seven_days() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path().join("Bib");
+        let lib = Library::open(&root).unwrap();
+        let src = tmp.path().join("src");
+        write_png(&src.join("alt.png"), 4, 4, 10);
+        write_png(&src.join("neu.png"), 4, 4, 20);
+        write_png(&src.join("zone.png"), 4, 4, 30);
+        lib.import_files(&[src.join("alt.png"), src.join("neu.png")], "Unsorted").unwrap();
+        lib.import_files(&[src.join("zone.png")], "Typo").unwrap();
+        // erster Lauf: nichts geht, die Frist beginnt
+        assert_eq!(lib.expire_inbox(DELETED_DAYS).unwrap(), 0);
+        let seen_path = root.join(META_DIR).join(INBOX_SEEN);
+        let mut seen: HashMap<String, i64> = serde_json::from_slice(&fs::read(&seen_path).unwrap()).unwrap();
+        assert_eq!(seen.len(), 2, "nur Unsorted zählt");
+        assert_eq!(lib.inbox_seen(), seen, "Snapshot liefert dieselben Zeiten");
+        // „alt.png“ liegt seit acht Tagen dort
+        let alt = lib.hash_of("Unsorted/alt.png").unwrap();
+        seen.insert(alt, now_ms() - 8 * 24 * 3600 * 1000);
+        fs::write(&seen_path, serde_json::to_vec(&seen).unwrap()).unwrap();
+        assert_eq!(lib.expire_inbox(DELETED_DAYS).unwrap(), 1);
+        assert!(!root.join("Unsorted/alt.png").exists());
+        assert!(root.join("Unsorted/neu.png").is_file());
+        assert!(root.join("Typo/zone.png").is_file());
+        // unter „Zuletzt gelöscht“, also wiederherstellbar
+        assert_eq!(lib.deleted_items().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn rename_only_on_request() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path().join("Bib");
+        let lib = Library::open(&root).unwrap();
+        let src = tmp.path().join("src");
+        write_png(&src.join("IMG_1.png"), 4, 4, 41);
+        write_png(&src.join("IMG_2.png"), 4, 4, 42);
+        // Ab Werk bleibt der Name
+        lib.import_files(&[src.join("IMG_1.png")], "Typo").unwrap();
+        assert!(root.join("Typo/IMG_1.png").is_file());
+        // Auch mit gewähltem Schema benennt der Import nie um (nur das Blatt, 0.36.4)
+        let mut n = crate::naming::Naming::default();
+        n.preset = "zone-nr".into();
+        lib.import_files(&[src.join("IMG_2.png")], "Typo").unwrap();
+        assert!(root.join("Typo/IMG_2.png").is_file(), "Import behält den Namen");
+        assert!(root.join("Typo/IMG_1.png").is_file(), "Vorhandenes bleibt");
+        // Aufräumen: Plan, dann umbenennen, Datenbank folgt
+        let plan = lib.name_plan(&["Typo/IMG_1.png".into()], &n, "Bib").unwrap();
+        assert_eq!(plan.len(), 1);
+        assert!(plan[0].messy);
+        assert!(plan[0].new.starts_with("typo_") && plan[0].new.ends_with(".png"));
+        let done = lib.rename_items(&[("Typo/IMG_1.png".into(), "Mein Plakat".into())]).unwrap();
+        assert_eq!(done, vec![("Typo/IMG_1.png".to_string(), "Typo/Mein Plakat.png".to_string())]);
+        assert!(root.join("Typo/Mein Plakat.png").is_file());
+        assert!(!root.join("Typo/IMG_1.png").exists());
+        assert!(lib.hash_of("Typo/Mein Plakat.png").is_some(), "Eintrag wanderte mit");
+        // nur Groß/klein
+        lib.rename_items(&[("Typo/Mein Plakat.png".into(), "mein plakat.png".into())]).unwrap();
+        assert!(root.join("Typo/mein plakat.png").is_file());
+        // Pfadzeichen im Namen werden entfernt, nichts verlässt den Ordner
+        let done = lib.rename_items(&[("Typo/mein plakat.png".into(), "../x/y".into())]).unwrap();
+        assert_eq!(done[0].1, "Typo/xy.png");
+    }
+
+    #[test]
+    fn unsorted_by_name() {
+        for yes in ["Unsorted", "unsorted", "UNSORTED", "00_Unsorted", "01 unsorted", "Projekt/Unsorted", "Unsorted/Sub"] {
+            assert!(is_unsorted(yes), "{yes}");
+        }
+        for no in ["", "Typo", "Unsortiert", "Unsorted Projekte", "Projekt/Typo"] {
+            assert!(!is_unsorted(no), "{no}");
+        }
+    }
+
+    #[test]
+    fn shared_library_empties_only_when_switched_on() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path().join("Bib");
+        drop(Library::open(&root).unwrap());
+        crate::studio::set_shared(&root, true).unwrap();
+        let lib = Library::open(&root).unwrap();
+        assert!(lib.shared);
+        assert_eq!(lib.expire_zone(), None, "geteilt: ab Werk aus");
+        let src = tmp.path().join("src");
+        write_png(&src.join("a.png"), 4, 4, 41);
+        lib.import_files(&[src.join("a.png")], "Unsorted").unwrap();
+        assert_eq!(lib.expire_inbox(DELETED_DAYS).unwrap(), 0);
+        assert!(lib.inbox_seen().is_empty());
+        lib.set_expire_zone(INBOX).unwrap();
+        assert_eq!(lib.expire_zone().as_deref(), Some(INBOX));
+        assert_eq!(lib.expire_inbox(DELETED_DAYS).unwrap(), 0, "Frist beginnt");
+        assert_eq!(lib.inbox_seen().len(), 1);
+    }
+
+    #[test]
+    fn self_made_unsorted_empties_too() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path().join("Bib");
+        let lib = Library::open(&root).unwrap();
+        let src = tmp.path().join("src");
+        write_png(&src.join("a.png"), 4, 4, 11);
+        write_png(&src.join("b.png"), 4, 4, 12);
+        lib.import_files(&[src.join("a.png")], "unsorted").unwrap();
+        lib.import_files(&[src.join("b.png")], "Typo").unwrap();
+        assert_eq!(lib.expire_inbox(DELETED_DAYS).unwrap(), 0);
+        let seen_path = root.join(META_DIR).join(INBOX_SEEN);
+        let mut seen: HashMap<String, i64> = serde_json::from_slice(&fs::read(&seen_path).unwrap()).unwrap();
+        assert_eq!(seen.len(), 1, "selbst angelegtes unsorted zählt");
+        let a = lib.hash_of("unsorted/a.png").unwrap();
+        seen.insert(a, now_ms() - 8 * 24 * 3600 * 1000);
+        fs::write(&seen_path, serde_json::to_vec(&seen).unwrap()).unwrap();
+        assert_eq!(lib.expire_inbox(DELETED_DAYS).unwrap(), 1);
+        assert!(root.join("Typo/b.png").is_file());
+        assert_eq!(lib.deleted_items().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn switching_unsorted_back_on_restarts_the_clock() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path().join("Bib");
+        let lib = Library::open(&root).unwrap();
+        let src = tmp.path().join("src");
+        write_png(&src.join("a.png"), 4, 4, 51);
+        lib.import_files(&[src.join("a.png")], INBOX).unwrap();
+        assert_eq!(lib.expire_inbox(DELETED_DAYS).unwrap(), 0);
+        let seen_path = root.join(META_DIR).join(INBOX_SEEN);
+        let mut seen = lib.inbox_seen();
+        for v in seen.values_mut() {
+            *v = now_ms() - 30 * 24 * 3600 * 1000;
+        }
+        fs::write(&seen_path, serde_json::to_vec(&seen).unwrap()).unwrap();
+        lib.set_expire_zone("").unwrap();
+        assert_eq!(lib.expire_inbox(DELETED_DAYS).unwrap(), 0, "aus");
+        lib.set_expire_zone(INBOX).unwrap();
+        assert_eq!(lib.expire_inbox(DELETED_DAYS).unwrap(), 0, "Frist beginnt neu");
+        assert!(root.join("Unsorted/a.png").is_file());
+    }
+
+    #[test]
+    fn paste_files_image_and_text() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path().join("Bib");
+        let lib = Library::open(&root).unwrap();
+        // Bilddaten (PNG)
+        let src = tmp.path().join("src");
+        write_png(&src.join("a.png"), 4, 4, 10);
+        let png = fs::read(src.join("a.png")).unwrap();
+        let r = lib.paste_into("Typo", Pasted { image: Some(png), ..Default::default() }).unwrap();
+        assert_eq!(r.imported, 1);
+        // Text wird zur Textkarte, benannt nach den ersten Wörtern
+        let r = lib.paste_into("Typo", Pasted { text: Some("  Form folgt Funktion, sagt man  ".into()), ..Default::default() }).unwrap();
+        assert_eq!(r.imported, 1);
+        assert!(root.join("Typo/Form folgt Funktion, sagt man.txt").is_file());
+        // Dateien aus dem Finder gehen vor Bild und Text
+        write_png(&src.join("b.png"), 4, 4, 20);
+        let r = lib
+            .paste_into("Typo", Pasted { files: vec![src.join("b.png")], image: Some(vec![1, 2, 3]), text: Some("b.png".into()) })
+            .unwrap();
+        assert_eq!(r.imported, 1);
+        assert!(root.join("Typo/b.png").is_file());
+        assert_eq!(lib.items().unwrap().iter().filter(|i| i.zone == "Typo").count(), 3);
+        assert!(fs::read_dir(root.join(META_DIR).join("paste")).unwrap().next().is_none(), "Zwischenordner leer");
+        assert!(paste_name("").starts_with("Eingefügt 20"));
     }
 
     #[test]
@@ -1989,7 +3696,7 @@ mod tests {
         std::fs::create_dir_all(root.join("Neu")).unwrap();
 
         let lib = Library::open(&root).unwrap();
-        assert!(!root.join(INBOX).exists(), "keine Inbox in bestehenden Ordnern");
+        assert!(root.join(INBOX).is_dir(), "Unsorted auch in bestehenden Ordnern (0.33.1)");
         lib.scan().unwrap();
         let items = lib.items().unwrap();
         assert_eq!(items.len(), 2, "Links und Pakete übersprungen");
@@ -1998,14 +3705,14 @@ mod tests {
         folders.sort();
         assert_eq!(folders, ["02_Layout", "02_Layout"], "Unterordner als Ordner der Zone");
         let zones: Vec<String> = lib.zones().unwrap().into_iter().map(|z| z.path).collect();
-        assert_eq!(zones, vec!["01_Outra".to_string(), "Neu".to_string()]);
+        assert_eq!(zones, vec![INBOX.to_string(), "01_Outra".to_string(), "Neu".to_string()], "Unsorted zuerst");
 
         lib.set_structure(&Structure { depth: 2, skip: DEFAULT_SKIP.iter().map(|s| s.to_string()).collect(), subzones: true }).unwrap();
         let items = lib.items().unwrap();
         assert!(items.iter().all(|i| i.zone == "01_Outra/02_Layout"));
         assert!(items.iter().any(|i| i.folder == "04_Products") && items.iter().any(|i| i.folder.is_empty()));
         let zones: Vec<String> = lib.zones().unwrap().into_iter().map(|z| z.path).collect();
-        assert_eq!(zones, vec!["01_Outra/02_Layout".to_string(), "Neu".to_string()], "nur Ebene 2, ohne reine Projektordner");
+        assert_eq!(zones, vec![INBOX.to_string(), "01_Outra/02_Layout".to_string(), "Neu".to_string()], "nur Ebene 2, ohne reine Projektordner");
 
         lib.set_structure(&Structure { depth: 3, skip: vec![], subzones: true }).unwrap();
         let items = lib.items().unwrap();

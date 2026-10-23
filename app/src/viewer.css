@@ -1,6 +1,64 @@
 /* viewer.css — Betrachter. Gleiche Sprache wie die App: dunkle Fläche,
    schwebende Leiste unten, eine Schriftgröße, Grau für Nebensachen. */
 
+/* Melange (kimera, lizenziert): Dateien kommen beim Build aus dem privaten
+   Repo, fehlen sie, greift Geist. */
+@font-face {
+  font-family: "KMR Melange Grotesk";
+  src: url("fonts/melange/Melange-100.woff2") format("woff2");
+  font-weight: 100;
+  font-style: normal;
+  font-display: block;
+}
+
+@font-face {
+  font-family: "KMR Melange Grotesk";
+  src: url("fonts/melange/Melange-300.woff2") format("woff2");
+  font-weight: 300;
+  font-style: normal;
+  font-display: block;
+}
+
+@font-face {
+  font-family: "KMR Melange Grotesk";
+  src: url("fonts/melange/Melange-400.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: block;
+}
+
+@font-face {
+  font-family: "KMR Melange Grotesk";
+  src: url("fonts/melange/Melange-400i.woff2") format("woff2");
+  font-weight: 400;
+  font-style: italic;
+  font-display: block;
+}
+
+@font-face {
+  font-family: "KMR Melange Grotesk";
+  src: url("fonts/melange/Melange-500.woff2") format("woff2");
+  font-weight: 500;
+  font-style: normal;
+  font-display: block;
+}
+
+@font-face {
+  font-family: "KMR Melange Grotesk";
+  src: url("fonts/melange/Melange-600.woff2") format("woff2");
+  font-weight: 600;
+  font-style: normal;
+  font-display: block;
+}
+
+@font-face {
+  font-family: "KMR Melange Grotesk";
+  src: url("fonts/melange/Melange-700.woff2") format("woff2");
+  font-weight: 700;
+  font-style: normal;
+  font-display: block;
+}
+
 @font-face {
   font-family: "Geist";
   src: url("fonts/Geist-Variable.woff2") format("woff2");
@@ -16,7 +74,8 @@
 }
 
 :root {
-  --bg: #121212;
+  /* 0.30: Glas wie App und Tray (Glas-Regler setzt --win-alpha) */
+  --bg: color-mix(in srgb, #1c1c1c calc(var(--win-alpha, 0.72) * 100%), transparent);
   --text: #ededed;
   --dim: #8c8c8c;
   --rule: rgba(var(--ink-rgb), 0.12);
@@ -29,7 +88,7 @@
 
 /* Hell: neutrales Hellgrau wie die App (html.light aus i18n.js) */
 html.light {
-  --bg: #ebebeb;
+  --bg: color-mix(in srgb, #f4f4f4 calc(var(--win-alpha, 0.78) * 100%), transparent);
   --text: #111111;
   --dim: #707070;
   --ink-rgb: 17, 17, 17;
@@ -137,7 +196,7 @@ button {
   margin: 0 4px 22px;
   font-size: 22px;
   line-height: 1.25;
-  letter-spacing: -0.01em;
+  letter-spacing: 0;
   word-break: break-word;
 }
 

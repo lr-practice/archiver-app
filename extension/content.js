@@ -13,7 +13,6 @@
 // gegenseitig beeinflussen.
 
 (function () {
-  const ZONE_HEIGHT_VH = 32; // muss zu .zones-bar in overlay.css passen
   const { DEFAULT_ZONES, DEFAULT_SHORTCUT, isRootZoneName, loadZones, debugLog, currentPageSource, extractDroppedImage, t } =
     ArchiverShared;
   const UI = ArchiverUI;
@@ -21,12 +20,23 @@
   let zones = DEFAULT_ZONES.slice();
   // Leiste beim Ziehen: mit App die vier Hot Zones aus der Übersicht, sonst alle Zonen
   let barZones = zones;
+  // Nach einem Update der Extension läuft dieses Skript in schon offenen Tabs
+  // verwaist weiter (ohne chrome.*). Dann hält es still, statt eine alte
+  // Leiste ohne Texte zu zeigen; die neue Fassung übernimmt.
+  const gone = () => {
+    try {
+      return !chrome.runtime || !chrome.runtime.id;
+    } catch {
+      return true;
+    }
+  };
   const hotOf = (list, info) => (info && Array.isArray(info.hot) && info.hot.length ? info.hot.slice() : list);
   let shortcut = DEFAULT_SHORTCUT;
   let dragCounter = 0;
   let manualOpen = false; // true, wenn per Tastenkombination geöffnet (nicht durch Drag)
   let recordingShortcut = false; // true, während in den Einstellungen eine neue Kombination aufgenommen wird
   let fallbackImageUrl = null; // beim dragstart ermittelte (möglichst hochauflösende) Bildquelle
+  let dragCaption = null; // Bildtext zum gezogenen Bild (0.29), siehe captionNear
 
   // ---- Shadow-DOM-Host ----
   // Wird beim ersten Bedarf angelegt (erster Drag, Tastenkombination oder
@@ -44,7 +54,7 @@
   let panelHostEl = null;
   let panels = null;
 
-  // Geist wie in der App. @font-face greift im Shadow DOM nicht, deshalb über
+  // Melange und Geist wie in der App. @font-face greift im Shadow DOM nicht, deshalb über
   // document.fonts; die Seite sieht nur die zusätzliche Schrift, ändert nichts.
   let fontsLoaded = false;
   function loadFonts() {
@@ -53,6 +63,13 @@
     [
       ["Geist", "fonts/Geist-Variable.woff2", { weight: "100 900" }],
       ["Geist Mono", "fonts/GeistMono-Regular.woff2", { weight: "400" }],
+      ["KMR Melange Grotesk", "fonts/melange/Melange-100.woff2", { weight: "100" }],
+      ["KMR Melange Grotesk", "fonts/melange/Melange-300.woff2", { weight: "300" }],
+      ["KMR Melange Grotesk", "fonts/melange/Melange-400.woff2", { weight: "400" }],
+      ["KMR Melange Grotesk", "fonts/melange/Melange-400i.woff2", { weight: "400", style: "italic" }],
+      ["KMR Melange Grotesk", "fonts/melange/Melange-500.woff2", { weight: "500" }],
+      ["KMR Melange Grotesk", "fonts/melange/Melange-600.woff2", { weight: "600" }],
+      ["KMR Melange Grotesk", "fonts/melange/Melange-700.woff2", { weight: "700" }],
     ].forEach(([family, file, desc]) => {
       const face = new FontFace(family, `url(${chrome.runtime.getURL(file)})`, desc);
       face.load().then((f) => document.fonts.add(f)).catch(() => {});
@@ -66,17 +83,26 @@
     // schon registriert (zweite Injektion) oder nicht unterstützt: Fallback 1 im CSS
   }
 
+  // Styles vorab holen (siehe Ende der Datei), das Overlay selbst erst beim
+  // ersten Gebrauch anlegen: die Seite bekommt bis dahin kein fremdes Element.
+  let stylesReady = null;
+  const loadStyles = () =>
+    (stylesReady ||= Promise.all(
+      ["gallery.css", "panel.css", "overlay.css"].map((file) => fetch(chrome.runtime.getURL(file)).then((r) => r.text()))
+    ).catch((e) => {
+      stylesReady = null; // beim nächsten Mal neu versuchen
+      throw e;
+    }));
+
   function ensureOverlay() {
     if (!overlayReady) {
-      overlayReady = Promise.all(
-        ["gallery.css", "panel.css", "overlay.css"].map((file) => fetch(chrome.runtime.getURL(file)).then((r) => r.text()))
-      ).then((texts) => {
+      overlayReady = loadStyles().then((texts) => {
         const host = document.createElement("archiver-overlay");
         ["position:fixed", "top:0", "left:0", "width:0", "height:0", "display:block", "z-index:2147483647"].forEach((rule) => {
           const [prop, value] = rule.split(":");
           host.style.setProperty(prop, value, "important");
         });
-        shadow = host.attachShadow({ mode: "open" });
+        shadow = host.attachShadow({ mode: "closed" }); // geschlossen: die Seite kommt nicht an Vorschauen und Dateinamen
         UI.watchTheme(host);
         const sheet = new CSSStyleSheet();
         sheet.replaceSync(texts.join("\n"));
@@ -160,6 +186,7 @@
   }
 
   document.addEventListener("keydown", (e) => {
+    if (!e.isTrusted || gone()) return; // nur echte Eingaben, keine von der Seite erzeugten Events
     if (recordingShortcut) return; // nimmt das Einstellungen-Panel selbst entgegen
 
     if (manualOpen) {
@@ -178,7 +205,9 @@
 
     if (matchesShortcut(e, shortcut)) {
       e.preventDefault();
-      toggleManualOverlay();
+      // Das Overlay lebt nur im Top-Frame; aus einem iframe heraus dorthin weiterreichen
+      if (window === window.top) toggleManualOverlay();
+      else chrome.runtime.sendMessage({ type: "toggle-overlay-top" }).catch(() => {});
     }
   });
 
@@ -188,10 +217,8 @@
     if (!message) return;
     if (message.type === "feedback") {
       ensureOverlay().then(() => UI.showToast(rootEl, message.text, message.ok));
-    } else if (message.type === "toggle-overlay") {
+    } else if (message.type === "toggle-overlay" && window === window.top) {
       toggleManualOverlay(); // Chrome-Befehl, kommt nur im Top-Frame an
-    } else if (message.type === "pinterest-collect" && window === window.top) {
-      collectPinterestBoard().then((result) => chrome.runtime.sendMessage({ type: "pinterest-pins", ...result }));
     } else if (message.type === "context-save") {
       dropLibrary = null;
       contextSave(message);
@@ -209,6 +236,7 @@
   document.addEventListener(
     "contextmenu",
     (e) => {
+      if (!e.isTrusted) return; // nur echte Eingaben, keine von der Seite erzeugten Events
       lastContext = { target: e.target, x: e.clientX, y: e.clientY };
     },
     true
@@ -272,7 +300,9 @@
       (document.head || document.documentElement).appendChild(toneStyle);
     }
     const [bg, fg] = CARD_TONES[toneFor()];
-    toneStyle.textContent = `::selection{background:${bg}!important;color:${fg}!important}`;
+    toneStyle.textContent =
+      `::selection{background:${bg}!important;color:${fg}!important}` +
+      `::highlight(archiver-marks){background-color:${bg};color:${fg}}`;
   }
 
   // ---- PDF, Video und Audio ----
@@ -310,6 +340,34 @@
     return null;
   }
 
+  // Bildtext zu einem Bild (0.29): nur Text, den man auf der Seite markiert
+  // hat, während man das Bild sichert. Sonst kein Bildtext.
+  function captionNear() {
+    const text = String((window.getSelection && window.getSelection()) || "").replace(/\s+/g, " ").trim();
+    return text ? text.slice(0, 2000) : null;
+  }
+
+  // Bilder in der Markierung (0.29.1): wer Bild und Text zusammen markiert,
+  // sichert das Bild mit dem Text als Bildtext, nicht nur eine Textkarte.
+  function selectedImages() {
+    const sel = window.getSelection && window.getSelection();
+    if (!sel || sel.isCollapsed || !sel.rangeCount) return [];
+    const range = sel.getRangeAt(0);
+    const c = range.commonAncestorContainer;
+    const root = c.nodeType === 1 ? c : c.parentElement;
+    if (!root) return [];
+    const imgs = [root, ...root.querySelectorAll("img")].filter((n) => n.tagName === "IMG" && range.intersectsNode(n));
+    return imgs.filter((i) => Math.max(i.naturalWidth || 0, i.width || 0) >= 80).slice(0, 12);
+  }
+
+  function saveSelectedImages(imgs, folder, caption = captionNear()) {
+    const source = currentPageSource();
+    for (const img of imgs) {
+      const url = findBestImageUrl(img) || img.currentSrc || img.src;
+      if (url) sendSave({ type: "download-image", url: resolveUrl(url), folder, caption, ...source });
+    }
+  }
+
   function saveMediaFile(url, folder, source) {
     sendSave({ type: "download-image", url: resolveUrl(url), folder, ...source });
   }
@@ -329,12 +387,13 @@
     else saveCard(linkCard(title, link), folder, { pageUrl: link, pageTitle: title || link });
   }
 
-  // Die geöffnete Seite selbst: PDF als Datei, Video als Karte, sonst Bildschirmfoto
+  // Die geöffnete Seite selbst: PDF als Datei, Video als Karte, sonst Linkkarte
+  // mit der ganzen Seite als MHTML dahinter (3.23.0, background.js archiveTab)
   function savePage(folder, source) {
     const video = videoPageUrl(location.href);
     if (isPdfPage()) saveMediaFile(location.href, folder, { pageUrl: location.href, pageTitle: document.title || null });
     else if (video) saveVideoCard(video, folder, document.title.replace(/ - YouTube$/, ""));
-    else sendSave({ type: "capture-visible", folder, ...source });
+    else saveCard(linkCard(document.title.trim(), location.href), folder, { ...source, pageUrl: location.href, pageTitle: document.title || null, archivePage: true });
   }
 
   function contextSave(msg) {
@@ -348,7 +407,10 @@
       savePage(folder, source);
     } else if (msg.srcUrl) {
       const best = ctx && ctx.target && ctx.target.tagName === "IMG" ? findBestImageUrl(ctx.target) : null;
-      sendSave({ type: "download-image", url: resolveUrl(best || msg.srcUrl), folder, ...source });
+      const caption = captionNear();
+      sendSave({ type: "download-image", url: resolveUrl(best || msg.srcUrl), folder, caption, ...source });
+    } else if (selection && selectedImages().length) {
+      saveSelectedImages(selectedImages(), folder);
     } else if (selection) {
       saveCard(textCard(selection, source), folder, { ...source, quote: selection });
     } else if (msg.linkUrl) {
@@ -564,6 +626,7 @@
   }
 
   function areaKey(e) {
+    if (!e.isTrusted) return; // nur echte Eingaben, keine von der Seite erzeugten Events
     if (e.key === "Escape") {
       e.preventDefault();
       e.stopPropagation();
@@ -613,49 +676,6 @@
         }, 60)
       )
     );
-  }
-
-  // ---- Pinterest-Board einsammeln (Entwicklungshilfe) ----
-  // Scrollt das Board durch und merkt sich jeden Pin. Pinterest blendet Pins
-  // außerhalb des Bildschirms aus, deshalb wird beim Scrollen gesammelt.
-  // Schluss ist bei der Pin-Zahl des Boards oder bei „Mehr Ideen“.
-
-  function bestPinImage(img) {
-    const set = (img.getAttribute("srcset") || "").split(",").map((s) => s.trim().split(/\s+/)[0]).filter(Boolean);
-    const url = set.length ? set[set.length - 1] : img.src;
-    return url.includes("/originals/") ? url : url.replace(/\/\d+x(\d+)?\//, "/736x/");
-  }
-
-  async function collectPinterestBoard() {
-    const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-    const toast = (text) => ensureOverlay().then(() => UI.showToast(rootEl, text, true));
-    const h1 = document.querySelector("h1");
-    const board = ((h1 && h1.textContent) || decodeURIComponent(location.pathname.split("/")[2] || "Pinterest")).trim();
-    const countEl = [...document.querySelectorAll("div, span")].find((n) => /^\s*[\d.,]+\s+Pins?\s*$/i.test(n.textContent));
-    const expected = countEl ? parseInt(countEl.textContent.replace(/[^\d]/g, ""), 10) : Infinity;
-    const stopHeading = () =>
-      [...document.querySelectorAll("h2, h3")].find((h) => /mehr ideen|weitere ideen|more ideas|more like this/i.test(h.textContent));
-    const pins = new Map();
-    window.scrollTo(0, 0);
-    await sleep(800);
-    let idle = 0;
-    while (idle < 5 && pins.size < expected) {
-      const stop = stopHeading();
-      const before = pins.size;
-      for (const a of document.querySelectorAll('a[href*="/pin/"]')) {
-        if (stop && stop.compareDocumentPosition(a) & Node.DOCUMENT_POSITION_FOLLOWING) continue;
-        const img = a.querySelector('img[src*="pinimg.com"]');
-        const id = (a.getAttribute("href").match(/\/pin\/([^/?#]+)/) || [])[1];
-        if (!img || !id || pins.has(id)) continue;
-        pins.set(id, { url: bestPinImage(img), pageUrl: `https://www.pinterest.com/pin/${id}/`, pageTitle: img.alt || board });
-      }
-      idle = pins.size === before ? idle + 1 : 0;
-      if (pins.size !== before) toast(`Pinterest: ${pins.size}${expected !== Infinity ? " / " + expected : ""} Pins gefunden`);
-      if (stop && stop.getBoundingClientRect().top < window.innerHeight) break;
-      window.scrollBy(0, window.innerHeight * 0.8);
-      await sleep(900);
-    }
-    return { board, pins: [...pins.values()].slice(0, expected) };
   }
 
   // ---- Manuell geöffnetes Overlay ----
@@ -726,9 +746,9 @@
       zonesBarEl = UI.el("div", "zones-bar");
       if (zoneAlpha != null) zonesBarEl.style.setProperty("--zone-alpha", String(zoneAlpha));
       zoneEls = barZones.map((name, i) => {
-        const zone = UI.el("div", "zone" + (isRootZoneName(name) ? " root" : ""));
+        const zone = UI.el("div", "zone" + (isRootZoneName(name) ? " zone-root" : ""));
         zone.dataset.index = String(i);
-        // Schwebende Karte wie in der App: Name oben links, Unterzone mit grauem Elternteil
+        // Schwebende Karte wie in der App (.p-hot): Nummer oben, Name in der Mitte, Hinweis unten, Unterzone mit grauem Elternteil
         zone.appendChild(UI.el("span", "zone-key", String(i + 1).padStart(2, "0")));
         const label = UI.el("div", "zone-label");
         const parts = String(name).split("/");
@@ -740,6 +760,7 @@
         return zone;
       });
       rootEl.appendChild(zonesBarEl);
+      showLibBar();
       debugLog("Zonen angezeigt:", barZones);
     });
   }
@@ -783,16 +804,25 @@
     zonesBarEl = null;
     zoneEls = [];
     dragCounter = 0;
+    removeLibBar();
     zone.classList.add("active");
     bar.classList.add("leaving");
     setTimeout(() => bar.remove(), 520);
   }
 
+  // Zeiger während eines Ziehens (Browser-Ziehen, Text, Instagram): Zielkarte
+  // markieren. Die Leiste steht in voller Höhe (3.29.7, vorher erst ein Streifen).
+  function trackZones(x, y) {
+    if (!zonesBarEl) return;
+    trackLibs(x, y);
+    const active = getZoneIndex(x, y);
+    zoneEls.forEach((el, i) => el.classList.toggle("active", i === active));
+  }
+
   // Liefert den Zonen-Index unter x/y, oder -1 wenn außerhalb aller Zonen
   function getZoneIndex(x, y) {
-    if (!barZones.length) return -1;
-    const zoneHeight = (window.innerHeight * ZONE_HEIGHT_VH) / 100;
-    if (y < window.innerHeight - zoneHeight) return -1;
+    if (!barZones.length || !zonesBarEl) return -1;
+    if (y < zonesBarEl.getBoundingClientRect().top) return -1;
     const zoneWidth = window.innerWidth / barZones.length;
     const idx = Math.floor(x / zoneWidth);
     return Math.min(Math.max(idx, 0), barZones.length - 1);
@@ -800,23 +830,40 @@
 
   // ---- Bildquelle ermitteln (High-Res statt Thumbnail) ----
 
+  // srcset nach dem Verfahren der HTML-Spezifikation lesen: eine Adresse endet
+  // erst an Leerraum, Kommas darin gehören dazu (Substack, Cloudinary:
+  // ".../w_1456,c_limit,f_webp/..."). Ein Komma nach der Adresse oder nach den
+  // Angaben trennt die Kandidaten.
+  function parseSrcset(srcset) {
+    const out = [];
+    const s = String(srcset || "");
+    let i = 0;
+    while (i < s.length) {
+      while (i < s.length && /[\s,]/.test(s[i])) i++;
+      if (i >= s.length) break;
+      let j = i;
+      while (j < s.length && !/\s/.test(s[j])) j++;
+      let url = s.slice(i, j);
+      i = j;
+      let desc = "";
+      if (/,$/.test(url)) url = url.replace(/,+$/, "");
+      else {
+        while (i < s.length && s[i] !== ",") desc += s[i++];
+        i++;
+      }
+      if (url) out.push({ url, desc: desc.trim() });
+    }
+    return out;
+  }
+
   function parseSrcsetBest(srcset) {
-    if (!srcset) return null;
-    const candidates = srcset
-      .split(",")
-      .map((s) => s.trim())
-      .filter(Boolean)
-      .map((entry) => {
-        const parts = entry.split(/\s+/);
-        const url = parts[0];
-        let score = 0;
-        if (parts[1]) {
-          const d = parts[1];
-          if (d.endsWith("w")) score = parseInt(d, 10) || 0;
-          else if (d.endsWith("x")) score = (parseFloat(d) || 1) * 1000;
-        }
-        return { url, score };
-      });
+    const candidates = parseSrcset(srcset).map(({ url, desc }) => {
+      let score = 0;
+      const d = desc.split(/\s+/)[0] || "";
+      if (d.endsWith("w")) score = parseInt(d, 10) || 0;
+      else if (d.endsWith("x")) score = (parseFloat(d) || 1) * 1000;
+      return { url, score };
+    });
     if (!candidates.length) return null;
     candidates.sort((a, b) => b.score - a.score);
     return candidates[0].url;
@@ -887,6 +934,215 @@
 
     return null;
   }
+
+  // ---- Mehrere Stellen markieren (⌥, seit 3.29.1; vorher ⌘) ----
+  // Mit gedrückter ⌥-Taste kommen weitere Stellen dazu: Text wie gewohnt
+  // markieren, Bilder anklicken (nochmal anklicken nimmt sie wieder raus).
+  // Chrome kennt nur eine Markierung, deshalb merkt sich Archiver die früheren
+  // Stücke selbst: Text bleibt in der Farbe der Markierung (CSS Highlight, die
+  // Seite wird nicht verändert), Bilder tragen den gestrichelten Ring.
+  // Ziehen eines Stücks nimmt alle mit:
+  //   nur Text → eine Textkarte, Stücke als Absätze in Markierreihenfolge
+  //   Text und Bild → jedes Bild mit allem Text als Bildtext
+  //   nur Bilder → jedes Bild einzeln
+  // Klick ohne ⌥ daneben oder Esc hebt alles auf.
+
+  const marks = []; // { range, text } | { img }
+  const MIN_MARK_IMG = 80;
+  let markLayer = null;
+  let markFrame = 0;
+  const reduceMotion = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)");
+
+  const hasMarks = () => marks.length > 0;
+
+  function bigImage(img) {
+    return img && img.tagName === "IMG" && Math.max(img.naturalWidth || 0, img.width || 0) >= MIN_MARK_IMG;
+  }
+
+  function imageUnder(x, y) {
+    for (const el of document.elementsFromPoint(x, y)) {
+      if (el === document.documentElement || el === document.body) continue;
+      if (el.tagName === "ARCHIVER-OVERLAY") return null;
+      if (bigImage(el)) return el;
+      // Bilder unter einer Fläche (Instagram u. a.)
+      const img = el.querySelectorAll && [...el.querySelectorAll("img")].find((i) => {
+        const r = i.getBoundingClientRect();
+        return bigImage(i) && x >= r.left && x <= r.right && y >= r.top && y <= r.bottom;
+      });
+      if (img) return img;
+    }
+    return null;
+  }
+
+  function addImageMark(img) {
+    if (!marks.some((m) => m.img === img)) marks.push({ img });
+  }
+
+  // Die laufende Markierung wird ein gemerktes Stück
+  function keepLiveSelection() {
+    const text = selectedText();
+    if (!text) return false;
+    const images = selectedImages();
+    marks.push({ range: window.getSelection().getRangeAt(0).cloneRange(), text: captionNear() || text });
+    images.forEach(addImageMark);
+    return true;
+  }
+
+  function collectPieces() {
+    const texts = [];
+    const images = [];
+    const addImg = (img) => !images.includes(img) && images.push(img);
+    for (const m of marks) {
+      if (m.img) addImg(m.img);
+      else if (m.text) texts.push(m.text);
+    }
+    if (selectedText()) {
+      texts.push(captionNear());
+      selectedImages().forEach(addImg);
+    }
+    const text = texts.join("\n\n");
+    return { text, caption: text ? text.slice(0, 2000) : null, images: images.slice(0, 12) };
+  }
+
+  function insideMarks(x, y) {
+    const hit = (r, pad) => x >= r.left - pad && x <= r.right + pad && y >= r.top - pad && y <= r.bottom + pad;
+    return marks.some((m) => (m.img ? hit(m.img.getBoundingClientRect(), 3) : [...m.range.getClientRects()].some((r) => hit(r, 2))));
+  }
+
+  function clearMarks() {
+    if (!marks.length) return;
+    marks.length = 0;
+    paintMarks();
+  }
+
+  function paintMarks() {
+    if (window.CSS && CSS.highlights && window.Highlight) {
+      const ranges = marks.filter((m) => m.range).map((m) => m.range);
+      if (ranges.length) CSS.highlights.set("archiver-marks", new Highlight(...ranges));
+      else CSS.highlights.delete("archiver-marks");
+    }
+    showTone();
+    scheduleMarkRings();
+  }
+
+  // Ring wie in der App (DESIGN 4.1): 1 px gestrichelt 4/4, 3 px Abstand,
+  // eckig wie das Bild. Weiß mit feinem dunklen Schatten, damit er auf hellen
+  // und dunklen Bildern steht.
+  const MARK_RING =
+    "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Crect x='.5' y='.5' style='width:calc(100%25 - 1px);height:calc(100%25 - 1px)' fill='none' stroke='white' stroke-dasharray='4 4'/%3E%3C/svg%3E\") 0 0 / 100% 100% no-repeat";
+
+  function placeMarkRings() {
+    markFrame = 0;
+    const imgs = marks.filter((m) => m.img).map((m) => m.img);
+    if (!imgs.length && !markLayer) return;
+    if (!markLayer) {
+      markLayer = document.createElement("div");
+      markLayer.setAttribute("data-archiver-marks", "");
+      markLayer.style.cssText = "position:fixed;left:0;top:0;width:0;height:0;z-index:2147483000;pointer-events:none";
+      document.documentElement.appendChild(markLayer);
+    }
+    while (markLayer.children.length > imgs.length) markLayer.lastChild.remove();
+    while (markLayer.children.length < imgs.length) {
+      const ring = document.createElement("div");
+      ring.style.cssText =
+        `position:fixed;left:0;top:0;background:${MARK_RING};filter:drop-shadow(0 0 1px rgba(0,0,0,.7));opacity:0;` +
+        (reduceMotion && reduceMotion.matches ? "" : "transition:opacity .18s ease-out");
+      markLayer.appendChild(ring);
+      requestAnimationFrame(() => (ring.style.opacity = "1"));
+    }
+    imgs.forEach((img, i) => {
+      const r = img.getBoundingClientRect();
+      const ring = markLayer.children[i];
+      ring.style.transform = `translate(${Math.round(r.left - 3)}px, ${Math.round(r.top - 3)}px)`;
+      ring.style.width = Math.round(r.width + 6) + "px";
+      ring.style.height = Math.round(r.height + 6) + "px";
+    });
+  }
+
+  function scheduleMarkRings() {
+    if (!markFrame) markFrame = requestAnimationFrame(placeMarkRings);
+  }
+  window.addEventListener("scroll", () => hasMarks() && scheduleMarkRings(), true);
+  window.addEventListener("resize", () => hasMarks() && scheduleMarkRings());
+
+  // Den Klick nach einer ⌥-Geste schlucken, sonst lädt Chrome den Link herunter
+  function swallowNextClick() {
+    const stop = (c) => {
+      c.preventDefault();
+      c.stopImmediatePropagation();
+    };
+    window.addEventListener("click", stop, { capture: true, once: true });
+    setTimeout(() => window.removeEventListener("click", stop, true), 600);
+  }
+
+  let metaMark = null; // { x, y } während einer ⌥-Markierung
+
+  // Seiten, die schon bei pointerdown/pointerup weiterspringen (Pinterest u. a.),
+  // sehen ⌥-Klicks gar nicht erst. Nur stopPropagation: Archivers eigene
+  // Listener am window laufen weiter, die Textauswahl bleibt möglich.
+  const OWN_FIELDS = "input, textarea, select, [contenteditable=''], [contenteditable='true'], archiver-overlay";
+  for (const type of ["pointerdown", "pointerup", "mouseup"]) {
+    window.addEventListener(
+      type,
+      (e) => {
+        if (!e.isTrusted || !e.altKey || e.button !== 0 || manualOpen || gone()) return;
+        if (e.target instanceof Element && e.target.closest(OWN_FIELDS)) return;
+        e.stopPropagation();
+      },
+      true
+    );
+  }
+  window.addEventListener(
+    "mousedown",
+    (e) => {
+      if (!e.isTrusted) return; // nur echte Eingaben, keine von der Seite erzeugten Events
+      if (e.button !== 0 || manualOpen || textDrag || gone()) return;
+      const t = e.target;
+      if (t instanceof Element && t.closest("input, textarea, select, [contenteditable=''], [contenteditable='true'], archiver-overlay")) return;
+      if (!e.altKey) {
+        // Klick daneben hebt alle Stücke auf. Nicht auf einem Stück und nicht auf
+        // der laufenden Markierung: von dort zieht das Ziehen unten alle Stücke mit.
+        const onLive = !!selectedText() && insideSelection(e.clientX, e.clientY);
+        if (hasMarks() && !onLive && !insideMarks(e.clientX, e.clientY)) clearMarks();
+        return;
+      }
+      // ⌥-Klick gehört der Markierung: Die Seite bekommt ihn nicht, ein Link
+      // führt nicht weiter und Chrome lädt ihn nicht herunter (3.29.3)
+      e.stopPropagation();
+      swallowNextClick();
+      keepLiveSelection();
+      const img = imageUnder(e.clientX, e.clientY);
+      if (img) {
+        // ⌥-Klick auf ein Bild: dazunehmen oder wieder herausnehmen
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        const i = marks.findIndex((m) => m.img === img);
+        if (i === -1) marks.push({ img });
+        else marks.splice(i, 1);
+        window.getSelection().removeAllRanges();
+        swallowNextClick();
+      } else metaMark = { x: e.clientX, y: e.clientY };
+      paintMarks();
+    },
+    true
+  );
+  window.addEventListener(
+    "mouseup",
+    (e) => {
+      if (!e.isTrusted || !metaMark) return;
+      const moved = Math.hypot(e.clientX - metaMark.x, e.clientY - metaMark.y) > TEXT_DRAG_THRESHOLD;
+      metaMark = null;
+      if (moved && selectedText()) swallowNextClick();
+    },
+    true
+  );
+  window.addEventListener(
+    "keydown",
+    (e) => {
+      if (e.isTrusted && e.key === "Escape" && hasMarks() && !textDrag) clearMarks();
+    },
+    true
+  );
 
   // ---- Markierten Text ziehen ----
   // Manche Seiten lassen eine Markierung nicht nativ ziehen (ein neuer Klick
@@ -968,18 +1224,20 @@
 
   // Erst nach dem Loslassen der Maus einblenden, nicht während des Markierens
   let selecting = false;
-  document.addEventListener("mousedown", (e) => {
+  window.addEventListener("mousedown", (e) => {
+    if (!e.isTrusted) return; // nur echte Eingaben, keine von der Seite erzeugten Events
     if (e.button === 0 && spotRect && insideBlock(e.clientX, e.clientY)) return; // Ziehen des Blocks
     selecting = true;
     hideSpotlight();
-    // Neue Markierung beginnt: neue Farbe, sofort sichtbar
-    if (e.button === 0) {
+    // Neue Markierung beginnt: neue Farbe, sofort sichtbar. Mit ⌘ oder auf
+    // einem gemerkten Stück bleibt die Farbe, alle Stücke werden eine Karte.
+    if (e.button === 0 && !e.altKey && !(hasMarks() && insideMarks(e.clientX, e.clientY))) {
       newTone();
       showTone();
     }
   }, true);
   showTone();
-  document.addEventListener("mouseup", () => {
+  window.addEventListener("mouseup", () => {
     selecting = false;
     setTimeout(scheduleSpotlight, 0);
   }, true);
@@ -1008,25 +1266,27 @@
   function endTextDrag() {
     if (!textDrag) return;
     if (textDrag.ghost) textDrag.ghost.remove();
-    document.removeEventListener("mousemove", onTextDragMove, true);
-    document.removeEventListener("mouseup", onTextDragUp, true);
-    document.removeEventListener("keydown", onTextDragKey, true);
+    window.removeEventListener("mousemove", onTextDragMove, true);
+    window.removeEventListener("mouseup", onTextDragUp, true);
+    window.removeEventListener("keydown", onTextDragKey, true);
     if (textDrag.moving) removeZones();
     textDrag = null;
     scheduleSpotlight();
   }
 
   function onTextDragMove(e) {
+    if (!e.isTrusted) return; // nur echte Eingaben, keine von der Seite erzeugten Events
     const d = textDrag;
     if (!d.moving) {
       if (Math.hypot(e.clientX - d.x, e.clientY - d.y) < TEXT_DRAG_THRESHOLD) return;
       d.moving = true;
       dragCounter = 1;
+      loadDragLibs();
       showZones();
       ensureOverlay().then(() => {
         if (textDrag !== d) return;
         // in der Überlagerung, damit die Karte über den Zonen liegt
-        d.ghost = cardGhost(d.text);
+        d.ghost = d.images.length ? imageGhost(d.images[0], d.text) : cardGhost(d.text);
         rootEl.appendChild(d.ghost);
         moveGhost(d, d.lastX ?? e.clientX, d.lastY ?? e.clientY);
       });
@@ -1035,8 +1295,7 @@
     d.lastX = e.clientX;
     d.lastY = e.clientY;
     moveGhost(d, e.clientX, e.clientY);
-    const active = getZoneIndex(e.clientX, e.clientY);
-    zoneEls.forEach((el, i) => el.classList.toggle("active", i === active));
+    trackZones(e.clientX, e.clientY);
   }
 
   // Am Zeiger hängt schon die spätere Textkarte: Farbe der Markierung,
@@ -1053,6 +1312,17 @@
     return g;
   }
 
+  // Bild mit Bildtext: am Zeiger das Bild, darunter der Anfang des Textes
+  function imageGhost(img, text) {
+    const g = UI.el("div", "text-ghost card");
+    const pic = document.createElement("img");
+    pic.src = img.currentSrc || img.src;
+    pic.style.cssText = "display:block;width:100%;max-height:180px;object-fit:cover;margin-bottom:8px";
+    g.appendChild(pic);
+    if (text) g.appendChild(UI.el("div", "text-ghost-text", text.length > 120 ? text.slice(0, 120).trim() + " …" : text));
+    return g;
+  }
+
   function moveGhost(d, x, y) {
     if (!d.ghost) return;
     // am rechten und unteren Rand auf die andere Seite des Zeigers
@@ -1064,10 +1334,12 @@
   }
 
   function onTextDragUp(e) {
+    if (!e.isTrusted) return; // nur echte Eingaben, keine von der Seite erzeugten Events
     const d = textDrag;
     if (!d.moving) {
-      // nur geklickt: wie gewohnt Markierung aufheben
+      // nur geklickt: wie gewohnt Markierung aufheben, auch die gemerkten Stücke
       window.getSelection().removeAllRanges();
+      clearMarks();
     } else {
       e.preventDefault();
       e.stopPropagation();
@@ -1075,39 +1347,52 @@
       if (idx !== -1) {
         const name = barZones[idx];
         landZones(idx);
-        const source = currentPageSource();
-        saveCard(textCard(d.text, source), isRootZoneName(name) ? null : name, { ...source, quote: d.text });
+        const folder = isRootZoneName(name) ? null : name;
+        if (d.images.length) saveSelectedImages(d.images, folder, d.caption);
+        else {
+          const source = currentPageSource();
+          saveCard(textCard(d.text, source), folder, { ...source, quote: d.text });
+        }
+        clearMarks();
+        window.getSelection().removeAllRanges();
       }
     }
     endTextDrag();
   }
 
   function onTextDragKey(e) {
+    if (!e.isTrusted) return; // nur echte Eingaben, keine von der Seite erzeugten Events
     if (e.key !== "Escape") return;
     e.preventDefault();
     endTextDrag();
   }
 
-  document.addEventListener(
+  window.addEventListener(
     "mousedown",
     (e) => {
-      if (e.button !== 0 || manualOpen || textDrag) return;
+      if (!e.isTrusted) return; // nur echte Eingaben, keine von der Seite erzeugten Events
+      if (e.button !== 0 || e.altKey || manualOpen || textDrag || gone()) return;
       const text = selectedText();
-      if (!text || !insideSelection(e.clientX, e.clientY)) return;
+      const onLive = !!text && insideSelection(e.clientX, e.clientY);
+      if (!onLive && !(hasMarks() && insideMarks(e.clientX, e.clientY))) return;
       // Kein neues Markieren und kein natives Ziehen: Archiver zieht selbst.
       e.preventDefault();
-      textDrag = { x: e.clientX, y: e.clientY, text, moving: false, ghost: null, rect: spotRect ? { ...spotRect } : null };
-      document.addEventListener("mousemove", onTextDragMove, true);
-      document.addEventListener("mouseup", onTextDragUp, true);
-      document.addEventListener("keydown", onTextDragKey, true);
+      e.stopImmediatePropagation();
+      const p = hasMarks() ? collectPieces() : { text, caption: captionNear(), images: selectedImages() };
+      textDrag = { x: e.clientX, y: e.clientY, text: p.text, caption: p.caption, images: p.images, moving: false, ghost: null, rect: spotRect ? { ...spotRect } : null };
+      window.addEventListener("mousemove", onTextDragMove, true);
+      window.addEventListener("mouseup", onTextDragUp, true);
+      window.addEventListener("keydown", onTextDragKey, true);
     },
     true
   );
 
-  document.addEventListener(
+  window.addEventListener(
     "dragstart",
     (e) => {
+      if (!e.isTrusted) return; // nur echte Eingaben, keine von der Seite erzeugten Events
       fallbackImageUrl = findBestImageUrl(e.target);
+      dragCaption = captionNear();
       debugLog("dragstart, target:", e.target, "erkannte Quelle:", fallbackImageUrl);
     },
     true
@@ -1138,11 +1423,34 @@
     return null;
   }
 
+  function bigControl(el) {
+    const r = el.getBoundingClientRect();
+    return r.width >= 160 && r.height >= 160;
+  }
+
+  const SLIDER_ROLES = "[role='slider'], [role='scrollbar'], [role='progressbar'], [role='spinbutton']";
+  const CONTROL_ROLES =
+    "a[href], label, summary, [role='button'], [role='link'], [role='menuitem'], [role='tab'], [role='checkbox'], [role='switch'], [role='option']";
+
   function armHiddenDrag(e) {
+    if (!e.isTrusted) return; // nur echte Eingaben, keine von der Seite erzeugten Events
     clearHiddenDrag();
-    if (e.button !== 0 || manualOpen || textDrag) return;
+    if (e.button !== 0 || e.altKey || manualOpen || textDrag || gone()) return;
+    if (hasMarks() && insideMarks(e.clientX, e.clientY)) return; // zieht alle Stücke (Mehrfachmarkierung)
     const t = e.target;
-    if (!(t instanceof Element) || t.closest("input, textarea, select, button, [contenteditable=''], [contenteditable='true']")) return;
+    if (!(t instanceof Element)) return;
+    const ctl = t.closest("input, textarea, select, button, [contenteditable=''], [contenteditable='true']");
+    // Instagram-Feed: über dem Video liegt ein großer Knopf („Ton stummschalten“).
+    // Den wie eine Fläche behandeln, kleine Bedienknöpfe bleiben Knöpfe.
+    if (ctl && !(IG && ctl.tagName === "BUTTON" && bigControl(ctl))) return;
+    // Regler und Bedienelemente der Seite bleiben bedienbar (3.29.5): Lautstärke,
+    // Zeitleiste, Knöpfe. Links und Knöpfe ohne <button> ebenso, außer auf
+    // Instagram, wo ein Link über dem Video liegt.
+    if (t.closest(SLIDER_ROLES)) return;
+    if (!IG && t.closest(CONTROL_ROLES)) return;
+    // Kleine Flächen (Reglerknopf, Symbol) sind keine Hülle über einem Bild
+    const tr = t.getBoundingClientRect();
+    if (tr.width < 80 || tr.height < 80) return;
     // Echt ziehbare Bilder und Links laufen wie bisher
     if (t.closest("[draggable='true']") || (t.tagName === "IMG" && t.getAttribute("draggable") !== "false")) return;
     if (selectedText() && insideSelection(e.clientX, e.clientY)) return;
@@ -1160,12 +1468,13 @@
   window.addEventListener(
     "mousedown",
     (e) => {
+      if (!e.isTrusted) return; // nur echte Eingaben, keine von der Seite erzeugten Events
       if (hiddenDrag && hiddenDrag.el === e.target) e.stopImmediatePropagation();
     },
     true
   );
-  document.addEventListener("mouseup", () => setTimeout(clearHiddenDrag, 0), true);
-  document.addEventListener(
+  window.addEventListener("mouseup", () => setTimeout(clearHiddenDrag, 0), true);
+  window.addEventListener(
     "dragend",
     () =>
       setTimeout(() => {
@@ -1175,9 +1484,10 @@
     true
   );
 
-  document.addEventListener(
+  window.addEventListener(
     "dragstart",
     (e) => {
+      if (!e.isTrusted) return; // nur echte Eingaben, keine von der Seite erzeugten Events
       dragSource = e.target instanceof Element ? e.target : null;
       if (!hiddenDrag || !e.dataTransfer || !(e.target === hiddenDrag.el || hiddenDrag.el.contains(e.target))) return;
       e.dataTransfer.effectAllowed = "copy";
@@ -1185,6 +1495,14 @@
         fallbackImageUrl = null;
         e.dataTransfer.setData("application/x-archiver-video", "1");
         e.dataTransfer.setData("text/plain", location.href);
+        // Vorschau beim Ziehen: das sichtbare Videobild statt der grauen Fläche
+        const frame = videoFrame(hiddenDrag.video);
+        if (frame) {
+          frame.style.cssText += "position:fixed;left:-10000px;top:0;pointer-events:none";
+          document.documentElement.appendChild(frame);
+          e.dataTransfer.setDragImage(frame, frame.width / 2, frame.height / 2);
+          setTimeout(() => frame.remove(), 0);
+        }
         return;
       }
       const url = resolveUrl(hiddenDrag.url);
@@ -1222,13 +1540,84 @@
     setTimeout(() => canvas.remove(), 0);
   }
 
+  // Ziehbild für Bild und Video (3.28.0): das Motiv im eigenen Seitenverhältnis,
+  // ohne Rundung, höchstens DRAG_PX an der langen Seite (wie cappedDragImage).
+  // Video: das gerade sichtbare Bild, sonst das Poster.
+  const DRAG_PX = 220;
+  const GHOST_CSS =
+    "position:fixed;left:0;top:0;z-index:2147483647;pointer-events:none;border-radius:0;display:block;" +
+    "box-shadow:0 12px 32px rgba(0,0,0,.4);opacity:.92;";
+
+  function fitDrag(w, h) {
+    const scale = Math.min(1, DRAG_PX / Math.max(w, h, 1));
+    return [Math.max(1, Math.round(w * scale)), Math.max(1, Math.round(h * scale))];
+  }
+
+  function videoFrame(video) {
+    if (!video || video.readyState < 2 || !video.videoWidth) return null;
+    const [w, h] = fitDrag(video.videoWidth, video.videoHeight);
+    const canvas = document.createElement("canvas");
+    canvas.width = w;
+    canvas.height = h;
+    canvas.style.cssText = `width:${w}px;height:${h}px;`;
+    try {
+      // Fremde Videos lassen die Fläche „tainted“; zeichnen und zeigen geht trotzdem
+      canvas.getContext("2d").drawImage(video, 0, 0, w, h);
+    } catch {
+      return null;
+    }
+    return canvas;
+  }
+
+  function mediaGhost(d) {
+    const frame = d.video ? videoFrame(d.video) : null;
+    if (frame) {
+      frame.style.cssText += GHOST_CSS;
+      return frame;
+    }
+    const src = d.url || (d.video && d.video.poster);
+    const r = (d.video || d.el).getBoundingClientRect();
+    const [w, h] = fitDrag(r.width || DRAG_PX, r.height || DRAG_PX);
+    if (src) {
+      const img = document.createElement("img");
+      img.style.cssText = GHOST_CSS + `width:${w}px;height:${h}px;object-fit:cover;background:#222;`;
+      img.onload = () => {
+        const [nw, nh] = fitDrag(img.naturalWidth, img.naturalHeight);
+        img.style.width = nw + "px";
+        img.style.height = nh + "px";
+      };
+      img.src = src;
+      return img;
+    }
+    const box = document.createElement("div");
+    box.style.cssText = GHOST_CSS + `width:${w}px;height:${h}px;background:#222;`;
+    return box;
+  }
+
   // Instagram: eigenes Ziehen mit Zeiger-Ereignissen statt des Browser-Ziehens,
   // das Instagram unterbindet. Erst ab ein paar Pixeln Bewegung, sonst bleibt
   // es ein normaler Klick.
   let mediaDrag = null;
 
+  // Instagram legt im Feed einen Link (mit „Ton stummgeschaltet“) über das
+  // Video. Chrome würde sonst diesen Link ziehen statt des Videos: solange
+  // Archiver zieht, sind Link und gedrücktes Element nicht nativ ziehbar.
+  function blockNativeDrag(el) {
+    const els = [el, el.closest && el.closest("a[href]")].filter((n, i, a) => n && a.indexOf(n) === i);
+    return els.map((n) => ({ n, prev: n.getAttribute("draggable") })).map((x) => (x.n.setAttribute("draggable", "false"), x));
+  }
+
+  function restoreNativeDrag(list) {
+    for (const { n, prev } of list || []) prev == null ? n.removeAttribute("draggable") : n.setAttribute("draggable", prev);
+  }
+
+  function stopNativeDrag(e) {
+    if (mediaDrag) e.preventDefault();
+  }
+
   function startMediaDrag(e, el, url, video) {
-    mediaDrag = { x: e.clientX, y: e.clientY, el, url, video, moving: false, ghost: null };
+    mediaDrag = { x: e.clientX, y: e.clientY, el, url, video, moving: false, ghost: null, blocked: blockNativeDrag(el) };
+    window.addEventListener("dragstart", stopNativeDrag, true);
     window.addEventListener("pointermove", onMediaDragMove, true);
     window.addEventListener("pointerup", onMediaDragUp, true);
     window.addEventListener("keydown", onMediaDragKey, true);
@@ -1237,6 +1626,8 @@
   function endMediaDrag() {
     if (!mediaDrag) return;
     if (mediaDrag.ghost) mediaDrag.ghost.remove();
+    restoreNativeDrag(mediaDrag.blocked);
+    window.removeEventListener("dragstart", stopNativeDrag, true);
     window.removeEventListener("pointermove", onMediaDragMove, true);
     window.removeEventListener("pointerup", onMediaDragUp, true);
     window.removeEventListener("keydown", onMediaDragKey, true);
@@ -1245,32 +1636,30 @@
   }
 
   function onMediaDragMove(e) {
+    if (!e.isTrusted) return; // nur echte Eingaben, keine von der Seite erzeugten Events
     const d = mediaDrag;
     if (!d.moving) {
       if (Math.hypot(e.clientX - d.x, e.clientY - d.y) < 6) return;
       d.moving = true;
       dragCounter = 1;
+      loadDragLibs();
       showZones();
-      const g = document.createElement("div");
-      const thumb = d.url || d.video.poster;
-      g.style.cssText =
-        "position:fixed;left:0;top:0;z-index:2147483647;width:120px;height:120px;border-radius:10px;pointer-events:none;" +
-        "background:#222 center/cover no-repeat;box-shadow:0 12px 32px rgba(0,0,0,.4);opacity:.92;color:#fff;" +
-        "font:600 12px/120px -apple-system,sans-serif;text-align:center";
-      if (thumb) g.style.backgroundImage = `url("${String(thumb).replace(/"/g, "%22")}")`;
-      else g.textContent = "▶ Video";
-      document.documentElement.appendChild(g);
-      d.ghost = g;
+      d.ghost = mediaGhost(d);
+      document.documentElement.appendChild(d.ghost);
+      // in die Überlagerung, damit das Bild über den Zonen liegt (wie beim Text)
+      ensureOverlay().then(() => {
+        if (mediaDrag === d && d.ghost) rootEl.appendChild(d.ghost);
+      });
       window.getSelection && window.getSelection().removeAllRanges();
     }
     e.preventDefault();
     e.stopImmediatePropagation();
     d.ghost.style.transform = `translate(${e.clientX + 12}px, ${e.clientY + 12}px)`;
-    const active = getZoneIndex(e.clientX, e.clientY);
-    zoneEls.forEach((z, i) => z.classList.toggle("active", i === active));
+    trackZones(e.clientX, e.clientY);
   }
 
   function onMediaDragUp(e) {
+    if (!e.isTrusted) return; // nur echte Eingaben, keine von der Seite erzeugten Events
     const d = mediaDrag;
     if (!d.moving) return endMediaDrag();
     e.preventDefault();
@@ -1293,16 +1682,16 @@
   }
 
   function onMediaDragKey(e) {
+    if (!e.isTrusted) return; // nur echte Eingaben, keine von der Seite erzeugten Events
     if (e.key !== "Escape") return;
     e.preventDefault();
     endMediaDrag();
   }
 
   // Video abgelegt: hat das Video eine echte Dateiadresse, wird die Datei
-  // gesichert. Instagram streamt (blob:): dort fragt die Extension wie gängige
-  // Downloader die Beitragsdaten bei Instagram ab (mit der Anmeldung im
-  // Browser) und lädt die fertige MP4 mit Ton im Hintergrund. Klappt das
-  // nicht, wird das aktuelle Bild des Videos fotografiert.
+  // gesichert. Instagram streamt (blob:): dort nimmt die Extension die MP4
+  // mit Ton aus den Beitragsdaten, die Instagram selbst geladen hat (siehe
+  // dropInstagram). Klappt das nicht, wird das aktuelle Bild fotografiert.
   async function dropHiddenVideo(folder) {
     const video = hiddenDrag.video;
     const src = video.currentSrc || video.src || "";
@@ -1321,12 +1710,108 @@
   }
 
   // ---- Instagram: Bilder und Videos in Originalgröße aus den Beitragsdaten ----
-  // Wie gängige Downloader: Beitragscode → Medien-ID → /api/v1/media/ID/info/
-  // (mit der Anmeldung im Browser). Bei Karussells wird das gezogene Bild über
-  // den Dateinamen, ein Video über seine Länge zugeordnet.
+  // Archiver fragt Instagram nicht selbst ab. ig-page.js liest mit, was
+  // Instagram ohnehin in den Browser lädt (Feed, Beitrag, Reels, Stories),
+  // und meldet die Medien hierher. Bei Karussells wird das gezogene Bild über
+  // den Dateinamen, ein Video über seine Länge zugeordnet. Fehlt ein Beitrag,
+  // gilt das angezeigte Bild in der größten Variante der Seite (srcset).
   const IG = /(^|\.)instagram\.com$/.test(location.hostname);
   let dragSource = null;
-  const igCache = new Map();
+
+  // ---- Pinterest: Ziehen aus der Übersicht (3.28.4) ----
+  // Jeder Pin ist ein Link um das Bild. Chrome zog darum den Link (Adresse am
+  // Mauszeiger), und Pinterest hielt das Ziehen für einen Upload und öffnete
+  // „Bild zur Suche hochladen“. Jetzt ist es ein Bild-Drag, und solange ein Drag
+  // aus der Seite selbst läuft, bekommt Pinterest die Drag-Ereignisse nicht.
+  // Dateien aus dem Finder (kein dragSource) erreichen die Seite wie bisher.
+  const PIN = /(^|\.)pinterest\.[a-z.]+$/.test(location.hostname);
+  if (PIN) {
+    window.addEventListener(
+      "dragstart",
+      (e) => {
+        if (!e.isTrusted || !e.dataTransfer || hiddenDrag || !(e.target instanceof Element)) return;
+        const img = e.target.tagName === "IMG" ? e.target : e.target.querySelector && e.target.querySelector("img");
+        if (!img || !e.target.closest("a[href]")) return;
+        const url = resolveUrl(fallbackImageUrl || findBestImageUrl(img));
+        if (!url) return;
+        e.dataTransfer.clearData();
+        e.dataTransfer.effectAllowed = "copy";
+        e.dataTransfer.setData("text/uri-list", url);
+        e.dataTransfer.setData("text/plain", url);
+        e.dataTransfer.setData("text/html", `<img src="${url.replace(/"/g, "&quot;")}">`);
+        cappedDragImage(e, img);
+      },
+      true
+    );
+    for (const type of ["dragenter", "dragover", "dragleave", "drop"]) {
+      window.addEventListener(
+        type,
+        (e) => {
+          if (e.isTrusted && dragSource && !manualOpen) e.stopPropagation(); // offenes Overlay: Karten nehmen selbst an
+        },
+        true
+      );
+    }
+  }
+  const igMedia = new Map();
+  const IG_MEDIA_MAX = 3000;
+
+  // Nur Adressen von Instagrams Bildservern übernehmen; die Seite selbst
+  // könnte das Ereignis sonst mit fremden Adressen füttern.
+  function igCdnUrl(u) {
+    try {
+      const url = new URL(u);
+      return url.protocol === "https:" && /(^|\.)(cdninstagram\.com|fbcdn\.net)$/.test(url.hostname);
+    } catch {
+      return false;
+    }
+  }
+
+  function igClean(m) {
+    if (!m || typeof m !== "object") return null;
+    const urls = (list) => (Array.isArray(list) ? list.filter((v) => v && igCdnUrl(v.url)).map((v) => ({ url: v.url })) : []);
+    const out = {
+      code: typeof m.code === "string" ? m.code : null,
+      pk: typeof m.pk === "string" ? m.pk : null,
+      product_type: typeof m.product_type === "string" ? m.product_type : null,
+      video_duration: typeof m.video_duration === "number" ? m.video_duration : null,
+      video_versions: urls(m.video_versions),
+      image_versions2: { candidates: urls(m.image_versions2 && m.image_versions2.candidates) },
+      user: m.user && typeof m.user.username === "string" ? { username: m.user.username } : null,
+      carousel_media: Array.isArray(m.carousel_media) ? m.carousel_media.map(igClean).filter(Boolean) : [],
+    };
+    if (!out.video_versions.length) out.video_versions = null;
+    return out;
+  }
+
+  function igRemember(key, item) {
+    if (!key) return;
+    const prev = igMedia.get(key);
+    // Ein vollständigerer Eintrag (mit Video oder Karussell) gewinnt
+    if (prev && !item.video_versions && !item.carousel_media.length && (prev.video_versions || prev.carousel_media.length)) return;
+    igMedia.delete(key);
+    igMedia.set(key, item);
+    if (igMedia.size > IG_MEDIA_MAX) igMedia.delete(igMedia.keys().next().value);
+  }
+
+  if (IG) {
+    document.addEventListener("archiver:ig-media", (e) => {
+      let list;
+      try {
+        list = JSON.parse(e.detail);
+      } catch {
+        return;
+      }
+      if (!Array.isArray(list)) return;
+      for (const raw of list) {
+        const item = igClean(raw);
+        if (!item) continue;
+        igRemember(item.code, item);
+        igRemember(item.pk, item);
+      }
+    });
+    document.dispatchEvent(new CustomEvent("archiver:ig-hello"));
+  }
 
   function postCodeNear(el) {
     const loc = location.pathname.match(/\/(?:p|reel|reels|tv)\/([\w-]+)/);
@@ -1347,20 +1832,23 @@
     return id.toString();
   }
 
-  async function igItem(code) {
-    if (!igCache.has(code)) {
-      igCache.set(
-        code,
-        fetch(`/api/v1/media/${mediaIdOf(code)}/info/`, {
-          credentials: "include",
-          headers: { "X-IG-App-ID": "936619743392459", "X-Requested-With": "XMLHttpRequest" },
-        })
-          .then((r) => (r.ok ? r.json() : null))
-          .then((j) => (j && j.items && j.items[0]) || null)
-          .catch(() => null)
-      );
+  // Story: /stories/<name>/<Medien-ID>/ trägt die ID schon in der Adresse
+  function storyOfPage() {
+    const m = location.pathname.match(/\/stories\/([\w.]+)\/(\d+)/);
+    return m && m[1] !== "highlights" ? { user: m[1], id: m[2] } : null;
+  }
+
+  const igItem = (code) => igMedia.get(code) || igMedia.get(mediaIdOf(code)) || null;
+
+  // Kontoname aus dem Kopf des Beitrags, falls Instagram den Beitrag nicht mitgeliefert hat
+  function igUserNear(el) {
+    const art = el && el.closest ? el.closest("article") : null;
+    if (!art) return null;
+    for (const a of art.querySelectorAll("header a[href], a[href]")) {
+      const m = (a.getAttribute("href") || "").match(/^\/([\w.]+)\/$/);
+      if (m && !["explore", "reels", "stories", "p", "reel"].includes(m[1])) return m[1];
     }
-    return igCache.get(code);
+    return null;
   }
 
   const fileNameOf = (url) => {
@@ -1379,7 +1867,10 @@
       const vids = list.filter(vid);
       const match = vids.find((m) => m.video_duration && isFinite(video.duration) && Math.abs(m.video_duration - video.duration) < 0.6);
       const m = match || (vids.length === 1 ? vids[0] : null);
-      return m ? { url: vid(m), ext: "mp4" } : null;
+      if (m) return { url: vid(m), ext: "mp4" };
+      // Foto-Story mit einem vorgeladenen Video daneben: das Foto nehmen
+      if (vids.length || list.length !== 1 || !img(list[0])) return null;
+      return { url: img(list[0]), ext: "jpg" };
     }
     const name = fileNameOf(imageUrl || "");
     const m =
@@ -1389,9 +1880,9 @@
   }
 
   // Quelle ist der Beitrag selbst, nicht der Feed, auf dem gezogen wurde.
-  function igSource(code, item) {
+  function igSource(code, item, el) {
     const reel = item ? item.product_type === "clips" : /\/reels?\//.test(location.pathname);
-    const user = item && item.user && item.user.username;
+    const user = (item && item.user && item.user.username) || igUserNear(el);
     return {
       pageUrl: `https://www.instagram.com/${reel ? "reel" : "p"}/${code}/`,
       pageTitle: user ? `@${user} · Instagram` : "Instagram",
@@ -1402,12 +1893,18 @@
     clearHiddenDrag();
     removeZones();
     fallbackImageUrl = null;
-    const code = el ? postCodeNear(el) : null;
-    const item = code ? await igItem(code) : null;
-    const source = code ? igSource(code, item) : currentPageSource();
+    // Stories: Original aus den mitgelesenen Mediendaten statt eines Standbilds
+    const story = storyOfPage();
+    const code = story ? null : el ? postCodeNear(el) : null;
+    const item = story ? igMedia.get(story.id) || null : code ? igItem(code) : null;
+    const source = story
+      ? { pageUrl: `https://www.instagram.com/stories/${story.user}/${story.id}/`, pageTitle: `@${story.user} · Instagram` }
+      : code
+        ? igSource(code, item, el)
+        : currentPageSource();
     const hit = item ? igPick(item, video, imageUrl) : null;
     if (hit) {
-      sendSave({ type: "download-image", url: hit.url, suggestedName: `instagram-${code}-${fileNameOf(hit.url).slice(0, 40)}`.replace(/\.(jpe?g|mp4|webp|heic)$/i, "") + "." + hit.ext, folder, toDownloads: shiftDrop, ...source });
+      sendSave({ type: "download-image", url: hit.url, suggestedName: `instagram-${story ? story.id : code}-${fileNameOf(hit.url).slice(0, 40)}`.replace(/\.(jpe?g|mp4|webp|heic)$/i, "") + "." + hit.ext, folder, toDownloads: shiftDrop, ...source });
     } else if (video) {
       photographVideo(video, folder);
     } else if (imageUrl) {
@@ -1444,35 +1941,55 @@
   // Gibt es in der App mehrere Bibliotheken, wechselt ⇧ stattdessen die Bibliothek.
   let shiftDrop = false;
 
-  // ---- ⇧ beim Ziehen: Bibliothek wechseln ----
-  // Jeder Druck auf ⇧ (gelesen aus dragover, Tastenereignisse gibt es während
-  // eines Drags nicht) springt zur nächsten Bibliothek und zeigt ihre Active
-  // Zones. Die Bibliotheks-Leiste ist nur sichtbar, solange ⇧ gedrückt ist.
+  // ---- Bibliothek beim Ziehen wechseln (3.29.0) ----
+  // Gibt es mehrere Bibliotheken, steht beim Ziehen eine Pille über dem
+  // Streifen. Einen Namen anfahren und kurz verweilen wechselt die Bibliothek,
+  // die Zonen zeigen dann ihre Active Zones. ⇧ springt weiter zur nächsten
+  // (gelesen aus dragover, Tastenereignisse gibt es während eines Drags nicht).
+  const LIB_DWELL_MS = 400;
   let dragLibs = []; // [{ name, path, active }]
   let libIdx = -1;
   let shiftHeld = false;
-  let dropLibrary = null; // Pfad der per ⇧ gewählten Bibliothek, null = aktive
+  let dropLibrary = null; // Pfad der gewählten Bibliothek, null = aktive
   let libBarEl = null;
+  let libTarget = -1; // angefahrener Name
+  let libTimer = null;
 
+  // Nach einem Update der Extension ist dieses Skript von ihr abgeschnitten:
+  // Speichern geht dann ins Leere. Statt still nichts zu tun, sagen wir es (3.24.0).
   function sendSave(message) {
-    return chrome.runtime.sendMessage(dropLibrary ? { ...message, library: dropLibrary } : message);
+    const lost = () => {
+      const own = t("extensionReloaded");
+      const text = own !== "extensionReloaded" ? own : /^de/i.test(navigator.language) ? "Archiver wurde aktualisiert. Bitte lade die Seite neu." : "Archiver was updated. Please reload the page.";
+      if (rootEl) UI.showToast(rootEl, text, false);
+    };
+    try {
+      return chrome.runtime.sendMessage(dropLibrary ? { ...message, library: dropLibrary } : message).catch(lost);
+    } catch {
+      lost();
+      return Promise.resolve();
+    }
   }
 
   function loadDragLibs() {
     dropLibrary = null;
     libIdx = -1;
     shiftHeld = false;
-    chrome.runtime.sendMessage({ type: "library-zones", library: null }, (r) => {
-      if (chrome.runtime.lastError || !r || !r.app) return;
-      dragLibs = Array.isArray(r.libraries) ? r.libraries : [];
-      libIdx = Math.max(0, dragLibs.findIndex((l) => l.active));
-    });
+    setLibTarget(-1);
+    try {
+      chrome.runtime.sendMessage({ type: "library-zones", library: null }, (r) => {
+        if (chrome.runtime.lastError || !r || !r.app) return;
+        dragLibs = Array.isArray(r.libraries) ? r.libraries : [];
+        libIdx = Math.max(0, dragLibs.findIndex((l) => l.active));
+        if (zonesBarEl) showLibBar();
+      });
+    } catch {} // verwaistes Skript nach einem Update: ohne Bibliotheken weiter
   }
 
-  function cycleLibrary() {
-    if (dragLibs.length < 2) return;
-    libIdx = (libIdx + 1) % dragLibs.length;
-    const lib = dragLibs[libIdx];
+  function selectLibrary(i) {
+    if (i < 0 || i >= dragLibs.length || i === libIdx) return;
+    libIdx = i;
+    const lib = dragLibs[i];
     dropLibrary = lib.active ? null : lib.path;
     showLibBar();
     chrome.runtime.sendMessage({ type: "library-zones", library: lib.path }, (r) => {
@@ -1482,26 +1999,60 @@
     });
   }
 
+  function cycleLibrary() {
+    if (dragLibs.length < 2) return;
+    setLibTarget(-1);
+    selectLibrary((libIdx + 1) % dragLibs.length);
+  }
+
   function showLibBar() {
-    if (!rootEl) return;
+    if (!rootEl || !zonesBarEl || dragLibs.length < 2) return;
     if (!libBarEl) {
       libBarEl = UI.el("div", "lib-bar");
       rootEl.appendChild(libBarEl);
     }
     libBarEl.replaceChildren(
-      ...dragLibs.map((l, i) => UI.el("span", "lib" + (i === libIdx ? " on" : ""), l.name)),
-      UI.el("span", "lib-key", "⇧")
+      ...dragLibs.map((l, i) => UI.el("span", "lib" + (i === libIdx ? " on" : "") + (i === libTarget ? " target" : ""), l.name))
     );
     libBarEl.hidden = false;
   }
 
-  function hideLibBar() {
-    if (libBarEl) libBarEl.hidden = true;
-  }
-
   function removeLibBar() {
+    setLibTarget(-1);
     if (libBarEl) libBarEl.remove();
     libBarEl = null;
+  }
+
+  // Angefahrener Name: Ring, nach LIB_DWELL_MS Wechsel
+  function setLibTarget(i) {
+    if (i === libTarget) return;
+    libTarget = i;
+    clearTimeout(libTimer);
+    libTimer = null;
+    if (libBarEl) [...libBarEl.children].forEach((el, j) => el.classList.toggle("target", j === i));
+    if (i < 0 || i === libIdx) return;
+    libTimer = setTimeout(() => {
+      libTimer = null;
+      if (libTarget !== i) return;
+      libTarget = -1;
+      selectLibrary(i);
+    }, LIB_DWELL_MS);
+  }
+
+  // Zeiger über der Pille? Liefert true, solange er darauf steht.
+  function trackLibs(x, y) {
+    if (!libBarEl || libBarEl.hidden) return false;
+    const box = libBarEl.getBoundingClientRect();
+    if (x < box.left || x > box.right || y < box.top || y > box.bottom) {
+      setLibTarget(-1);
+      return false;
+    }
+    const i = [...libBarEl.children].findIndex((el) => {
+      const r = el.getBoundingClientRect();
+      return x >= r.left && x <= r.right;
+    });
+    setLibTarget(i === libIdx ? -1 : i);
+    return true;
   }
 
   // Karten behalten, nur Namen tauschen (Leiste bleibt ruhig stehen)
@@ -1518,10 +2069,20 @@
     });
   }
 
-  document.addEventListener(
+  // Dateien von außen (Finder, Schreibtisch) in den Browser gezogen: keine
+  // Zonen, die Seite bekommt das Ablegen selbst (Upload-Felder). Zonen nur,
+  // wenn das Ziehen auf dieser Seite begonnen hat (3.29.5).
+  function foreignDrag(e) {
+    return !dragSource && !hiddenDrag && !!e.dataTransfer && [...e.dataTransfer.types].includes("Files");
+  }
+
+  window.addEventListener(
     "dragenter",
     (e) => {
+      if (!e.isTrusted) return; // nur echte Eingaben, keine von der Seite erzeugten Events
+      if (gone()) return removeZones();
       if (!e.dataTransfer || manualOpen) return; // im offenen Overlay übernehmen die Zonen-Karten
+      if (foreignDrag(e)) return;
       dragCounter++;
       if (dragCounter === 1 && !zonesBarEl) loadDragLibs();
       showZones();
@@ -1529,49 +2090,47 @@
     true
   );
 
-  document.addEventListener(
+  window.addEventListener(
     "dragover",
     (e) => {
-      if (!e.dataTransfer || manualOpen) return;
+      if (!e.isTrusted) return; // nur echte Eingaben, keine von der Seite erzeugten Events
+      if (gone()) return;
+      if (!e.dataTransfer || manualOpen || foreignDrag(e)) return;
       e.preventDefault(); // notwendig, damit "drop" überhaupt feuert
       e.dataTransfer.dropEffect = "copy";
-      // Mehrere Bibliotheken: ⇧ wechselt die Bibliothek, die Leiste zeigt sich nur bei gedrückter Taste
+      // Mehrere Bibliotheken: jeder Druck auf ⇧ springt zur nächsten
       if (dragLibs.length > 1) {
         if (e.shiftKey && !shiftHeld) {
           shiftHeld = true;
           cycleLibrary();
-        } else if (!e.shiftKey && shiftHeld) {
-          shiftHeld = false;
-          hideLibBar();
-        }
+        } else if (!e.shiftKey) shiftHeld = false;
       } else if (zonesBarEl && zonesBarEl.classList.contains("to-downloads") !== e.shiftKey) {
         // Nur eine Bibliothek: mit Shift geht das Bild am Archiv vorbei in den Download-Ordner
         zonesBarEl.classList.toggle("to-downloads", e.shiftKey);
         const hint = t(e.shiftKey ? "dropDownloads" : "dropRelease");
         zoneEls.forEach((el) => (el.querySelector(".zone-hint").textContent = hint));
       }
-      if (zoneEls.length) {
-        const activeIdx = getZoneIndex(e.clientX, e.clientY);
-        zoneEls.forEach((el, i) => el.classList.toggle("active", i === activeIdx));
-      }
+      trackZones(e.clientX, e.clientY);
     },
     true
   );
 
-  document.addEventListener(
+  window.addEventListener(
     "dragleave",
-    () => {
-      if (manualOpen) return;
+    (e) => {
+      if (manualOpen || foreignDrag(e)) return;
       dragCounter--;
       if (dragCounter <= 0) removeZones();
     },
     true
   );
 
-  document.addEventListener(
+  window.addEventListener(
     "drop",
     (e) => {
-      if (manualOpen) return;
+      if (!e.isTrusted) return; // nur echte Eingaben, keine von der Seite erzeugten Events
+      if (gone()) return;
+      if (manualOpen || foreignDrag(e)) return;
       const zoneIdx = getZoneIndex(e.clientX, e.clientY);
       shiftDrop = dragLibs.length > 1 ? false : e.shiftKey;
       removeLibBar();
@@ -1603,6 +2162,18 @@
         e.preventDefault();
         e.stopPropagation();
         dropHiddenVideo(folder);
+        return;
+      }
+
+      // Markierung mit Bild: Bild sichern, Text wird Bildtext
+      const marked = selectedImages();
+      const fromMark = !fallbackImageUrl || marked.some((i) => findBestImageUrl(i) === fallbackImageUrl);
+      if (marked.length && fromMark && e.dataTransfer.getData("text/plain").trim()) {
+        e.preventDefault();
+        e.stopPropagation();
+        saveSelectedImages(marked, folder);
+        removeZones();
+        fallbackImageUrl = null;
         return;
       }
 
@@ -1643,7 +2214,7 @@
           };
           reader.readAsDataURL(result.file);
         } else {
-          sendSave({ type: "download-image", url: result, folder, toDownloads: shiftDrop, ...currentPageSource() });
+          sendSave({ type: "download-image", url: result, folder, toDownloads: shiftDrop, caption: dragCaption, ...currentPageSource() });
         }
       }
       removeZones();
@@ -1652,11 +2223,14 @@
     true
   );
 
-  document.addEventListener(
+  window.addEventListener(
     "dragend",
     () => {
       fallbackImageUrl = null;
     },
     true
   );
+  // Styles vorab holen (nur im Hauptfenster), damit die Leiste schon beim
+  // ersten Ziehen sofort steht und nicht erst nachlädt
+  if (window === window.top) (window.requestIdleCallback || setTimeout)(() => loadStyles().catch(() => {}), { timeout: 2000 });
 })();

@@ -3,6 +3,8 @@
    Navigation unten. Zonen bleiben Ablageziele: Zeilen, Karten, Leiste beim Ziehen. */
 
 :root {
+  /* Grundschrift (0.40.18): Geist; Labor › Schrift kann Melange zurückholen */
+  --sans: "Geist", -apple-system, BlinkMacSystemFont, sans-serif;
   --bg: rgba(12, 12, 12, 0.42);
   --card-bg: rgba(20, 20, 20, 0.28);
   --panel: rgba(24, 24, 24, 0.96);
@@ -44,7 +46,7 @@ body {
   height: 100%;
   background: var(--bg);
   color: var(--text);
-  font: 13px/1.4 -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", sans-serif;
+  font: 13px/1.4 var(--sans);
   -webkit-font-smoothing: antialiased;
   user-select: none;
   -webkit-user-select: none;
@@ -76,7 +78,7 @@ button {
   background: transparent;
   border: 1px solid var(--dash);
   padding: 9px 14px;
-  border-radius: 0;
+  border-radius: var(--r-md); /* folgt Einstellungen › Aussehen › Ecken */
   text-align: left;
 }
 
@@ -111,9 +113,9 @@ button {
 
 .welcome-inner {
   max-width: 520px;
-  outline: 1px dashed var(--dash);
-  outline-offset: -1px;
-  background: var(--card-bg);
+  border-radius: var(--r-lg);
+  background: var(--menu-bg);
+  box-shadow: var(--menu-shadow);
   padding: 44px 40px;
 }
 
@@ -128,7 +130,7 @@ button {
   font-size: 30px;
   line-height: 1.12;
   font-weight: 600;
-  letter-spacing: -0.01em;
+  letter-spacing: 0;
   margin: 18px 0 12px;
 }
 
@@ -464,6 +466,9 @@ button {
   inset: 0;
   z-index: 20;
   background: var(--lightbox-bg);
+  /* 0.30.1: Raster dahinter verschwimmt, kein Text scheint durch */
+  -webkit-backdrop-filter: blur(24px);
+  backdrop-filter: blur(24px);
   display: flex;
   flex-direction: column;
 }
@@ -528,8 +533,14 @@ html.light .lb-bar {
 
 .lb-nav {
   bottom: 22px;
-  /* Feste Breite: springt nicht mit dem Dateinamen, mit Player gleich breit */
-  width: min(600px, calc(100% - 32px));
+  /* Feste Breite: springt nicht mit dem Dateinamen, mit Player gleich breit.
+     0.37.1: 960 statt 600 px, damit lange Dateinamen Platz haben; zu lange
+     kürzt app.js in der Mitte (fitLbName). */
+  width: min(960px, calc(100% - 32px));
+}
+
+.lightbox.info-open .lb-nav {
+  width: min(960px, calc(100% - min(380px, 42vw) - 32px));
 }
 
 .lightbox.info-open .lb-bar {
@@ -723,7 +734,7 @@ html.light .lb-bar {
   margin: 0 4px 22px;
   font-size: 22px;
   line-height: 1.25;
-  letter-spacing: -0.01em;
+  letter-spacing: 0;
   word-break: break-word;
 }
 
@@ -799,10 +810,13 @@ html.light .lb-bar {
 .dialog {
   width: 520px;
   max-width: calc(100% - 40px);
-  background: var(--panel);
-  outline: 1px dashed var(--dash);
-  outline-offset: -1px;
   padding: 22px 24px 20px;
+  border-radius: var(--r-lg);
+  background: var(--menu-bg);
+  box-shadow: var(--menu-shadow);
+  -webkit-backdrop-filter: blur(24px) saturate(1.4);
+  backdrop-filter: blur(24px) saturate(1.4);
+  animation: confirm-in 0.18s cubic-bezier(0.2, 0.7, 0.2, 1);
 }
 
 .dialog h3 {
@@ -812,7 +826,7 @@ html.light .lb-bar {
 
 .dialog section {
   padding: 14px 0;
-  border-top: 1px dashed var(--line);
+  border-top: 1px solid var(--p-rule);
 }
 
 .dialog h4 {
@@ -822,7 +836,7 @@ html.light .lb-bar {
 
 .dialog p {
   margin: 0 0 12px;
-  color: #b9b9be;
+  color: var(--p-dim);
 }
 
 .dialog .row {
@@ -842,19 +856,19 @@ html.light .lb-bar {
   display: flex;
   justify-content: flex-end;
   padding-top: 12px;
-  border-top: 1px dashed var(--line);
+  border-top: 1px solid var(--p-rule);
 }
 
 /* Rückfrage: kompakt, ohne Rahmenlinien */
 .dialog.confirm {
   width: 340px;
   outline: none;
-  border-radius: 14px;
+  border-radius: var(--r-lg);
   padding: 22px 22px 18px;
   background: var(--menu-bg);
   box-shadow: var(--menu-shadow);
-  -webkit-backdrop-filter: blur(24px);
-  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px) saturate(1.4);
+  backdrop-filter: blur(24px) saturate(1.4);
   animation: confirm-in 0.18s cubic-bezier(0.2, 0.7, 0.2, 1);
 }
 
@@ -879,7 +893,7 @@ html.light .lb-bar {
 }
 
 .confirm-foot .btn {
-  border-radius: 999px;
+  border-radius: var(--r-md);
   padding: 7px 16px;
   border-color: rgba(var(--ink-rgb), 0.18);
 }
@@ -905,6 +919,11 @@ html.light .lb-bar {
 
 .modal:has(.confirm) {
   background: rgba(0, 0, 0, 0.35);
+}
+
+html.light .dialog {
+  -webkit-backdrop-filter: blur(28px) saturate(0);
+  backdrop-filter: blur(28px) saturate(0);
 }
 
 /* ---- Toasts ---- */
@@ -1051,10 +1070,10 @@ html.light .lb-bar {
 
 .splash-word,
 .splash-sub {
-  font-family: "Geist", -apple-system, BlinkMacSystemFont, sans-serif;
+  font-family: var(--sans);
   font-size: 1em;
   line-height: 1.2;
-  letter-spacing: -0.01em;
+  letter-spacing: 0;
 }
 
 .splash-word {
@@ -1122,6 +1141,64 @@ html.light .lb-bar {
   opacity: 1;
 }
 
+/* Melange (kimera, lizenziert): Dateien kommen beim Build aus dem privaten
+   Repo, fehlen sie, greift Geist. */
+@font-face {
+  font-family: "KMR Melange Grotesk";
+  src: url("fonts/melange/Melange-100.woff2") format("woff2");
+  font-weight: 100;
+  font-style: normal;
+  font-display: block;
+}
+
+@font-face {
+  font-family: "KMR Melange Grotesk";
+  src: url("fonts/melange/Melange-300.woff2") format("woff2");
+  font-weight: 300;
+  font-style: normal;
+  font-display: block;
+}
+
+@font-face {
+  font-family: "KMR Melange Grotesk";
+  src: url("fonts/melange/Melange-400.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: block;
+}
+
+@font-face {
+  font-family: "KMR Melange Grotesk";
+  src: url("fonts/melange/Melange-400i.woff2") format("woff2");
+  font-weight: 400;
+  font-style: italic;
+  font-display: block;
+}
+
+@font-face {
+  font-family: "KMR Melange Grotesk";
+  src: url("fonts/melange/Melange-500.woff2") format("woff2");
+  font-weight: 500;
+  font-style: normal;
+  font-display: block;
+}
+
+@font-face {
+  font-family: "KMR Melange Grotesk";
+  src: url("fonts/melange/Melange-600.woff2") format("woff2");
+  font-weight: 600;
+  font-style: normal;
+  font-display: block;
+}
+
+@font-face {
+  font-family: "KMR Melange Grotesk";
+  src: url("fonts/melange/Melange-700.woff2") format("woff2");
+  font-weight: 700;
+  font-style: normal;
+  font-display: block;
+}
+
 @font-face {
   font-family: "Geist";
   src: url("fonts/Geist-Variable.woff2") format("woff2");
@@ -1157,7 +1234,7 @@ html:not(.mac) {
 
 html,
 body {
-  font-family: "Geist", -apple-system, BlinkMacSystemFont, sans-serif;
+  font-family: var(--sans);
   font-size: 13px;
   font-feature-settings: "ss01" 0;
 }
@@ -1196,7 +1273,7 @@ body {
   font-size: 24px;
   line-height: 1.18;
   font-weight: 500;
-  letter-spacing: -0.02em;
+  letter-spacing: 0;
 }
 
 .p-head-title.zone-card-name {
@@ -1338,6 +1415,47 @@ body {
   min-width: 0;
 }
 
+/* 0.39.1 Filter C: „Mehr“ als Tabelle unter der ersten Zeile, gesetzte Filter als Pillen */
+.p-filter-table {
+  display: grid;
+  gap: 8px;
+  padding-top: 4px;
+}
+
+.p-filters .p-facet-chips {
+  align-items: center;
+}
+
+.p-filter-pill {
+  padding: 2px 7px;
+  margin-left: 4px;
+  border: 0;
+  border-radius: var(--r-md);
+  background: rgba(var(--ink-rgb), 0.08);
+  color: var(--p-text);
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: background 0.12s ease;
+}
+
+.p-filter-pill::after {
+  content: " \00d7";
+  color: var(--p-dim);
+}
+
+.p-filter-pill:hover {
+  background: rgba(var(--ink-rgb), 0.14);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .p-filter-pill {
+    transition: none;
+  }
+}
+
 .p-find .p-find-facets + .p-bar {
   margin-top: 28px;
 }
@@ -1353,7 +1471,7 @@ body {
   padding: 8px 0;
   border-bottom: 1px solid var(--p-rule);
   font-size: 14px;
-  letter-spacing: -0.005em;
+  letter-spacing: 0;
   color: var(--p-text);
 }
 
@@ -1465,34 +1583,7 @@ body {
   color: var(--ink) !important;
 }
 
-/* ---- Index + Vorschau (E) ---- */
-
-.p-split {
-  display: grid;
-  grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.25fr);
-  gap: 40px;
-  align-items: start;
-}
-
-.p-preview {
-  position: sticky;
-  top: 20px;
-  margin-top: -2px;
-}
-
-.p-preview-head {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  height: 28px;
-  padding-bottom: 8px;
-  font-size: 13px;
-  font-weight: 500;
-}
-
-.p-preview-title .p-head-text {
-  font-weight: 400;
-}
+/* ---- Index ---- */
 
 .p-link {
   padding: 0;
@@ -1504,33 +1595,6 @@ body {
 
 .p-link:hover {
   color: var(--p-text);
-}
-
-.p-mosaic {
-  display: grid;
-  grid-template-columns: repeat(var(--mosaic-cols, 4), minmax(0, 1fr));
-  gap: 4px;
-  border-top: 1px solid var(--p-rule);
-  padding-top: 10px;
-}
-
-.p-mosaic-cell {
-  aspect-ratio: 1 / 1;
-  background: var(--thumb-bg);
-  overflow: hidden;
-}
-
-.p-mosaic-cell:first-child {
-  grid-column: span 2;
-  grid-row: span 2;
-  aspect-ratio: auto;
-}
-
-.p-mosaic-cell img {
-  width: 100%;
-  height: 100%;
-  display: block;
-  object-fit: cover;
 }
 
 .p-empty {
@@ -1562,7 +1626,7 @@ body {
   background: rgba(var(--ink-rgb), 0.055);
   overflow: hidden;
   font-size: 15px;
-  letter-spacing: -0.01em;
+  letter-spacing: 0;
   transition: background 0.12s ease;
 }
 
@@ -1676,6 +1740,59 @@ body.sorting * {
   color: var(--p-text);
 }
 
+/* Plus der Neue-Zone-Karte (0.39.1): ein Viertel der Kartenhöhe, 1 px wie die Outline */
+.p-card.p-new {
+  position: relative;
+}
+
+.p-new-plus {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  height: 25%;
+  aspect-ratio: 1;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+.p-new-plus::before,
+.p-new-plus::after {
+  content: "";
+  position: absolute;
+  background: var(--dash);
+  transition: background 0.12s ease;
+}
+
+.p-new-plus::before {
+  left: 0;
+  right: 0;
+  top: calc(50% - 0.5px);
+  height: 1px;
+}
+
+.p-new-plus::after {
+  top: 0;
+  bottom: 0;
+  left: calc(50% - 0.5px);
+  width: 1px;
+}
+
+.p-card.p-new:hover .p-new-plus::before,
+.p-card.p-new:hover .p-new-plus::after {
+  background: currentColor;
+}
+
+.p-card.p-new.editing .p-new-plus {
+  display: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .p-new-plus::before,
+  .p-new-plus::after {
+    transition: none;
+  }
+}
+
 /* ---- Zonenansicht (G), Alle Bilder, Suche ---- */
 
 .p-section.zone-card {
@@ -1769,7 +1886,7 @@ body.sorting * {
   color: var(--p-text);
   font-size: 13px;
   font-weight: 500;
-  letter-spacing: -0.005em;
+  letter-spacing: 0;
   white-space: nowrap;
 }
 
@@ -1933,10 +2050,6 @@ body.sorting * {
   .p-index.compact .p-row > :nth-child(5) {
     display: initial;
   }
-  .p-split {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-    gap: 24px;
-  }
 }
 
 /* ---- Runde 2: Pfad, Größenstufen, höhere Navigation ---- */
@@ -2046,13 +2159,6 @@ button.p-crumb:hover {
 body.lightbox-open .p-nav,
 body.lightbox-open .p-dropbar {
   display: none;
-}
-
-/* Große Stufen: alle Bilder gleich groß statt eines Aufmacherbilds */
-.p-mosaic.even .p-mosaic-cell:first-child {
-  grid-column: auto;
-  grid-row: auto;
-  aspect-ratio: 1 / 1;
 }
 
 /* ---- Runde 3: Pfad in der Navigation, Bibliothek als Home ---- */
@@ -2198,6 +2304,29 @@ body.lightbox-open .p-dropbar {
   color: var(--p-dim);
 }
 
+/* Handbuch: Tasten wie in der Tour, rechts in der Zeile */
+.p-sheet kbd {
+  font-family: var(--p-mono);
+  font-size: 11px;
+  color: var(--p-text);
+  padding: 1px 5px;
+  border-radius: var(--r-sm);
+  box-shadow: inset 0 0 0 1px rgba(var(--ink-rgb), 0.25);
+  white-space: nowrap;
+}
+
+.p-keys {
+  display: inline-flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 4px;
+  max-width: 140px;
+}
+
+.p-manual .p-block-text {
+  margin-top: 3px;
+}
+
 .p-sheet-foot {
   padding: 14px 4px;
   color: var(--p-faint);
@@ -2206,14 +2335,14 @@ body.lightbox-open .p-dropbar {
 .p-sheet {
   font-size: 15px;
   line-height: 1.35;
-  letter-spacing: -0.01em;
+  letter-spacing: 0;
   color: var(--p-text);
 }
 
 .p-sheet .p-head {
   font-size: 28px;
   line-height: 1.12;
-  letter-spacing: -0.025em;
+  letter-spacing: 0;
 }
 
 /* Originalansicht: CSS-Spalten schneiden alles ab, was über eine Karte
@@ -2397,6 +2526,11 @@ body.lightbox-open .p-dropbar {
   font-size: 13px;
 }
 
+/* Externe Zone (0.39.1): Trennen ist kein Löschen, also nicht rot */
+.p-zone-del.unlink.armed {
+  color: var(--p-text);
+}
+
 /* ---- Auswahl: gestrichelt in Weiß, der Rest tritt zurück ----
    Weiß heißt ausgewählt, Blau heißt Ablageziel. */
 
@@ -2448,11 +2582,11 @@ body.has-selection .card:not(.selected):hover img {
   z-index: 40;
   width: min(440px, 80vw);
   padding: 32px 32px 30px;
-  outline: 1px dashed var(--dash);
-  outline-offset: -1px;
-  background: var(--p-pill);
-  -webkit-backdrop-filter: blur(24px);
-  backdrop-filter: blur(24px);
+  border-radius: var(--r-lg);
+  background: var(--menu-bg);
+  box-shadow: var(--menu-shadow);
+  -webkit-backdrop-filter: blur(24px) saturate(1.4);
+  backdrop-filter: blur(24px) saturate(1.4);
   pointer-events: none;
 }
 
@@ -2513,8 +2647,8 @@ body.has-selection .card:not(.selected):hover img {
   border-radius: var(--r-lg);
   background: var(--menu-bg);
   box-shadow: var(--menu-shadow);
-  -webkit-backdrop-filter: blur(24px);
-  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px) saturate(1.4);
+  backdrop-filter: blur(24px) saturate(1.4);
 }
 
 .tour-card.center {
@@ -2646,7 +2780,12 @@ html.fullscreen .p-top {
 
 .p-nav-brand {
   font-weight: 600;
-  letter-spacing: -0.01em;
+  letter-spacing: 0;
+}
+
+/* Steht hinter „Archiver“ kein Pfad: auch keine Trennlinie */
+.p-nav-rule:has(+ .p-nav-main:empty) {
+  display: none;
 }
 
 /* Trennlinie zwischen „Archiver“ und den Reitern */
@@ -2731,8 +2870,8 @@ body.lightbox-open .p-top {
   display: flex;
   flex-wrap: nowrap;
   align-items: stretch;
-  gap: 10px;
-  padding: 0 14px 14px;
+  gap: 8px;
+  padding: 0 10px 10px;
   border-radius: 0;
   background: none;
   -webkit-backdrop-filter: none;
@@ -2743,6 +2882,31 @@ body.lightbox-open .p-top {
 
 .p-dropbar[hidden] {
   display: none;
+}
+
+/* Streifen (0.35, Einstellungen › Ansicht): erst 90 px angeschnitten wie die
+   Leiste der Extension (DESIGN.md 4.13), Zeiger hinein → volle Höhe */
+.p-dropbar {
+  transition: height 0.22s cubic-bezier(0.16, 1, 0.3, 1), padding 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.p-dropbar.strip {
+  height: 90px;
+  padding: 0 10px;
+}
+
+.p-dropbar.strip .p-hot {
+  border-radius: var(--r-lg) var(--r-lg) 0 0;
+}
+
+.p-dropbar.strip .p-hot-hint {
+  display: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .p-dropbar {
+    transition: none;
+  }
 }
 
 /* Ruhige Bewegung: nur Ein- und Ausblenden, kein Hochfahren */
@@ -2776,7 +2940,7 @@ body.lightbox-open .p-top {
 .p-hot .zone-card-name {
   font-size: 17px;
   font-weight: 400;
-  letter-spacing: -0.01em;
+  letter-spacing: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -2802,7 +2966,7 @@ body.lightbox-open .p-top {
 
 /* Abgelegt: kein Glühen, die Leiste blendet nur ruhig aus */
 .p-dropbar.leaving {
-  animation: hot-out 0.2s ease 0.3s forwards;
+  animation: hot-out 0.28s ease var(--leave-delay, 0.3s) forwards;
 }
 
 @keyframes hot-out {
@@ -3533,7 +3697,7 @@ html.light .pdf-maker {
   margin: 0 0 6px;
   font-size: 22px;
   font-weight: 500;
-  letter-spacing: -0.01em;
+  letter-spacing: 0;
 }
 
 .pdf-field {
@@ -3548,7 +3712,7 @@ html.light .pdf-maker {
   color: var(--text);
   background: rgba(var(--ink-rgb), 0.06);
   border: 0;
-  border-radius: 6px;
+  border-radius: var(--r-md);
   padding: 8px 10px;
   outline: none;
 }
@@ -3569,7 +3733,7 @@ html.light .pdf-maker {
   gap: 5px;
   padding: 7px 5px 5px;
   border: 0;
-  border-radius: 6px;
+  border-radius: var(--r-md);
   background: transparent;
   color: var(--muted);
   cursor: pointer;
@@ -3616,11 +3780,49 @@ html.light .pdf-maker {
   color: var(--muted);
 }
 
+/* Knöpfe unten links (K2, 0.37.2): „PDF sichern“ über die ganze Breite mit
+   ⌘↩ rechts, darunter „Abbrechen“ klein in Mono */
 .pdf-actions {
   margin-top: auto;
   display: flex;
-  gap: 8px;
-  justify-content: flex-end;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+}
+
+.pdf-actions .btn.primary {
+  order: -1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 40px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: var(--r-md, 6px);
+  font-size: 14px;
+}
+
+.pdf-actions .btn.primary::after {
+  content: "⌘↩";
+  font-family: "Geist Mono", ui-monospace, monospace;
+  font-size: 11px;
+  opacity: 0.55;
+}
+
+.pdf-actions .btn:not(.primary) {
+  align-self: flex-start;
+  border: 0;
+  padding: 0;
+  background: none;
+  font-family: "Geist Mono", ui-monospace, monospace;
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.pdf-actions .btn:not(.primary):hover {
+  color: var(--text);
 }
 
 .pdf-stage {
@@ -4056,7 +4258,7 @@ body.page-open .p-lock {
 .p-lock-mark {
   font-size: 22px;
   font-weight: 500;
-  letter-spacing: -0.02em;
+  letter-spacing: 0;
 }
 
 .p-lock-inner p {
@@ -4069,7 +4271,7 @@ body.page-open .p-lock {
 .p-lock-btn {
   margin-top: 6px;
   border: none;
-  border-radius: 999px;
+  border-radius: var(--r-md);
   padding: 8px 18px;
   background: var(--ink);
   color: var(--ink-inverse);
@@ -4096,7 +4298,7 @@ body.page-open .p-lock {
   min-width: 0;
   background: rgba(var(--ink-rgb), 0.06);
   border: 1px solid transparent;
-  border-radius: 999px;
+  border-radius: var(--r-md);
   padding: 8px 14px;
   color: var(--ink);
   font: 13px var(--p-mono);
@@ -4115,7 +4317,7 @@ body.page-open .p-lock {
 
 .p-unlock-go {
   border: none;
-  border-radius: 999px;
+  border-radius: var(--r-md);
   padding: 8px 16px;
   background: var(--ink);
   color: var(--ink-inverse);
@@ -4135,84 +4337,6 @@ body.page-open .p-lock {
 .p-unlock-dot {
   color: var(--ink);
   font-size: 10px;
-}
-
-/* ---- Farbschema „Salbei“: Periwinkle auf Grau-Grün (Einstellungen → Darstellung) ---- */
-
-html[data-scheme="sage"]:not(.light) {
-  --splash-bg: #2b312e;
-  --bg: rgba(43, 49, 46, 0.9);
-  --card-bg: rgba(56, 63, 59, 0.42);
-  --panel: rgba(43, 49, 46, 0.97);
-  --sheet-bg: #2b312e;
-  --menu-bg: rgba(54, 61, 57, 0.97);
-  --thumb-bg: #353c38;
-  --muted: #8e938f;
-  --ink: #e4e7e5;
-  --ink-rgb: 228, 231, 229;
-  --ink-inverse: #1c211e;
-  --accent: #a6b5d6;
-  --accent-rgb: 166, 181, 214;
-  --accent-ink: #161b26;
-  --glow-rgb: 166, 181, 214;
-  --p-text: #e4e7e5;
-  --p-dim: #8e938f;
-  --p-faint: #646a66;
-  --p-pill: rgba(58, 66, 61, 0.86);
-}
-
-html[data-scheme="sage"]:not(.mac):not(.light) {
-  --bg: #2b312e;
-}
-
-html[data-scheme="sage"].light {
-  --splash-bg: #e9ece9;
-  --bg: rgba(233, 236, 233, 0.92);
-  --card-bg: rgba(0, 0, 0, 0.04);
-  --panel: #e9ece9;
-  --sheet-bg: #e9ece9;
-  --menu-bg: rgba(238, 241, 238, 0.98);
-  --thumb-bg: #d9ddd9;
-  --muted: #6c726d;
-  --ink: #1c211e;
-  --ink-rgb: 28, 33, 30;
-  --ink-inverse: #e9ece9;
-  --accent: #5f6f94;
-  --accent-rgb: 95, 111, 148;
-  --accent-ink: #ffffff;
-  --glow-rgb: 95, 111, 148;
-  --p-text: #1c211e;
-  --p-dim: #6c726d;
-  --p-faint: #a3a8a4;
-  --p-pill: rgba(222, 227, 222, 0.94);
-}
-
-/* Wortmarke und aktive Knöpfe im Akzent, Knopf-Schrift dunkel */
-html[data-scheme="sage"] .p-nav-brand,
-html[data-scheme="sage"] .splash-word {
-  color: var(--accent);
-}
-
-html[data-scheme="sage"] .p-nav-btn.active,
-html[data-scheme="sage"] .p-nav.has-glide .p-nav-btn.active:hover {
-  background: var(--accent);
-  color: var(--accent-ink);
-}
-
-html[data-scheme="sage"] .p-chip.active {
-  color: var(--accent);
-}
-
-html[data-scheme="sage"] .btn.primary,
-html[data-scheme="sage"] .p-unlock-go,
-html[data-scheme="sage"] .p-lock-btn {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: var(--accent-ink);
-}
-
-html[data-scheme="sage"] .toast {
-  color: var(--accent-ink);
 }
 
 /* ---- Einstellungen: Bereiche als Liste, Untermenüs mit Zurück ---- */
@@ -4449,7 +4573,7 @@ html[data-nav$="r"] .p-more-menu.zone-menu {
   font-size: 11px;
   color: var(--p-text);
   padding: 1px 5px;
-  border-radius: 3px;
+  border-radius: var(--r-sm);
   box-shadow: inset 0 0 0 1px rgba(var(--ink-rgb), 0.25);
 }
 
@@ -5203,7 +5327,8 @@ body.lightbox-open .p-lib-tab,
   padding: 0 14px;
 }
 
-/* ≡-Menü: hängt an der ganzen Leiste, bündig mit ihrer Kante, so breit wie sie */
+/* ≡-Menü: hängt an der Leiste, bündig mit ihrer Kante, so breit wie sein Inhalt
+   (Lukas 18.10.: nicht an der Breite der Leiste ausrichten) */
 .p-nav-more {
   position: static;
 }
@@ -5213,7 +5338,9 @@ body.lightbox-open .p-lib-tab,
   bottom: auto;
   left: 0;
   right: auto;
-  min-width: max(100%, 240px);
+  width: max-content;
+  min-width: 240px;
+  max-width: min(360px, calc(100vw - 32px));
 }
 
 html[data-nav$="r"] .p-more-menu.zone-menu {
@@ -5470,7 +5597,7 @@ html[data-topfade="glass"] .p-drag::after {
   animation: hot-glass-in 0.14s ease-out;
 }
 .p-dropbar.leaving {
-  animation: hot-glass-out 0.2s ease 0.3s forwards;
+  animation: hot-glass-out 0.28s ease var(--leave-delay, 0.3s) forwards;
 }
 @keyframes hot-glass-in {
   from {
@@ -5650,12 +5777,6 @@ html.light .p-hot {
 html.light {
   --bg-solid: #d6d6d6;
 }
-html[data-scheme="sage"] {
-  --bg-solid: #2b312e;
-}
-html[data-scheme="sage"].light {
-  --bg-solid: #e9ece9;
-}
 html.mac[data-winalpha] {
   --bg: color-mix(in srgb, var(--bg-solid) calc(var(--win-alpha, 0.6) * 100%), transparent);
 }
@@ -5728,7 +5849,7 @@ html.mac[data-winalpha] {
    haben. Übersetzt aus Dunkel: gleiche Kontraste, Karten eine Stufe vom Grund
    abgesetzt, Navigation als weißes Glas, Zonenkarten beim Ziehen als helles
    Glas ohne Sättigung (Deckkraft über den Regler). Salbei bleibt unverändert. */
-html.light:not([data-scheme="sage"]) {
+html.light {
   --bg-solid: #f4f4f4;
   --bg: #f4f4f4;
   --panel: #f4f4f4;
@@ -5750,32 +5871,32 @@ html.light:not([data-scheme="sage"]) {
   --menu-bg: rgba(250, 250, 250, 0.97);
   --menu-shadow: 0 14px 44px rgba(0, 0, 0, 0.14), inset 0 0 0 1px rgba(0, 0, 0, 0.06);
 }
-html.mac[data-winalpha].light:not([data-scheme="sage"]) {
+html.mac[data-winalpha].light {
   --bg: color-mix(in srgb, var(--bg-solid) calc(var(--win-alpha, 0.6) * 100%), transparent);
 }
-html.light:not([data-scheme="sage"]) .p-nav {
+html.light .p-nav {
   background: var(--p-pill);
   -webkit-backdrop-filter: blur(24px) saturate(0);
   backdrop-filter: blur(24px) saturate(0);
   box-shadow: 0 10px 34px rgba(0, 0, 0, 0.08), inset 0 0 0 1px rgba(0, 0, 0, 0.05);
 }
-html.light:not([data-scheme="sage"]) .p-nav-btn.active {
+html.light .p-nav-btn.active {
   background: rgba(0, 0, 0, 0.08);
 }
-html.light:not([data-scheme="sage"]) .p-nav > .p-nav-glide {
+html.light .p-nav > .p-nav-glide {
   background: rgba(0, 0, 0, 0.06);
 }
-html.light:not([data-scheme="sage"]) .p-lib-tab {
+html.light .p-lib-tab {
   background: transparent;
   box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.08);
 }
-html.light:not([data-scheme="sage"]) .p-card {
+html.light .p-card {
   background: rgba(0, 0, 0, 0.045);
 }
-html.light:not([data-scheme="sage"]) .p-card:hover {
+html.light .p-card:hover {
   background: rgba(0, 0, 0, 0.07);
 }
-html.light:not([data-scheme="sage"]) .p-dropbar .p-hot {
+html.light .p-dropbar .p-hot {
   --menu-bg: #fafafa;
   --hot-shadow: 0.16;
   -webkit-backdrop-filter: blur(calc(28px * var(--hot-in))) saturate(0);
@@ -5784,4 +5905,2075 @@ html.light:not([data-scheme="sage"]) .p-dropbar .p-hot {
     0 14px 44px rgba(0, 0, 0, calc(0.16 * var(--hot-in))),
     inset 0 0 0 1px rgba(255, 255, 255, calc(0.7 * var(--hot-in))),
     inset 0 0 0 0.5px rgba(0, 0, 0, calc(0.08 * var(--hot-in)));
+}
+
+/* ---- 0.27: Titel der Zone steht oben fest, springt nicht mit den Ordnerkarten ---- */
+.p-head-row > .p-head {
+  align-self: start;
+}
+
+/* ---- 0.27: Ordnerkarte als Ablageziel (Ring wie 4.1) ---- */
+.p-folder-card.drop-active {
+  --ring: var(--ring-lg);
+  --ring-gap: 3px;
+  position: relative;
+  overflow: visible;
+}
+.p-head-row.is-list .p-folder-card.drop-active {
+  --ring: var(--ring-in);
+  --ring-gap: 0px;
+}
+.p-folder-card.drop-active::after {
+  content: "";
+  position: absolute;
+  inset: calc(-1 * var(--ring-gap));
+  z-index: 4;
+  pointer-events: none;
+  background: var(--p-text, var(--ink));
+  -webkit-mask: var(--ring) 0 0 / 100% 100% no-repeat;
+  mask: var(--ring) 0 0 / 100% 100% no-repeat;
+}
+
+/* ---- 0.35: Abschnitt (Sections) als Ablageziel: derselbe Ring, keine Fläche ---- */
+.p-folder-section.drop-active {
+  --ring: var(--ring-lg);
+  --ring-gap: 8px;
+  position: relative;
+  background: transparent !important;
+  outline: none !important;
+  color: inherit !important;
+}
+.p-folder-section.drop-active::after {
+  content: "";
+  position: absolute;
+  inset: calc(-1 * var(--ring-gap));
+  z-index: 4;
+  pointer-events: none;
+  background: var(--p-text, var(--ink));
+  -webkit-mask: var(--ring) 0 0 / 100% 100% no-repeat;
+  mask: var(--ring) 0 0 / 100% 100% no-repeat;
+}
+
+/* ---- 0.27: Zuletzt gelöscht ---- */
+.p-chip.danger:hover {
+  color: var(--danger);
+}
+.p-deleted-row {
+  cursor: pointer;
+  color: var(--p-dim);
+}
+.p-deleted-row .zone-card-name {
+  color: var(--p-dim);
+}
+.p-deleted-row:hover .zone-card-name {
+  color: var(--p-text);
+}
+
+/* ---- 0.27: Video-Vorschau beim Hover (Daumenkino aus acht Bildern) ---- */
+.card-scrub {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  z-index: 1;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.18s ease;
+}
+.card-scrub.on {
+  opacity: 1;
+}
+.card > .card-badge,
+.card > .card-media {
+  z-index: 2;
+}
+
+/* ---- 0.28: Fensterglas wie im Tray ----
+   Grundfarbe und Deckkraft des Trays gelten jetzt für das ganze Fenster:
+   Dunkel rgb(28,28,28) zu 72 %, Hell rgb(244,244,244) zu 78 %. Der Regler in
+   Einstellungen › Aussehen startet auf diesem Wert und setzt --win-alpha. */
+:root {
+  --bg-solid: #1c1c1c;
+  --win-alpha: 0.72;
+}
+html.light {
+  --bg-solid: #f4f4f4;
+  --win-alpha: 0.78;
+}
+
+/* ---- 0.28: Active Zones brechen um wie der Index (vier oder 2 × 2) ---- */
+.p-hotrow {
+  grid-template-columns: repeat(var(--hot-cols, 4), minmax(0, 1fr));
+}
+
+/* ---- 0.28: Leiste der Lightbox in den Maßen der Hauptnavigation ----
+   Rand --nav-rim, Knopfhöhe --nav-h, 13,5 px, Abstand 3 px, Ecke --r-md. */
+.lb-bar,
+.lb-group {
+  gap: 3px;
+}
+.lb-bar {
+  padding: var(--nav-rim, 5px);
+  border-radius: var(--r-md);
+}
+.lb-btn {
+  height: var(--nav-h, 36px);
+  font-size: 13.5px;
+  letter-spacing: 0;
+}
+.lb-name {
+  font-size: 13.5px;
+}
+/* die Leiste ist 6 px höher: Zonen und Player rücken mit */
+.lb-zones {
+  bottom: 76px;
+}
+.lightbox.has-player .lb-zones {
+  bottom: 120px;
+}
+.lightbox.has-player .lb-media .media-video {
+  bottom: 134px;
+  height: calc(100% - 48px - 134px);
+}
+.lightbox.has-player .lb-media .media-audio {
+  bottom: 134px;
+}
+
+/* ---- 0.33.1: Bild mit Bildtext im Raster ----
+   Kein Textauszug mehr unter dem Bild. Ein Punkt 10 px unten rechts in der
+   Farbe der Textkarte zeigt an, dass das Bild Text hat. Die feine Kante hält
+   ihn auf Flächen in derselben Farbe sichtbar. */
+.card-dot {
+  position: absolute;
+  right: 6px;
+  bottom: 6px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--ts-bg);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.18), 0 1px 3px rgba(0, 0, 0, 0.25);
+  pointer-events: none;
+}
+.card-dot[hidden],
+.card-days[hidden] {
+  display: none;
+}
+/* 0.33: Unsorted, die letzten zwei Tage vor „Zuletzt gelöscht“: oben links,
+   gleiche Marke wie .card-media, Schrift in --danger */
+.card-days {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  padding: 2px 5px;
+  border-radius: min(3px, var(--r-sm));
+  background: rgba(0, 0, 0, 0.65);
+  color: var(--danger);
+  font-family: "Geist Mono", ui-monospace, monospace;
+  font-size: 10px;
+  letter-spacing: 0.02em;
+  pointer-events: none;
+}
+/* Original: Karte hat 3 px Innenrand, Punkt und Marke sitzen am Bild */
+.original .card-dot {
+  right: 9px;
+  bottom: 9px;
+}
+.original .card-days {
+  top: 7px;
+  left: 7px;
+}
+.p-zone-note {
+  color: var(--p-dim);
+}
+/* 0.30.1: Bildtext in der Lightbox als Karte im Ton des Bildes (wie die
+   Textkarten). Lage setzt app.js lbPlaceText: Rückseite deckt das Bild,
+   Doppelseite steht 24 px links daneben, gleich hoch. */
+.lb-caption {
+  position: absolute;
+  z-index: 2;
+  display: flex;
+}
+.lb-cap-card {
+  --ts-pad: 7cqmin;
+  container-type: size;
+  flex: 1;
+  min-width: 0;
+  padding: var(--ts-pad);
+  font-family: var(--sans);
+}
+.lb-cap-card .ts-label,
+.lb-cap-card .ts-foot {
+  font-family: "Geist Mono", ui-monospace, monospace;
+  font-size: 11px;
+  text-transform: uppercase;
+}
+.lb-cap-card .ts-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  margin: 1.6em 0 1.2em;
+  font-weight: 500;
+  line-height: 1.28;
+  letter-spacing: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  outline: none;
+  cursor: text;
+  user-select: text;
+  -webkit-user-select: text;
+}
+.lb-cap-card.short .ts-body {
+  font-size: 7cqmin;
+}
+.lb-cap-card.medium .ts-body {
+  font-size: 5cqmin;
+}
+.lb-cap-card.long .ts-body {
+  font-size: max(15px, 3.6cqmin);
+}
+.lb-cap-card ::selection {
+  background: rgba(var(--accent-rgb), 0.25);
+}
+/* Editierbar (auch Textkarten): beim Schreiben ein feiner Rand im Ton */
+.lb-cap-card .ts-body:focus,
+.text-sheet.large .ts-body:focus {
+  outline: none;
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--ts-fg) 50%, transparent);
+}
+/* Rückseite: das Bild ist gewendet */
+.lightbox.flipped .lightbox-stage {
+  visibility: hidden;
+}
+/* Eselsohr unten rechts am Bild, in der Farbe der Karte */
+.lb-ear {
+  position: absolute;
+  z-index: 2;
+  width: 22px;
+  height: 22px;
+  margin: -22px 0 0 -22px;
+  padding: 0;
+  border: 0;
+  background: linear-gradient(135deg, transparent 50%, var(--ts-bg) 50%);
+  cursor: pointer;
+  transition: width 0.12s ease, height 0.12s ease, margin 0.12s ease;
+}
+.lb-ear:hover {
+  width: 30px;
+  height: 30px;
+  margin: -30px 0 0 -30px;
+}
+
+/* ---- 0.29: Notiz-Objekte ----
+   Im Raster ein Blatt wie die Textkarten (Kennung NOTIZ · Datum, fetter Titel,
+   Text, Fuß), Papier statt Zufallsfarbe. In der Lightbox wird auf dem Blatt
+   geschrieben; die Verknüpfungen stehen 40 px links daneben. */
+.original .card-note {
+  aspect-ratio: 3 / 4;
+}
+.note-sheet .ts-title {
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.15;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.card-text .note-sheet .ts-title {
+  padding: 3cqw 6cqw 0;
+  font-size: 6.4cqw;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  flex: none;
+}
+.card-text .note-sheet .ts-body {
+  padding-top: 2.4cqw;
+  font-weight: 400;
+  line-height: 1.35;
+}
+.card-text .note-sheet.short .ts-body {
+  font-size: 4.4cqw;
+}
+.card-text .note-sheet.medium .ts-body,
+.card-text .note-sheet.long .ts-body {
+  font-size: 3.8cqw;
+}
+.text-sheet.mini.note-sheet .ts-title {
+  font-size: 9cqw;
+  padding: 0 8cqw;
+}
+.text-sheet.mini.note-sheet .ts-body {
+  display: none;
+}
+
+/* Lightbox: Papier, max. 620 × 760, Titel 30 px, Text 17 px */
+.lb-note {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 48px 32px 84px;
+  box-sizing: border-box;
+}
+.note-paper {
+  position: relative;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  width: min(620px, 100%);
+  height: min(760px, 100%);
+  padding: 48px 52px 36px;
+  background: var(--ts-bg, #f4f3ef);
+  color: var(--ts-fg, #141414);
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+  font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
+  caret-color: var(--accent);
+}
+/* Schwarzes Blatt auf dunklem Grund: feine Kante */
+.note-paper[data-tone="black"] {
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12), 0 10px 40px rgba(0, 0, 0, 0.3);
+}
+.text-sheet[data-tone="black"] {
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12);
+}
+.note-paper .np-label,
+.note-paper .np-foot {
+  font-family: "Geist Mono", ui-monospace, monospace;
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  opacity: var(--ts-dim, 0.5);
+}
+.np-title,
+.np-body {
+  display: block;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: inherit;
+  font-family: inherit;
+}
+.np-title {
+  margin: 14px 0 18px;
+  font-size: 30px;
+  font-weight: 600;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+}
+.np-body {
+  flex: 1;
+  min-height: 0;
+  resize: none;
+  font-size: 17px;
+  line-height: 1.45;
+  letter-spacing: -0.005em;
+  scrollbar-width: none;
+}
+.np-title::placeholder,
+.np-body::placeholder {
+  color: inherit;
+  opacity: 0.35;
+}
+.note-paper ::selection {
+  background: rgba(var(--accent-rgb), 0.25);
+}
+.np-foot {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 16px;
+}
+
+/* Verknüpfungen: Spalte links neben dem Blatt, oben bündig, zwei Reihen à 72 px */
+.note-links {
+  position: absolute;
+  top: 0;
+  right: calc(100% + 40px);
+  width: 150px;
+  color: var(--p-text);
+}
+.nl-label {
+  margin-bottom: 8px;
+  font-family: "Geist Mono", ui-monospace, monospace;
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--p-dim);
+}
+.nl-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 72px);
+  gap: 6px;
+}
+.nl-tile,
+.nc-tile {
+  position: relative;
+  width: 72px;
+  height: 72px;
+  padding: 0;
+  border: none;
+  background: rgba(var(--ink-rgb), 0.06);
+  overflow: hidden;
+  cursor: default;
+}
+.nl-tile img,
+.nc-tile img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.nl-tile .text-sheet.mini,
+.nc-tile .text-sheet.mini {
+  position: absolute;
+  inset: 0;
+}
+.nl-add {
+  background: none;
+  box-shadow: inset 0 0 0 1px rgba(var(--ink-rgb), 0.25);
+  color: var(--p-dim);
+  font-size: 20px;
+  font-weight: 300;
+}
+.nl-add:hover {
+  color: var(--p-text);
+  box-shadow: inset 0 0 0 1px rgba(var(--ink-rgb), 0.5);
+}
+.nl-remove {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  width: 18px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.6);
+  color: #fff;
+  font-size: 12px;
+  line-height: 1;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+.nl-tile:hover .nl-remove {
+  opacity: 1;
+}
+/* Schmales Fenster: Verknüpfungen rücken unter den Text, auf das Blatt */
+@media (max-width: 1080px) {
+  .note-links {
+    position: static;
+    width: auto;
+    margin-top: 16px;
+    color: inherit;
+  }
+  .note-links .nl-label {
+    color: inherit;
+    opacity: var(--ts-dim, 0.5);
+  }
+  .note-links .nl-grid {
+    grid-template-columns: repeat(auto-fill, 48px);
+  }
+  .note-links .nl-tile {
+    width: 48px;
+    height: 48px;
+  }
+}
+
+/* Farbpunkte der Notiz in der Leiste */
+.lb-tones {
+  align-items: center;
+  gap: 9px;
+  padding: 0 10px;
+}
+.lb-tones:not([hidden]) {
+  display: flex;
+}
+.lb-tones .tone-dot {
+  width: 16px;
+  height: 16px;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.25);
+}
+
+/* Auswahl zum Verknüpfen (Variante A): Suchfeld, Zonen als kleine Tray-Karten,
+   in der Zone ein Raster mit sechs Spalten, gewählte gestrichelt */
+.zone-menu.p-ctx-menu.note-chooser {
+  width: 430px;
+  min-width: 0;
+  padding: 10px;
+  box-sizing: border-box;
+}
+.nc-search {
+  width: 100%;
+  box-sizing: border-box;
+  height: 32px;
+  padding: 0 10px;
+  border: none;
+  border-radius: var(--r-sm, 4px);
+  outline: none;
+  background: rgba(var(--ink-rgb), 0.07);
+  color: var(--p-text);
+  font: inherit;
+  font-size: 13px;
+}
+.nc-head,
+.nc-foot {
+  display: flex;
+  align-items: baseline;
+  font-family: "Geist Mono", ui-monospace, monospace;
+  font-size: 10px;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--p-dim);
+}
+.nc-head {
+  margin: 12px 2px 6px;
+}
+.nc-back {
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  color: var(--p-text);
+  cursor: default;
+}
+.nc-crumb {
+  margin-left: 0.6em;
+}
+.nc-back:hover {
+  text-decoration: underline;
+}
+.nc-foot {
+  justify-content: space-between;
+  margin: 10px 2px 0;
+  color: var(--p-faint);
+}
+.nc-body {
+  max-height: 300px;
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+.nc-zones {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+}
+.nc-zone {
+  padding: 0;
+  border: none;
+  border-radius: var(--r-sm, 4px);
+  overflow: hidden;
+  background: rgba(var(--ink-rgb), 0.06);
+  color: var(--p-text);
+  text-align: left;
+  font: inherit;
+  cursor: default;
+  transition: background 0.12s ease;
+}
+.nc-zone:hover {
+  background: rgba(var(--ink-rgb), 0.1);
+}
+.nc-cover {
+  position: relative;
+  display: grid;
+  height: 58px;
+  gap: 2px;
+}
+.nc-cover.trio {
+  grid-template-columns: 2fr 1fr;
+  grid-template-rows: 1fr 1fr;
+}
+.nc-cover.trio > :first-child {
+  grid-row: span 2;
+}
+.nc-cover > img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  object-fit: cover;
+}
+.nc-cover > .text-sheet.mini {
+  min-height: 0;
+  overflow: hidden;
+}
+.nc-cover.empty {
+  background: rgba(var(--ink-rgb), 0.04);
+}
+.nc-zone-name {
+  display: flex;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 6px 8px 7px;
+  font-size: 12px;
+  font-weight: 500;
+}
+.nc-zone-name > :first-child {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.nc-count {
+  font-family: "Geist Mono", ui-monospace, monospace;
+  font-size: 10px;
+  font-weight: 400;
+  color: var(--p-dim);
+}
+.nc-grid {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 4px;
+}
+.nc-tile {
+  width: 100%;
+  height: auto;
+  aspect-ratio: 1;
+}
+.nc-tile.on {
+  outline: 1px dashed var(--ink);
+  outline-offset: -3px;
+}
+.nc-tile.on::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: rgba(var(--accent-rgb), 0.18);
+}
+.nc-empty {
+  grid-column: 1 / -1;
+  padding: 18px 0;
+  text-align: center;
+  color: var(--p-dim);
+  font-size: 13px;
+}
+
+/* ---- 0.29.1: Lightbox in „Zuletzt gelöscht“ ----
+   Statt Zone und Info: „Wiederherstellen“ und „Sofort löschen“ (rot beim Überfahren, wie der Chip). */
+.lb-remove:hover {
+  color: var(--danger);
+}
+
+/* ---- 0.34: Liste – Dateiname und Angaben zum Bild ----
+   Zeilen wie im Finder: Bild, Name, Format, Maße, Größe, Quelle, Gesichert.
+   Die Bildhöhe --lt folgt der Größenstufe (24–96 px). */
+.card-info,
+.p-list-head {
+  display: none;
+}
+.card-name {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--p-text);
+}
+.card-m {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--p-dim);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.listview .card-badge,
+.listview .card-media,
+.listview .card-days,
+.listview .card-dot {
+  display: none;
+}
+.listview .zone-card-items {
+  display: block;
+}
+.listview .p-list-head,
+.zones-grid.listview .card {
+  display: grid;
+  grid-template-columns: var(--lt) minmax(0, 3fr) 56px 104px 72px minmax(0, 1.4fr) 104px;
+  column-gap: 16px;
+  align-items: center;
+}
+.listview .p-list-head {
+  padding: 0 8px 8px;
+  border-bottom: 1px solid var(--p-rule);
+}
+.listview .p-list-head > :first-child {
+  grid-column: 2;
+}
+.zones-grid.listview .card {
+  aspect-ratio: auto;
+  padding: 6px 8px;
+  background: transparent;
+  border-bottom: 1px solid var(--p-rule);
+  cursor: default;
+}
+.zones-grid.listview .card:hover {
+  background: rgba(var(--ink-rgb), 0.04);
+}
+.zones-grid.listview .card img {
+  width: var(--lt);
+  height: var(--lt);
+  object-fit: contain;
+}
+.listview .card-info,
+.listview .card-meta {
+  display: contents;
+}
+.listview .card-name {
+  font-size: 13px;
+  font-weight: 500;
+}
+.listview .card-m:empty::before {
+  content: "–";
+}
+.listview .card-m-kind {
+  font-family: "Geist Mono", ui-monospace, monospace;
+  font-size: 11px;
+  letter-spacing: 0.02em;
+}
+
+/* ---- 0.34.2: Liste – Textkarten klein links, Spalten sortierbar ----
+   Text- und Notizkarten stehen als Blatt in der Bildspalte, im Format wie im
+   Raster (quadratisch); im Namen steht der Anfang des Texts. */
+.zones-grid.listview .card-text {
+  aspect-ratio: auto;
+}
+.zones-grid.listview .card-text .text-sheet {
+  position: relative;
+  inset: auto;
+  width: var(--lt);
+  height: var(--lt);
+}
+.zones-grid.listview .card-text .ts-label,
+.zones-grid.listview .card-text .ts-foot,
+.zones-grid.listview .card-text .note-sheet .ts-body {
+  display: none;
+}
+.zones-grid.listview .card-text .ts-body,
+.zones-grid.listview .card-text .note-sheet .ts-title {
+  padding: 10cqw 10cqw 0;
+  font-size: max(4px, 11cqw);
+  line-height: 1.2;
+}
+.p-list-sort {
+  padding: 0;
+  border: none;
+  background: none;
+  font-family: var(--p-mono);
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  text-align: left;
+  white-space: nowrap;
+  color: var(--p-faint);
+  cursor: default;
+}
+.p-list-sort:hover {
+  color: var(--p-dim);
+}
+.p-list-sort.active {
+  color: var(--p-text);
+}
+
+/* ---- 0.36.0: Dateinamen (Einstellungen), Umbenennen-Blatt, Namensvorschlag ---- */
+.nm-row {
+  cursor: default;
+}
+.nm-row .p-block-main > div {
+  color: var(--p-dim);
+}
+.nm-row.nm-on .p-block-main > div {
+  color: var(--p-text);
+}
+.nm-radio {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  margin-right: 10px;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1px rgba(var(--ink-rgb), 0.35);
+  vertical-align: -1px;
+}
+.nm-on .nm-radio {
+  box-shadow: inset 0 0 0 4px var(--ink);
+}
+.nm-note {
+  color: var(--p-faint);
+}
+.nm-ex,
+.nm-prev,
+.nm-input,
+.rn-old,
+.rn-new,
+.rn-input,
+.lb-info-sugg .n {
+  font-family: var(--p-mono, "Geist Mono", ui-monospace, "SF Mono", monospace);
+}
+.nm-ex {
+  font-size: 12px;
+  color: var(--p-dim);
+}
+.nm-bricks {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+}
+.nm-more {
+  margin-top: 10px;
+}
+.nm-brick {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 28px;
+  padding: 0 4px 0 10px;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: rgba(var(--ink-rgb), 0.08);
+  color: var(--p-text);
+  font: inherit;
+  font-size: 12.5px;
+  transition: background 0.12s ease;
+}
+.nm-brick.off {
+  padding: 0 10px;
+  background: transparent;
+  box-shadow: inset 0 0 0 1px rgba(var(--ink-rgb), 0.14);
+  color: var(--p-dim);
+}
+.nm-brick.off:hover {
+  color: var(--p-text);
+}
+.nm-mv {
+  height: 20px;
+  min-width: 18px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--p-faint);
+  font: inherit;
+  font-size: 13px;
+  line-height: 1;
+}
+.nm-mv:hover {
+  color: var(--p-text);
+}
+.nm-sep {
+  color: var(--p-faint);
+  font-family: var(--p-mono, "Geist Mono", ui-monospace, monospace);
+}
+.nm-prev {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-radius: var(--r-md);
+  background: rgba(var(--ink-rgb), 0.05);
+  font-size: 12.5px;
+  color: var(--p-text);
+}
+.nm-input {
+  height: 28px;
+  width: 120px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: rgba(var(--ink-rgb), 0.07);
+  color: var(--p-text);
+  font-size: 12.5px;
+  outline: none;
+}
+.nm-input.wide {
+  width: 100%;
+}
+.nm-hint {
+  margin-top: 4px;
+}
+
+.rn-dim {
+  position: fixed;
+  inset: 0;
+  z-index: 89;
+  background: color-mix(in srgb, var(--ink-inverse) 55%, transparent);
+}
+.rn-sheet {
+  position: fixed;
+  left: 50%;
+  top: 50%;
+  z-index: 90;
+  display: flex;
+  flex-direction: column;
+  width: min(760px, calc(100vw - 48px));
+  max-height: calc(100vh - 96px);
+  padding: 22px 22px 18px;
+  border-radius: var(--r-lg);
+  background: var(--menu-bg);
+  box-shadow: var(--menu-shadow);
+  color: var(--p-text);
+  font-size: 13.5px;
+  transform: translate(-50%, -50%);
+  animation: rn-in 0.18s ease both;
+}
+@keyframes rn-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, calc(-50% + 6px));
+  }
+}
+.rn-h {
+  font-size: 20px;
+  font-weight: 500;
+}
+.rn-sub {
+  margin: 4px 0 16px;
+  color: var(--p-dim);
+  font-size: 12.5px;
+}
+.rn-scheme {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  color: var(--p-dim);
+  font-size: 12.5px;
+}
+.rn-list {
+  min-height: 0;
+  overflow-y: auto;
+}
+.rn-row {
+  display: grid;
+  grid-template-columns: 14px 40px minmax(0, 1fr) 18px minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+  padding: 8px 0;
+  border-top: 1px solid var(--p-rule);
+}
+.rn-row img {
+  width: 40px;
+  height: 40px;
+  border-radius: 0;
+  background: var(--thumb-bg);
+  object-fit: cover;
+}
+.rn-old {
+  overflow: hidden;
+  color: var(--p-dim);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rn-old .flag {
+  margin-left: 8px;
+  padding: 1px 6px;
+  border-radius: var(--r-sm);
+  box-shadow: inset 0 0 0 1px rgba(var(--ink-rgb), 0.3);
+  color: var(--p-text);
+  font-size: 10.5px;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+.rn-arrow {
+  color: var(--p-faint);
+}
+.rn-new {
+  overflow: hidden;
+  padding: 5px 8px;
+  border-radius: var(--r-sm);
+  background: rgba(var(--ink-rgb), 0.06);
+  color: var(--p-text);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: text;
+}
+.rn-new.edit {
+  outline: 1px dashed var(--dash);
+  outline-offset: -1px;
+}
+.rn-input {
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--p-text);
+  font-size: 12px;
+  outline: none;
+}
+.rn-chk {
+  position: relative;
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  background: var(--ink);
+}
+.rn-chk::after {
+  content: "✓";
+  position: absolute;
+  inset: 0;
+  color: var(--ink-inverse);
+  font-size: 11px;
+  line-height: 14px;
+  text-align: center;
+}
+.rn-chk.off {
+  background: transparent;
+  box-shadow: inset 0 0 0 1px rgba(var(--ink-rgb), 0.35);
+}
+.rn-chk.off::after {
+  content: "";
+}
+.rn-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 16px;
+}
+.rn-foot .sp {
+  flex: 1;
+  color: var(--p-dim);
+  font-size: 12.5px;
+}
+.rn-foot button {
+  height: 34px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: var(--r-md);
+  font: inherit;
+  font-size: 13px;
+}
+.rn-foot .ok {
+  background: var(--ink);
+  color: var(--ink-inverse);
+  font-weight: 500;
+}
+.rn-foot .ok:disabled {
+  opacity: 0.4;
+}
+.rn-foot .no {
+  background: rgba(var(--ink-rgb), 0.08);
+  color: var(--p-text);
+}
+
+/* Namensvorschlag in der Info-Spalte: erscheint einmal mit einem Lichtstreif über dem Namen */
+.lb-info-sugg {
+  margin: 14px 0 4px;
+  padding: 12px;
+  border-radius: var(--r-md);
+  background: rgba(var(--ink-rgb), 0.055);
+  animation: sg-in 0.28s var(--sheet-ease, cubic-bezier(0.2, 0.7, 0.2, 1)) both;
+}
+.lb-info-sugg .k {
+  margin-bottom: 6px;
+  color: var(--p-dim);
+  font-family: var(--p-mono, "Geist Mono", ui-monospace, monospace);
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+.lb-info-sugg .n {
+  position: relative;
+  overflow: hidden;
+  color: var(--p-text);
+  font-size: 12.5px;
+  word-break: break-all;
+}
+.lb-info-sugg .n::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(100deg, transparent 30%, rgba(var(--ink-rgb), 0.5) 50%, transparent 70%);
+  transform: translateX(-110%);
+  animation: sg-shine 1.1s ease 0.3s both;
+  pointer-events: none;
+}
+.lb-info-sugg .why {
+  margin-top: 6px;
+  color: var(--p-dim);
+  font-size: 12px;
+  line-height: 1.4;
+}
+.lb-info-sugg .row {
+  display: flex;
+  gap: 6px;
+  margin-top: 10px;
+}
+.lb-info-sugg button {
+  height: 30px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: var(--r-md);
+  font: inherit;
+  font-size: 12.5px;
+}
+.lb-info-sugg .ok {
+  background: var(--ink);
+  color: var(--ink-inverse);
+}
+.lb-info-sugg .ed {
+  background: rgba(var(--ink-rgb), 0.08);
+  color: var(--p-text);
+}
+@keyframes sg-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+@keyframes sg-shine {
+  to {
+    transform: translateX(110%);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .rn-sheet,
+  .lb-info-sugg,
+  .lb-info-sugg .n::after {
+    animation: none;
+  }
+}
+
+/* PDF-Ersteller, Plakat Index und Paar (0.37.2): Felder frei gesetzt in
+   PDF-Punkten wie pdf.rs flow_sheet, Bilder ungeschnitten, oben bündig */
+.pdf-page.flow {
+  position: relative;
+}
+
+.pdf-flow {
+  position: absolute;
+  inset: 0;
+  font-size: calc(var(--u) * 6.4);
+  line-height: 1.3;
+}
+
+.pdf-frow {
+  position: absolute;
+  left: calc(var(--u) * 14);
+  right: calc(var(--u) * 14);
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  white-space: nowrap;
+}
+
+.pdf-frow > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pdf-frow > :last-child {
+  text-align: right;
+}
+
+.pdf-fhead {
+  top: calc(var(--u) * 10);
+}
+
+.pdf-finfo {
+  top: calc(var(--u) * 34);
+  grid-template-columns: calc(var(--u) * 28) 1fr 2fr 1fr calc(var(--u) * 40);
+}
+
+.pdf-finfo .pdf-fdesc {
+  max-width: calc(var(--u) * 230);
+  white-space: normal;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.pdf-page.flow .pdf-cell {
+  position: absolute;
+  border-radius: 0;
+}
+
+.pdf-page.flow .pdf-box {
+  flex: none;
+  height: var(--h);
+}
+
+.pdf-page.flow .pdf-box img {
+  position: static;
+  display: block;
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  max-height: none;
+}
+
+.pdf-page.flow .pdf-quote {
+  font-size: calc(var(--u) * 9);
+}
+
+.pdf-page.flow .pdf-cap {
+  height: calc(var(--u) * 12);
+  padding-top: calc(var(--u) * 3);
+  flex-direction: row;
+  justify-content: space-between;
+  gap: calc(var(--u) * 6);
+  font-size: calc(var(--u) * 6.4);
+}
+
+.pdf-page.flow .pdf-cell.lifted {
+  outline-offset: calc(var(--u) * 2);
+}
+
+.pdf-desc {
+  resize: none;
+  line-height: 1.4;
+}
+
+/* ---- 0.40.6: Konto, Sperre und Lese-Modus als Liste (4.26) ---- */
+
+/* Satz als Überschrift: zwischen Seitenkopf (24 px) und Titelblatt, ohne Highlight */
+.p-say {
+  margin: 0;
+  max-width: 18em;
+  font-size: 34px;
+  line-height: 1.14;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-wrap: balance;
+}
+
+.p-say-sub {
+  color: var(--p-dim);
+}
+
+/* Mono-Zeile über einer Gruppe: links der Name, rechts ein Zusatz */
+.p-group-label {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 0 2px;
+  font-family: var(--p-mono);
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--p-dim);
+}
+
+/* Gruppierte Zeilen wie die Einstellungen: Schlüssel, Wert, Zusatz */
+.p-list {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  padding: 2px 16px;
+  border: none;
+  border-radius: var(--r-lg);
+  background: rgba(var(--ink-rgb), 0.045);
+  color: var(--p-text);
+  font: inherit;
+  text-align: left;
+  box-sizing: border-box;
+}
+
+button.p-list {
+  transition: background 0.12s ease;
+}
+
+button.p-list:hover {
+  background: rgba(var(--ink-rgb), 0.07);
+}
+
+.p-list-row {
+  display: flex;
+  align-items: baseline;
+  gap: 16px;
+  padding: 12px 0;
+  border-top: 1px solid var(--p-rule);
+}
+
+.p-list-row:first-child {
+  border-top: none;
+}
+
+.p-list-key {
+  flex: 0 0 132px;
+  color: var(--p-dim);
+}
+
+.p-list-value {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.p-list-side {
+  flex: 0 0 auto;
+  color: var(--p-faint);
+}
+
+.p-group {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  width: 100%;
+}
+
+/* Konto oben in den Einstellungen */
+.p-account {
+  margin-bottom: 20px;
+}
+
+.p-account-plan {
+  padding: 0 0 10px;
+  color: var(--p-dim);
+}
+
+.p-sheet .p-settings-back + .p-say {
+  margin: 0 4px 28px;
+}
+
+/* Sperre: eine ruhige Spalte in der Mitte, Code als Zeile der Liste */
+.p-lock {
+  align-items: center;
+  justify-content: center;
+}
+
+.p-lock-inner {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  width: min(560px, 100%);
+  max-width: none;
+  padding: 0 var(--p-pad);
+  text-align: left;
+  box-sizing: border-box;
+}
+
+.p-lock-inner .p-say {
+  max-width: none;
+  margin-bottom: 8px;
+}
+
+.p-lock-tr {
+  display: flex;
+  gap: 16px;
+}
+
+.p-lock-end {
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  color: var(--p-text);
+  cursor: pointer;
+}
+
+/* Das Feld ist kein Kasten, sondern der Wert der Zeile */
+.p-lock-form {
+  min-width: 0;
+}
+
+.p-lock .p-unlock-form {
+  padding: 0;
+}
+
+.p-lock .p-unlock-input {
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: none;
+  font: inherit;
+  letter-spacing: 0.04em;
+}
+
+.p-lock .p-unlock-form.wrong .p-unlock-input {
+  color: var(--danger);
+}
+
+.p-lock-foot {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.p-lock-foot .p-unlock-go {
+  margin-left: auto;
+}
+
+.p-lock-foot .p-lock-end,
+.p-list-row .p-lock-end {
+  font-family: var(--p-mono);
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.p-lock-msg {
+  color: var(--p-dim);
+}
+
+.p-list.wrong + .p-lock-foot .p-lock-msg {
+  color: var(--danger);
+}
+
+/* Eingabe als Wert der Zeile: kein Rahmen, keine Fläche (4.26) */
+.p-lock-input {
+  min-width: 0;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  outline: none;
+}
+
+.p-lock-input::placeholder {
+  color: var(--p-faint);
+}
+
+.p-list.wrong .p-lock-input {
+  animation: unlock-shake 0.36s;
+}
+
+.p-unlock-go:disabled {
+  opacity: 0.5;
+}
+
+.p-lock .p-unlock-go {
+  display: inline-flex;
+  align-items: center;
+  gap: 24px;
+  height: 40px;
+  padding: 0 14px;
+  border-radius: var(--r-sm);
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.p-lock .p-unlock-go::after {
+  content: "→";
+}
+
+/* Lese-Modus (Vorschau): Satz und eine kurze Liste, was geht und was ruht */
+.p-read {
+  width: min(560px, 100%);
+  margin-bottom: 28px;
+}
+
+.p-read .p-say {
+  margin-bottom: 8px;
+}
+
+/* Kopf der Seiten (Übersicht, Zone, Alle Objekte): so groß wie der Satz in 4.26 */
+.p-page .p-head {
+  max-width: 22em;
+  font-size: 34px;
+  line-height: 1.14;
+  letter-spacing: 0;
+  text-wrap: balance;
+}
+
+/* ---- 0.40.9: Anmelden als Satz (Variante B) ----
+   Satz, darunter ein einziges Feld in Satzgröße auf einer Linie, rechts ein
+   runder Pfeil (Pille). Darunter Mono-Hinweis oder Mono-Links und die Meldung. */
+.p-lock-inner {
+  gap: 0;
+  width: min(640px, 100%);
+}
+
+.p-lock-inner .p-say {
+  margin-bottom: 28px;
+}
+
+.p-lock-preview {
+  align-self: flex-end;
+  margin-bottom: 18px;
+  font-family: var(--p-mono);
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.p-lock-line {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 6px 0 14px;
+  border-bottom: 1px solid rgba(var(--ink-rgb), 0.22);
+  transition: border-color 0.12s ease;
+}
+
+.p-lock-line:focus-within {
+  border-bottom-color: rgba(var(--ink-rgb), 0.5);
+}
+
+.p-lock-line .p-lock-input {
+  flex: 1;
+  min-width: 0;
+  font-size: 34px;
+  font-weight: 500;
+  line-height: 1.14;
+  letter-spacing: 0;
+}
+
+.p-lock-line .p-lock-input.is-code {
+  letter-spacing: 0.06em;
+  font-variant-numeric: tabular-nums;
+}
+
+.p-lock-line.wrong {
+  border-bottom-color: var(--danger);
+}
+
+.p-lock-line.wrong .p-lock-input {
+  animation: unlock-shake 0.36s;
+}
+
+.p-lock-go {
+  flex: none;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: none;
+  border-radius: 999px;
+  background: var(--ink);
+  color: var(--ink-inverse);
+  font-size: 18px;
+  cursor: pointer;
+  transition: opacity 0.12s ease;
+}
+
+.p-lock-go:disabled {
+  opacity: 0.5;
+}
+
+.p-lock-inner .p-lock-foot {
+  margin-top: 14px;
+  gap: 20px;
+  font-family: var(--p-mono);
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.p-lock-hint {
+  color: var(--p-dim);
+}
+
+.p-lock-inner .p-lock-msg {
+  margin-left: auto;
+  color: var(--p-dim);
+}
+
+.p-lock-line.wrong + .p-lock-foot .p-lock-msg {
+  color: var(--danger);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .p-lock-line.wrong .p-lock-input {
+    animation: none;
+  }
+}
+
+/* ---- 0.40.11: Übersicht mit Kontaktbogen (Variante E) ----
+   Kopf in zwei Zeilen. Oben die Active Zones als Karten, darunter je übrige
+   Zone eine Zeile: links 180 px Name und Mono-Zahl, rechts die Bilder klein
+   und dicht wie auf einem Kontaktabzug.
+   Gleicher Kopf auf allen Seiten (Übersicht, Zone, Alle, Suche, Gelöscht):
+   gleicher Abstand oben und unten, M 28–42 px Regular (Übersicht L 34–56 px),
+   leicht gesperrt (+0.01em), Titel weiß, Satz gedimmt darunter. */
+.p-page > .p-home-hero,
+.p-page > .p-head,
+.p-page > .p-head-row {
+  margin: 0;
+  padding: clamp(24px, 6vh, 72px) 0 clamp(40px, 9vh, 96px);
+}
+
+.p-page > .p-home-hero > .p-head,
+.p-page > .p-head,
+.p-page > .p-head-row > .p-head {
+  max-width: 20em;
+  margin: 0;
+  font-size: clamp(28px, 3vw, 42px);
+  font-weight: 400;
+  line-height: 1.1;
+  letter-spacing: 0;
+}
+
+/* Übersicht eine Stufe größer: L (34–56 px) */
+.p-page > .p-home-hero > .p-head {
+  font-size: clamp(34px, 4vw, 56px);
+}
+
+.p-page > .p-home-hero .p-head-text,
+.p-page > .p-head .p-head-text,
+.p-page > .p-head-row > .p-head .p-head-text {
+  display: block;
+}
+
+.p-sheetlist {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+/* Zeile als Karte: Raster wie .p-hotrow, Name in Spalte 1, Bilder ab Spalte 2 */
+.p-sheet-row {
+  display: grid;
+  grid-template-columns: repeat(var(--hot-cols, 4), minmax(0, 1fr));
+  column-gap: 10px;
+  align-items: start;
+  padding: 14px 0;
+  cursor: pointer;
+  touch-action: none;
+}
+
+.p-sheet-zone {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  padding: 2px 0 0 16px;
+  font-weight: 500;
+}
+
+.p-sheet-zone .p-mono {
+  font-weight: 400;
+}
+
+.p-sheet-thumbs {
+  grid-column: 2 / -1;
+  padding-right: 14px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 4px;
+  min-width: 0;
+}
+
+.p-sheet-thumb {
+  position: relative;
+  display: block;
+  height: max(40px, var(--row-thumb, 40px));
+  aspect-ratio: 13 / 10;
+  border-radius: var(--r-sm);
+  overflow: hidden;
+  background: rgba(var(--ink-rgb), 0.055);
+}
+
+.p-sheet-thumb img,
+.p-sheet-thumb .text-sheet {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  border-radius: inherit;
+}
+
+.p-sheet-more {
+  align-self: center;
+  padding: 0 8px;
+  color: var(--p-dim);
+}
+
+@media (max-width: 700px) {
+  .p-sheet-row {
+    grid-template-columns: minmax(0, 1fr);
+    row-gap: 12px;
+    padding-left: 14px;
+    padding-right: 14px;
+  }
+
+  .p-sheet-zone {
+    padding-left: 2px;
+  }
+
+  .p-sheet-thumbs {
+    grid-column: 1;
+    padding-right: 0;
+  }
+}
+
+/* ---- 0.40.12: Labor (Einstellungen › Labor) ----
+   Varianten B–H der Active-Zone-Karte (DESIGN 4.24b). A ist .p-card-cover.trio. */
+.p-lab-cover {
+  position: relative;
+  overflow: hidden;
+}
+.p-hot-card .p-hot-key {
+  z-index: 3;
+}
+.p-lab-cover img,
+.p-lab-cover .text-sheet {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  display: block;
+  object-fit: cover;
+}
+
+/* B Skim und G Lauf: Bilder liegen übereinander, eines ist sichtbar */
+.p-lab-B > img,
+.p-lab-B > .text-sheet,
+.p-lab-G > img,
+.p-lab-G > .text-sheet {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+}
+.p-lab-B > .on {
+  opacity: 1;
+}
+.p-lab-G > * {
+  transition: opacity 0.9s ease;
+}
+.p-lab-G > .on {
+  opacity: 1;
+}
+.p-lab-ticks {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 10px;
+  z-index: 2;
+  display: flex;
+  gap: 2px;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+.p-lab-B:hover .p-lab-ticks {
+  opacity: 1;
+}
+.p-lab-ticks b {
+  flex: 1;
+  height: 2px;
+  border-radius: 1px;
+  background: rgba(255, 255, 255, 0.35);
+}
+.p-lab-ticks b.on {
+  background: #fff;
+}
+.p-lab-count {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  z-index: 2;
+  padding: 3px 6px;
+  border-radius: var(--r-sm);
+  background: rgba(0, 0, 0, 0.6);
+  color: #fff;
+}
+
+/* C Streifen, D Kontaktbogen */
+.p-lab-C {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 2px;
+}
+.p-lab-D {
+  display: grid;
+  grid-template-columns: repeat(8, minmax(0, 1fr));
+  grid-template-rows: repeat(4, minmax(0, 1fr));
+  gap: 2px;
+}
+.p-lab-more {
+  display: grid;
+  place-items: center;
+  color: var(--p-dim);
+  background: rgba(var(--ink-rgb), 0.055);
+}
+
+/* E Stapel */
+.p-lab-E {
+  display: grid;
+  place-items: center;
+  background: rgba(var(--ink-rgb), 0.04);
+}
+.p-lab-E > img,
+.p-lab-E > .text-sheet {
+  position: absolute;
+  width: 38%;
+  height: auto;
+  aspect-ratio: 4 / 5;
+  border-radius: var(--r-sm);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
+  transition: transform 0.35s cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+.p-lab-E > :nth-child(1) { transform: translateX(-14%) rotate(-6deg); }
+.p-lab-E > :nth-child(2) { transform: rotate(1deg); }
+.p-lab-E > :nth-child(3) { transform: translateX(14%) rotate(6deg); }
+.p-hot-card:hover .p-lab-E > :nth-child(1) { transform: translateX(-82%) rotate(-3deg); }
+.p-hot-card:hover .p-lab-E > :nth-child(3) { transform: translateX(82%) rotate(3deg); }
+
+/* F Aufklappen */
+.p-lab-top {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  transition: transform 0.4s cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+.p-lab-under {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 34%;
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 2px;
+}
+.p-hot-card:hover .p-lab-top {
+  transform: translateY(-34%);
+}
+
+/* H Blättern */
+.p-lab-track {
+  display: flex;
+  gap: 2px;
+  height: 100%;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  scrollbar-width: none;
+}
+.p-lab-track::-webkit-scrollbar {
+  display: none;
+}
+.p-lab-track > * {
+  flex: 0 0 50%;
+  scroll-snap-align: start;
+}
+.p-lab-track > :first-child {
+  flex-basis: 100%;
+}
+.p-lab-arrows {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  z-index: 2;
+  display: flex;
+  gap: 4px;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+.p-hot-card:hover .p-lab-arrows {
+  opacity: 1;
+}
+.p-lab-arrow {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.6);
+  color: #fff;
+  cursor: pointer;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .p-lab-cover *,
+  .p-lab-cover {
+    transition: none !important;
+  }
+}
+
+
+/* ---- 0.40.18: Labor › Kopf ----
+   Vierzehn Mechaniken für den Seitenkopf (html[data-head]), dazu Größe (--hk)
+   und Farbe von Titel und Satz (--head-title, --head-text). Ab Werk 05 in M, Titel voll, Satz hell. */
+html[data-font="melange"] {
+  --sans: "KMR Melange Grotesk", "Geist", -apple-system, BlinkMacSystemFont, sans-serif;
+}
+html {
+  --hk: 1;
+  --head-title: var(--p-text);
+  --head-text: var(--p-dim);
+}
+html[data-head] :is(.p-page > .p-home-hero > .p-head, .p-page > .p-head, .p-page > .p-head-row > .p-head) {
+  max-width: none;
+  color: var(--head-title);
+  text-wrap: balance;
+}
+html[data-head] :is(.p-page > .p-home-hero > .p-head, .p-page > .p-head, .p-page > .p-head-row > .p-head) .p-head-title { color: var(--head-title); }
+html[data-head] :is(.p-page > .p-home-hero > .p-head, .p-page > .p-head, .p-page > .p-head-row > .p-head) .p-head-text { color: var(--head-text); }
+
+/* 01 Geist-Original: klein, Semibold, Satz klein daneben */
+html[data-head="01"] :is(.p-page > .p-home-hero > .p-head, .p-page > .p-head, .p-page > .p-head-row > .p-head) {
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 10px;
+  font-size: calc(24px * var(--hk)); font-weight: 600; line-height: 1.15; letter-spacing: -0.02em;
+}
+html[data-head="01"] :is(.p-page > .p-home-hero > .p-head, .p-page > .p-head, .p-page > .p-head-row > .p-head) .p-head-text { display: inline; font-size: 13px; font-weight: 400; letter-spacing: 0; }
+
+/* 02 Plakat: riesig, zwei Zeilen */
+html[data-head="02"] :is(.p-page > .p-home-hero > .p-head, .p-page > .p-head, .p-page > .p-head-row > .p-head) {
+  font-size: calc(clamp(48px, 7.2vw, 128px) * var(--hk)); font-weight: 600; line-height: 1; letter-spacing: -0.045em;
+}
+
+/* 03 Kontaktbogen M */
+html[data-head="03"] :is(.p-page > .p-home-hero > .p-head, .p-page > .p-head, .p-page > .p-head-row > .p-head) {
+  max-width: 20em; font-size: calc(clamp(28px, 3vw, 42px) * var(--hk)); font-weight: 500; line-height: 1.1; letter-spacing: -0.01em;
+}
+
+/* 04 Regular L, leicht gesperrt */
+html[data-head="04"] :is(.p-page > .p-home-hero > .p-head, .p-page > .p-head, .p-page > .p-head-row > .p-head) {
+  max-width: 20em; font-size: calc(clamp(34px, 4vw, 56px) * var(--hk)); font-weight: 400; line-height: 1.1; letter-spacing: 0.01em;
+}
+
+/* 05 Satz im Fluss: Titel und Satz als ein Absatz */
+html[data-head="05"] :is(.p-page > .p-home-hero > .p-head, .p-page > .p-head, .p-page > .p-head-row > .p-head) {
+  max-width: 22em; font-size: calc(clamp(26px, 3.4vw, 46px) * var(--hk)); font-weight: 500; line-height: 1.14; letter-spacing: -0.025em;
+}
+html[data-head="05"] :is(.p-page > .p-home-hero > .p-head, .p-page > .p-head, .p-page > .p-head-row > .p-head) .p-head-text { display: inline; }
+
+/* 06 Etikett und Titel: Satz als Mono-Etikett über dem Titel */
+html[data-head="06"] :is(.p-page > .p-home-hero > .p-head, .p-page > .p-head, .p-page > .p-head-row > .p-head) {
+  display: flex; flex-direction: column-reverse; align-items: flex-start; gap: 10px;
+  font-size: calc(clamp(30px, 3.6vw, 52px) * var(--hk)); font-weight: 500; line-height: 1; letter-spacing: -0.03em;
+}
+html[data-head="06"] :is(.p-page > .p-home-hero > .p-head, .p-page > .p-head, .p-page > .p-head-row > .p-head) .p-head-text {
+  font-family: "Geist Mono", ui-monospace, monospace; font-size: 11px; font-weight: 400;
+  letter-spacing: 0.02em; text-transform: uppercase; line-height: 1.3;
+}
+
+/* 07 Zeile mit Linie: Titel links, Angaben rechts in Mono, Linie darunter */
+html[data-head="07"] :is(.p-page > .p-home-hero > .p-head, .p-page > .p-head, .p-page > .p-head-row > .p-head) {
+  display: flex; justify-content: space-between; align-items: baseline; gap: 16px;
+  padding-bottom: 10px; border-bottom: 1px solid var(--head-title);
+  font-size: calc(20px * var(--hk)); font-weight: 500; line-height: 1.2; letter-spacing: -0.01em;
+}
+html[data-head="07"] :is(.p-page > .p-home-hero > .p-head, .p-page > .p-head, .p-page > .p-head-row > .p-head) .p-head-text {
+  font-family: "Geist Mono", ui-monospace, monospace; font-size: 11px; font-weight: 400;
+  letter-spacing: 0.02em; text-transform: uppercase; text-align: right;
+}
+
+/* 08 Zweispaltig: Titel groß links, Satz klein rechts, unten bündig */
+html[data-head="08"] :is(.p-page > .p-home-hero > .p-head, .p-page > .p-head, .p-page > .p-head-row > .p-head) {
+  display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 360px); align-items: end; gap: 32px;
+  font-size: calc(clamp(40px, 6vw, 96px) * var(--hk)); font-weight: 600; line-height: 0.95; letter-spacing: -0.04em;
+}
+html[data-head="08"] :is(.p-page > .p-home-hero > .p-head, .p-page > .p-head, .p-page > .p-head-row > .p-head) .p-head-text { font-size: 14px; font-weight: 400; line-height: 1.45; letter-spacing: 0; }
+
+/* 09 Großer Satz: Titel klein darüber, Satz (die Zahlen) groß und leicht */
+html[data-head="09"] :is(.p-page > .p-home-hero > .p-head, .p-page > .p-head, .p-page > .p-head-row > .p-head) {
+  font-size: calc(15px * var(--hk)); font-weight: 500; line-height: 1.3;
+}
+html[data-head="09"] :is(.p-page > .p-home-hero > .p-head, .p-page > .p-head, .p-page > .p-head-row > .p-head) .p-head-text {
+  margin-top: 6px; font-size: calc(clamp(40px, 6vw, 96px) * var(--hk)); font-weight: 200; line-height: 0.95; letter-spacing: -0.045em;
+}
+
+/* 10 Wortreihe: alle Zonen als eine Zeile, die aktuelle in Titelfarbe (app.js) */
+html[data-head="10"] :is(.p-page > .p-home-hero > .p-head, .p-page > .p-head, .p-page > .p-head-row > .p-head) {
+  max-width: none; font-size: calc(clamp(26px, 3.4vw, 46px) * var(--hk)); font-weight: 500; line-height: 1.15; letter-spacing: -0.025em;
+}
+html[data-head="10"] :is(.p-page > .p-home-hero > .p-head, .p-page > .p-head, .p-page > .p-head-row > .p-head) .p-head-text { display: inline; color: var(--p-faint); }
+html[data-head="10"] :is(.p-page > .p-home-hero > .p-head, .p-page > .p-head, .p-page > .p-head-row > .p-head):has(.p-head-row-word) .p-head-text { display: none; }
+.p-head-row-word { color: var(--p-faint); }
+
+/* 11 Leicht und groß: Schnitt 300, Satz mit Punkt angehängt */
+html[data-head="11"] :is(.p-page > .p-home-hero > .p-head, .p-page > .p-head, .p-page > .p-head-row > .p-head) {
+  font-size: calc(clamp(36px, 5.4vw, 84px) * var(--hk)); font-weight: 300; line-height: 1.02; letter-spacing: -0.035em;
+}
+html[data-head="11"] :is(.p-page > .p-home-hero > .p-head, .p-page > .p-head, .p-page > .p-head-row > .p-head) .p-head-text { display: inline; }
+html[data-head="11"] :is(.p-page > .p-home-hero > .p-head, .p-page > .p-head, .p-page > .p-head-row > .p-head) .p-head-text::before { content: "\00a0· "; }
+
+/* 12 Kein Kopf: nur eine kleine Zeile, die Bilder beginnen sofort */
+html[data-head="12"] :is(.p-page > .p-head, .p-page > .p-head-row, .p-page > .p-home-hero) {
+  padding: 4px 0 18px;
+}
+html[data-head="12"] :is(.p-page > .p-home-hero > .p-head, .p-page > .p-head, .p-page > .p-head-row > .p-head) {
+  display: flex; gap: 8px; align-items: baseline;
+  font-size: calc(14px * var(--hk)); font-weight: 500; line-height: 1.3; letter-spacing: 0;
+}
+html[data-head="12"] :is(.p-page > .p-home-hero > .p-head, .p-page > .p-head, .p-page > .p-head-row > .p-head) .p-head-text { display: inline; font-weight: 400; }
+
+/* 13 Pfad: Titel hell, der letzte Ordner voll, Satz klein darunter */
+html[data-head="13"] :is(.p-page > .p-home-hero > .p-head, .p-page > .p-head, .p-page > .p-head-row > .p-head) {
+  font-size: calc(clamp(28px, 3vw, 42px) * var(--hk)); font-weight: 500; line-height: 1.1; letter-spacing: -0.02em;
+}
+html[data-head="13"] :is(.p-page > .p-home-hero > .p-head, .p-page > .p-head, .p-page > .p-head-row > .p-head) .p-head-title:has(~ .p-head-folder),
+html[data-head="13"] :is(.p-page > .p-home-hero > .p-head, .p-page > .p-head, .p-page > .p-head-row > .p-head) .p-head-folder:has(~ .p-head-folder) { color: var(--p-faint); }
+html[data-head="13"] :is(.p-page > .p-home-hero > .p-head, .p-page > .p-head, .p-page > .p-head-row > .p-head) .p-head-text { margin-top: 8px; font-size: 13px; font-weight: 400; letter-spacing: 0; }
+
+/* 14 Hochkant: Kopf um 90° gedreht an der linken Kante, alles andere rückt daneben */
+html[data-head="14"] .p-page:has(> .p-head, > .p-head-row, > .p-home-hero) {
+  display: grid; grid-template-columns: auto minmax(0, 1fr); column-gap: 28px; align-content: start;
+}
+html[data-head="14"] .p-page:has(> .p-head, > .p-head-row, > .p-home-hero) > * { grid-column: 2; }
+html[data-head="14"] :is(.p-page > .p-head, .p-page > .p-head-row, .p-page > .p-home-hero) {
+  grid-column: 1; grid-row: 1 / span 40; align-self: start; position: sticky; top: 0; padding: 24px 0 0;
+}
+html[data-head="14"] :is(.p-page > .p-home-hero > .p-head, .p-page > .p-head, .p-page > .p-head-row > .p-head) {
+  writing-mode: vertical-rl; transform: rotate(180deg);
+  font-size: calc(clamp(36px, 4.4vw, 64px) * var(--hk)); font-weight: 600; line-height: 1; letter-spacing: -0.03em;
+}
+html[data-head="14"] :is(.p-page > .p-home-hero > .p-head, .p-page > .p-head, .p-page > .p-head-row > .p-head) .p-head-text { display: inline; }
+html[data-head="14"] .p-head-row .p-folder-cards { display: none; }
+
+/* ---- 0.41.0: Farbmarken (DESIGN.md 4.6a) ----
+   Innenrand 4 px in der Farbe auf dem Bild (Lukas 23.10.: Variante B). Liegt
+   innen, damit das Raster ruhig bleibt und die Marke den Ring (außen, 4.1)
+   nie berührt. */
+.card-mark {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  pointer-events: none;
+  box-shadow: inset 0 0 0 4px var(--mk);
+}
+.card-mark[hidden] {
+  display: none;
+}
+/* Liste: ein Strich links an der Zeile */
+.listview .card-mark {
+  inset: 6px auto 6px 0;
+  width: 3px;
+  box-shadow: none;
+  background: var(--mk);
+}
+.mark-sw {
+  display: inline-block;
+  flex: none;
+  width: 9px;
+  height: 9px;
+  background: var(--mk);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.12);
+}
+.p-marks {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: 14px;
+}
+.p-mark-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.p-mark-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 10px 8px;
+}
+.p-mark-row .mark-sw.big {
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: 0;
+  cursor: default;
+}
+.p-mark-row .mark-sw.active {
+  outline: 1px dashed rgba(var(--ink-rgb), 0.7);
+  outline-offset: 3px;
+}
+.p-mark-none {
+  margin-left: 4px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--p-dim);
+  font-family: var(--p-mono);
+  font-size: 10px;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  cursor: default;
+}
+.p-mark-none:hover {
+  color: var(--p-text);
 }

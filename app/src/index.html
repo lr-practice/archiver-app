@@ -5,12 +5,14 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Archiver</title>
     <link rel="stylesheet" href="app.css" />
+    <link rel="stylesheet" href="cloud.css" />
+    <link rel="stylesheet" href="dropfx.css" />
   </head>
   <body>
     <div id="splash" class="splash">
       <div class="splash-text">
         <div class="splash-word">Archiver</div>
-        <div class="splash-sub">Visual Library for Creatives</div>
+        <div class="splash-sub">A Visual Library for Creative Research</div>
       </div>
     </div>
 
@@ -35,9 +37,10 @@
       <div id="dropbar" class="p-dropbar" hidden></div>
       <div id="lock" class="p-lock" hidden>
         <div class="p-lock-inner">
-          <div class="p-lock-mark">Archiver</div>
-          <p id="lockText"></p>
-          <div id="lockForm" class="p-lock-form"></div>
+          <button type="button" id="lockEnd" class="p-lock-end p-lock-preview" hidden></button>
+          <h1 class="p-say"><span id="lockTitle"></span> <span id="lockText" class="p-say-sub"></span></h1>
+          <form id="lockList" class="p-lock-line" novalidate></form>
+          <div id="lockGo" class="p-lock-foot"></div>
         </div>
       </div>
       <header id="top" class="p-top" data-tauri-drag-region>
@@ -63,6 +66,7 @@
       <div class="lightbox-stage" id="lightboxStage"><img id="lightboxImg" alt="" /></div>
       <div id="lbMedia" class="lb-media" hidden></div>
       <aside id="lbInfo" class="lb-info"></aside>
+      <aside id="lbText" class="lb-caption" hidden></aside>
       <div id="lbZones" class="lb-bar lb-zones" hidden></div>
       <nav class="lb-bar lb-nav">
         <span id="lbBrowse" class="lb-group">
@@ -73,8 +77,14 @@
         </span>
         <span id="lbName" class="lb-name"></span>
         <button type="button" id="lightboxZoom" class="lb-btn lb-zoom"></button>
+        <span id="lbTones" class="lb-tones tone-picker" hidden></span>
+        <button type="button" id="lbTextBtn" class="lb-btn" hidden></button>
+        <button type="button" id="lbCloudBtn" class="lb-btn"></button>
         <button type="button" id="lbInfoBtn" class="lb-btn"></button>
         <button type="button" id="lbSourceBtn" class="lb-btn"></button>
+        <button type="button" id="lbOfflineBtn" class="lb-btn" hidden></button>
+        <button type="button" id="lbRestoreBtn" class="lb-btn" hidden></button>
+        <button type="button" id="lbRemoveBtn" class="lb-btn lb-remove" hidden></button>
         <button type="button" id="lbAction" class="lb-btn lb-action"></button>
       </nav>
     </div>
@@ -83,8 +93,12 @@
     <div id="toasts" class="toasts"></div>
 
     <script src="i18n.js"></script>
+    <script src="manual.js"></script>
     <script src="media.js"></script>
     <script src="reveal.js"></script>
+    <script src="search.js"></script>
+    <script src="cloud.js"></script>
+    <script src="dropfx.js"></script>
     <script src="app.js"></script>
   </body>
 </html>
