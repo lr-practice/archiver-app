@@ -18,7 +18,7 @@
   const VIEWS = ["cloud", "focus", "grid", "masonry", "spectrum", "strand", "piles", "compare", "free"];
   // Modi bis 0.40: gehen in den neuen Ansichten auf
   const OLD_VIEWS = { orbit: "focus", magnet: "spectrum", constellation: "strand" };
-  const GAPS = { tight: 12, mid: 26, wide: 44 };
+  const GAP = 26; // Abstand fest (0.42.1: Wahl Eng/Mittel/Weit raus, Lukas)
   const STEPS = ["S", "M", "L", "XL"];
   const SCALE = [0.62, 1, 1.45, 2.05];
   // Fläche: Lightbox wie bisher, Schwarz, Weiß, die fünf Farben der Textkarten, Auto aus dem Objekt
@@ -35,7 +35,6 @@
     root: null,
     focus: null, // Objekt aus der Bibliothek
     view: "cloud",
-    gap: "mid",
     tone: "lightbox",
     nodes: [], // [0] ist das offene Objekt
     sel: new Set(),
@@ -47,7 +46,8 @@
     hover: null,
     drag: null,
     look: null, // { list, at }
-    pop: null, // offenes Auswahlfeld über der Leiste: "view" oder "tone"
+    pop: null, // offenes Auswahlfeld über der Leiste: "versions" oder "tone"
+    lines: false, // Linien zu den ähnlichsten Bildern stehen fest (und kommen mit ins Bild)
     auto: 0, // Autoplay-Takt
     barHidden: false,
     ctx: false, // Rechtsklick-Menü offen
@@ -76,14 +76,13 @@
     const refs = C.nodes.slice(1).map((n) => [keyOf(n.item), n.step, 0, n.group || 0]);
     const free = {};
     for (const [k, p] of C.free) free[k] = [Math.round(p[0] * 1000) / 1000, Math.round(p[1] * 1000) / 1000];
-    if (refs.length) all[key] = { m: C.view, g: C.gap, t: C.tone, s: C.nodes[0].step, r: refs, p: free, v: C.versions, at: Date.now() };
+    if (refs.length) all[key] = { m: C.view, t: C.tone, s: C.nodes[0].step, r: refs, p: free, v: C.versions, at: Date.now() };
     else delete all[key];
     const keys = Object.keys(all);
     if (keys.length > MAX_CLOUDS) keys.sort((a, b) => (all[a].at || 0) - (all[b].at || 0)).slice(0, keys.length - MAX_CLOUDS).forEach((k) => delete all[k]);
     try {
       localStorage.setItem("archiver.clouds", JSON.stringify(all));
       localStorage.setItem("archiver.cloudMode", JSON.stringify(C.view));
-      localStorage.setItem("archiver.cloudGap", JSON.stringify(C.gap));
       localStorage.setItem("archiver.cloudTone", JSON.stringify(C.tone));
     } catch {}
   }
@@ -308,7 +307,6 @@
     n.h = v / Math.sqrt(n.ar);
   }
 
-  const gapPx = () => GAPS[C.gap];
   const kOf = (n) => SCALE[n.step] / SCALE[1];
 
   // Reihenfolge: Mischen tauscht fest (gleiche Zahl, gleiche Lage)
@@ -369,7 +367,7 @@
 
   // Wolke: alles sammelt sich dicht um die Mitte, Gruppen halten zusammen
   function cloudLayout(ns, b, s) {
-    const gap = gapPx();
+    const gap = GAP;
     const c = centerNode();
     const list = [c, ...ordered(ns.filter((n) => n !== c))];
     const cx = b.x + b.w / 2, cy = b.y + b.h / 2;
@@ -445,7 +443,7 @@
 
   // Zeilen gleicher Grundhöhe, Größe S–XL skaliert je Objekt; so groß, wie es passt
   function rows(ns, b, maxH, snake) {
-    const gap = Math.min(gapPx(), 26);
+    const gap = GAP;
     const pack = (h) => {
       const out = [[]];
       let x = 0;
@@ -519,7 +517,7 @@
     // Jede Gruppe beginnt eine neue Zeile; so viele Spalten, dass die Zellen am größten werden
     grid(ns, b) {
       const parts = blocks(ordered(ns));
-      const gap = Math.min(gapPx(), 26);
+      const gap = GAP;
       let cols = 1, lines = 1, cell = 0;
       for (let k = 1; k <= ns.length; k++) {
         const l = parts.reduce((a, p) => a + Math.ceil(p.length / k), 0);
@@ -544,7 +542,7 @@
     // Spalten: gleich breit, unterschiedlich hoch
     masonry(ns, b) {
       const list = blocks(ordered(ns)).flat();
-      const gap = Math.min(gapPx(), 26);
+      const gap = GAP;
       let best = null;
       for (let cols = 2; cols <= 10; cols++) {
         const cw = (b.w - gap * (cols - 1)) / cols;
@@ -717,22 +715,43 @@
     threads();
   }
 
+  // Linien fest (0.42.1): jedes Bild zu seinem ähnlichsten, jedes Paar einmal
+  function linePairs() {
+    if (!C.lines || C.nodes.length < 2) return [];
+    const seen = new Set();
+    const out = [];
+    for (const n of C.nodes) {
+      let best = null;
+      for (const m of C.nodes) if (m !== n && (!best || colorSim(n, m) > colorSim(n, best))) best = m;
+      const k = [C.nodes.indexOf(n), C.nodes.indexOf(best)].sort((a, b) => a - b).join("-");
+      if (seen.has(k)) continue;
+      seen.add(k);
+      out.push([n, best]);
+    }
+    return out;
+  }
+
   // Strang: Kette vom ähnlichsten zum nächsten. Überfahren: die drei Bilder
   // mit der ähnlichsten Durchschnittsfarbe
   function threads() {
     const svg = $("clLinks");
     svg.replaceChildren();
     const ns = "http://www.w3.org/2000/svg";
+    const line = (a, b) => {
+      const l = document.createElementNS(ns, "line");
+      l.setAttribute("x1", a.x);
+      l.setAttribute("y1", a.y);
+      l.setAttribute("x2", b.x);
+      l.setAttribute("y2", b.y);
+      svg.appendChild(l);
+    };
     if (C.view === "strand" && C.chain && C.chain.length > 1) {
       const p = document.createElementNS(ns, "path");
       p.setAttribute("d", "M" + C.chain.map((n) => n.x + " " + n.y).join(" L"));
       svg.appendChild(p);
     }
-    for (const n of C.nodes) {
-      n.el.classList.remove("near");
-      const why = n.el.querySelector(".cl-why");
-      if (why) why.remove();
-    }
+    for (const [a, b] of linePairs()) line(a, b);
+    for (const n of C.nodes) n.el.classList.remove("near");
     const h = C.hover;
     if (!h || C.drag || !C.nodes.includes(h)) return;
     C.nodes
@@ -740,15 +759,8 @@
       .sort((p, q) => colorSim(h, q) - colorSim(h, p))
       .slice(0, 3)
       .forEach((n) => {
-        const l = document.createElementNS(ns, "line");
-        l.setAttribute("x1", h.x);
-        l.setAttribute("y1", h.y);
-        l.setAttribute("x2", n.x);
-        l.setAttribute("y2", n.y);
-        svg.appendChild(l);
+        line(h, n);
         n.el.classList.add("near");
-        // Was die Linie meint: Anteil gleicher Farben (0.42.0)
-        n.el.appendChild(el("span", "cl-why", t("cloudWhy", { n: Math.round(colorSim(h, n) * 100) })));
       });
   }
 
@@ -871,10 +883,17 @@
       nav.appendChild(lbBtn("×", false, () => selectOnly(null), "esc"));
       return;
     }
-    const view = lbBtn(t("cloudView_" + C.view) + " ▾", C.pop === "view", () => togglePop("view"), t("cloudViewPick"));
-    view.classList.add("cl-pop-btn");
-    view.dataset.pop = "view";
-    nav.appendChild(view);
+    // 0.42.1: die Ansichten direkt in der Leiste, links (Lukas)
+    for (const v of VIEWS) nav.appendChild(lbBtn(t("cloudView_" + v), C.view === v, () => setView(v), t("cloudViewTitle_" + v)));
+    nav.appendChild(
+      lbBtn(t("cloudShuffle"), false, () => {
+        C.shuffle++;
+        if (C.view === "free") C.free.clear();
+        layout();
+        save();
+      }, t("cloudShuffleTitle"))
+    );
+    nav.appendChild(sep());
     const tone = A.button("cl-tone cl-pop-btn" + (C.pop === "tone" ? " active" : ""), "", () => togglePop("tone"));
     tone.dataset.tone = C.tone;
     tone.dataset.pop = "tone";
@@ -883,7 +902,12 @@
     nav.appendChild(tone);
     nav.appendChild(sep());
     nav.appendChild(lbBtn("+ " + t("cloudAdd"), C.picker, togglePicker, t("cloudAddTitle")));
+    const vers = lbBtn(t("cloudVersions") + " ▾", C.pop === "versions", () => togglePop("versions"), t("cloudVersionsTitle"));
+    vers.classList.add("cl-pop-btn");
+    vers.dataset.pop = "versions";
+    nav.appendChild(vers);
     nav.appendChild(sep());
+    nav.appendChild(lbBtn(t("cloudLines"), C.lines, toggleLines, t("cloudLinesTitle")));
     nav.appendChild(lbBtn(t("cloudAuto"), !!C.auto, () => toggleAuto(), t("cloudAutoTitle")));
     nav.appendChild(lbBtn(t("cloudSaveImage"), false, saveImage, t("cloudSaveImageTitle")));
     nav.appendChild(el("span", "cl-flex"));
@@ -891,7 +915,7 @@
     nav.appendChild(lbBtn(t("cloudClose"), false, close, "esc"));
   }
 
-  // ---- Feld über der Leiste: Ansicht (mit Abstand und Mischen) oder Fläche ----
+  // ---- Feld über der Leiste: Fassungen oder Fläche ----
 
   function togglePop(kind) {
     C.pop = C.pop === kind ? null : kind;
@@ -912,37 +936,7 @@
     box.replaceChildren();
     box.hidden = C.barHidden || !C.pop;
     if (box.hidden) return;
-    if (C.pop === "view") {
-      box.appendChild(el("span", "cl-label", t("cloudViewLabel")));
-      const list = el("div", "cl-pop-row");
-      for (const v of VIEWS)
-        list.appendChild(
-          lbBtn(t("cloudView_" + v), C.view === v, () => {
-            setView(v);
-            closePop();
-          }, t("cloudViewTitle_" + v))
-        );
-      box.appendChild(list);
-      box.appendChild(el("span", "cl-label", t("cloudGap")));
-      const gaps = el("div", "cl-pop-row");
-      for (const g of Object.keys(GAPS))
-        gaps.appendChild(
-          lbBtn(t("cloudGap_" + g), C.gap === g, () => {
-            C.gap = g;
-            layout();
-            save();
-          })
-        );
-      gaps.appendChild(sep());
-      gaps.appendChild(
-        lbBtn(t("cloudShuffle"), false, () => {
-          C.shuffle++;
-          if (C.view === "free") C.free.clear();
-          layout();
-          save();
-        }, t("cloudShuffleTitle"))
-      );
-      box.appendChild(gaps);
+    if (C.pop === "versions") {
       box.appendChild(el("span", "cl-label", t("cloudVersions")));
       const vs = el("div", "cl-pop-row");
       C.versions.forEach((v, i) => {
@@ -980,6 +974,15 @@
     box.style.bottom = r.bottom - nb.top + 10 + "px";
     const x = btn ? btn.getBoundingClientRect().left - r.left - 6 : nb.left - r.left;
     box.style.left = Math.max(16, Math.min(x, r.width - box.offsetWidth - 16)) + "px";
+  }
+
+  function toggleLines() {
+    C.lines = !C.lines;
+    try {
+      localStorage.setItem("archiver.cloudLines", JSON.stringify(C.lines));
+    } catch {}
+    paint();
+    renderBar();
   }
 
   // ---- Fassungen: benannte Stände eines Atlas (Ansicht, Fläche, freie Lage) ----
@@ -1126,6 +1129,16 @@
 
   // ---- Als Bild sichern: die ganze Anordnung als PNG (lib.rs export_cloud_image) ----
 
+  // Farbe der Linien im Bild: Schriftfarbe der Fläche (--cl-fg), auf 45 % wie am Schirm
+  function ink() {
+    const probe = el("span");
+    probe.style.color = "var(--cl-fg)";
+    C.root.appendChild(probe);
+    const m = getComputedStyle(probe).color.match(/\d+(\.\d+)?/g) || [237, 237, 237];
+    probe.remove();
+    return m.slice(0, 3).map((v) => Math.round(Number(v)));
+  }
+
   function background() {
     const probe = el("span");
     probe.style.color = C.root.style.getPropertyValue("--cl-bg") || "";
@@ -1167,11 +1180,15 @@
         h: n.h * k,
         alpha: n.dim ? 0.4 : 1,
       }));
+    // Was an Linien gerade fest steht: Linien-Knopf und der Faden im Strang
+    const segs = linePairs();
+    if (C.view === "strand" && C.chain) for (let i = 1; i < C.chain.length; i++) segs.push([C.chain[i - 1], C.chain[i]]);
+    const lines = segs.map(([a, b]) => [(a.x - x0) * k, (a.y - y0) * k, (b.x - x0) * k, (b.y - y0) * k]);
     const name = String(C.focus.filename || "Archiver").replace(/\.[^.]+$/, "") + " – " + t("cloud") + ".png";
     try {
       const out = await A.invoke("export_cloud_image", {
         fileName: name,
-        image: { width: Math.round((x1 - x0) * k), height: Math.round((y1 - y0) * k), bg: background(), items },
+        image: { width: Math.round((x1 - x0) * k), height: Math.round((y1 - y0) * k), bg: background(), ink: ink(), scale: k, lines, items },
       });
       if (out) A.toast(t("cloudSaved"));
     } catch (err) {
@@ -1431,7 +1448,7 @@
     closeLook();
     const stored = load()[keyOf(item)];
     C.view = (stored && viewOf(stored.m)) || viewOf(lastPref("cloudMode", (v) => !!viewOf(v), "cloud"));
-    C.gap = stored && GAPS[stored.g] ? stored.g : lastPref("cloudGap", (v) => !!GAPS[v], "mid");
+    C.lines = lastPref("cloudLines", (v) => typeof v === "boolean", false);
     C.tone = stored && TONES.includes(stored.t) ? stored.t : lastPref("cloudTone", (v) => TONES.includes(v), "lightbox");
     C.free = new Map(stored && stored.p ? Object.entries(stored.p) : []);
     C.versions = stored && Array.isArray(stored.v) ? stored.v.filter((v) => v && v.n && v.p) : [];

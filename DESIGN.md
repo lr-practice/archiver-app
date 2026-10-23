@@ -1,6 +1,6 @@
 # Archiver – Design-System
 
-Stand: App 0.42.0 · Extension 3.29.7
+Stand: App 0.42.1 · Extension 3.29.7
 
 Diese Datei hält fest, wie Archiver aussieht und warum. Sie gilt für die Mac-App
 (`app/src`) und die Extension (`extension/`, in Chrome und in Safari). Wer an der Oberfläche
@@ -740,16 +740,19 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
   hsl × 32 % × 13 %). Schrift, Ring, Fäden und Lasso nehmen die Schriftfarbe der
   Fläche (`--cl-fg`). Auf farbiger Fläche deckt die Leiste wie ein Menü
   (`--menu-bg`).
-- **Eine Leiste (0.42.0):** unten, im Maß der Lightbox-Leiste (4.11). Ohne
-  Auswahl: „Ansicht ▾“, Flächen-Quadrat, „+ Referenz“, Autoplay, Als Bild,
+- **Eine Leiste (0.42.0, 0.42.1):** unten, Knöpfe wie die Lightbox-Leiste
+  (4.11), aber 10 px Innenabstand. Breite bis 1480 px (Lukas 23.10.: „gerne
+  länger“), zu schmal bricht sie in eine zweite Zeile um. Ohne Auswahl: die neun
+  Ansichten direkt links (nicht in einem Feld, Lukas 23.10.), Mischen,
+  Flächen-Quadrat, „+ Referenz“, „Fassungen ▾“, Linien, Autoplay, Als Bild,
   rechts Ausblenden und Schließen. Mit Auswahl: „n gewählt“, S M L XL, Groß,
   Gruppe und Vergleichen (ab zwei) bzw. In die Mitte (eins), Gruppe lösen,
   rechts Entfernen und ×. Aktiv = gefüllter Knopf (ink × 0.15). Die obere
   Leiste (0.41) ist weg; oben bleibt nur Platz für die Fensterknöpfe (52 px).
 - **Feld über der Leiste:** Glas wie das Menü (`--menu-bg`, `--menu-shadow`,
-  `--r-lg`), steht über dem Knopf, der es öffnet, nie über den Rand. „Ansicht ▾“:
-  die neun Ansichten, Abstand mit Mischen, Fassungen. Flächen-Quadrat: die neun
-  Flächen als Quadrate 20 px. Klick auf die Fläche oder Esc schließt.
+  `--r-lg`), steht über dem Knopf, der es öffnet, nie über den Rand.
+  „Fassungen ▾“: die Fassungen und „+ Fassung sichern“. Flächen-Quadrat: die
+  neun Flächen als Quadrate 20 px. Klick auf die Fläche oder Esc schließt.
 - **Rechtsklick auf ein Bild:** Menü wie in den Zonen (`.p-ctx-menu`): Groß
   ansehen, In die Mitte (eins) oder Vergleichen (mehrere), Gruppe bilden, Gruppe
   lösen, Größe S M L XL, Eigener Atlas (dieses Bild als Mitte, ↩), In der Zone
@@ -766,7 +769,8 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
   - Stapel: je Zone ein Stapel mit Label (4.7), Klick fächert auf
   - Vergleich: zwei bis vier gewählte groß, der Rest klein und auf 40 %
   - Frei: was gezogen wird, bleibt liegen. Ziehen in jeder Ansicht schaltet hierher
-- **Abstand:** Eng 12, Mittel 26, Weit 44 px; in Zeilen höchstens 26.
+- **Abstand:** fest 26 px. Die Wahl Eng/Mittel/Weit ist seit 0.42.1 raus
+  (Lukas 23.10.: „erstmal rausnehmen“).
 - **Größe:** vier Stufen (0.62, 1, 1.45, 2.05 × Grundmaß = kürzere
   Fensterseite / 8, 56–140 px). Gilt in Wolke, Frei und allen Zeilen-Ansichten;
   Raster, Spalten, Fokus, Stapel und Vergleich setzen die Größe selbst.
@@ -781,9 +785,11 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
   Stapel: jede Gruppe ist ein eigener Stapel („Gruppe 1“) neben den Zonen.
 - **Linien:** Beim Überfahren verbinden gestrichelte Fäden das Bild mit den drei
   Bildern der ähnlichsten Farbanteile (Bildanalyse, nicht Zone oder Tags); die
-  drei tragen den Ring auf 45 %. Seit 0.42.0 steht links unter jedem der drei,
-  was die Linie meint: „Farbe 94 %“ (Mono 10 px, Label 4.7 auf `--menu-bg`).
-  Im Strang zeigt ein Faden die Kette.
+  drei tragen den Ring auf 45 %. Kein Label daran (das „Farbe 94 %“ aus 0.42.0
+  ist seit 0.42.1 raus, Lukas). Im Strang zeigt ein Faden die Kette.
+  Knopf Linien (0.42.1): von jedem Bild eine Linie zu seinem farblich
+  ähnlichsten, jedes Paar einmal, stehen fest. Bleibt gemerkt
+  (`archiver.cloudLines`).
 - **Autoplay (0.42.0):** P oder Knopf. Schaltet auf Fokus, die Mitte wechselt
   alle 3,2 s, mit mehreren gewählten nur durch die Auswahl. Ein Klick auf die
   Fläche, eine Taste oder Esc hält an. Knopf aktiv, solange es läuft.
@@ -792,14 +798,17 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
   den nächsten Atlas gemerkt (`archiver.cloudBarHidden`).
 - **Als Bild (0.42.0):** PNG der ganzen Anordnung, wie sie gerade liegt, mit
   6 % Rand (mind. 24 px) im Ton der Fläche; Lightbox wird deckend (#0a0a0a
-  dunkel, #ebebeb hell). Lange Seite bis 4000 px, aus den Originalen, sonst der
+  dunkel, #ebebeb hell). Feste Linien und der Faden im Strang kommen mit, unter
+  den Bildern, in der Schriftfarbe der Fläche auf 45 %, Strich 1 und 4/4
+  gestrichelt, im Maß des Bildes (0.42.1). Lange Seite bis 4000 px, aus den Originalen, sonst der
   Vorschau. Sichern-Dialog in Downloads, danach im Finder gezeigt
   (`export_cloud_image`, `atlas.rs`).
 - **Fassungen (0.42.0):** „+ Fassung sichern“ hält die aktuelle Lage als freie
   Lage fest, mit Ansicht und Fläche, Namen „Fassung 1, 2 …“, höchstens 12 je
   Atlas. Klick legt sie wieder aus (Ansicht Frei), Rechtsklick löscht.
 - **Groß ansehen:** Leertaste oder Doppelklick; Fläche wie der Atlas, Bild
-  `contain`, ← → blättert durch die Auswahl (bei einer: alle), Label unten mit
+  `contain` in einer festen Zelle (`grid-template: minmax(0, 1fr) / minmax(0,
+  1fr)`, sonst laufen hohe Bilder aus dem Fenster, 0.42.1), ← → blättert durch die Auswahl (bei einer: alle), Label unten mit
   Zone, Name und Stelle. Esc oder Leertaste schließt.
 - **Hinzufügen:** Glas über der Leiste (2.4) mit Suchfeld, daneben „+5
   ähnliche“, darunter Streifen 88 px, ähnlichste Bilder zuerst (Farbanteile,
@@ -807,7 +816,7 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
   ihres eigenen Atlas.
 - **Bewegung:** Bei `prefers-reduced-motion` springen die Objekte ohne Gleiten,
   Feld und Glas erscheinen ohne Einblenden.
-- **Speichern:** Mitglieder, Größe, Gruppe, Ansicht, Abstand, Fläche, die
+- **Speichern:** Mitglieder, Größe, Gruppe, Ansicht, Fläche, die
   freie Lage (Anteile der Fläche) und die Fassungen je Objekt, lokal unter
   `archiver.clouds` (höchstens 300). Keine Datei, keine Kopien. Alte Modi werden
   beim Öffnen übersetzt: Orbit → Fokus, Farbe → Spektrum, Konstellation → Strang.

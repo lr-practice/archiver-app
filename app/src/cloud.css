@@ -94,9 +94,7 @@
   opacity: 0.45;
 }
 
-/* Gruppe: Kennung unter dem Objekt, Label wie 4.7. Beim Überfahren steht
-   links darunter, was die Linie meint („Farbe 94 %“), deckend wie ein Menü. */
-.cl-why,
+/* Gruppe: Kennung unter dem Objekt, Label wie 4.7 */
 .cl-group,
 .cl-pile-label {
   position: absolute;
@@ -113,17 +111,6 @@
 .cl-group {
   right: 0;
   bottom: -16px;
-}
-
-.cl-why {
-  left: 0;
-  top: calc(100% + 4px);
-  z-index: 2;
-  padding: 2px 4px;
-  border-radius: var(--r-sm);
-  background: var(--menu-bg);
-  color: var(--p-text);
-  opacity: 1;
 }
 
 .cl-labels {
@@ -151,6 +138,9 @@
   inset: 0;
   z-index: 6;
   display: grid;
+  /* Feste Zelle in Fenstergröße, sonst greift max-height in % nicht und
+     große Bilder laufen unten aus dem Fenster (0.42.1) */
+  grid-template: minmax(0, 1fr) / minmax(0, 1fr);
   place-items: center;
   background: color-mix(in srgb, var(--cl-bg, var(--lightbox-bg)) 94%, transparent);
   -webkit-backdrop-filter: blur(24px);
@@ -244,9 +234,17 @@
   background: var(--menu-bg);
 }
 
+/* 0.42.1: länger, die Ansichten stehen links in der Leiste. Zu schmal: zweite Zeile */
 .cl-nav {
   bottom: 22px;
-  width: min(960px, calc(100% - 32px));
+  width: min(1480px, calc(100% - 32px));
+  flex-wrap: wrap;
+  row-gap: 2px;
+}
+
+/* Knöpfe enger als in der Lightbox, damit 1440 px in einer Zeile reichen */
+.cl-nav .lb-btn {
+  padding: 0 10px;
 }
 
 .cl-label,
@@ -268,7 +266,7 @@
   flex: 1;
 }
 
-/* ---- Feld über der Leiste: Ansicht ▾ (Ansichten, Abstand, Fassungen) und Fläche ---- */
+/* ---- Feld über der Leiste: Fassungen ▾ und Fläche ---- */
 
 .cl-pop {
   position: absolute;

@@ -1,5 +1,19 @@
 # Changelog
 
+## App 0.42.1 (Vorabversion)
+
+- Atlas, Groß ansehen: hohe Bilder liefen unten aus dem Fenster. Jetzt passt
+  jedes Bild ganz hinein.
+- Die neun Ansichten stehen direkt links in der Leiste, daneben Mischen. Die
+  Leiste ist dafür länger (bis 1480 px), in schmalen Fenstern bricht sie in
+  eine zweite Zeile um.
+- Abstand ist raus, es gilt fest Mittel (26 px).
+- Fassungen haben einen eigenen Knopf „Fassungen ▾“.
+- Neu: Linien. Der Knopf lässt von jedem Bild eine Linie zu seinem farblich
+  ähnlichsten stehen. Was dabei steht, kommt mit „Als Bild“ ins PNG, auch der
+  Faden im Strang.
+- Beim Überfahren steht kein „Farbe 62 %“ mehr unter den Bildern.
+
 ## App 0.42.0 (Vorabversion)
 
 - Die Wolke heißt jetzt Atlas, nach Warburgs Bildatlas.
