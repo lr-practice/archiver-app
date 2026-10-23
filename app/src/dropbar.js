@@ -114,11 +114,33 @@
 
   const FX = window.ArchiverDropFx;
 
-  function leave(delay) {
-    hold(delay + 400);
+  // Glas (0.40.24): echte macOS-Unschärfe hinter jeder Karte, wie das Glas
+  // der App. Die Karten melden ihre Rechtecke, system.rs legt das Glas darunter.
+  function glass() {
+    const cards = [...document.querySelectorAll(".db-hot")].map((c) => {
+      const r = c.getBoundingClientRect();
+      return [r.left, r.top, r.width, r.height];
+    });
+    const first = document.querySelector(".db-hot");
+    const radius = first ? parseFloat(getComputedStyle(first).borderTopLeftRadius) || 0 : 0;
+    invoke("dropbar_glass", { cards, radius, light: document.documentElement.classList.contains("light") }).catch(() => {});
+  }
+  // nach dem Einblenden messen: das Fenster hat eben erst seine Höhe bekommen
+  const glassSoon = () => requestAnimationFrame(() => requestAnimationFrame(glass));
+  window.addEventListener("resize", () => state.visible && glassSoon());
+
+  // Ausblenden: Webansicht und Glas zusammen (das Glas folgt keinem CSS)
+  const FADE = 280;
+  function fade(delay) {
     const bar = $("bar");
     bar.style.setProperty("--leave-delay", delay / 1000 + "s");
     bar.classList.add("leaving");
+    setTimeout(() => invoke("dropbar_fade", { ms: FADE }).catch(() => {}), delay);
+  }
+
+  function leave(delay) {
+    hold(delay + FADE + 100);
+    fade(delay);
   }
 
   // „Gesichert“ erst, wenn es wirklich gesichert ist (0.31.0). Bis dahin bleibt
@@ -150,7 +172,7 @@
       card.classList.replace("busy", "failed");
       hint.textContent = t("dropFailed", { msg: String(e) });
       hold(3000);
-      setTimeout(() => $("bar").classList.add("leaving"), 2500);
+      fade(2500);
     }
   }
 
@@ -179,15 +201,15 @@
     state.visible = true;
     // Stand von eben zeigen; nur wenn noch nie geladen wurde, jetzt laden
     // (render baut die Karten neu, ihr Einblenden läuft damit jedes Mal)
-    if (!state.snap) load().then(render);
-    else render();
+    if (!state.snap) load().then(render).then(glassSoon);
+    else {
+      render();
+      glassSoon();
+    }
   });
   TAURI.event.listen("dropbar-release", () => {
     // ohne Drop sofort weg
-    if (!document.querySelector(".landed, .busy, .failed")) {
-      $("bar").style.setProperty("--leave-delay", "0s");
-      $("bar").classList.add("leaving");
-    }
+    if (!document.querySelector(".landed, .busy, .failed")) fade(0);
     // nach dem Ausblenden den neuen Stand vorbereiten (der Drop hat Zonen gefüllt)
     setTimeout(() => {
       state.visible = false;

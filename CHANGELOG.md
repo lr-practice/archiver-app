@@ -1,5 +1,16 @@
 # Changelog
 
+## App 0.40.24 (Vorabversion)
+
+- Zonenleiste am ganzen Mac mit echtem Glas: Hinter jeder Karte liegt jetzt
+  die macOS-Unschärfe, so wie in der App. Vorher wirkten die Karten wie graue
+  Folie.
+- Einstellungen › Mac & Browser: Die Zonen kommen „Mit ⌥“ (Standard),
+  „Immer“ (sobald Dateien gezogen werden) oder gar nicht.
+- Nach dem Ablegen bleibt die Leiste 0.7 s stehen und blendet in 0.28 s aus,
+  in der App und am ganzen Mac. Die Miniatur bleibt Standard, die Wahl
+  „Danach“ im Labor ist weg.
+
 ## App 0.40.23 (Vorabversion)
 
 - Zonenleiste am ganzen Mac: Ein Drop landet wieder in der Zone unter dem

@@ -1,6 +1,6 @@
 // dropfx.js — Ablegen auf einer Active Zone (DESIGN.md 4.3, 4.13): wie die
 // Karte zeigt, dass etwas angekommen ist. Labor › Ablegen wählt die Variante
-// (`archiver.lab`: drop, dropLeave). Gleich in der Leiste der App (app.js)
+// (`archiver.lab`: drop). Gleich in der Leiste der App (app.js)
 // und der Zonenleiste am ganzen Mac (dropbar.js).
 
 (function () {
@@ -20,11 +20,12 @@
     try {
       l = JSON.parse(localStorage.getItem("archiver.lab") || "{}") || {};
     } catch {}
-    return { style: STYLES.includes(l.drop) ? l.drop : "mini", calm: l.dropLeave === "calm" };
+    return { style: STYLES.includes(l.drop) ? l.drop : "mini" };
   }
 
-  // Stehzeit nach dem Ablegen, danach 0.18 s ausblenden
-  const leaveDelay = (calm) => (calm ? 1200 : 350);
+  // Stehzeit nach dem Ablegen (0.40.24): zwischen „sofort weg“ (0.35 s) und
+  // „kurz stehen“ (1.2 s), danach 0.28 s ausblenden
+  const LEAVE = 700;
   const reduced = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
   const fileName = (p) => p.split("/").pop();
 
@@ -90,8 +91,8 @@
   // Beim Loslassen, bevor gesichert ist. parts: { num, name, hint };
   // opts: { paths, pos, invoke, src, url? }. Gibt das Spiel für land() zurück.
   async function begin(card, parts, opts) {
-    const { style, calm } = lab();
-    const play = { style, calm, card, parts, paths: opts.paths, t0: Date.now() };
+    const { style } = lab();
+    const play = { style, card, parts, paths: opts.paths, t0: Date.now() };
     card.classList.add("fx", "fx-is-" + style);
     const img = style === "mini" || style === "after" ? await preview(opts) : null;
     if (img && style === "mini") stamp(card, img, opts.pos, opts.paths.length - 1);
@@ -118,7 +119,7 @@
       await new Promise((r) => setTimeout(r, Math.max(0, 600 - (Date.now() - play.t0))));
       roll(parts.name, zoneLabel);
     }
-    return leaveDelay(play.calm);
+    return LEAVE;
   }
 
   function fail(play) {
@@ -126,5 +127,5 @@
     play.card.querySelector(".fx-after")?.remove();
   }
 
-  window.ArchiverDropFx = { lab, begin, land, fail, leaveDelay };
+  window.ArchiverDropFx = { lab, begin, land, fail };
 })();

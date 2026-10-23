@@ -117,7 +117,6 @@
       text: v.text in LAB_INKS ? v.text : "faint",
       font: LAB_FONTS.includes(v.font) ? v.font : "geist",
       drop: LAB_DROPS.includes(v.drop) ? v.drop : "mini",
-      dropLeave: v.dropLeave === "calm" ? "calm" : "fast",
     };
   }
   function setLab(patch) {
@@ -2595,7 +2594,16 @@
         ),
         blockRow(
           t("setDropbarSys"),
-          choice([["on", t("setOn")], ["off", t("setOff")]], prefs.dropbar ? "on" : "off", (id) => save({ ...prefs, dropbar: id === "on", dropbarAltChosen: true }))
+          // 0.40.24: mit ⌥, immer beim Ziehen von Dateien oder aus
+          choice(
+            [
+              ["alt", t("setDropbarAlt")],
+              ["always", t("setDropbarAlways")],
+              ["off", t("setOff")],
+            ],
+            !prefs.dropbar ? "off" : prefs.dropbarAlways ? "always" : "alt",
+            (id) => save({ ...prefs, dropbar: id !== "off", dropbarAlways: id === "always", dropbarAltChosen: true })
+          )
         )
       );
     };
@@ -2890,12 +2898,6 @@
         );
       }
       drops.appendChild(blockRow(el("div", "p-block-text", t("labDropText_" + cur.drop))));
-      drops.appendChild(
-        blockRow(t("labDropLeave"), choice([["fast", t("labDropLeave_fast")], ["calm", t("labDropLeave_calm")]], cur.dropLeave, (id) => {
-          setLab({ dropLeave: id });
-          rerender();
-        }))
-      );
       wrap.appendChild(drops);
       const head = block(t("labHeads"));
       head.appendChild(blockRow(el("div", "p-block-text", t("labHeadsText"))));
@@ -6247,11 +6249,11 @@
       const delay = await window.ArchiverDropFx.land(play, lastSegment(target.dataset.zone));
       bar.style.setProperty("--leave-delay", delay / 1000 + "s");
       bar.classList.add("leaving");
-      landingUntil = Date.now() + delay + 200;
+      landingUntil = Date.now() + delay + 300;
       setTimeout(() => {
         landingUntil = 0;
         hideDropbar();
-      }, delay + 200);
+      }, delay + 300);
     })();
   }
 

@@ -1780,6 +1780,8 @@ pub fn run() {
             system::palette_hide,
             system::dropbar_hold,
             system::dropbar_preview,
+            system::dropbar_glass,
+            system::dropbar_fade,
             log_error,
             system::palette_ghost,
             system::palette_place,

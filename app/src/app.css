@@ -2966,7 +2966,7 @@ body.lightbox-open .p-top {
 
 /* Abgelegt: kein Glühen, die Leiste blendet nur ruhig aus */
 .p-dropbar.leaving {
-  animation: hot-out 0.18s ease var(--leave-delay, 0.3s) forwards;
+  animation: hot-out 0.28s ease var(--leave-delay, 0.3s) forwards;
 }
 
 @keyframes hot-out {
@@ -5597,7 +5597,7 @@ html[data-topfade="glass"] .p-drag::after {
   animation: hot-glass-in 0.14s ease-out;
 }
 .p-dropbar.leaving {
-  animation: hot-glass-out 0.18s ease var(--leave-delay, 0.3s) forwards;
+  animation: hot-glass-out 0.28s ease var(--leave-delay, 0.3s) forwards;
 }
 @keyframes hot-glass-in {
   from {

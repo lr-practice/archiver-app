@@ -31,6 +31,8 @@ pub const DEFAULT_SHORTCUT: &str = "Alt+Space";
 
 /// Zonenleiste beim Ziehen eingeschaltet
 static DROPBAR_ON: AtomicBool = AtomicBool::new(true);
+/// Zonenleiste ohne ⌥, sobald Dateien gezogen werden (0.40.24, „Immer“)
+static DROPBAR_ALWAYS: AtomicBool = AtomicBool::new(false);
 /// Gerade wird aus der Palette gezogen: keine Leiste, Palette nicht schließen
 static PALETTE_DRAG: AtomicBool = AtomicBool::new(false);
 /// Zonenleiste nach dem Loslassen stehen lassen bis zu diesem Zeitpunkt (ms):
@@ -63,11 +65,14 @@ pub struct SystemPrefs {
     /// die alte Leiste (ohne ⌥) ausgeschaltet war.
     #[serde(default)]
     pub dropbar_alt_chosen: bool,
+    /// „Immer“ (0.40.24): ohne ⌥, sobald Dateien gezogen werden
+    #[serde(default)]
+    pub dropbar_always: bool,
 }
 
 impl Default for SystemPrefs {
     fn default() -> Self {
-        SystemPrefs { shortcut: DEFAULT_SHORTCUT.into(), dropbar: true, dropbar_chosen: false, dropbar_alt_chosen: false }
+        SystemPrefs { shortcut: DEFAULT_SHORTCUT.into(), dropbar: true, dropbar_chosen: false, dropbar_alt_chosen: false, dropbar_always: false }
     }
 }
 
@@ -110,6 +115,7 @@ pub fn setup(app: &AppHandle, prefs: &SystemPrefs) {
 pub fn apply(app: &AppHandle, prefs: &SystemPrefs) -> Result<(), String> {
     use tauri_plugin_global_shortcut::GlobalShortcutExt;
     DROPBAR_ON.store(prefs.dropbar, Ordering::Relaxed);
+    DROPBAR_ALWAYS.store(prefs.dropbar_always, Ordering::Relaxed);
     let gs = app.global_shortcut();
     let _ = gs.unregister_all();
     if prefs.shortcut.is_empty() {
@@ -265,6 +271,36 @@ pub fn dropbar_preview(app: AppHandle, path: String) -> bool {
     image && p.is_file() && tauri::Manager::asset_protocol_scope(&app).allow_file(p).is_ok()
 }
 
+/// Glas hinter den Karten (4.13): Rechtecke [x, oben, Breite, Höhe] in Punkten
+#[tauri::command]
+pub fn dropbar_glass(app: AppHandle, cards: Vec<[f64; 4]>, radius: f64, light: bool) {
+    #[cfg(target_os = "macos")]
+    if let Some(win) = app.get_webview_window(DROPBAR) {
+        let _ = app.run_on_main_thread(move || {
+            if let Ok(ns) = win.ns_window() {
+                unsafe { crate::macos::set_glass(ns.cast(), &cards, radius, light) };
+            }
+        });
+    }
+    #[cfg(not(target_os = "macos"))]
+    let _ = (app, cards, radius, light);
+}
+
+/// Zonenleiste ausblenden, Glas eingeschlossen (das Glas folgt keinem CSS)
+#[tauri::command]
+pub fn dropbar_fade(app: AppHandle, ms: f64) {
+    #[cfg(target_os = "macos")]
+    if let Some(win) = app.get_webview_window(DROPBAR) {
+        let _ = app.run_on_main_thread(move || {
+            if let Ok(ns) = win.ns_window() {
+                unsafe { crate::macos::fade_out(ns.cast(), ms) };
+            }
+        });
+    }
+    #[cfg(not(target_os = "macos"))]
+    let _ = (app, ms);
+}
+
 #[tauri::command]
 pub fn palette_hide(app: AppHandle) {
     hide_palette(&app);
@@ -418,7 +454,7 @@ fn watch_drags(app: AppHandle) {
                 }
                 armed = true;
             }
-            if crate::macos::option_held() {
+            if DROPBAR_ALWAYS.load(Ordering::Relaxed) || crate::macos::option_held() {
                 armed = false;
                 showing = true;
                 set_dropbar(&app, true);

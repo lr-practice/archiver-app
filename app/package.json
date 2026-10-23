@@ -1,7 +1,7 @@
 {
   "name": "archiver-app",
   "private": true,
-  "version": "0.40.23",
+  "version": "0.40.24",
   "scripts": {
     "tauri": "tauri",
     "dev": "tauri dev",

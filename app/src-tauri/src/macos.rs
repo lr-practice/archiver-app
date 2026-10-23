@@ -855,3 +855,69 @@ pub fn app_bundle_id(app: usize) -> Option<String> {
         (!s.is_empty()).then_some(s)
     }
 }
+
+/// Glas der Zonenleiste (4.13, 0.40.24): hinter jeder Karte eine echte
+/// macOS-Unschärfe wie das Glas der App, gerundet wie die Karte. Die Webansicht
+/// ist durchsichtig, die Karten färben nur noch mit `--zone-alpha` darüber.
+static GLASS: std::sync::Mutex<Vec<usize>> = std::sync::Mutex::new(Vec::new());
+
+pub unsafe fn set_glass(window: *mut AnyObject, cards: &[[f64; 4]], radius: f64, light: bool) {
+    if window.is_null() {
+        return;
+    }
+    let mut glass = GLASS.lock().unwrap();
+    for v in glass.drain(..) {
+        let _: () = msg_send![v as *mut AnyObject, removeFromSuperview];
+    }
+    let content: *mut AnyObject = msg_send![window, contentView];
+    let web = find_webview(content);
+    if web.is_null() {
+        return;
+    }
+    let parent: *mut AnyObject = msg_send![web, superview];
+    if parent.is_null() {
+        return;
+    }
+    let wf: NSRect = msg_send![web, frame];
+    let flipped: bool = msg_send![parent, isFlipped];
+    let name = NSString::from_str(if light { "NSAppearanceNameAqua" } else { "NSAppearanceNameDarkAqua" });
+    let appearance: *mut AnyObject = msg_send![class!(NSAppearance), appearanceNamed: &*name];
+    for &[x, top, w, h] in cards {
+        let y = if flipped { wf.origin.y + top } else { wf.origin.y + wf.size.height - top - h };
+        let rect = NSRect::new(NSPoint::new(wf.origin.x + x, y), NSSize::new(w, h));
+        let v: *mut AnyObject = msg_send![class!(NSVisualEffectView), alloc];
+        let v: *mut AnyObject = msg_send![v, initWithFrame: rect];
+        // HUD dunkel, Seitenleiste hell, wie der Tray (lib.rs set_appearance)
+        let material: isize = if light { 7 } else { 13 };
+        let _: () = msg_send![v, setMaterial: material];
+        let _: () = msg_send![v, setBlendingMode: 0isize];
+        let _: () = msg_send![v, setState: 1isize];
+        if !appearance.is_null() {
+            let _: () = msg_send![v, setAppearance: appearance];
+        }
+        let _: () = msg_send![v, setWantsLayer: true];
+        let layer: *mut AnyObject = msg_send![v, layer];
+        if !layer.is_null() {
+            let _: () = msg_send![layer, setCornerRadius: radius];
+            let _: () = msg_send![layer, setMasksToBounds: true];
+        }
+        // NSWindowBelow: unter der Webansicht
+        let none: *mut AnyObject = web;
+        let _: () = msg_send![parent, addSubview: v, positioned: -1isize, relativeTo: none];
+        let _: () = msg_send![v, release];
+        glass.push(v as usize);
+    }
+}
+
+/// Zonenleiste ausblenden mit Glas: das ganze Fenster in `ms` auf 0
+pub unsafe fn fade_out(window: *mut AnyObject, ms: f64) {
+    if window.is_null() {
+        return;
+    }
+    let _: () = msg_send![class!(NSAnimationContext), beginGrouping];
+    let ctx: *mut AnyObject = msg_send![class!(NSAnimationContext), currentContext];
+    let _: () = msg_send![ctx, setDuration: ms / 1000.0];
+    let animator: *mut AnyObject = msg_send![window, animator];
+    let _: () = msg_send![animator, setAlphaValue: 0.0f64];
+    let _: () = msg_send![class!(NSAnimationContext), endGrouping];
+}

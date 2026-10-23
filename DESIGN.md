@@ -1,6 +1,6 @@
 # Archiver – Design-System
 
-Stand: App 0.40.23 · Extension 3.29.7
+Stand: App 0.40.24 · Extension 3.29.7
 
 Diese Datei hält fest, wie Archiver aussieht und warum. Sie gilt für die Mac-App
 (`app/src`) und die Extension (`extension/`, in Chrome und in Safari). Wer an der Oberfläche
@@ -146,6 +146,7 @@ Ebenen vor: Navigation, Active-Zones-Leiste, Menüs und Ladeplatzhalter.
 | Unschärfe | `blur(24px) saturate(1.4)` | `blur(28px) saturate(0)` |
 | Schatten | `0 14px 44px rgba(0,0,0,.5)` | `0 14px 44px rgba(0,0,0,.16)` |
 | Kante | `inset 0 0 0 1px` ink × 0.07 | `inset 0 0 0 1px` weiß × 0.7 + schwarz × 0.08 auf 0.5 px |
+| Am ganzen Mac (0.40.24) | `NSVisualEffectView` hinter jeder Karte, Material HUD (13) | Material Seitenleiste (7) |
 | Deckkraft | `--zone-alpha`, eigener Regler „Zonen beim Ziehen“ (30–100 % in 5er-Schritten, `archiver.zoneGlass`, Standard 0.97). App, Zonenleiste und Extension (über `zones.json` „alpha“) | dito |
 
 ### 2.5 Bewegung
@@ -156,7 +157,7 @@ Ebenen vor: Navigation, Active-Zones-Leiste, Menüs und Ladeplatzhalter.
 | Ein- und Ausblenden, Toast, Wenden in der Lightbox (je Hälfte) | 0.18 s | `ease` / `ease-out` |
 | Seitenblatt, Gleiten | 0.28 s | `cubic-bezier(0.2, 0.7, 0.2, 1)` (`--sheet-ease`) |
 | Zonenleiste rein | 0.14 s | `ease-out` |
-| Zonenleiste raus | 0.2 s, 0.3 s verzögert | `ease` (Glühen auf dem Ziel bleibt kurz sichtbar). Am ganzen Mac (0.40.22) 0.18 s, 0.35 s nach „Gesichert“ (Labor „Kurz stehen“: 1.2 s), ohne Drop sofort; bei einem Fehler 2.5 s später (4.13) |
+| Zonenleiste raus | 0.2 s, 0.3 s verzögert | `ease` (Glühen auf dem Ziel bleibt kurz sichtbar). Am ganzen Mac und nach dem Ablegen in der App (0.40.24) 0.28 s, 0.7 s nach „Gesichert“ (0.40.22: 0.35 s wirkte sofort, 1.2 s zu lang), ohne Drop sofort; das Fenster mit dem Glas blendet gleich lang aus (`dropbar_fade`); bei einem Fehler 2.5 s später (4.13) |
 | Miniatur, Ring und Rollen beim Ablegen (4.13) | 0.28 s | `--sheet-ease` |
 | Ring „Umlaufend“ | 1.6 s je Runde | `linear` |
 
@@ -506,9 +507,11 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
   Unschärfe und Schatten, Nummer oben, Name in der Mitte, Ziel mit
   gestricheltem Ring (`--ring-lg`, 3 px) statt Outline. Sie nimmt
   den Zeiger an (3.25.1), damit Chrome am unteren Rand die Seite nicht
-  darunter wegscrollt; Text- und Instagram-Ziehen nutzen dieselbe Leiste. Die Karten
-  am ganzen Mac haben keine eigene Unschärfe (das Fenster ist durchsichtig),
-  deshalb gilt dort nur `--zone-alpha`.
+  darunter wegscrollt; Text- und Instagram-Ziehen nutzen dieselbe Leiste. Am ganzen Mac
+  liegt seit 0.40.24 hinter jeder Karte echtes macOS-Glas (2.4): Die Leiste
+  meldet nach dem Einblenden die Rechtecke ihrer Karten und die Rundung
+  (`dropbar_glass`), darüber färbt `--zone-alpha` wie in der App. Vorher
+  hatten die Karten dort keine Unschärfe und wirkten wie graue Folie.
 - **Ablauf (0.31.0):** Nach dem Loslassen zeigt das Ziel „Wird gesichert …“
   (`.busy`, kein Glühen). Erst wenn Import oder Verschieben fertig ist, kommt
   „Gesichert in …“ (`.landed`). Scheitert es, steht „Nicht
@@ -521,7 +524,7 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
   steht „+N“ in Mono davor. Das Bild kommt direkt aus der abgelegten Datei
   (`dropbar_preview` gibt nur diese Bilddatei frei), noch bevor gesichert ist;
   „Gesichert“ steht weiter erst danach. Ohne Bild (Video, PDF) bleibt nur der
-  Hinweis. Danach geht die Leiste schnell (2.5). Labor › Ablegen (4.24b)
+  Hinweis. Danach steht die Leiste 0.7 s und blendet in 0.28 s aus (2.5). Labor › Ablegen (4.24b)
   bietet Varianten: Haken vor „Gesichert“, Ring schließt sich, Zähler (Nummer
   rollt auf „+N“), Dateiname (Name rollt zum Dateinamen, mindestens 0.6 s, und
   zurück), Nachbild (graues Bild × 0.22 verblasst in 1.6 s), Glühen (bisher).
@@ -531,8 +534,9 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
   Drop landete auf Retina links daneben). Abweichung: Die Extension glüht noch.
 - **Ab Werk an (0.40.21, vorher ab 0.32.1 aus):** Weil sie nur mit ⌥ kommt,
   ist sie wieder an, auch wenn die alte Leiste ausgeschaltet war.
-  Ausschalten unter Einstellungen › Mac & Browser; erst diese Wahl zählt
-  (`dropbarAltChosen`). Im Browser übernimmt die Extension.
+  Einstellungen › Mac & Browser (0.40.24): „Mit ⌥“ (Standard), „Immer“
+  (sobald Dateien gezogen werden, `dropbarAlways`) oder „Aus“; erst diese
+  Wahl zählt (`dropbarAltChosen`). Im Browser übernimmt die Extension.
 - **Nicht:** Erscheint nicht, wenn Archiver selbst vorne ist, und nicht bei
   Text oder Links ohne Datei. Zeigt nie „Gesichert“, bevor es gesichert ist.
   Im Browser (Extension 3.29.5) erscheint sie nur, wenn das Ziehen auf der
@@ -782,8 +786,8 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
 - **Ablegen (0.40.22):** Rückmeldung der Active-Zone-Karte in der App und am
   ganzen Mac (4.13, seit 0.40.23 beide): Miniatur (Standard), Haken, Ring,
   Zähler, Dateiname, Nachbild, Glühen, in zwei Reihen (4 + 3).
-  „Danach“: Schnell weg (Standard) oder Kurz stehen. `dropfx.js` liest
-  `archiver.lab` selbst (`drop`, `dropLeave`). Klassen der Karte heißen
+  Die Stehzeit danach ist fest (0.7 s, 2.5), die Wahl „Danach“ (0.40.22/23)
+  ist weg. `dropfx.js` liest `archiver.lab` selbst (`drop`). Klassen der Karte heißen
   `fx-is-<variante>`, nie `fx-<variante>` (sonst greifen die Regeln der
   Bauteile wie `.fx-ring` auf die Karte).
 - **Bewegung:** Bei `prefers-reduced-motion` laufen G, Daumenkino und

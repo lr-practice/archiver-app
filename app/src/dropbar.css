@@ -94,10 +94,10 @@ html.light .db-hot {
   color: var(--danger);
 }
 
-/* Nach dem Ablegen schnell weg (0.40.22): 0.35 s stehen, 0.18 s ausblenden;
-   Labor › „Ruhig“ lässt sie 1.2 s stehen, ohne Drop geht sie sofort */
+/* Nach dem Ablegen (0.40.24): 0.7 s stehen, 0.28 s ausblenden, ohne Drop
+   sofort. Das Fenster blendet mit dem Glas gleich lang aus (dropbar_fade). */
 .db-bar.leaving {
-  animation: db-out 0.18s ease var(--leave-delay, 0.35s) forwards;
+  animation: db-out 0.28s ease var(--leave-delay, 0.7s) forwards;
 }
 
 @keyframes db-out {
@@ -114,6 +114,6 @@ html.light .db-hot {
 
   .db-bar.leaving {
     opacity: 0;
-    transition: opacity 0s var(--leave-delay, 0.35s);
+    transition: opacity 0s var(--leave-delay, 0.7s);
   }
 }
