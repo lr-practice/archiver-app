@@ -97,20 +97,17 @@ Für die Farbe gilt:
 | UI | Melange | 13–13.5 px | 400 | 0 | Navigation, Menüs |
 | Karten-Titel | Melange Semi-Light | 14 px | 350 | 0 | Zonenname auf der Karte |
 | Index-Zeile | Melange Semi-Light | 19 px | 350 | −0.01em | Zonenname im Index |
-| Seitenkopf | Melange Semi-Light | 30 px × Labor-Größe (`--hk`) / 1.16 | 350 | −0.02em | alle Seiten und Einstellungen, Satz grau dahinter |
+| Seitenkopf | Melange Semi-Light | 30 px / 1.16 | 350 | −0.02em | alle Seiten und Einstellungen, Titel voll, Satz hell (`--p-faint`) im selben Absatz |
 | Einstellungen | Melange Semi-Light | 20 px | 350 | −0.012em | Bereiche in der Vollbild-Liste |
 | Notiz | Melange Semi-Light | Titel 28 px, Text 16 px / 1.5 | 350 | −0.02em / 0 | Lightbox-Notiz |
 | Satz | Melange | 34 px / 1.14 | 350 | 0 | Konto, Sperre, Lese-Modus (`.p-say`) |
 
 Für die Typografie gilt:
 
-- Grundschrift ist seit 0.42.2 Melange, Typo-System „A Leise“
-  (`html[data-font="melange"]`, ab Werk). Semi-Light (350) trägt Köpfe und
+- Grundschrift ist seit 0.42.2 Melange, Typo-System „A Leise“ (`--sans`),
+  seit 0.42.3 fest ohne Wahl im Labor. Semi-Light (350) trägt Köpfe und
   Inhalt, die Hierarchie entsteht über Grau statt über Größe. Etiketten sind
-  Melange Medium statt Geist Mono. Geist bleibt unter Einstellungen › Labor ›
-  Kopf › Schrift wählbar und zeigt dann den alten Stand. Gespeichertes „geist“
-  aus der Zeit vor 0.42.2 zählt nicht (`fontV: 2`). Tray und Observer setzen
-  fest Geist.
+  Melange Medium statt Geist Mono. Tray und Observer setzen fest Geist.
 - Melange ist kommerziell (kimera, Freigabe für den internen Gebrauch) und
   liegt nicht in diesem Repo. Der Build holt die woff2-Schnitte 100, 300, 350
   (Semi-Light), 350 kursiv, 400, 400 kursiv, 500, 600 und 700 aus dem privaten
@@ -846,18 +843,10 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
 - **Nicht:** Keine Rundung an Objekten, keine Akzentfarbe, keine Schatten an
   den Objekten. Die Extension kennt die Collection nicht.
 
-### 4.24c Labor › Kopf (App 0.40.18, `html[data-head]`)
-- **Wozu:** Vierzehn Mechaniken für den Seitenkopf zum Ausprobieren, nur auf
-  diesem Mac (`archiver.lab`). Ab Werk 05 (Satz im Fluss) in M, Titel Voll, Satz Hell.
-- **Varianten:** 01 Geist-Original (24 px, 600, Satz klein daneben), 02 Plakat
-  (7.2vw, 600, zwei Zeilen), 03 Kontaktbogen (3vw, 500), 04 Regular L (4vw,
-  400, +0.01em), 05 Satz im Fluss, 06 Satz als Mono-Etikett über dem Titel,
-  07 Zeile mit Linie, 08 zweispaltig, 09 großer leichter Satz unter kleinem
-  Titel, 10 Wortreihe aller Zonen, 11 Schnitt 300 mit „·“, 12 kein Kopf (eine
-  Zeile 14 px), 13 Pfad hell, Ort voll, 14 hochkant an der linken Kante.
-- **Stellschrauben:** Größe S / M / L / XL (`--hk` 0.8 / 1 / 1.25 / 1.5),
-  Farbe von Titel und Satz je Voll, Grau, Hell oder Blau (`--head-title`,
-  `--head-text`), Schrift Geist oder Melange.
+### 4.24c Seitenkopf (vorher Labor › Kopf, fest seit App 0.42.3)
+- Ein Kopf für alle Seiten: Titel und Satz als ein Absatz, Titel `--p-text`,
+  Satz `--p-faint`, 30 px Semi-Light (2.2). Die vierzehn Labor-Varianten,
+  Größe, Farben und die Schriftwahl sind entfernt.
 
 ### 4.24a Übersicht mit Kontaktbogen, ein Kopf für alle Seiten (App 0.40.11, `.p-sheetlist`, `.p-home-hero`)
 - **Kopf (alle Seiten):** Übersicht, Zone, Alle Objekte, Suche und Zuletzt
@@ -979,17 +968,12 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
 - **Nicht:** Keine Safari-eigenen Farben, Icons oder Abstände. Was nur in
   Safari anders sein muss, regelt `background.js` (`IS_SAFARI`), nie CSS.
 
-### 4.28 Einstellungen als Vollbild (App 0.42.2)
 
-Einstellungen öffnen nicht mehr als Seitenblatt, sondern über das ganze
-Fenster (`.p-sheet:has(.p-settings-nav, .p-settings-back)`). Links stehen Kopf
-und Rückweg, beide bleiben beim Scrollen stehen (5 Teile), rechts die Blöcke
-(7 Teile), höchstens 1240 px breit, oben 132 px Luft unter der Navigation.
-Blöcke und Listen haben keine graue Fläche mehr, sondern einen Titel über einer
-kräftigen Haarlinie (`--p-rule-strong`), Zeilen 14 px hoch gepolstert. Die
-Bereichsliste auf der ersten Seite steht in 20 px Semi-Light. Handbuch und
-Information bleiben Seitenblatt. Der Abstand zwischen Kopf und Inhalt auf allen
-Seiten ist auf 24–44 px gestrafft (vorher 40–96 px).
+### 4.28 Abstand unter dem Seitenkopf (App 0.42.2)
+
+Zwischen Kopf und Inhalt stehen auf allen Seiten 24–44 px (vorher 40–96 px).
+Die Einstellungen bleiben Seitenblatt (ein Vollbild-Versuch in 0.42.2 ist in
+0.42.3 zurückgenommen).
 
 ## 5. Bekannte Abweichungen
 

@@ -1,5 +1,11 @@
 # Changelog
 
+## App 0.42.3 (Vorabversion)
+
+- Einstellungen wieder als Seitenblatt rechts.
+- Labor › Kopf ist aufgelöst: Kopf und Schrift stehen fest auf „A Leise“
+  (Melange Semi-Light), ohne Varianten, Größe, Farben oder Schriftwahl.
+
 ## App 0.42.2 (Vorabversion)
 
 - Neue Typografie „A Leise“: Melange Semi-Light für Köpfe, Namen, Text-Karten
