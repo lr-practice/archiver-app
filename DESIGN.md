@@ -1016,3 +1016,13 @@ sie nur auf ausdrückliches Go.
 - [ ] `prefers-reduced-motion` wird respektiert.
 - [ ] Diese Datei ist nachgezogen, wenn sich ein Wert oder eine Regel geändert
       hat.
+
+### 4.26 Demo-App (Testlandschaft, `demo.css`, `html[data-demo]`)
+
+Der Build mit Schalter `demo` setzt `html[data-demo]`. Alles in `demo.css` gilt
+nur dort, die echte App bleibt unberührt. Erstes Experiment (Branch
+`claude/demo-melange`): Melange als Grundschrift und für Etiketten (Medium,
+Versalien, +0.06em statt Geist Mono), Semi-Light 350 für Seitenkopf (Übersicht
+34–64 px, sonst 30–52 px, −0.03em), Zonennamen im Index (26–44 px), Text-Karten,
+Notiz-Titel (Lightbox 36 px) und `.p-say`. Übernimmt die echte App etwas davon,
+wandert es in `app.css` und in die Tabellen oben.
