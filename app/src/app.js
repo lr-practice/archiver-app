@@ -8770,8 +8770,6 @@
       afterLibrarySwitch();
     });
     const info = await invoke("start_info");
-    // Demo-Build: eigene Oberfläche zum Ausprobieren (demo.css), ohne Extension-Hinweise
-    if (info.demo) document.documentElement.dataset.demo = "1";
     // Die Bibliothek wird erst hier geöffnet (im Hintergrund, mit Ordner-Schutz),
     // damit das Fenster nie hängt.
     if (!info.library && info.pending) {
@@ -8787,7 +8785,7 @@
     } else showWelcome(info);
     hideSplash();
     setTimeout(checkUpdate, 3000);
-    if (!info.demo) setTimeout(checkExtension, 6000);
+    setTimeout(checkExtension, 6000);
     // Auch im laufenden Betrieb: alle 30 Minuten und wenn das Fenster wieder nach vorne kommt
     setInterval(checkUpdate, 30 * 60 * 1000);
     let lastFocusCheck = Date.now();
