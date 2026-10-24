@@ -28,7 +28,7 @@ use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
 pub const HOST_NAME: &str = "app.archiver.bridge";
-const APP_IDENTIFIER: &str = "app.archiver.desktop";
+use crate::APP_IDENTIFIER;
 const LIST_LIMIT: usize = 500;
 /// Chrome nimmt vom Host höchstens 1 MB je Nachricht; etwas Luft bleibt
 const MAX_OUT: usize = 900 * 1024;

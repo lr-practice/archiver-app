@@ -18,7 +18,7 @@ type Result<T> = std::result::Result<T, String>;
 
 const SHARED_MARKER: &str = "shared.json";
 const PEOPLE_DIR: &str = "people";
-const APP_IDENTIFIER: &str = "app.archiver.desktop";
+use crate::APP_IDENTIFIER;
 
 /// Notiz, Rechte und Herkunft eines Objekts.
 #[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]

@@ -30,6 +30,10 @@ on:
         description: "Nur bei freigeben: Version unter „vorab“, z. B. 0.37.0"
         type: string
         default: ""
+      demo:
+        description: "Als „Archiver Demo“ bauen: eigene Kennung, kein Update, keine Extension, nur als Artefakt"
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -43,7 +47,8 @@ jobs:
     if: inputs.ausspielen != 'freigeben'
     runs-on: macos-15 # 0.42.0: macos-14 hatte keine freien Runner
     env:
-      CHANNEL: ${{ inputs.ausspielen }}
+      CHANNEL: ${{ inputs.demo && 'nein' || inputs.ausspielen }}
+      DEMO: ${{ inputs.demo }}
       HAS_RELEASE_SECRETS: ${{ secrets.RELEASES_TOKEN != '' && secrets.TAURI_SIGNING_PRIVATE_KEY != '' }}
       APPLE_SIGN: ${{ secrets.APPLE_CERTIFICATE != '' }}
       APPLE_NOTARIZE: ${{ secrets.APPLE_CERTIFICATE != '' && secrets.APPLE_ID != '' && secrets.APPLE_PASSWORD != '' && secrets.APPLE_TEAM_ID != '' }}
@@ -55,7 +60,8 @@ jobs:
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           repository: lr-practice/archiver
-          ref: claude/project-thread-47qm6a
+          # Die Demo holt die Schnitte mit Semi-Light (350) aus ihrem eigenen Branch.
+          ref: ${{ inputs.demo && 'claude/project-thread-85f33d' || 'claude/project-thread-47qm6a' }}
           token: ${{ secrets.RELEASES_TOKEN }}
           path: _melange
           sparse-checkout: fonts/melange
@@ -111,6 +117,7 @@ jobs:
       # Safari-Extension als App-Erweiterung (Contents/PlugIns), siehe safari/build.sh.
       # Scheitert sie, scheitert der Build: lieber laut als eine App ohne Safari.
       - name: Safari-Extension bauen
+        if: env.DEMO != 'true'
         env:
           APPLE_SIGNING_IDENTITY: ${{ steps.cert.outputs.identity }}
         run: safari/build.sh
@@ -134,16 +141,23 @@ jobs:
           if [ -n "$IDENTITY" ]; then
             CONFIG=$(echo "$CONFIG" | jq -c --arg id "$IDENTITY" '.bundle.macOS.signingIdentity=$id')
           fi
-          # Safari-Extension aus safari/build.sh nach Contents/PlugIns
-          APPEX="$GITHUB_WORKSPACE/build/safari/Archiver Extension.appex"
-          test -d "$APPEX"
-          CONFIG=$(echo "$CONFIG" | jq -c --arg p "$APPEX" '.bundle.macOS.files["PlugIns/Archiver Extension.appex"]=$p')
+          if [ "$DEMO" = "true" ]; then
+            # Demo: eigener Name und eigene Kennung, keine Update-Pakete, keine Safari-Extension
+            CONFIG=$(echo "$CONFIG" | jq -c '.productName="Archiver Demo" | .identifier="app.archiver.demo" | .bundle.createUpdaterArtifacts=false')
+            export ARCHIVER_DEMO=1
+          else
+            # Safari-Extension aus safari/build.sh nach Contents/PlugIns
+            APPEX="$GITHUB_WORKSPACE/build/safari/Archiver Extension.appex"
+            test -d "$APPEX"
+            CONFIG=$(echo "$CONFIG" | jq -c --arg p "$APPEX" '.bundle.macOS.files["PlugIns/Archiver Extension.appex"]=$p')
+          fi
           for v in APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID; do [ -z "${!v}" ] && unset $v; done
           npx tauri build --bundles app,dmg --config "$CONFIG"
 
       # Die Erweiterung muss im fertigen Bündel liegen und weiter in der Sandbox
       # laufen (Safari lädt sie sonst nicht), auch nachdem Tauri die App signiert hat.
       - name: Safari-Extension prüfen
+        if: env.DEMO != 'true'
         run: |
           APP=$(ls -d app/src-tauri/target/release/bundle/macos/*.app | head -1)
           APPEX="$APP/Contents/PlugIns/Archiver Extension.appex"
@@ -179,7 +193,7 @@ jobs:
           VERSION=$(node -p "require('./app/src-tauri/tauri.conf.json').version")
           BUNDLE=app/src-tauri/target/release/bundle
           mkdir -p dist
-          NAME=Archiver
+          NAME=Archiver; [ "$DEMO" = "true" ] && NAME=Archiver-Demo
           APP=$(ls -d "$BUNDLE"/macos/*.app | head -1)
           ditto -c -k --keepParent "$APP" "dist/$NAME-$VERSION-mac-arm64.zip"
           cp "$BUNDLE"/dmg/*.dmg "dist/$NAME-$VERSION-mac-arm64.dmg"
@@ -188,10 +202,11 @@ jobs:
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: archiver-mac
+          name: ${{ inputs.demo && 'archiver-demo-mac' || 'archiver-mac' }}
           path: dist/*
 
       - name: Vorabversion aktualisieren
+        if: env.DEMO != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |

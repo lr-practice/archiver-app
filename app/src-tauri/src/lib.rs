@@ -453,6 +453,7 @@ struct StartInfo {
     pending: Option<String>,
     suggested_library: String,
     extension_export: Option<String>,
+    demo: bool,
 }
 
 #[tauri::command]
@@ -462,8 +463,9 @@ async fn start_info(app: AppHandle, state: State<'_, AppState>) -> Result<StartI
     Ok(StartInfo {
         library: state.library.lock().unwrap().as_ref().map(|l| l.root.to_string_lossy().into_owned()),
         pending: load_settings(&app).library.filter(|p| Path::new(p).is_dir()),
-        suggested_library: home.join("Archiver").to_string_lossy().into_owned(),
+        suggested_library: home.join(if DEMO { "Archiver Demo" } else { "Archiver" }).to_string_lossy().into_owned(),
         extension_export: export.is_file().then(|| export.to_string_lossy().into_owned()),
+        demo: DEMO,
     })
 }
 
@@ -1435,6 +1437,9 @@ const PRERELEASE_FEED: &str = "https://github.com/lr-practice/Archiver-Releases/
 /// Erst der Vorab-Kanal (falls an), dann der Beta-Kanal. Ist die Beta schon
 /// weiter als die letzte Vorabversion, gewinnt die Beta.
 async fn find_update(app: &AppHandle) -> Result<Option<tauri_plugin_updater::Update>, String> {
+    if DEMO {
+        return Ok(None);
+    }
     use tauri_plugin_updater::UpdaterExt;
     if load_settings(app).prerelease {
         let url = tauri::Url::parse(PRERELEASE_FEED).map_err(|e| e.to_string())?;
@@ -1547,6 +1552,9 @@ async fn update_versions(app: AppHandle) -> Result<Vec<VersionEntry>, String> {
 
 #[tauri::command]
 async fn update_install_version(app: AppHandle, tag: String) -> Result<(), String> {
+    if DEMO {
+        return Err("demo".into());
+    }
     use tauri_plugin_updater::UpdaterExt;
     let feed = if tag.starts_with("vorab-") { "vorab.json" } else { "latest.json" };
     if tag.is_empty() || !tag.chars().all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '-') {
@@ -1672,6 +1680,11 @@ async fn copy_images(app: AppHandle, paths: Vec<String>, text: Option<String>) -
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
+/// Demo-Build (0.42.2): mit ARCHIVER_DEMO gebaut läuft die App als „Archiver Demo“
+/// neben der echten, mit eigener Kennung, ohne Update und ohne Extension-Brücke.
+pub const DEMO: bool = option_env!("ARCHIVER_DEMO").is_some();
+pub const APP_IDENTIFIER: &str = if DEMO { "app.archiver.demo" } else { "app.archiver.desktop" };
+
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
@@ -1683,11 +1696,14 @@ pub fn run() {
         .setup(|app| {
             let handle = app.handle().clone();
             // Brücke zur Chrome-Extension anmelden (bei jedem Start, falls die App verschoben wurde).
-            std::thread::spawn(bridge::install_manifests);
-            // Brücke zur Safari-Extension: HTTP auf 127.0.0.1 (http_bridge.rs).
-            // Nur in der laufenden App; der Chrome-Host startet ohne setup.
-            #[cfg(target_os = "macos")]
-            http_bridge::start();
+            // Die Demo lässt beide Brücken der echten App.
+            if !DEMO {
+                std::thread::spawn(bridge::install_manifests);
+                // Brücke zur Safari-Extension: HTTP auf 127.0.0.1 (http_bridge.rs).
+                // Nur in der laufenden App; der Chrome-Host startet ohne setup.
+                #[cfg(target_os = "macos")]
+                http_bridge::start();
+            }
             // Die Bibliothek öffnet die Oberfläche selbst (open_library), damit das
             // Fenster sofort erscheint, auch wenn das Einlesen dauert.
             if let Some(path) = viewer::from_args() {
