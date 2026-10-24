@@ -55,7 +55,7 @@ jobs:
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           repository: lr-practice/archiver
-          ref: claude/project-thread-47qm6a
+          ref: claude/project-thread-85f33d
           token: ${{ secrets.RELEASES_TOKEN }}
           path: _melange
           sparse-checkout: fonts/melange

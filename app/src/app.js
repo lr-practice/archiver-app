@@ -115,12 +115,13 @@
       size: v.size in LAB_SIZES ? v.size : "M",
       title: v.title in LAB_INKS ? v.title : "text",
       text: v.text in LAB_INKS ? v.text : "faint",
-      font: LAB_FONTS.includes(v.font) ? v.font : "geist",
+      // 0.42.2: Melange ist ab Werk, gespeichertes „geist“ von vorher zählt erst ab fontV 2
+      font: v.fontV === 2 && LAB_FONTS.includes(v.font) ? v.font : "melange",
       drop: LAB_DROPS.includes(v.drop) ? v.drop : "mini",
     };
   }
   function setLab(patch) {
-    setPref("lab", { ...lab(), ...patch });
+    setPref("lab", { ...lab(), ...patch, fontV: 2 });
     applyLab();
   }
   function applyLab() {

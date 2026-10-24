@@ -7977,3 +7977,132 @@ html[data-head="14"] .p-head-row .p-folder-cards { display: none; }
 .p-mark-none:hover {
   color: var(--p-text);
 }
+
+/* ---- 0.42.2: Typo „A Leise“, Hell neu, Einstellungen als Vollbild ----
+   Melange Semi-Light (350) trägt Köpfe und Inhalt, Hierarchie über Grau statt
+   Größe. Gilt mit html[data-font="melange"] (ab Werk), Geist im Labor bleibt
+   der alte Stand. Hell nach Lukas' Vorlage: #f3f4f1, Flächen #e7e8e5, Schrift #111. */
+
+@font-face {
+  font-family: "KMR Melange Grotesk";
+  src: url("fonts/melange/Melange-350.woff2") format("woff2");
+  font-weight: 350;
+  font-style: normal;
+  font-display: block;
+}
+
+@font-face {
+  font-family: "KMR Melange Grotesk";
+  src: url("fonts/melange/Melange-350i.woff2") format("woff2");
+  font-weight: 350;
+  font-style: italic;
+  font-display: block;
+}
+
+html[data-font="melange"] {
+  --p-mono: var(--sans);
+}
+html[data-font="melange"] body,
+html[data-font="melange"] .p-sheet { font-weight: 350; }
+html[data-font="melange"] :is(.p-nav-btn, .p-nav-search) { font-weight: 400; }
+html[data-font="melange"] .p-num { font-variant-numeric: tabular-nums; letter-spacing: 0; font-size: 12px; }
+html[data-font="melange"] .p-card-body { font-size: 14px; }
+html[data-font="melange"] .p-card-meta { font-size: 12px; letter-spacing: 0; }
+html[data-font="melange"] .p-mono { font-weight: 500; font-size: 10px; letter-spacing: 0.09em; }
+html[data-font="melange"] .p-chip { font-family: var(--sans); }
+html[data-font="melange"] .p-index .p-row.p-zone .zone-card-name { font-size: 19px; font-weight: 350; letter-spacing: -0.01em; }
+html[data-font="melange"] .p-say { font-weight: 350; }
+
+/* Köpfe: 30 px, die Labor-Größe (--hk) wirkt weiter */
+html[data-font="melange"][data-head] :is(.p-page > .p-home-hero > .p-head, .p-page > .p-head, .p-page > .p-head-row > .p-head),
+html[data-font="melange"] .p-sheet .p-head {
+  max-width: 24em;
+  font-size: calc(30px * var(--hk));
+  font-weight: 350;
+  line-height: 1.16;
+  letter-spacing: -0.02em;
+}
+
+/* Text-Karten und Notizen in Melange */
+html[data-font="melange"] :is(.text-sheet, .note-paper) { font-family: var(--sans); }
+html[data-font="melange"] :is(.text-sheet .ts-label, .text-sheet .ts-foot, .note-paper .np-label, .note-paper .np-foot) {
+  font-family: var(--sans);
+  font-weight: 500;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+html[data-font="melange"] .card-text .ts-body { font-weight: 350; line-height: 1.25; letter-spacing: -0.01em; }
+html[data-font="melange"] :is(.note-sheet .ts-title, .np-title) { font-weight: 350; }
+html[data-font="melange"] .np-title { font-size: 28px; letter-spacing: -0.02em; }
+html[data-font="melange"] .np-body { font-weight: 350; font-size: 16px; line-height: 1.5; }
+
+/* Dunkel: der dünne Schnitt braucht etwas mehr Licht im Grau */
+html[data-font="melange"]:not(.light) {
+  --p-text: #f0f0ee;
+  --p-dim: #9d9d9b;
+  --p-faint: #6d6d6b;
+}
+
+/* Abstand zwischen Kopf und Zonen gestrafft */
+.p-page > .p-home-hero,
+.p-page > .p-head,
+.p-page > .p-head-row {
+  padding-bottom: clamp(24px, 4vh, 44px);
+}
+
+/* Hell */
+html.light {
+  --ink: #111111;
+  --ink-rgb: 17, 17, 17;
+  --ink-inverse: #f3f4f1;
+  --bg-solid: #f3f4f1;
+  --bg: #f3f4f1;
+  --panel: #f3f4f1;
+  --card-bg: #e7e8e5;
+  --thumb-bg: #e1e2df;
+  --sheet-bg: #eeefec;
+  --lightbox-bg: rgba(243, 244, 241, 0.97);
+  --p-text: #111111;
+  --p-dim: #5f605d;
+  --p-faint: #90918d;
+  --p-rule: rgba(17, 17, 17, 0.1);
+  --p-pill: rgba(231, 232, 229, 0.94);
+  --menu-bg: rgba(246, 247, 244, 0.98);
+  --splash-bg: #f3f4f1;
+}
+html.light :is(.p-card, .p-block, .p-list) { background: #e7e8e5; }
+html.light .p-nav { box-shadow: 0 6px 24px rgba(0, 0, 0, 0.06); }
+
+/* Einstellungen als Vollbild: links Kopf und Rückweg, rechts die Blöcke
+   als ruhige Liste mit Haarlinien statt grauer Kästen. */
+.p-sheet:has(.p-settings-nav, .p-settings-back) {
+  left: 0;
+  width: auto;
+  padding: 132px var(--p-pad) 96px;
+  background: var(--bg);
+  box-shadow: none;
+}
+.page-open:has(.p-sheet .p-settings-nav, .p-sheet .p-settings-back) .zones-grid { visibility: hidden; }
+.p-sheet:has(.p-settings-nav, .p-settings-back) .p-sheet-inner {
+  display: grid;
+  grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+  column-gap: clamp(40px, 6vw, 112px);
+  max-width: 1240px;
+}
+.p-sheet:has(.p-settings-nav, .p-settings-back) .p-sheet-inner > * { grid-column: 2; }
+.p-sheet:has(.p-settings-nav, .p-settings-back) .p-sheet-inner > .p-settings-back {
+  grid-column: 1; grid-row: 1; justify-self: start; align-self: start; position: sticky; top: 0; margin: 0; z-index: 1;
+}
+.p-sheet:has(.p-settings-nav, .p-settings-back) .p-sheet-inner > :is(.p-head, .p-say) {
+  grid-column: 1; grid-row: 1 / span 40; align-self: start; position: sticky; top: 34px; margin: 34px 0 0;
+}
+.p-sheet:has(.p-settings-nav) .p-sheet-inner > :is(.p-head, .p-say) { top: 0; margin-top: 0; }
+.p-sheet:has(.p-settings-nav, .p-settings-back) .p-block { margin: 0 0 40px; padding: 0; border-radius: 0; background: none; }
+.p-sheet:has(.p-settings-nav, .p-settings-back) .p-block-title { padding-bottom: 10px; border-bottom: 1px solid var(--p-rule-strong); }
+.p-sheet:has(.p-settings-nav, .p-settings-back) .p-block-row { padding: 14px 0; }
+.p-sheet:has(.p-settings-nav, .p-settings-back) .p-list { background: none; border-radius: 0; padding-left: 0; padding-right: 0; }
+.p-sheet:has(.p-settings-nav, .p-settings-back) .p-account { margin-bottom: 48px; }
+.p-sheet:has(.p-settings-nav) .p-settings-nav { border-top: 1px solid var(--p-rule-strong); }
+.p-sheet:has(.p-settings-nav) .p-settings-link { padding: 18px 0; }
+.p-sheet:has(.p-settings-nav) .p-settings-link-title { font-size: 20px; letter-spacing: -0.012em; }
+.p-sheet:has(.p-settings-nav) .p-settings-link-sum { font-size: 13px; color: var(--p-dim); }

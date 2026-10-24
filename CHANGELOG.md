@@ -1,5 +1,18 @@
 # Changelog
 
+## App 0.42.2 (Vorabversion)
+
+- Neue Typografie „A Leise“: Melange Semi-Light für Köpfe, Namen, Text-Karten
+  und Notizen, Etiketten in Melange Medium statt Geist Mono. Köpfe ruhiger
+  (30 px), die Ordnung entsteht über Grau statt über Größe.
+- Hell neu: warmes Hellgrau (#f3f4f1), Karten und Flächen eine Stufe dunkler
+  statt weiß, Schrift fast schwarz, Grau mit mehr Kontrast.
+- Dunkel: Grau etwas heller, damit der dünne Schnitt trägt.
+- Einstellungen als Vollbild: links Kopf und Rückweg, rechts die Bereiche als
+  ruhige Liste mit Haarlinien.
+- Weniger Abstand zwischen Kopf und Zonen auf allen Seiten.
+- Geist lässt sich unter Labor › Kopf › Schrift zurückholen.
+
 ## App 0.42.1 (Vorabversion)
 
 - Der Atlas heißt jetzt Collection.

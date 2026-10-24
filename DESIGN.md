@@ -59,22 +59,22 @@ Bei neuen Regeln gilt:
 
 | Token | Dunkel | Hell (0.25.0) | Zweck |
 |---|---|---|---|
-| `--bg-solid` | `#1c1c1c` | `#f4f4f4` | Grundfarbe des Fensters, gleich dem Tray (0.28) |
+| `--bg-solid` | `#1c1c1c` | `#f3f4f1` (0.42.2) | Grundfarbe des Fensters, gleich dem Tray (0.28) |
 | `--win-alpha` | 0.72 | 0.78 | Deckkraft über dem Mac-Glas, Standard wie im Tray. Regler „Glas“ (Einstellungen › Darstellung, 40–100 % in 5er-Schritten, `archiver.glass`, i18n.js `applyGlass`) für App, Tray und Observer |
 | `--bg` | aus `--bg-solid` × `--win-alpha` | dito | Fenster über dem Mac-Glas |
 | `--ink` / `--ink-rgb` | `#ffffff` / `255,255,255` | `#111111` / `17,17,17` | Text und Basis aller Alpha-Flächen |
-| `--ink-inverse` | `#0f0f0f` | `#f4f4f4` | Text auf `--ink`-Flächen (Primärknopf) |
-| `--p-text` | `#ededed` | `#111111` | Haupttext |
-| `--p-dim` | `#8c8c8c` | `#5c5c5c` | Sekundärtext, Meta |
-| `--p-faint` | `#5e5e5e` | `#8f8f8f` | Tertiärtext, inaktive Chips |
+| `--ink-inverse` | `#0f0f0f` | `#f3f4f1` | Text auf `--ink`-Flächen (Primärknopf) |
+| `--p-text` | `#ededed`, mit Melange `#f0f0ee` | `#111111` | Haupttext |
+| `--p-dim` | `#8c8c8c`, mit Melange `#9d9d9b` | `#5f605d` | Sekundärtext, Meta |
+| `--p-faint` | `#5e5e5e`, mit Melange `#6d6d6b` | `#90918d` | Tertiärtext, inaktive Chips |
 | `--p-rule` | ink × 0.10 | schwarz × 0.10 | Trennlinien |
 | `--p-rule-strong` | ink × 0.55 | schwarz × 0.55 | betonte Linien |
-| `--p-pill` | `rgba(52,52,52,.82)` | `rgba(255,255,255,.78)` | Pillen und Navigationsglas |
-| Karte | ink × 0.055 (Hover 0.08) | schwarz × 0.045 (Hover 0.07) | Zonen- und Ordnerkarten, eine Stufe vom Grund abgesetzt |
-| `--thumb-bg` | `#262626` | `#e8e8e8` | Platzhalter hinter Bildern |
-| `--menu-bg` | `rgba(40,40,40,.97)` | `rgba(250,250,250,.97)` | Menüs, Zonenglas |
-| `--sheet-bg` | `#1c1c1c` | `#f4f4f4` | Seitenblatt (Details) |
-| `--lightbox-bg` | `rgba(0,0,0,.9)` | `rgba(244,244,244,.98)` | Lightbox |
+| `--p-pill` | `rgba(52,52,52,.82)` | `rgba(231,232,229,.94)` | Pillen und Navigationsglas |
+| Karte | ink × 0.055 (Hover 0.08) | `#e7e8e5` deckend (0.42.2), auch Blöcke und Listen | Zonen- und Ordnerkarten, eine Stufe vom Grund abgesetzt |
+| `--thumb-bg` | `#262626` | `#e1e2df` | Platzhalter hinter Bildern |
+| `--menu-bg` | `rgba(40,40,40,.97)` | `rgba(246,247,244,.98)` | Menüs, Zonenglas |
+| `--sheet-bg` | `#1c1c1c` | `#eeefec` | Seitenblatt (Details) |
+| `--lightbox-bg` | `rgba(0,0,0,.9)` | `rgba(243,244,241,.97)` | Lightbox |
 | `--accent` / `--accent-rgb` | `#2d5aeb` | dito | Toast, aktive Systemzustände |
 | `--glow-rgb` | `91,124,255` | dito | Glühen der Zielkarte beim Ablegen |
 | `--danger` | `#e5484d` | dito | Fehler-Toast, Löschen |
@@ -84,30 +84,37 @@ Für die Farbe gilt:
 - **Akzent sparsam.** Blau zeigt nur Systemrückmeldung (Toast, Glühen beim
   Ablegen). Auswahl und Fokus sind nie blau, sondern Ring
   (Prinzip 5).
-- **Kein reines Weiß als Fläche.** Hell beginnt bei `#f4f4f4`. Reines Weiß
+- **Kein reines Weiß als Fläche.** Hell beginnt bei `#f3f4f1` (0.42.2, nach
+  Lukas' Vorlage: warmes Hellgrau, Flächen `#e7e8e5`, Schrift `#111`). Reines Weiß
   bleibt Glas (Navigation, Zonenleiste) und Bildern vorbehalten.
 
 ### 2.2 Typografie
 
 | Rolle | Schrift | Größe | Gewicht | Laufweite | Beispiel |
 |---|---|---|---|---|---|
-| Label, Chip | Geist Mono, Versalien | 11 px | 400 | +0.02em | Filter-Chips, Zähler |
-| Meta | Geist | 12 px | 400 | 0 | Datum, Quelle |
-| UI | Geist | 13–13.5 px | 500 | 0 | Navigation, Menüs |
-| Karten-Titel | Geist | 15 px | 500 | 0 | Zonenname auf der Karte |
-| Seitenkopf | Geist | 28–42 px (3vw) / 1.1, Übersicht 34–56 px (4vw) | je nach Labor-Variante | 0 | Übersicht, Zone, Alle Objekte, Suche, Zuletzt gelöscht (`.p-page > .p-head`, seit 0.40.10). Mechanik, Größe und Farbe aus Labor › Kopf (4.24c), ab Werk 05 |
-| Satz | Geist | 34 px / 1.14 | 500 | 0 | Konto, Sperre, Lese-Modus (`.p-say`) |
-| Überschrift | Geist | 22–24 px | 600 | 0 | Kopf in Einstellungen und Handbuch (`.p-sheet`), Onboarding |
+| Label, Chip | Melange Medium, Versalien | 10 px | 500 | +0.09em | Filter-Chips, Zähler, `.p-mono` |
+| Meta | Melange | 12 px | 350 | 0 | Datum, Quelle, `.p-card-meta`, `.p-num` (Ziffern tabellarisch) |
+| UI | Melange | 13–13.5 px | 400 | 0 | Navigation, Menüs |
+| Karten-Titel | Melange Semi-Light | 14 px | 350 | 0 | Zonenname auf der Karte |
+| Index-Zeile | Melange Semi-Light | 19 px | 350 | −0.01em | Zonenname im Index |
+| Seitenkopf | Melange Semi-Light | 30 px × Labor-Größe (`--hk`) / 1.16 | 350 | −0.02em | alle Seiten und Einstellungen, Satz grau dahinter |
+| Einstellungen | Melange Semi-Light | 20 px | 350 | −0.012em | Bereiche in der Vollbild-Liste |
+| Notiz | Melange Semi-Light | Titel 28 px, Text 16 px / 1.5 | 350 | −0.02em / 0 | Lightbox-Notiz |
+| Satz | Melange | 34 px / 1.14 | 350 | 0 | Konto, Sperre, Lese-Modus (`.p-say`) |
 
 Für die Typografie gilt:
 
-- Grundschrift ist wieder Geist (seit 0.40.18, `--sans`), Mono bleibt Geist
-  Mono. Melange lässt sich unter Einstellungen › Labor › Kopf › Schrift
-  zurückholen (`html[data-font="melange"]`). Tray und Observer setzen fest
-  Geist.
+- Grundschrift ist seit 0.42.2 Melange, Typo-System „A Leise“
+  (`html[data-font="melange"]`, ab Werk). Semi-Light (350) trägt Köpfe und
+  Inhalt, die Hierarchie entsteht über Grau statt über Größe. Etiketten sind
+  Melange Medium statt Geist Mono. Geist bleibt unter Einstellungen › Labor ›
+  Kopf › Schrift wählbar und zeigt dann den alten Stand. Gespeichertes „geist“
+  aus der Zeit vor 0.42.2 zählt nicht (`fontV: 2`). Tray und Observer setzen
+  fest Geist.
 - Melange ist kommerziell (kimera, Freigabe für den internen Gebrauch) und
-  liegt nicht in diesem Repo. Der Build holt die woff2-Schnitte 100, 300, 400,
-  400 kursiv, 500, 600 und 700 aus dem privaten Repo `lr-practice/archiver`
+  liegt nicht in diesem Repo. Der Build holt die woff2-Schnitte 100, 300, 350
+  (Semi-Light), 350 kursiv, 400, 400 kursiv, 500, 600 und 700 aus dem privaten
+  Repo `lr-practice/archiver` (Branch `claude/project-thread-85f33d`)
   (`fonts/melange/`) nach `app/src/fonts/melange/` und
   `extension/fonts/melange/` (beide in `.gitignore`). Fehlen sie, springt
   Geist ein. Text-Karten und Bildbeschriftungen der Extension behalten ihre
@@ -116,7 +123,8 @@ Für die Typografie gilt:
   Köpfen und Sätzen. Nur Geist Mono in Versalien bekommt +0.02em, die
   Notiz-Blätter in Systemschrift behalten ihre eigenen Werte.
 - Mono ist für Daten und Etiketten da, nicht für Fließtext.
-- Gewichte sind nur 400, 500 und 600.
+- Gewichte sind 350 (Inhalt, Köpfe), 400 (Bedienung), 500 (Etiketten) und 600
+  (Geist-Stand).
 - Neue Größen werden auf diese Stufen gerundet. Im Code stecken heute auch
   10, 14, 16 und 19 px. Diese Größen werden bei Gelegenheit auf die Stufen
   gezogen und nicht neu eingeführt.
@@ -971,6 +979,18 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
 - **Nicht:** Keine Safari-eigenen Farben, Icons oder Abstände. Was nur in
   Safari anders sein muss, regelt `background.js` (`IS_SAFARI`), nie CSS.
 
+### 4.28 Einstellungen als Vollbild (App 0.42.2)
+
+Einstellungen öffnen nicht mehr als Seitenblatt, sondern über das ganze
+Fenster (`.p-sheet:has(.p-settings-nav, .p-settings-back)`). Links stehen Kopf
+und Rückweg, beide bleiben beim Scrollen stehen (5 Teile), rechts die Blöcke
+(7 Teile), höchstens 1240 px breit, oben 132 px Luft unter der Navigation.
+Blöcke und Listen haben keine graue Fläche mehr, sondern einen Titel über einer
+kräftigen Haarlinie (`--p-rule-strong`), Zeilen 14 px hoch gepolstert. Die
+Bereichsliste auf der ersten Seite steht in 20 px Semi-Light. Handbuch und
+Information bleiben Seitenblatt. Der Abstand zwischen Kopf und Inhalt auf allen
+Seiten ist auf 24–44 px gestrafft (vorher 40–96 px).
+
 ## 5. Bekannte Abweichungen
 
 Diese Punkte stehen hier, damit niemand sie für Absicht hält. Behoben werden
@@ -1016,3 +1036,4 @@ sie nur auf ausdrückliches Go.
 - [ ] `prefers-reduced-motion` wird respektiert.
 - [ ] Diese Datei ist nachgezogen, wenn sich ein Wert oder eine Regel geändert
       hat.
+
