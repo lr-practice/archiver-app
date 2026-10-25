@@ -1,5 +1,10 @@
 # Changelog
 
+## App 0.42.4
+
+- Hell kühler und sauberer: Grund #f4f5f7, Karten und Flächen #e9ebee, Grau
+  leicht bläulich statt gelbgrün. Das Seitenblatt hat auf dem Mac denselben Ton.
+
 ## Extension 3.29.8
 
 - Ablegen wie in der App: Das Bild fliegt als Miniatur vom Zeiger in die

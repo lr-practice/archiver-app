@@ -59,21 +59,21 @@ Bei neuen Regeln gilt:
 
 | Token | Dunkel | Hell (0.25.0) | Zweck |
 |---|---|---|---|
-| `--bg-solid` | `#1c1c1c` | `#f3f4f1` (0.42.2) | Grundfarbe des Fensters, gleich dem Tray (0.28) |
+| `--bg-solid` | `#1c1c1c` | `#f4f5f7` (0.42.4, vorher `#f3f4f1`) | Grundfarbe des Fensters, gleich dem Tray (0.28) |
 | `--win-alpha` | 0.72 | 0.78 | Deckkraft über dem Mac-Glas, Standard wie im Tray. Regler „Glas“ (Einstellungen › Darstellung, 40–100 % in 5er-Schritten, `archiver.glass`, i18n.js `applyGlass`) für App, Tray und Observer |
 | `--bg` | aus `--bg-solid` × `--win-alpha` | dito | Fenster über dem Mac-Glas |
 | `--ink` / `--ink-rgb` | `#ffffff` / `255,255,255` | `#111111` / `17,17,17` | Text und Basis aller Alpha-Flächen |
-| `--ink-inverse` | `#0f0f0f` | `#f3f4f1` | Text auf `--ink`-Flächen (Primärknopf) |
+| `--ink-inverse` | `#0f0f0f` | `#f4f5f7` | Text auf `--ink`-Flächen (Primärknopf) |
 | `--p-text` | `#ededed`, mit Melange `#f0f0ee` | `#111111` | Haupttext |
-| `--p-dim` | `#8c8c8c`, mit Melange `#9d9d9b` | `#5f605d` | Sekundärtext, Meta |
-| `--p-faint` | `#5e5e5e`, mit Melange `#6d6d6b` | `#90918d` | Tertiärtext, inaktive Chips |
+| `--p-dim` | `#8c8c8c`, mit Melange `#9d9d9b` | `#5e6064` | Sekundärtext, Meta |
+| `--p-faint` | `#5e5e5e`, mit Melange `#6d6d6b` | `#8f9196` | Tertiärtext, inaktive Chips |
 | `--p-rule` | ink × 0.10 | schwarz × 0.10 | Trennlinien |
 | `--p-rule-strong` | ink × 0.55 | schwarz × 0.55 | betonte Linien |
 | `--p-pill` | `rgba(52,52,52,.82)` | `rgba(231,232,229,.94)` | Pillen und Navigationsglas |
-| Karte | ink × 0.055 (Hover 0.08) | `#e7e8e5` deckend (0.42.2), auch Blöcke und Listen | Zonen- und Ordnerkarten, eine Stufe vom Grund abgesetzt |
-| `--thumb-bg` | `#262626` | `#e1e2df` | Platzhalter hinter Bildern |
+| Karte | ink × 0.055 (Hover 0.08) | `#e9ebee` deckend (0.42.4, vorher `#e7e8e5`), auch Blöcke und Listen | Zonen- und Ordnerkarten, eine Stufe vom Grund abgesetzt |
+| `--thumb-bg` | `#262626` | `#e3e5e8` | Platzhalter hinter Bildern |
 | `--menu-bg` | `rgba(40,40,40,.97)` | `rgba(246,247,244,.98)` | Menüs, Zonenglas |
-| `--sheet-bg` | `#1c1c1c` | `#eeefec` | Seitenblatt (Details) |
+| `--sheet-bg` | `#1c1c1c` | `#eef0f2` (auch auf dem Mac) | Seitenblatt (Details) |
 | `--lightbox-bg` | `rgba(0,0,0,.9)` | `rgba(243,244,241,.97)` | Lightbox |
 | `--accent` / `--accent-rgb` | `#2d5aeb` | dito | Toast, aktive Systemzustände |
 | `--glow-rgb` | `91,124,255` | dito | Glühen der Zielkarte beim Ablegen |
@@ -84,8 +84,9 @@ Für die Farbe gilt:
 - **Akzent sparsam.** Blau zeigt nur Systemrückmeldung (Toast, Glühen beim
   Ablegen). Auswahl und Fokus sind nie blau, sondern Ring
   (Prinzip 5).
-- **Kein reines Weiß als Fläche.** Hell beginnt bei `#f3f4f1` (0.42.2, nach
-  Lukas' Vorlage: warmes Hellgrau, Flächen `#e7e8e5`, Schrift `#111`). Reines Weiß
+- **Kein reines Weiß als Fläche.** Hell beginnt bei `#f4f5f7` (0.42.4, Lukas' Wahl „Kühl“:
+  ein Hauch Blau, Flächen `#e9ebee`, Schrift `#111`; das warme `#f3f4f1` aus 0.42.2
+  wirkte neben Bildern schmutzig). Tray, Viewer und Extension bleiben bei `#f4f4f4`. Reines Weiß
   bleibt Glas (Navigation, Zonenleiste) und Bildern vorbehalten.
 
 ### 2.2 Typografie

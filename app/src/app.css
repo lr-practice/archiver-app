@@ -7863,7 +7863,8 @@ button.p-list:hover {
 /* ---- 0.42.2: Typo „A Leise“ und Hell neu ----
    Melange Semi-Light (350) trägt Köpfe und Inhalt, Hierarchie über Grau statt
    Größe. Seit 0.42.3 fest, ohne Wahl im Labor. Hell nach Lukas' Vorlage:
-   #f3f4f1, Flächen #e7e8e5, Schrift #111. */
+   #f4f5f7, Flächen #e9ebee, Schrift #111 (0.42.4 kühl statt warm #f3f4f1/#e7e8e5,
+   das wirkte neben Bildern schmutzig). */
 
 @font-face {
   font-family: "KMR Melange Grotesk";
@@ -7936,21 +7937,23 @@ html:not(.light) {
 html.light {
   --ink: #111111;
   --ink-rgb: 17, 17, 17;
-  --ink-inverse: #f3f4f1;
-  --bg-solid: #f3f4f1;
-  --bg: #f3f4f1;
-  --panel: #f3f4f1;
-  --card-bg: #e7e8e5;
-  --thumb-bg: #e1e2df;
-  --sheet-bg: #eeefec;
-  --lightbox-bg: rgba(243, 244, 241, 0.97);
+  --ink-inverse: #f4f5f7;
+  --bg-solid: #f4f5f7;
+  --bg: #f4f5f7;
+  --panel: #f4f5f7;
+  --card-bg: #e9ebee;
+  --thumb-bg: #e3e5e8;
+  --sheet-bg: #eef0f2;
+  --lightbox-bg: rgba(244, 245, 247, 0.97);
   --p-text: #111111;
-  --p-dim: #5f605d;
-  --p-faint: #90918d;
+  --p-dim: #5e6064;
+  --p-faint: #8f9196;
   --p-rule: rgba(17, 17, 17, 0.1);
-  --p-pill: rgba(231, 232, 229, 0.94);
-  --menu-bg: rgba(246, 247, 244, 0.98);
-  --splash-bg: #f3f4f1;
+  --p-pill: rgba(233, 235, 238, 0.94);
+  --menu-bg: rgba(247, 248, 250, 0.98);
+  --splash-bg: #f4f5f7;
 }
-html.light :is(.p-card, .p-block, .p-list) { background: #e7e8e5; }
+html.light :is(.p-card, .p-block, .p-list) { background: #e9ebee; }
+/* Seitenblatt auf dem Mac im selben Ton statt neutral grau (html.mac.light weiter oben) */
+html.mac.light { --sheet-bg: #eef0f2; }
 html.light .p-nav { box-shadow: 0 6px 24px rgba(0, 0, 0, 0.06); }
