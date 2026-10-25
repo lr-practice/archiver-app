@@ -1,5 +1,12 @@
 # Changelog
 
+## Extension 3.29.8
+
+- Ablegen wie in der App: Das Bild fliegt als Miniatur vom Zeiger in die
+  obere rechte Ecke der Zielkarte, die Leiste steht kurz und blendet dann
+  ruhig aus. Die aufgehellte Zielkarte blendet jetzt mit den anderen aus,
+  statt hell stehen zu bleiben und dann wegzuspringen.
+
 ## App 0.42.3 (Vorabversion)
 
 - Einstellungen wieder als Seitenblatt rechts.

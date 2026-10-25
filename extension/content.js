@@ -796,8 +796,9 @@
     dragCounter = 0;
   }
 
-  // Abgelegt: Die Zielkarte bleibt kurz hervorgehoben, dann blendet die Leiste ruhig aus.
-  function landZones(idx) {
+  // Abgelegt (3.29.8, wie die App, DESIGN.md 4.13): Das Bild fliegt als Miniatur
+  // vom Zeiger in die Ecke der Zielkarte, die Leiste steht 0.7 s und blendet aus.
+  function landZones(idx, pos, src) {
     const bar = zonesBarEl;
     const zone = zoneEls[idx];
     if (!bar || !zone) return removeZones();
@@ -806,8 +807,29 @@
     dragCounter = 0;
     removeLibBar();
     zone.classList.add("active");
+    if (src) stampZone(zone, src, pos);
     bar.classList.add("leaving");
-    setTimeout(() => bar.remove(), 520);
+    setTimeout(() => bar.remove(), 1000);
+  }
+
+  // Miniatur oben rechts in der Karte; lädt das Bild nicht in 250 ms, bleibt es weg
+  function stampZone(zone, src, pos) {
+    const t0 = Date.now();
+    const img = new Image();
+    img.className = "zone-stamp";
+    img.onload = () => {
+      if (Date.now() - t0 > 250) return;
+      zone.appendChild(img);
+      if (!pos || matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+      const r = img.getBoundingClientRect();
+      const dx = pos.x - (r.left + r.width / 2);
+      const dy = pos.y - (r.top + r.height / 2);
+      img.animate([{ transform: `translate(${dx}px, ${dy}px) scale(2.4)` }, { transform: "none" }], {
+        duration: 280,
+        easing: "cubic-bezier(0.2, 0.7, 0.2, 1)",
+      });
+    };
+    img.src = src;
   }
 
   // Zeiger während eines Ziehens (Browser-Ziehen, Text, Instagram): Zielkarte
@@ -1346,7 +1368,7 @@
       const idx = getZoneIndex(e.clientX, e.clientY);
       if (idx !== -1) {
         const name = barZones[idx];
-        landZones(idx);
+        landZones(idx, { x: e.clientX, y: e.clientY }, d.images.length ? findBestImageUrl(d.images[0]) : null);
         const folder = isRootZoneName(name) ? null : name;
         if (d.images.length) saveSelectedImages(d.images, folder, d.caption);
         else {
@@ -1674,7 +1696,7 @@
       { capture: true, once: true }
     );
     const idx = getZoneIndex(e.clientX, e.clientY);
-    if (idx !== -1) landZones(idx);
+    if (idx !== -1) landZones(idx, { x: e.clientX, y: e.clientY }, d.video ? null : d.url);
     endMediaDrag();
     if (idx === -1) return;
     const name = barZones[idx];
@@ -2145,7 +2167,8 @@
 
       const zoneName = barZones[zoneIdx];
       const folder = isRootZoneName(zoneName) ? null : zoneName;
-      landZones(zoneIdx);
+      const shown = hiddenDrag ? (hiddenDrag.video ? null : hiddenDrag.url) : extractImageUrl(e.dataTransfer);
+      landZones(zoneIdx, { x: e.clientX, y: e.clientY }, typeof shown === "string" ? shown : shown && URL.createObjectURL(shown.file));
 
       if (IG && (hiddenDrag || dragSource)) {
         const el = hiddenDrag ? hiddenDrag.el : dragSource;

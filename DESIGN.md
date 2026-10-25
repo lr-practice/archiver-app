@@ -1,6 +1,6 @@
 # Archiver – Design-System
 
-Stand: App 0.42.1 · Extension 3.29.7
+Stand: App 0.42.3 · Extension 3.29.8
 
 Diese Datei hält fest, wie Archiver aussieht und warum. Sie gilt für die Mac-App
 (`app/src`) und die Extension (`extension/`, in Chrome und in Safari). Wer an der Oberfläche
@@ -162,7 +162,7 @@ Ebenen vor: Navigation, Active-Zones-Leiste, Menüs und Ladeplatzhalter.
 | Ein- und Ausblenden, Toast, Wenden in der Lightbox (je Hälfte) | 0.18 s | `ease` / `ease-out` |
 | Seitenblatt, Gleiten | 0.28 s | `cubic-bezier(0.2, 0.7, 0.2, 1)` (`--sheet-ease`) |
 | Zonenleiste rein | 0.14 s | `ease-out` |
-| Zonenleiste raus | 0.2 s, 0.3 s verzögert | `ease` (Glühen auf dem Ziel bleibt kurz sichtbar). Am ganzen Mac und nach dem Ablegen in der App (0.40.24) 0.28 s, 0.7 s nach „Gesichert“ (0.40.22: 0.35 s wirkte sofort, 1.2 s zu lang), ohne Drop sofort; das Fenster mit dem Glas blendet gleich lang aus (`dropbar_fade`); bei einem Fehler 2.5 s später (4.13) |
+| Zonenleiste raus | 0.28 s, 0.7 s verzögert | `ease`. In der Extension (3.29.8, vorher 0.2 s nach 0.3 s) ab dem Loslassen; am ganzen Mac und nach dem Ablegen in der App (0.40.24) 0.28 s, 0.7 s nach „Gesichert“ (0.40.22: 0.35 s wirkte sofort, 1.2 s zu lang), ohne Drop sofort; das Fenster mit dem Glas blendet gleich lang aus (`dropbar_fade`); bei einem Fehler 2.5 s später (4.13) |
 | Miniatur, Ring und Rollen beim Ablegen (4.13) | 0.28 s | `--sheet-ease` |
 | Ring „Umlaufend“ | 1.6 s je Runde | `linear` |
 
@@ -226,7 +226,7 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
   - Einfahren
   - Ziel unter dem Zeiger (Ring)
   - Herkunftszone (Inhalt auf 45 % zurückgenommen, Glas bleibt)
-  - Abgelegt (Ziel glüht kurz in `--glow-rgb`, dann fährt die Leiste aus)
+  - Abgelegt (Miniatur wie in 4.13, dann fährt die Leiste aus; das frühere Glühen nur noch im Labor)
 - **Angeschnitten (0.35, Einstellungen › Darstellung, ab Werk „Ganz“):** Wahlweise
   ragen die Karten erst 90 px herein (`.p-dropbar.strip`), wie früher die Leiste
   der Extension (4.13): oben gerundet, unten bündig, ohne Hinweis. Zeiger in
@@ -554,7 +554,9 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
   In der App (4.3) steht dabei „Abgelegt“, weil das Verschieben dort nicht
   abgewartet wird. Die Position aus `onDragDropEvent` ist auf macOS schon in
   Punkten; nie durch `devicePixelRatio` teilen (0.26 bis 0.40.22 taten es, der
-  Drop landete auf Retina links daneben). Abweichung: Die Extension glüht noch.
+  Drop landete auf Retina links daneben). Die Extension zeigt seit 3.29.8 fest die
+  Miniatur (`.zone-stamp` in `overlay.css`), ohne Labor-Varianten und ohne
+  „+N“; die Leiste steht dort 0.7 s ab dem Loslassen, weil sie das Sichern nicht abwartet.
 - **Ab Werk an (0.40.21, vorher ab 0.32.1 aus):** Weil sie nur mit ⌥ kommt,
   ist sie wieder an, auch wenn die alte Leiste ausgeschaltet war.
   Einstellungen › Mac & Browser (0.40.24): „Mit ⌥“ (Standard), „Immer“
@@ -980,9 +982,6 @@ Die Einstellungen bleiben Seitenblatt (ein Vollbild-Versuch in 0.42.2 ist in
 Diese Punkte stehen hier, damit niemand sie für Absicht hält. Behoben werden
 sie nur auf ausdrückliches Go.
 
-- **Ablegen glüht noch in der Extension (0.40.23).**
-  App und Zonenleiste am ganzen Mac zeigen die Variante aus dem Labor (4.13). Nachziehen,
-  sobald eine Variante aus dem Labor feststeht.
 - **Farbmarken fehlen in der Extension (0.41.0).** Die Galerie der Extension
   zeigt den Innenrand (4.6a) noch nicht; die Brücke liefert `mark` noch nicht mit.
 - **Die Extension hat ihre Farben fest im Code und nutzt keine Tokens.**

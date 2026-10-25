@@ -136,7 +136,7 @@ input {
 .zone.active {
   background: color-mix(
     in srgb,
-    color-mix(in srgb, var(--menu-bg) 88%, #fff) calc(var(--zone-alpha, 0.97) * 100%),
+    color-mix(in srgb, var(--menu-bg) 88%, #fff) calc(var(--zone-alpha, 0.97) * var(--archiver-zone-in, 1) * 100%),
     transparent
   );
 }
@@ -150,16 +150,30 @@ input {
   background: var(--p-text);
   -webkit-mask: var(--ring-lg) 0 0 / 100% 100% no-repeat;
   mask: var(--ring-lg) 0 0 / 100% 100% no-repeat;
+  opacity: var(--archiver-zone-in, 1);
 }
 
+/* Ziel blendet beim Gehen mit aus, statt hell stehen zu bleiben (3.29.8) */
 .zone.active .zone-hint {
-  opacity: 1;
+  opacity: var(--archiver-zone-in, 1);
   color: var(--p-text);
 }
 
-/* Abgelegt: kein Glühen, die Leiste blendet nur ruhig aus */
+/* Abgelegt (3.29.8, wie die App, 4.13): Miniatur oben rechts, die Leiste
+   steht 0.7 s und blendet in 0.28 s aus */
 .zones-bar.leaving {
-  animation: zones-out 0.2s ease 0.3s forwards;
+  animation: zones-out 0.28s ease 0.7s forwards;
+  pointer-events: none;
+}
+
+.zone-stamp {
+  position: absolute;
+  top: 14px;
+  right: 16px;
+  width: 36px;
+  height: 36px;
+  object-fit: cover;
+  border-radius: calc(var(--r-sm, 4px) * 0.6);
   pointer-events: none;
 }
 
