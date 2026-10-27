@@ -1,6 +1,6 @@
 # Archiver – Design-System
 
-Stand: App 0.42.5 · Extension 3.29.8
+Stand: App 0.42.6 · Extension 3.30.0
 
 Diese Datei hält fest, wie Archiver aussieht und warum. Sie gilt für die Mac-App
 (`app/src`) und die Extension (`extension/`, in Chrome und in Safari). Wer an der Oberfläche
@@ -419,9 +419,9 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
   (Zone—Nummer Position/Anzahl, etwa TYPO—02 3/7), Text in Geist 17 px
   (Lightbox).
 - **Raster (0.33):** Kein Textauszug mehr unter dem Bild, der Chip „(+ Text)“
-  ist entfallen. Ein Punkt 10 px, 6 px vom Rand unten rechts, in der Farbe der
+  ist entfallen. Ein Punkt 14 px (bis 0.42.5: 10 px), 6 px vom Rand unten rechts, in der Farbe der
   Textkarte (`.card-dot`, 0.33.1 statt Eselsohr) zeigt an, dass das Bild Text
-  hat. Feine dunkle Kante, damit er auf gleichfarbigen Bildern stehen bleibt.
+  hat. Seit 0.42.6 auch, wenn eine Note das Bild verknüpft (Farbe der Note). Feine dunkle Kante, damit er auf gleichfarbigen Bildern stehen bleibt.
   Bilder ohne Text bleiben stumm.
 - **Farbe (0.33):** In ⌘D unter „Bildtext“ wählbar, dieselbe Reihe wie bei
   Textkarten und Notizen (`tonePicker`). Ohne Wahl gilt die Farbe aus dem Hash.
@@ -440,7 +440,25 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
   Karte editierbar (Esc oder ⌘↩ beendet, Sichern beim Verlassen), ebenso der
   Text einer Textkarte; deren PNG bleibt unverändert.
 
-### 4.11b Notiz-Objekt (`.note-sheet`, `.note-paper`, `.note-links`, 0.29)
+### 4.11b Note (`.note-sheet`, `.note-paper`, `.note-links`, 0.29, „Note“ seit 0.42.6)
+- **Eine Funktion (0.42.6):** Textkarte und Notiz heißen in der Oberfläche
+  „Note“ (Kennung NOTE). Neuer Text wird immer `.md`: Ausschnitt aus der
+  Extension, ⌘V in einer Zone, Rechtsklick. Alte Textkarten (PNG) und Bildtexte
+  bleiben lesbar wie bisher. Rechtsklick auf ein oder mehrere Bilder › „Note zu
+  diesem Bild“ / „Note zu n Objekten“ legt die Note im Ordner des ersten an,
+  gleich verknüpft, und öffnet sie zum Schreiben.
+- **Herkunft (0.42.6):** Kommt die Note aus dem Web, steht die Domain im Fuß
+  (Raster: Domain · n verknüpft; Lightbox: „↗ domain“ zwischen Zahl und
+  „Gesichert“, Tooltip Seitentitel). Klick öffnet die Seite an der Stelle
+  (Textfragment, `sourceUrl`). Seite und Titel wandern beim Bearbeiten mit dem
+  neuen Hash mit (`move_note_hash`).
+- **Bild mit Note (0.42.6):** Ohne Bildtext zeigt die Lightbox die (erste) Note
+  des Bildes an derselben Stelle wie den Bildtext, als Blatt `.lb-note-card`
+  (Kennung, Titel 18–30 px, Text 13–17 px, Fuß), Rückseite oder Doppelseite
+  wie eingestellt. Knopf heißt dann „Note“, Taste T. Klick aufs Blatt öffnet die
+  Note; die Lightbox blättert durch Note und Verknüpfte.
+- **Suche (0.42.6):** Ein Bild passt auch, wenn der Text einer Note passt, die
+  es verknüpft (halbe Punktzahl, steht also hinter direkten Treffern).
 - **Datei:** Eine Notiz ist eine `.md`-Datei in der Zone. Erste Zeile = Titel
   (als `# Titel` gespeichert), beim Verlassen der Notiz auch Dateiname.
   Anlegen per Rechtsklick in den Hintergrund einer Zone („Neue Notiz“) oder
@@ -456,15 +474,19 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
   für Notizen und Textkarten (0.30) aus den bestehenden Farben Rot, Grün,
   Violett, Cyan, Gelb, Weiß (`#ffffff`, kein Papierton mehr) und Schwarz. Die
   Extension wählt beim Markieren zufällig aus den fünf Buntfarben. Schwarzes Blatt bekommt eine feine helle Kante.
-- **Verknüpfungen:** Spalte 40 px links neben dem Blatt, oben bündig, 150 px
-  breit: Mono-Kennung „Verknüpft (n)“, Kacheln 72 px in zwei Reihen, „+“ als
-  Rahmenkachel. „+“ öffnet eine Auswahl (Menüfläche 430 px, Suchfeld). Erst
+- **Verknüpfungen (0.42.6):** Die Verknüpften stehen in voller Höhe 24 px
+  rechts neben dem Blatt in einer Reihe, jedes im eigenen Seitenverhältnis
+  (Text 3 : 4), wie die Doppelseite beim Bildtext; am Ende „+“ als Rahmen
+  44 px. `noteFit` setzt die gemeinsame Höhe `--nh` (max. 760 px, Blatt
+  620 : 760, Innenrand mitskaliert), mindestens 320 px; passt es dann nicht,
+  läuft die Reihe waagerecht weiter. Fuß: Wörter · n verknüpft links, Quelle
+  und „Gesichert“ rechts. × oben rechts auf der Kachel löst die Verknüpfung.
+  (Bis 0.42.5: Spalte 150 px links neben dem Blatt, Kacheln 72 px.) „+“ öffnet eine Auswahl (Menüfläche 430 px, Suchfeld). Erst
   stehen die Zonen als kleine Tray-Karten da (drei Spalten, Cover 58 px mit
   einem großen und zwei kleinen Bildern, Name 12 px, Anzahl in Mono). Klick
   öffnet die Zone: Raster mit sechs Spalten, gewählte gestrichelt, „‹ Zonen“
   bzw. Esc führt zurück. Suchen durchsucht die ganze Bibliothek (0.29.1). Klick auf eine Kachel öffnet das Objekt; die Lightbox
-  blättert dann durch Notiz und Verknüpfte. Fenster schmaler als 1080 px: die
-  Kacheln (48 px) stehen auf dem Blatt über dem Fuß.
+  blättert dann durch Notiz und Verknüpfte.
 
 ### 4.12 Tray (`palette.css`)
 - **Name (0.28):** In der Oberfläche heißt sie „Tray“, im Code weiter `palette`.
@@ -630,7 +652,7 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
   1 px gestrichelt 4/4, 3 px Abstand, eckig, weiß mit feinem dunklen Schatten,
   weil die Extension auf fremden Seiten keinen eigenen Grund hat. Einblenden
   0.18 s `ease-out`, ohne bei `prefers-reduced-motion`.
-- **Ablegen:** nur Text → eine Textkarte, Stücke als Absätze in
+- **Ablegen:** nur Text → eine Note (`.md`, seit 3.30.0; ohne App eine Textkarte als Bild), Stücke als Absätze in
   Markierreihenfolge. Text und Bild → jedes Bild mit allem Text als Bildtext.
   Nur Bilder → jedes Bild einzeln.
 - **Nicht:** Kein Zähler, kein zweiter Rahmen um Text, keine Akzentfarbe.

@@ -2799,8 +2799,16 @@ impl Library {
                 params![old, new, now_ms()],
             )
             .map_err(err)?;
+            // Herkunft (Seite, Titel) wandert mit; der Text steht jetzt in der Datei
+            conn.execute(
+                "INSERT OR IGNORE INTO source (hash, image_url, page_url, page_title, captured_at, quote)
+                 SELECT ?2, image_url, page_url, page_title, captured_at, NULL FROM source WHERE hash = ?1",
+                params![old, new],
+            )
+            .map_err(err)?;
             if n == 0 {
                 conn.execute("DELETE FROM note WHERE hash = ?1", params![old]).map_err(err)?;
+                conn.execute("DELETE FROM source WHERE hash = ?1", params![old]).map_err(err)?;
                 // Verweise anderer Notizen umschreiben
                 let mut stmt = conn.prepare("SELECT hash, links FROM note WHERE links LIKE ?1").map_err(err)?;
                 let rows: Vec<(String, Option<String>)> = stmt
@@ -3444,6 +3452,23 @@ mod tests {
         assert_eq!(lib.items().unwrap().iter().filter(|i| i.zone == "Typo").count(), 3);
         assert!(fs::read_dir(root.join(META_DIR).join("paste")).unwrap().next().is_none(), "Zwischenordner leer");
         assert!(paste_name("").starts_with("Eingefügt 20"));
+    }
+
+    #[test]
+    fn note_keeps_source_when_edited() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path().join("Bib");
+        let lib = Library::open(&root).unwrap();
+        fs::create_dir_all(root.join("Typo")).unwrap();
+        let rel = lib.create_note("Typo", "Zitat").unwrap();
+        let hash = lib.items().unwrap().into_iter().find(|i| i.path == rel).unwrap().hash;
+        let src = Source { page_url: Some("https://a.b/x".into()), page_title: Some("Seite".into()), quote: Some("alt".into()), ..Default::default() };
+        lib.set_source(&hash, &src).unwrap();
+        let (rel, _) = lib.write_note(&rel, "# Zitat\n\nneu", false).unwrap();
+        let item = lib.items().unwrap().into_iter().find(|i| i.path == rel).unwrap();
+        assert_eq!(item.page_url.as_deref(), Some("https://a.b/x"));
+        assert_eq!(item.page_title.as_deref(), Some("Seite"));
+        assert_eq!(item.quote.as_deref(), Some("# Zitat\n\nneu"), "Text aus der Datei, nicht der alte");
     }
 
     #[test]

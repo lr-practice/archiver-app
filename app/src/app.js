@@ -395,7 +395,7 @@
   // markiert sie (Text-Fragment #:~:text=Anfang,Ende; Chrome, Safari, Edge).
   function sourceUrl(item) {
     const url = item.pageUrl;
-    const quote = (item.quote || "").replace(/\s+/g, " ").trim();
+    const quote = (item.quote || "").replace(/^\s*#+\s*/gm, "").replace(/\s+/g, " ").trim();
     if (!url || !quote || /#:~:/.test(url)) return url;
     const enc = (t) => encodeURIComponent(t).replace(/-/g, "%2D").replace(/,/g, "%2C").replace(/&/g, "%26");
     const words = quote.split(" ");
@@ -643,8 +643,11 @@
   const queryWords = () => Find.parse(state.query);
 
   // 0 = kein Treffer; jedes Wort muss irgendwo passen
+  // 0.42.6: ein Bild wird auch über den Text der Note gefunden, die es verknüpft
   function searchScore(item, words) {
-    return Find.score(item, words, findOpts());
+    const own = Find.score(item, words, findOpts());
+    if (own || isNote(item)) return own;
+    return Math.max(0, ...notesFor(item).map((n) => Find.score(n, words, findOpts()) * 0.5));
   }
 
   function matches(item, words) {
@@ -4213,10 +4216,12 @@
     info.querySelector(".card-m-bytes").textContent = item.bytes ? formatBytes(item.bytes) : "–";
     info.querySelector(".card-m-src").textContent = domainOf(item.pageUrl);
     info.querySelector(".card-m-date").textContent = shortDate(item.capturedAt || item.addedAt);
-    // 0.33.1: Bild mit Bildtext trägt einen Punkt in der Farbe seiner Textkarte
+    // 0.33.1: Bild mit Bildtext trägt einen Punkt in der Farbe seiner Textkarte,
+    // 0.42.6 auch ein Bild mit Note (Farbe der Note)
     const dot = card.querySelector(".card-dot");
-    dot.hidden = !hasCaption(item) || !!quote || isNote(item);
-    if (!dot.hidden) dot.style.setProperty("--ts-bg", quoteTone(item)[0]);
+    const dotNote = hasCaption(item) ? null : notesFor(item)[0];
+    dot.hidden = !(hasCaption(item) || dotNote) || !!quote || isNote(item);
+    if (!dot.hidden) dot.style.setProperty("--ts-bg", quoteTone(dotNote || item)[0]);
     // 0.41.0: Farbmarke als Kontur (DESIGN.md 4.6a)
     const mark = card.querySelector(".card-mark");
     mark.hidden = !MARKS.includes(item.mark);
@@ -4762,7 +4767,11 @@
   }
   function lbCaptionItem() {
     const item = lightboxItem();
-    return item && hasCaption(item) && !quoteOf(item) ? item : null;
+    return item && (hasCaption(item) || notesFor(item).length) && !quoteOf(item) ? item : null;
+  }
+  // 0.42.6: Bild ohne Bildtext, aber mit Note zeigt die Note an derselben Stelle
+  function lbNoteOf(item) {
+    return item && !hasCaption(item) ? notesFor(item)[0] || null : null;
   }
   function lbBackMode() {
     return lbTextStyle() === "back" && lbMode === "image";
@@ -4799,6 +4808,30 @@
     return card;
   }
 
+  // 0.42.6: Note eines Bildes als Blatt neben (bzw. hinter) dem Bild. Klick öffnet
+  // die Note zum Schreiben, die Lightbox blättert dann durch Note und Verknüpfte.
+  function noteCard(note, item) {
+    const { title, body } = noteParts(note.quote);
+    const card = el("button", "note-paper lb-note-card");
+    card.type = "button";
+    lbNoteTone(card, note);
+    card.appendChild(el("div", "np-label", [t("noteLabel"), zoneLabel(note.zone), noteDate(note, true)].join(" · ")));
+    card.appendChild(el("div", "np-title", title || t("noteUntitled")));
+    card.appendChild(el("div", "np-body", body));
+    const n = linkedItems(note).length;
+    const foot = el("div", "np-foot");
+    foot.append(el("span", null, t("noteWords", { n: noteWords(title + " " + body) })), el("span", null, n > 1 ? t("noteObjects", { n }) : ""));
+    card.appendChild(foot);
+    card.title = t("noteOpen");
+    card.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const list = [note, ...linkedItems(note)];
+      state.lightbox = { zone: null, list, index: 0 };
+      showLightboxItem();
+    });
+    return card;
+  }
+
   // 0.30.1: Text auf Karten in der Lightbox direkt ändern (Bildtext, Textkarte).
   // Esc oder ⌘↩ beendet, gesichert wird beim Verlassen.
   function editableText(body, current, save) {
@@ -4824,6 +4857,7 @@
     const cap = lbCaptionItem();
     if (!cap) lbFlipped = false;
     btn.hidden = !cap;
+    btn.textContent = t(lbNoteOf(cap) ? "noteChip" : "captionChip");
     btn.title = t(lbBackMode() ? "captionFlipTitle" : "captionLbTitle");
     btn.classList.toggle("active", lbTextShown());
     const on = lbTextShown();
@@ -4831,7 +4865,7 @@
     $("lightbox").classList.toggle("flipped", on && lbBackMode());
     box.hidden = !on;
     // Während geschrieben wird, nicht neu aufbauen (library-changed nach dem Sichern)
-    if (on && !box.contains(document.activeElement)) box.replaceChildren(captionCard(item));
+    if (on && !box.contains(document.activeElement)) box.replaceChildren(lbNoteOf(item) ? noteCard(lbNoteOf(item), item) : captionCard(item));
     lbPlaceText();
   }
 
@@ -4875,7 +4909,7 @@
     const show = !!item && lbBackMode() && !lbFlipped && !lbInfoOpen && lbView.w > 0;
     ear.hidden = !show;
     if (!show) return;
-    ear.style.setProperty("--ts-bg", quoteTone(item)[0]);
+    ear.style.setProperty("--ts-bg", quoteTone(lbNoteOf(item) || item)[0]);
     ear.style.left = Math.round(lbView.x + lbView.w * lbView.scale) + "px";
     ear.style.top = Math.round(lbView.y + lbView.h * lbView.scale) + "px";
   }
@@ -4948,6 +4982,18 @@
     const byHash = new Map(state.items.map((i) => [i.hash, i]));
     return (item.links || []).map((h) => byHash.get(h)).filter(Boolean);
   }
+  // Rückweg (0.42.6): welche Notes ein Objekt verknüpfen. Neu gebaut, wenn die
+  // Bibliothek neu geladen ist oder sich Verknüpfungen ändern.
+  let noteIdx = null;
+  let noteRev = 0;
+  function notesFor(item) {
+    if (!noteIdx || noteIdx.items !== state.items || noteIdx.rev !== noteRev) {
+      const map = new Map();
+      for (const n of state.items) if (isNote(n)) for (const h of n.links || []) map.set(h, [...(map.get(h) || []), n]);
+      noteIdx = { items: state.items, rev: noteRev, map };
+    }
+    return (item && noteIdx.map.get(item.hash)) || [];
+  }
 
   // Blatt im Raster (A1): Kennung, fetter Titel, Text, Fuß mit Verknüpfungen
   function noteSheet(item, cls) {
@@ -4963,7 +5009,7 @@
     sheet.appendChild(el("div", "ts-title", title || t("noteUntitled")));
     sheet.appendChild(el("div", "ts-body", body));
     const n = linkedItems(item).length;
-    sheet.appendChild(el("div", "ts-foot", n ? t("noteObjects", { n }) : ""));
+    sheet.appendChild(el("div", "ts-foot", [domainOf(item.pageUrl), n ? t("noteObjects", { n }) : ""].filter(Boolean).join("  ·  ")));
     return sheet;
   }
 
@@ -5042,10 +5088,25 @@
     const foot = el("div", "np-foot");
     const words = el("span", null, t("noteWords", { n: noteWords(title + " " + body) }));
     const status = el("span", null, t("noteSaved"));
-    foot.append(words, status);
-    paper.append(titleIn, bodyIn, noteLinks(item), foot);
-    wrap.appendChild(paper);
+    foot.append(words, el("span", "np-count"), status);
+    // 0.42.6: Zitat aus dem Web behält seine Herkunft; Klick führt zur Stelle
+    if (item.pageUrl) {
+      const src = el("button", "np-source", "↗ " + domainOf(item.pageUrl));
+      src.type = "button";
+      src.title = item.pageTitle || item.pageUrl;
+      src.addEventListener("click", (e) => {
+        e.stopPropagation();
+        invoke("open_url", { url: sourceUrl(item) }).catch(fail);
+      });
+      foot.insertBefore(src, status);
+    }
+    paper.append(titleIn, bodyIn, foot);
+    // 0.42.6: Verknüpfte stehen in voller Höhe direkt neben dem Blatt
+    wrap.append(paper, noteLinks(item));
     box.appendChild(wrap);
+    const n = linkedItems(item).length;
+    foot.querySelector(".np-count").textContent = n ? t("noteObjects", { n }) : "";
+    noteFit(wrap);
     noteEd = { item, title: titleIn, body: bodyIn, status, paper, dirty: false, renameDue: false, timer: null };
     const ed = noteEd;
     const changed = () => {
@@ -5171,27 +5232,31 @@
     render();
   }
 
-  // Verknüpfungen: Vorschauen in zwei Spalten, „+“ wählt weitere aus der Bibliothek
+  // Verknüpfungen (0.42.6): in voller Höhe direkt rechts neben dem Blatt, wie die
+  // Doppelseite beim Bildtext. „+“ wählt weitere aus der Bibliothek.
   function noteLinks(item) {
     const col = el("aside", "note-links");
     const fill = () => {
       const list = linkedItems(item);
-      const grid = el("div", "nl-grid");
-      list.forEach((it, i) => {
+      const tiles = list.map((it, i) => {
         const tile = el("button", "nl-tile");
         tile.type = "button";
         tile.title = it.filename;
-        tile.appendChild(quoteOf(it) ? (isNote(it) ? noteSheet(it, "text-sheet mini") : textSheet(it, "text-sheet mini")) : Object.assign(el("img"), { src: thumbSrc(it), alt: "", loading: "lazy" }));
-        const x = el("span", "nl-remove", "×");
-        x.title = t("noteLinkRemove");
-        x.addEventListener("click", (e) => {
-          e.stopPropagation();
-          setNoteLinks(item, (item.links || []).filter((h) => h !== it.hash));
-          fill();
-        });
-        tile.appendChild(x);
+        const text = !!quoteOf(it);
+        tile.style.setProperty("--ar", text ? 0.75 : Math.min(3, Math.max(0.3, (it.width || 1) / (it.height || 1))));
+        tile.appendChild(text ? textSheet(it, "text-sheet mini") : Object.assign(el("img"), { src: thumbSrc(it), alt: "", loading: "lazy" }));
+        if (canEdit(item.zone)) {
+          const x = el("span", "nl-remove", "×");
+          x.title = t("noteLinkRemove");
+          x.addEventListener("click", (e) => {
+            e.stopPropagation();
+            setNoteLinks(item, (item.links || []).filter((h) => h !== it.hash));
+            fill();
+          });
+          tile.appendChild(x);
+        }
         tile.addEventListener("click", () => openNoteLink(item, i));
-        grid.appendChild(tile);
+        return tile;
       });
       if (canEdit(item.zone)) {
         const add = el("button", "nl-tile nl-add", "+");
@@ -5201,16 +5266,37 @@
           e.stopPropagation();
           openNoteChooser(item, add, fill);
         });
-        grid.appendChild(add);
+        tiles.push(add);
       }
-      col.replaceChildren(el("div", "nl-label", t("noteLinks") + (list.length ? " (" + list.length + ")" : "")), grid);
+      col.replaceChildren(...tiles);
+      const count = col.parentElement && col.parentElement.querySelector(".np-count");
+      if (count) count.textContent = list.length ? t("noteObjects", { n: list.length }) : "";
+      if (col.parentElement) noteFit(col.parentElement);
     };
     fill();
     return col;
   }
 
+  // Höhe für Blatt und Verknüpfte: alles in einer Reihe, so groß wie möglich.
+  // Passt es selbst bei 320 px nicht, läuft die Reihe waagerecht weiter.
+  const NOTE_PAPER = { w: 620, h: 760, min: 320, add: 44 };
+  function noteFit(wrap) {
+    const cs = getComputedStyle(wrap);
+    const availW = wrap.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+    const availH = wrap.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
+    if (availW <= 0 || availH <= 0) return;
+    const tiles = [...wrap.querySelectorAll(".nl-tile")];
+    const ars = tiles.filter((t) => !t.classList.contains("nl-add")).map((t) => parseFloat(t.style.getPropertyValue("--ar")) || 1);
+    const fixed = tiles.length * LB_GAP + (tiles.length > ars.length ? NOTE_PAPER.add : 0);
+    const per = NOTE_PAPER.w / NOTE_PAPER.h + ars.reduce((a, b) => a + b, 0);
+    const h = Math.max(Math.min(NOTE_PAPER.min, availH), Math.min(NOTE_PAPER.h, availH, (availW - fixed) / per));
+    wrap.style.setProperty("--nh", Math.floor(h) + "px");
+  }
+  addEventListener("resize", () => noteEd && noteFit(noteEd.paper.parentElement));
+
   function setNoteLinks(item, links) {
     item.links = links.length ? links : null;
+    noteRev++;
     saveNote(item, { links });
   }
 
@@ -5333,15 +5419,21 @@
     setTimeout(() => document.addEventListener("pointerdown", closeNoteChooser, { once: true }), 0);
   }
 
-  // Neue Notiz auf der aktuellen Ebene, öffnet gleich zum Schreiben
-  async function newNote() {
-    if (!isZone(state.focus) || !canEdit(state.focus)) return toast(t("noteNeedsZone"));
-    const dir = state.focus + (state.level ? "/" + state.level : "");
+  // Neue Notiz auf der aktuellen Ebene, öffnet gleich zum Schreiben.
+  // 0.42.6: mit `objects` neben ihnen (Ordner des ersten) und gleich mit ihnen verknüpft.
+  async function newNote(objects) {
+    const first = objects && objects[0];
+    if (!first && (!isZone(state.focus) || !canEdit(state.focus))) return toast(t("noteNeedsZone"));
+    const dir = first ? first.path.split("/").slice(0, -1).join("/") : state.focus + (state.level ? "/" + state.level : "");
     try {
       const rel = await invoke("create_note", { dir, title: t("noteNew") });
       await refresh();
       const item = state.byPath.get(rel);
       if (!item) return;
+      if (first) {
+        setNoteLinks(item, objects.map((i) => i.hash));
+        await noteQueue;
+      }
       openLightbox(item);
       if (noteEd && noteEd.item === item) {
         noteEd.title.focus();
@@ -6149,7 +6241,7 @@
     else if ((e.key === "w" || e.key === "W") && !$("lbCloudBtn").hidden) openCloud();
     else if (e.key === "z" || e.key === "Z") lbToggleZoom();
     else if (e.key === "i" || e.key === "I") lbToggleInfo();
-    else if ((e.key === "t" || e.key === "T") && hasCaption(lightboxItem())) lbToggleText();
+    else if ((e.key === "t" || e.key === "T") && lbCaptionItem()) lbToggleText();
     else if (e.key === "Enter") $("lbZones").hidden ? lbOpenZones() : lbCloseZones();
     else if (e.key === "Escape" && !$("lbZones").hidden) lbCloseZones();
     else if (e.key === "Escape" && lbMode === "video" && lbVZoom && lbVZoom.scale() > 1) lbVZoom.reset();
@@ -7269,6 +7361,13 @@
     };
     const rule = () => menu.appendChild(el("div", "p-more-rule"));
     if (!one) menu.appendChild(el("div", "p-more-label", t("ctxSelected", { n: items.length })));
+    // 0.42.6: Note zu einem oder mehreren Objekten, gleich verknüpft
+    const forNote = items.filter((i) => !isNote(i));
+    const noteZone = forNote.length && isZone(forNote[0].zone) && canEdit(forNote[0].zone) ? forNote[0].zone : null;
+    if (!one && noteZone) {
+      entry(menu, t("ctxNoteForN", { n: forNote.length }), () => newNote(forNote));
+      rule();
+    }
     if (one) {
       entry(menu, t("ctxPreview"), () => openLightbox(one), "␣");
       entry(menu, t("openFile"), () => invoke("open_file", { path: one.abs }).catch(fail));
@@ -7277,6 +7376,7 @@
         const isCover = coverItem(one.zone, [one]) === one;
         entry(menu, t(isCover ? "ctxCoverOff" : "ctxCover"), () => setCover(one.zone, isCover ? null : one.path));
       }
+      if (noteZone) entry(menu, t("ctxNoteFor"), () => newNote(forNote));
       rule();
     }
     // Ablegen in: alle Zonen als Kästchen in zwei Spalten, Active Zones zuerst mit Taste

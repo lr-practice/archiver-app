@@ -2,22 +2,37 @@
 
 ## Extension 3.30.0
 
-- Markierter Text landet bei laufender App als Notiz (.md) statt als .txt in
-  der Zone und ist dort bearbeitbar und verknüpfbar. Ohne App bleibt es das Bild.
+- Markierter Text landet bei laufender App als Note (.md) statt als .txt in
+  der Zone, mit Seite und Seitentitel als Herkunft. Dort ist er bearbeitbar und
+  verknüpfbar. Ohne App bleibt es das Bild.
 
-## App 0.42.5
+## App 0.42.6
 
-- Eingefügter Text (⌘V in einer Zone) wird eine Notiz (.md) statt .txt.
+- Textkarte und Notiz sind eins: „Note“. Eingefügter Text (⌘V in einer Zone)
+  wird eine Note (.md) statt .txt.
+- Verknüpfte Bilder stehen in voller Höhe direkt neben der Note, wie die
+  Doppelseite beim Bildtext; „+“ am Ende verknüpft weitere.
+- Rechtsklick auf ein oder mehrere Bilder › „Note zu diesem Bild“ bzw. „Note zu
+  n Objekten“ legt eine Note daneben an, gleich verknüpft.
+- Ein Bild mit Note zeigt sie in der Lightbox an der Stelle des Bildtexts
+  (Knopf „Note“, Taste T); Klick auf das Blatt öffnet die Note.
+- Im Raster trägt ein Bild mit Note den Punkt in der Farbe der Note. Der Punkt
+  ist größer (14 statt 10 px).
+- Zitat behält Herkunft: Die Quelle steht im Fuß der Note und führt zur Stelle
+  auf der Seite. Sie bleibt jetzt auch nach dem Bearbeiten erhalten.
+- Suche findet Bilder auch über den Text ihrer Note.
+- Karten zeigen ab Werk kleine Bilder wie die Index-Zeilen (Variante I).
+  Rechtsklick auf ein Bild › „Als Titelbild der Zone“ setzt ein eigenes Titelbild.
+- Die Ansicht „Übersicht“ heißt jetzt „Mix“. Im Labor lassen sich die Active
+  Zones auch als Zeilen zeigen.
+
+## App 0.42.5 (Vorabversion)
 
 - Farben aus der Figma-Datei: Fenster Dunkel #1a1a1a, Hell #fafafa. Karten
   Dunkel neutral grau statt weiß getönt, Hell #f2f2f2. Navigation Hell #ebebeb
   deckend. Tertiärtext Dunkel #666664, Hell #b2b2b2.
 - Etiketten, Chips, Anzahl und Datum unter Karten, Quelle auf Text-Karten und
   die Notiz-Kennung wieder in Geist Mono 11 px, Versalien.
-- Karten zeigen ab Werk kleine Bilder wie die Index-Zeilen (Variante I).
-  Rechtsklick auf ein Bild › „Als Titelbild der Zone“ setzt ein eigenes Titelbild.
-- Die Ansicht „Übersicht“ heißt jetzt „Mix“. Im Labor lassen sich die Active
-  Zones auch als Zeilen zeigen.
 
 ## App 0.42.4
 

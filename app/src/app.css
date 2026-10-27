@@ -7982,3 +7982,105 @@ html:not(.light) .p-card:not(.p-new):not(:hover):not(.drop-target) { background:
 .p-hot-card .p-card-thumbs {
   padding-top: 44px;
 }
+
+/* ---- 0.42.6: Note als eine Funktion ----
+   Punkt im Raster 14 px (Bildtext oder Note). Verknüpfte stehen in voller Höhe
+   24 px rechts neben dem Blatt, „+“ als Rahmen 44 px. Höhe setzt app.js
+   noteFit (--nh, max. 760, Blatt 620 : 760). Ein Bild mit Note zeigt sie als
+   Blatt an der Stelle des Bildtexts (Doppelseite oder Rückseite). */
+.card-dot {
+  width: 14px;
+  height: 14px;
+}
+.lb-note {
+  --nh: 760px;
+  justify-content: flex-start;
+  gap: 24px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.lb-note > :first-child {
+  margin-left: auto;
+}
+.lb-note > :last-child {
+  margin-right: auto;
+}
+.lb-note .note-paper {
+  flex: none;
+  width: calc(var(--nh) * 620 / 760);
+  height: var(--nh);
+  padding: calc(var(--nh) * 0.063) calc(var(--nh) * 0.068) calc(var(--nh) * 0.047);
+}
+.lb-note .note-links {
+  position: static;
+  flex: none;
+  display: flex;
+  gap: 24px;
+  width: auto;
+  height: var(--nh);
+  margin: 0;
+}
+.lb-note .note-links:empty {
+  display: none;
+}
+.lb-note .nl-tile {
+  flex: none;
+  width: calc(var(--nh) * var(--ar, 1));
+  height: var(--nh);
+}
+.lb-note .nl-add {
+  width: 44px;
+  font-size: 22px;
+}
+.lb-note .nl-tile .text-sheet.mini {
+  padding: 0;
+}
+.np-source {
+  padding: 0;
+  border: none;
+  background: none;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  cursor: pointer;
+}
+.np-source:hover {
+  text-decoration: underline;
+}
+/* Note eines Bildes in der Lightbox: Blatt im Maß der Bildtext-Karte */
+.lb-note-card {
+  container-type: size;
+  flex: 1;
+  min-width: 0;
+  width: 100%;
+  height: 100%;
+  padding: 7cqmin 7cqmin 5cqmin;
+  border: none;
+  text-align: left;
+  cursor: pointer;
+  overflow: hidden;
+}
+html:root .lb-note-card .np-title {
+  margin: 1em 0 0.6em;
+  font-size: clamp(18px, 7cqmin, 30px);
+  font-weight: 350;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+}
+html:root .lb-note-card .np-body {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  font-size: clamp(13px, 3.6cqmin, 17px);
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.lb-note .np-foot {
+  justify-content: flex-start;
+  gap: 24px;
+}
+.lb-note .np-count {
+  margin-right: auto;
+}
