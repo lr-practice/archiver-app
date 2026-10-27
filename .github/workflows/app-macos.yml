@@ -291,7 +291,7 @@ jobs:
       BRANCH: ${{ github.ref_name }}
       CHANNEL: ${{ inputs.ausspielen }}
       VERSION: ${{ inputs.version }}
-      NEXT: ${{ inputs.versuch + 1 }}
+      VERSUCH: ${{ inputs.versuch }}
     steps:
       - name: Ohne Mac abgebrochen? Neu starten
         run: |
@@ -299,6 +299,7 @@ jobs:
           if [ -n "$RUNNER" ]; then echo "Build lief auf $RUNNER, kein Neustart"; exit 0; fi
           NEWEST=$(gh api "repos/$R/actions/workflows/app-macos.yml/runs?branch=$BRANCH&per_page=1" --jq '.workflow_runs[0].id')
           if [ "$NEWEST" != "$RUN" ]; then echo "Neuerer Lauf $NEWEST, kein Neustart"; exit 0; fi
+          NEXT=$((VERSUCH + 1))
           echo "Kein Mac bekommen, starte Versuch $NEXT"
           gh workflow run app-macos.yml -R "$R" --ref "$BRANCH" -f ausspielen="$CHANNEL" -f version="$VERSION" -f versuch="$NEXT"
 
