@@ -7591,188 +7591,10 @@ button.p-list:hover {
   }
 }
 
-/* ---- 0.40.12: Labor (Einstellungen › Labor) ----
-   Varianten B–H der Active-Zone-Karte (DESIGN 4.24b). A ist .p-card-cover.trio. */
-.p-lab-cover {
-  position: relative;
-  overflow: hidden;
-}
+/* Nummer und Etikett der Active Zone liegen über der Kartenfläche */
 .p-hot-card .p-hot-key {
   z-index: 3;
 }
-.p-lab-cover img,
-.p-lab-cover .text-sheet {
-  width: 100%;
-  height: 100%;
-  min-height: 0;
-  display: block;
-  object-fit: cover;
-}
-
-/* B Skim und G Lauf: Bilder liegen übereinander, eines ist sichtbar */
-.p-lab-B > img,
-.p-lab-B > .text-sheet,
-.p-lab-G > img,
-.p-lab-G > .text-sheet {
-  position: absolute;
-  inset: 0;
-  opacity: 0;
-}
-.p-lab-B > .on {
-  opacity: 1;
-}
-.p-lab-G > * {
-  transition: opacity 0.9s ease;
-}
-.p-lab-G > .on {
-  opacity: 1;
-}
-.p-lab-ticks {
-  position: absolute;
-  left: 12px;
-  right: 12px;
-  bottom: 10px;
-  z-index: 2;
-  display: flex;
-  gap: 2px;
-  opacity: 0;
-  transition: opacity 0.2s ease;
-}
-.p-lab-B:hover .p-lab-ticks {
-  opacity: 1;
-}
-.p-lab-ticks b {
-  flex: 1;
-  height: 2px;
-  border-radius: 1px;
-  background: rgba(255, 255, 255, 0.35);
-}
-.p-lab-ticks b.on {
-  background: #fff;
-}
-.p-lab-count {
-  position: absolute;
-  right: 10px;
-  bottom: 10px;
-  z-index: 2;
-  padding: 3px 6px;
-  border-radius: var(--r-sm);
-  background: rgba(0, 0, 0, 0.6);
-  color: #fff;
-}
-
-/* C Streifen, D Kontaktbogen */
-.p-lab-C {
-  display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 2px;
-}
-.p-lab-D {
-  display: grid;
-  grid-template-columns: repeat(8, minmax(0, 1fr));
-  grid-template-rows: repeat(4, minmax(0, 1fr));
-  gap: 2px;
-}
-.p-lab-more {
-  display: grid;
-  place-items: center;
-  color: var(--p-dim);
-  background: rgba(var(--ink-rgb), 0.055);
-}
-
-/* E Stapel */
-.p-lab-E {
-  display: grid;
-  place-items: center;
-  background: rgba(var(--ink-rgb), 0.04);
-}
-.p-lab-E > img,
-.p-lab-E > .text-sheet {
-  position: absolute;
-  width: 38%;
-  height: auto;
-  aspect-ratio: 4 / 5;
-  border-radius: var(--r-sm);
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
-  transition: transform 0.35s cubic-bezier(0.2, 0.7, 0.2, 1);
-}
-.p-lab-E > :nth-child(1) { transform: translateX(-14%) rotate(-6deg); }
-.p-lab-E > :nth-child(2) { transform: rotate(1deg); }
-.p-lab-E > :nth-child(3) { transform: translateX(14%) rotate(6deg); }
-.p-hot-card:hover .p-lab-E > :nth-child(1) { transform: translateX(-82%) rotate(-3deg); }
-.p-hot-card:hover .p-lab-E > :nth-child(3) { transform: translateX(82%) rotate(3deg); }
-
-/* F Aufklappen */
-.p-lab-top {
-  position: absolute;
-  inset: 0;
-  z-index: 1;
-  transition: transform 0.4s cubic-bezier(0.2, 0.7, 0.2, 1);
-}
-.p-lab-under {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  height: 34%;
-  display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
-  gap: 2px;
-}
-.p-hot-card:hover .p-lab-top {
-  transform: translateY(-34%);
-}
-
-/* H Blättern */
-.p-lab-track {
-  display: flex;
-  gap: 2px;
-  height: 100%;
-  overflow-x: auto;
-  scroll-snap-type: x mandatory;
-  scrollbar-width: none;
-}
-.p-lab-track::-webkit-scrollbar {
-  display: none;
-}
-.p-lab-track > * {
-  flex: 0 0 50%;
-  scroll-snap-align: start;
-}
-.p-lab-track > :first-child {
-  flex-basis: 100%;
-}
-.p-lab-arrows {
-  position: absolute;
-  right: 10px;
-  bottom: 10px;
-  z-index: 2;
-  display: flex;
-  gap: 4px;
-  opacity: 0;
-  transition: opacity 0.2s ease;
-}
-.p-hot-card:hover .p-lab-arrows {
-  opacity: 1;
-}
-.p-lab-arrow {
-  width: 24px;
-  height: 24px;
-  padding: 0;
-  border: none;
-  border-radius: 999px;
-  background: rgba(0, 0, 0, 0.6);
-  color: #fff;
-  cursor: pointer;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .p-lab-cover *,
-  .p-lab-cover {
-    transition: none !important;
-  }
-}
-
 
 /* ---- Seitenkopf (seit 0.42.3 fest, vorher Labor › Kopf) ----
    Titel und Satz als ein Absatz: Titel voll, Satz hell. Größe und Schnitt
@@ -7966,21 +7788,80 @@ html.light .p-nav { box-shadow: 0 6px 24px rgba(0, 0, 0, 0.06); }
 }
 html:not(.light) .p-card:not(.p-new):not(:hover):not(.drop-target) { background: rgba(150, 150, 150, 0.055); }
 
-/* Variante I (0.42.5, Standard): kleine Bilder wie in den Index-Zeilen, Name unten.
-   Über den Active Zones Platz für Nummer und Etikett. */
-.p-lab-I {
+/* ---- 0.42.6: Kartenfläche mit kleinen Bildern (vorher Labor-Variante I) ----
+   Bilder wie in den Index-Zeilen, aber als Raster über die volle Breite: die
+   Spalten dehnen sich, bis die Reihe bündig ist. Eigenes Titelbild: groß oben,
+   darunter eine Reihe der ersten Bilder (Entwurf J). Über den Active Zones
+   Platz für Nummer und Etikett. Labor › Ausblenden: Farbverlauf oder Glas-Blur
+   über der unteren Hälfte. */
+.p-thumb-cover {
+  position: relative;
   display: block;
+  overflow: hidden;
   background: transparent;
 }
 .p-card-thumbs {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(calc(max(40px, var(--row-thumb, 40px)) * 1.3), 1fr));
+  grid-auto-rows: max-content;
   height: 100%;
   box-sizing: border-box;
   padding: 16px 16px 0;
   overflow: hidden;
-  align-content: flex-start;
+  align-content: start;
+}
+.p-card-thumbs .p-sheet-thumb {
+  width: 100%;
+  height: auto;
+}
+.p-card-thumbs .p-sheet-more {
+  align-self: center;
+  justify-self: center;
+  padding: 0;
 }
 .p-hot-card .p-card-thumbs {
   padding-top: 44px;
+}
+.p-thumb-cover.has-own {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+}
+.p-cover-big {
+  min-height: 0;
+  overflow: hidden;
+}
+.p-cover-big img,
+.p-cover-big .text-sheet {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.p-card-thumbs.p-cover-strip,
+.p-hot-card .p-card-thumbs.p-cover-strip {
+  height: auto;
+  padding: 8px 16px 0;
+  grid-template-columns: repeat(auto-fill, minmax(42px, 1fr));
+  grid-template-rows: auto;
+  grid-auto-rows: 0;
+  row-gap: 0;
+}
+.p-cover-strip:empty {
+  display: none;
+}
+.fade-color .p-card-thumbs {
+  -webkit-mask-image: linear-gradient(to bottom, #000 35%, transparent 100%);
+  mask-image: linear-gradient(to bottom, #000 35%, transparent 100%);
+}
+.fade-blur::after {
+  content: "";
+  position: absolute;
+  inset: 40% 0 -32px;
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
+  -webkit-mask-image: linear-gradient(to bottom, transparent, #000 75%);
+  mask-image: linear-gradient(to bottom, transparent, #000 75%);
+  pointer-events: none;
 }
 
 /* ---- 0.42.6: Note als eine Funktion ----

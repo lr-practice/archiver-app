@@ -21,10 +21,13 @@
 - Zitat behält Herkunft: Die Quelle steht im Fuß der Note und führt zur Stelle
   auf der Seite. Sie bleibt jetzt auch nach dem Bearbeiten erhalten.
 - Suche findet Bilder auch über den Text ihrer Note.
-- Karten zeigen ab Werk kleine Bilder wie die Index-Zeilen (Variante I).
-  Rechtsklick auf ein Bild › „Als Titelbild der Zone“ setzt ein eigenes Titelbild.
-- Die Ansicht „Übersicht“ heißt jetzt „Mix“. Im Labor lassen sich die Active
-  Zones auch als Zeilen zeigen.
+- Karten zeigen kleine Bilder wie die Index-Zeilen, als Raster über die volle
+  Kartenbreite. Rechtsklick auf ein Bild › „Als Titelbild der Zone“: das Bild
+  steht groß oben, darunter eine Reihe der ersten Bilder.
+- Die Ansicht „Übersicht“ heißt jetzt „Mix“. Der Index besteht nur noch aus
+  Zeilenkarten über die volle Breite, die Active Zones zuerst.
+- Labor: Die alten Kartenvarianten sind weg. Neu ist „Ausblenden“: Die
+  späteren Bilder einer Karte laufen unten per Farbverlauf oder Glas-Blur aus.
 
 ## App 0.42.5 (Vorabversion)
 

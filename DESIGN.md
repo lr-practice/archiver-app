@@ -886,15 +886,22 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
 - **Übersicht (Ansicht „Mix“ seit 0.42.5, die Seite heißt weiter Übersicht):**
   Oben immer die vier Active Zones als Karten (2:1, vierspaltig ab 200 px
   Kartenbreite, sonst 2 × 2). Darunter „Index (N)“ und die übrigen Zonen als
-  Kontaktbogen. Im Labor lassen sich auch die Active Zones als Zeilen zeigen
-  (4.24b, Nummer und „Active Zone“ in Mono über dem Namen).
-- **Karten-Fläche (0.42.5, Variante I):** Active Zones und Zonenkarten zeigen
-  ab Werk die kleinen Bilder des Kontaktbogens (gleiche Größe, höchstens 24,
-  „+N“), Name und Anzahl unten. Oben 44 px Luft für Nummer und Etikett
-  der Active Zones, sonst 16 px. **Titelbild:** Rechtsklick auf ein Objekt ›
-  „Als Titelbild der Zone“ zeigt dieses eine Bild groß auf der Karte;
-  „Titelbild zurücksetzen“ nimmt es zurück. Gespeichert je Bibliothek in
-  `archiver.covers` (lokal), fehlt das Bild, gilt wieder Variante I.
+  Kontaktbogen.
+- **Index (0.42.6):** besteht nur aus Kontaktbogen-Zeilen über die volle
+  Breite, die Active Zones zuerst (Nummer und „Active Zone“ in Mono über dem
+  Namen). Die frühere Tabelle (Nr., Zone, Bilder, Zuletzt, Vorschau) ist weg;
+  „Neue Zone“ und „Zuletzt gelöscht“ stehen im Menü.
+- **Karten-Fläche (0.42.5, seit 0.42.6 einzige Form, `.p-thumb-cover`):**
+  Active Zones und Zonenkarten zeigen die kleinen Bilder des Kontaktbogens
+  (13:10, 4 px Abstand, höchstens 48, „+N“) als Raster über die volle
+  Breite: Mindestbreite 1,3 × Zeilen-Miniatur, die Spalten dehnen sich, bis
+  die Reihe bündig ist. Name und Anzahl unten. Oben 44 px Luft für Nummer und
+  Etikett der Active Zones, sonst 16 px, seitlich 16 px. **Titelbild:**
+  Rechtsklick auf ein Objekt › „Als Titelbild der Zone“ zeigt dieses Bild groß
+  oben, darunter eine Reihe der ersten übrigen Bilder (Entwurf J, mind. 42 px
+  breit, 8 px Abstand zum Bild). „Titelbild zurücksetzen“ nimmt es zurück.
+  Gespeichert je Bibliothek in `archiver.covers` (lokal), fehlt das Bild,
+  gilt wieder das Raster.
 - **Kontaktbogen:** Je übrige Zone eine Zeile als Karte (`.p-card`, gleiche
   Fläche wie die Active Zones, 10 px Abstand). Die Zeile ist ein einziges
   Klickziel: Klick öffnet die Zone, Ziehen tauscht mit einer Active Zone,
@@ -911,16 +918,12 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
 ### 4.24b Labor (App 0.40.12, Einstellungen › Labor, `.p-lab-*`)
 - **Zweck:** Varianten ausprobieren, bevor sie Regel werden. Gespeichert nur
   lokal (`archiver.lab`), an der Bibliothek ändert sich nichts.
-- **Active-Zone-Karte A–H:** A Heute (1 groß, 2 klein), B Skim (Zeiger
-  waagerecht durch bis zu 12 Bilder, unten Striche), C Streifen (5 Bilder),
-  D Kontaktbogen (8 × 4, „+N“), E Stapel (3 Bilder, fächern beim Hover auf),
-  F Aufklappen (Titelbild rutscht 34 % hoch, 6 Bilder darunter), G Lauf
-  (Überblendung alle 2,6 s, Anzahl unten rechts), H Blättern (seitlich
-  scrollen, Pfeile beim Hover). Eine Zone mit nur einem Bild bleibt A.
-  I Kontaktbogen (kleine Bilder wie im Index, seit 0.42.5 Standard, auch für
-  Zonen mit einem Bild).
-- **Active Zones (0.42.5):** Karten (Standard) oder Zeilen: Die Ansicht Mix
-  besteht dann nur aus Kontaktbogen-Zeilen, die Active Zones zuerst.
+- **Zonenkarten › Ausblenden (0.42.6):** Aus (Standard), Farbverlauf (die
+  Bilder laufen ab 35 % der Höhe per Maske in die Kartenfläche aus) oder
+  Glas-Blur (`backdrop-filter: blur(14px)` über den unteren 60 %, nach oben
+  per Maske weich). Nicht bei Karten mit Titelbild. Die Varianten A–I und
+  „Active Zones als Zeilen“ (bis 0.42.5) sind entfernt: I ist die Karte,
+  Zeilen sind der Index (4.24a).
 - **Video-Vorschau:** Daumenkino (Standard, 8 Standbilder), Skim (Zeiger
   waagerecht = Zeit im Clip), Abspielen (stumm, Schleife), Aus.
 - **Ablegen (0.40.22):** Rückmeldung der Active-Zone-Karte in der App und am
@@ -930,7 +933,7 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
   ist weg. `dropfx.js` liest `archiver.lab` selbst (`drop`). Klassen der Karte heißen
   `fx-is-<variante>`, nie `fx-<variante>` (sonst greifen die Regeln der
   Bauteile wie `.fx-ring` auf die Karte).
-- **Bewegung:** Bei `prefers-reduced-motion` laufen G, Daumenkino und
+- **Bewegung:** Bei `prefers-reduced-motion` laufen Daumenkino und
   Abspielen nicht. Skim bleibt, weil es der Hand folgt.
 - **Regel:** Eine Variante, die bleibt, wandert aus dem Labor in die normale
   Darstellung und bekommt hier ihren eigenen Abschnitt.
