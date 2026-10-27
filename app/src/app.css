@@ -7965,3 +7965,20 @@ html.light .p-nav { box-shadow: 0 6px 24px rgba(0, 0, 0, 0.06); }
   --bg-solid: #1a1a1a;
 }
 html:not(.light) .p-card:not(.p-new):not(:hover):not(.drop-target) { background: rgba(150, 150, 150, 0.055); }
+
+/* Variante I (0.42.5, Standard): kleine Bilder wie in den Index-Zeilen, Name unten.
+   Über den Active Zones Platz für Nummer und Etikett. */
+.p-lab-I {
+  display: block;
+  background: transparent;
+}
+.p-card-thumbs {
+  height: 100%;
+  box-sizing: border-box;
+  padding: 16px 16px 0;
+  overflow: hidden;
+  align-content: flex-start;
+}
+.p-hot-card .p-card-thumbs {
+  padding-top: 44px;
+}

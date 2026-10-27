@@ -7,6 +7,10 @@
   deckend. Tertiärtext Dunkel #666664, Hell #b2b2b2.
 - Etiketten, Chips, Anzahl und Datum unter Karten, Quelle auf Text-Karten und
   die Notiz-Kennung wieder in Geist Mono 11 px, Versalien.
+- Karten zeigen ab Werk kleine Bilder wie die Index-Zeilen (Variante I).
+  Rechtsklick auf ein Bild › „Als Titelbild der Zone“ setzt ein eigenes Titelbild.
+- Die Ansicht „Übersicht“ heißt jetzt „Mix“. Im Labor lassen sich die Active
+  Zones auch als Zeilen zeigen.
 
 ## App 0.42.4
 

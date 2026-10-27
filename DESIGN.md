@@ -861,9 +861,18 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
   eine Stufe größer: L 34–56 px (4vw). Oben 24–72 px (6vh), unten 40–96 px
   (9vh) Raum. In der Übersicht ohne Punkt und ohne „seit …“. Ordnerkarten
   einer Zone stehen rechts oben neben dem Kopf.
-- **Übersicht:** Oben immer die vier Active Zones als Karten (2:1, vierspaltig
-  ab 200 px Kartenbreite, sonst 2 × 2). Darunter „Index (N)“ und die übrigen
-  Zonen als Kontaktbogen.
+- **Übersicht (Ansicht „Mix“ seit 0.42.5, die Seite heißt weiter Übersicht):**
+  Oben immer die vier Active Zones als Karten (2:1, vierspaltig ab 200 px
+  Kartenbreite, sonst 2 × 2). Darunter „Index (N)“ und die übrigen Zonen als
+  Kontaktbogen. Im Labor lassen sich auch die Active Zones als Zeilen zeigen
+  (4.24b, Nummer und „Active Zone“ in Mono über dem Namen).
+- **Karten-Fläche (0.42.5, Variante I):** Active Zones und Zonenkarten zeigen
+  ab Werk die kleinen Bilder des Kontaktbogens (gleiche Größe, höchstens 24,
+  „+N“), Name und Anzahl unten. Oben 44 px Luft für Nummer und Etikett
+  der Active Zones, sonst 16 px. **Titelbild:** Rechtsklick auf ein Objekt ›
+  „Als Titelbild der Zone“ zeigt dieses eine Bild groß auf der Karte;
+  „Titelbild zurücksetzen“ nimmt es zurück. Gespeichert je Bibliothek in
+  `archiver.covers` (lokal), fehlt das Bild, gilt wieder Variante I.
 - **Kontaktbogen:** Je übrige Zone eine Zeile als Karte (`.p-card`, gleiche
   Fläche wie die Active Zones, 10 px Abstand). Die Zeile ist ein einziges
   Klickziel: Klick öffnet die Zone, Ziehen tauscht mit einer Active Zone,
@@ -872,7 +881,7 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
   Mono-Anzahl in Spalte 1, die Bilder beginnen genau auf der linken Kante der
   zweiten Active-Karte. Bilder in Höhe der Zeilen-Miniatur (mind. 40 px),
   13:10, 4 px Abstand, Rundung `--r-sm`, höchstens 24, danach „+N“ in Mono.
-- **Ansichten der Startseite:** Übersicht, Karten, Index. Die geteilte
+- **Ansichten der Startseite:** Mix (bis 0.42.4 „Übersicht“), Karten, Index. Die geteilte
   Vorschau-Ansicht (Liste links, Mosaik rechts) ist seit 0.40.11 entfernt.
 - **Fokus:** Ring (4.1) um die ganze Zeile, keine Farbe.
 - **Schmal (< 700 px):** Name über den Bildern, eine Spalte.
@@ -886,6 +895,10 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
   F Aufklappen (Titelbild rutscht 34 % hoch, 6 Bilder darunter), G Lauf
   (Überblendung alle 2,6 s, Anzahl unten rechts), H Blättern (seitlich
   scrollen, Pfeile beim Hover). Eine Zone mit nur einem Bild bleibt A.
+  I Kontaktbogen (kleine Bilder wie im Index, seit 0.42.5 Standard, auch für
+  Zonen mit einem Bild).
+- **Active Zones (0.42.5):** Karten (Standard) oder Zeilen: Die Ansicht Mix
+  besteht dann nur aus Kontaktbogen-Zeilen, die Active Zones zuerst.
 - **Video-Vorschau:** Daumenkino (Standard, 8 Standbilder), Skim (Zeiger
   waagerecht = Zeit im Clip), Abspielen (stumm, Schleife), Aus.
 - **Ablegen (0.40.22):** Rückmeldung der Active-Zone-Karte in der App und am

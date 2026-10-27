@@ -97,7 +97,8 @@
   // Labor (Einstellungen › Labor, 0.40.12): Varianten zum Ausprobieren, nur auf
   // diesem Mac. card = wie eine Active-Zone-Karte ihren Inhalt zeigt (A–H, siehe
   // DESIGN 4.24b), video = Vorschau eines Videos beim Darüberfahren.
-  const LAB_CARDS = ["A", "B", "C", "D", "E", "F", "G", "H"];
+  const LAB_CARDS = ["A", "B", "C", "D", "E", "F", "G", "H", "I"];
+  const LAB_HOT = ["cards", "rows"];
   const LAB_VIDEO = ["flip", "skim", "play", "off"];
   // 0.40.18: head = Mechanik des Seitenkopfs (01–14, DESIGN 4.24c), size = Größe
   // S–XL, title/text = Farbe von Titel und Satz, font = Geist oder Melange.
@@ -105,7 +106,8 @@
   function lab() {
     const v = pref("lab", null) || {};
     return {
-      card: LAB_CARDS.includes(v.card) ? v.card : "A",
+      card: LAB_CARDS.includes(v.card) ? v.card : "I",
+      hot: LAB_HOT.includes(v.hot) ? v.hot : "cards",
       video: LAB_VIDEO.includes(v.video) ? v.video : "flip",
       drop: LAB_DROPS.includes(v.drop) ? v.drop : "mini",
     };
@@ -1801,18 +1803,29 @@
   const SHEET_MAX = 24;
   function overviewLayout() {
     const wrap = el("div", "p-overview");
-    wrap.appendChild(hotRow());
-    wrap.appendChild(restBar(state.zones.length - HOT_ZONES));
+    // Labor (0.42.5): auf Wunsch auch die Active Zones als Zeilen, ohne Karten
+    const rows = lab().hot === "rows";
+    const hot = hotRow();
+    if (!rows) {
+      wrap.appendChild(hot);
+      wrap.appendChild(restBar(state.zones.length - HOT_ZONES));
+    }
     const sheet = el("div", "p-sheetlist");
     // 0.40.13: jede Zeile ist eine Karte, ein Klickziel; Bilder beginnen auf der Kante der zweiten Active-Karte
-    sheet.style.setProperty("--hot-cols", wrap.querySelector(".p-hotrow").style.getPropertyValue("--hot-cols") || "4");
-    for (const zone of state.zones.slice(HOT_ZONES)) {
+    sheet.style.setProperty("--hot-cols", hot.style.getPropertyValue("--hot-cols") || "4");
+    state.zones.slice(rows ? 0 : HOT_ZONES).forEach((zone, i) => sheet.appendChild(sheetRow(zone, rows && i < HOT_ZONES ? i : -1)));
+    wrap.appendChild(sheet);
+    return wrap;
+  }
+
+  function sheetRow(zone, hotIndex) {
       const items = orderedItems(zone.path);
       const row = el("article", "p-card p-sheet-row");
       row.dataset.zone = zone.path;
       row.dataset.swap = zone.path;
       const head = el("div", "p-sheet-zone");
       const name = zoneNameEl(zone);
+      if (hotIndex >= 0) head.appendChild(mono(String(hotIndex + 1).padStart(2, "0") + " · " + t("hotZone"), "dim"));
       head.appendChild(name);
       head.appendChild(mono(cardMeta(zone), "dim"));
       if (canEdit(zone.path))
@@ -1835,10 +1848,7 @@
       });
       row.addEventListener("pointerdown", (e) => dragSwap(e, row));
       row.addEventListener("dragstart", (e) => e.preventDefault());
-      sheet.appendChild(row);
-    }
-    wrap.appendChild(sheet);
-    return wrap;
+      return row;
   }
 
   function hotKey(i) {
@@ -1855,8 +1865,11 @@
     card.title = t("keyHint", { n: i + 1 });
     const items = orderedItems(zone.path);
     const mode = lab().card;
+    const own = coverItem(zone.path, items);
     let cover;
-    if (mode !== "A" && items.length > 1) cover = labCover(card, items, mode, zone);
+    if (own) cover = cardCover([own]);
+    else if (mode === "I" && items.length) cover = labCover(card, items, mode, zone);
+    else if (mode !== "A" && items.length > 1) cover = labCover(card, items, mode, zone);
     else {
       cover = el("div", "p-card-cover" + (items.length >= 3 ? " trio" : "") + (items.length ? "" : " empty"));
       for (const item of items.slice(0, items.length >= 3 ? 3 : 1)) cover.appendChild(previewImg(item));
@@ -1934,6 +1947,9 @@
           list[n].classList.add("on");
         }, 2600);
       }
+    } else if (mode === "I") {
+      // 0.42.5: kleine Bilder wie im Index, Standard der Active Zones
+      cover.appendChild(thumbStrip(items, 24));
     } else if (mode === "H") {
       const track = el("div", "p-lab-track");
       track.append(...imgs(9));
@@ -2199,7 +2215,14 @@
   function zoneCardTile(zone) {
     const card = el("article", "p-card");
     card.dataset.zone = zone.path;
-    card.appendChild(cardCover(orderedItems(zone.path)));
+    const items = orderedItems(zone.path);
+    const own = coverItem(zone.path, items);
+    if (own) card.appendChild(cardCover([own]));
+    else if (lab().card === "I" && items.length) {
+      const cover = el("div", "p-card-cover p-lab-cover p-lab-I");
+      cover.appendChild(thumbStrip(items, 24));
+      card.appendChild(cover);
+    } else card.appendChild(cardCover(items));
     const body = el("div", "p-card-body");
     const text = el("div");
     const name = zoneNameEl(zone);
@@ -2221,6 +2244,34 @@
       });
     }
     return card;
+  }
+
+  // Kleine Bilder wie in den Index-Zeilen, für Karten in Variante I (0.42.5)
+  function thumbStrip(items, max) {
+    const box = el("div", "p-sheet-thumbs p-card-thumbs");
+    for (const item of items.slice(0, max)) {
+      const cell = el("span", "p-sheet-thumb");
+      cell.appendChild(previewImg(item));
+      box.appendChild(cell);
+    }
+    if (items.length > max) box.appendChild(mono("+" + (items.length - max), "p-sheet-more"));
+    return box;
+  }
+
+  // Eigenes Titelbild einer Zone (0.42.5, Rechtsklick › Als Titelbild). Je
+  // Bibliothek in localStorage; fehlt das Bild, gilt wieder die Variante.
+  function coverItem(zonePath, items) {
+    const want = (pref("covers", {})[state.root] || {})[zonePath];
+    return want ? items.find((i) => i.path === want) || null : null;
+  }
+  function setCover(zonePath, itemPath) {
+    const all = pref("covers", {});
+    const mine = { ...(all[state.root] || {}) };
+    if (itemPath) mine[zonePath] = itemPath;
+    else delete mine[zonePath];
+    all[state.root] = mine;
+    setPref("covers", all);
+    render();
   }
 
   // Titelbild einer Karte: ein Bild oder drei, leer als ruhige Fläche
@@ -2913,6 +2964,12 @@
         }))
       );
       cards.appendChild(blockRow(el("div", "p-block-text", cur.card + " · " + t("labCard_" + cur.card))));
+      cards.appendChild(
+        blockRow(t("labHot"), choice(LAB_HOT.map((id) => [id, t("labHot_" + id)]), cur.hot, (id) => {
+          setLab({ hot: id });
+          rerender();
+        }))
+      );
       wrap.appendChild(cards);
       const video = block(t("labVideos"));
       video.appendChild(blockRow(el("div", "p-block-text", t("labVideosText"))));
@@ -7216,6 +7273,10 @@
       entry(menu, t("ctxPreview"), () => openLightbox(one), "␣");
       entry(menu, t("openFile"), () => invoke("open_file", { path: one.abs }).catch(fail));
       if (one.pageUrl) entry(menu, t("ctxSource"), () => invoke("open_url", { url: sourceUrl(one) }).catch(fail));
+      if (isZone(one.zone)) {
+        const isCover = coverItem(one.zone, [one]) === one;
+        entry(menu, t(isCover ? "ctxCoverOff" : "ctxCover"), () => setCover(one.zone, isCover ? null : one.path));
+      }
       rule();
     }
     // Ablegen in: alle Zonen als Kästchen in zwei Spalten, Active Zones zuerst mit Taste
