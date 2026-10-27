@@ -2073,10 +2073,21 @@
       const strip = thumbStrip(items.filter((i) => i !== own), 12);
       strip.classList.add("p-cover-strip");
       cover.append(big, strip);
-    } else if (items.length) cover.appendChild(thumbStrip(items, 48));
-    else cover.classList.add("empty");
+    } else if (items.length) {
+      const strip = thumbStrip(items, 48);
+      cover.appendChild(strip);
+      if (fade !== "off") cutWatch.observe(strip);
+    } else cover.classList.add("empty");
     return cover;
   }
+  // Ausblenden nur bei abgeschnittener letzter Reihe, sonst liegt Blur oder
+  // Verlauf über leerer Fläche (Kante, Farbschein)
+  const cutWatch = new ResizeObserver((entries) => {
+    for (const { target } of entries) {
+      if (!target.isConnected) cutWatch.unobserve(target);
+      else target.parentElement.classList.toggle("cut", target.scrollHeight > target.clientHeight + 1);
+    }
+  });
 
   function thumbStrip(items, max) {
     const box = el("div", "p-sheet-thumbs p-card-thumbs");

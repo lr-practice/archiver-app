@@ -1,6 +1,6 @@
 # Archiver – Design-System
 
-Stand: App 0.42.7 · Extension 3.30.0
+Stand: App 0.42.8 · Extension 3.30.0
 
 Diese Datei hält fest, wie Archiver aussieht und warum. Sie gilt für die Mac-App
 (`app/src`) und die Extension (`extension/`, in Chrome und in Safari). Wer an der Oberfläche
@@ -901,7 +901,9 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
   oben, darunter eine Reihe der ersten übrigen Bilder (Entwurf J, mind. 42 px
   breit, 8 px Abstand zum Bild). „Titelbild zurücksetzen“ nimmt es zurück.
   Gespeichert je Bibliothek in `archiver.covers` (lokal), fehlt das Bild,
-  gilt wieder das Raster.
+  gilt wieder das Raster. Notes und Textkarten stehen als Kachel mit dem Anfang
+  ihres Texts (Innenabstand 9 %, wie im Index; bis 0.42.7 schob der
+  Abstand der ganzseitigen Karte den Text aus der Kachel).
 - **Kontaktbogen:** Je übrige Zone eine Zeile als Karte (`.p-card`, gleiche
   Fläche wie die Active Zones, 10 px Abstand). Die Zeile ist ein einziges
   Klickziel: Klick öffnet die Zone, Ziehen tauscht mit einer Active Zone,
@@ -922,8 +924,11 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
   lokal (`archiver.lab`), an der Bibliothek ändert sich nichts.
 - **Zonenkarten › Ausblenden (0.42.6):** Aus (Standard), Farbverlauf (die
   Bilder laufen ab 35 % der Höhe per Maske in die Kartenfläche aus) oder
-  Glas-Blur (`backdrop-filter: blur(14px)` über den unteren 60 %, nach oben
-  per Maske weich). Nicht bei Karten mit Titelbild. Die Varianten A–I und
+  Glas-Blur (`backdrop-filter: blur(14px)` über den unteren 45 %, oben und
+  unten per Maske weich; darunter laufen die Bilder ab 60 % aus, so bleibt
+  am unteren Rand keine Kante). Nicht bei Karten mit Titelbild. Seit 0.42.8
+  nur, wenn die letzte Reihe abgeschnitten ist (`.cut`, gesetzt von einem
+  ResizeObserver); sonst lag der Blur über leerer Fläche (Kante, Farbschein). Die Varianten A–I und
   „Active Zones als Zeilen“ (bis 0.42.5) sind entfernt: I ist die Karte,
   Zeilen sind der Index (4.24a).
 - **Video-Vorschau:** Daumenkino (Standard, 8 Standbilder), Skim (Zeiger

@@ -6,6 +6,14 @@
   der Zone, mit Seite und Seitentitel als Herkunft. Dort ist er bearbeitbar und
   verknüpfbar. Ohne App bleibt es das Bild.
 
+## App 0.42.8
+
+- Notes und Textkarten zeigen in den Karten wieder ihren Text statt einer
+  leeren Fläche.
+- Labor › Ausblenden greift nur noch, wenn die Bilder einer Karte unten
+  abgeschnitten sind. Karten mit wenigen Bildern bleiben ruhig, ohne Kante
+  und Farbschein. Der Glas-Blur hat am unteren Rand keine Kante mehr.
+
 ## App 0.42.7
 
 - Karten zeigen kleine Bilder wie die Index-Zeilen, als Raster über die volle
