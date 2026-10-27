@@ -1,5 +1,13 @@
 # Changelog
 
+## App 0.42.5
+
+- Farben aus der Figma-Datei: Fenster Dunkel #1a1a1a, Hell #fafafa. Karten
+  Dunkel neutral grau statt weiß getönt, Hell #f2f2f2. Navigation Hell #ebebeb
+  deckend. Tertiärtext Dunkel #666664, Hell #b2b2b2.
+- Etiketten, Chips, Anzahl und Datum unter Karten, Quelle auf Text-Karten und
+  die Notiz-Kennung wieder in Geist Mono 11 px, Versalien.
+
 ## App 0.42.4
 
 - Hell kühler und sauberer: Grund #f4f5f7, Karten und Flächen #e9ebee, Grau

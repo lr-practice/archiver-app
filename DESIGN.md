@@ -1,6 +1,6 @@
 # Archiver – Design-System
 
-Stand: App 0.42.3 · Extension 3.29.8
+Stand: App 0.42.5 · Extension 3.29.8
 
 Diese Datei hält fest, wie Archiver aussieht und warum. Sie gilt für die Mac-App
 (`app/src`) und die Extension (`extension/`, in Chrome und in Safari). Wer an der Oberfläche
@@ -59,18 +59,18 @@ Bei neuen Regeln gilt:
 
 | Token | Dunkel | Hell (0.25.0) | Zweck |
 |---|---|---|---|
-| `--bg-solid` | `#1c1c1c` | `#f4f5f7` (0.42.4, vorher `#f3f4f1`) | Grundfarbe des Fensters, gleich dem Tray (0.28) |
+| `--bg-solid` | `#1a1a1a` (0.42.5, vorher `#1c1c1c`) | `#fafafa` (0.42.5, vorher `#f4f5f7`) | Grundfarbe des Fensters, gleich dem Tray (0.28) |
 | `--win-alpha` | 0.72 | 0.78 | Deckkraft über dem Mac-Glas, Standard wie im Tray. Regler „Glas“ (Einstellungen › Darstellung, 40–100 % in 5er-Schritten, `archiver.glass`, i18n.js `applyGlass`) für App, Tray und Observer |
 | `--bg` | aus `--bg-solid` × `--win-alpha` | dito | Fenster über dem Mac-Glas |
 | `--ink` / `--ink-rgb` | `#ffffff` / `255,255,255` | `#111111` / `17,17,17` | Text und Basis aller Alpha-Flächen |
 | `--ink-inverse` | `#0f0f0f` | `#f4f5f7` | Text auf `--ink`-Flächen (Primärknopf) |
 | `--p-text` | `#ededed`, mit Melange `#f0f0ee` | `#111111` | Haupttext |
 | `--p-dim` | `#8c8c8c`, mit Melange `#9d9d9b` | `#5e6064` | Sekundärtext, Meta |
-| `--p-faint` | `#5e5e5e`, mit Melange `#6d6d6b` | `#8f9196` | Tertiärtext, inaktive Chips |
+| `--p-faint` | `#5e5e5e`, mit Melange `#666664` (0.42.5, vorher `#6d6d6b`) | `#b2b2b2` (0.42.5, vorher `#8f9196`; etwa 2:1 auf dem Grund, nur Nebentext) | Tertiärtext, inaktive Chips |
 | `--p-rule` | ink × 0.10 | schwarz × 0.10 | Trennlinien |
 | `--p-rule-strong` | ink × 0.55 | schwarz × 0.55 | betonte Linien |
-| `--p-pill` | `rgba(52,52,52,.82)` | `rgba(231,232,229,.94)` | Pillen und Navigationsglas |
-| Karte | ink × 0.055 (Hover 0.08) | `#e9ebee` deckend (0.42.4, vorher `#e7e8e5`), auch Blöcke und Listen | Zonen- und Ordnerkarten, eine Stufe vom Grund abgesetzt |
+| `--p-pill` | `rgba(52,52,52,.82)` | `#ebebeb` deckend (0.42.5) | Pillen und Navigationsglas |
+| Karte | `rgba(150,150,150,.055)` (0.42.5, vorher ink × 0.055; Hover ink × 0.08) | `#f2f2f2` deckend (`--card-bg`, 0.42.5). Blöcke, Listen und Neu-Karte bleiben `#e9ebee` | Zonen- und Ordnerkarten, eine Stufe vom Grund abgesetzt |
 | `--thumb-bg` | `#262626` | `#e3e5e8` | Platzhalter hinter Bildern |
 | `--menu-bg` | `rgba(40,40,40,.97)` | `rgba(246,247,244,.98)` | Menüs, Zonenglas |
 | `--sheet-bg` | `#1c1c1c` | `#eef0f2` (auch auf dem Mac) | Seitenblatt (Details) |
@@ -93,8 +93,9 @@ Für die Farbe gilt:
 
 | Rolle | Schrift | Größe | Gewicht | Laufweite | Beispiel |
 |---|---|---|---|---|---|
-| Label, Chip | Melange Medium, Versalien | 10 px | 500 | +0.09em | Filter-Chips, Zähler, `.p-mono` |
-| Meta | Melange | 12 px | 350 | 0 | Datum, Quelle, `.p-card-meta`, `.p-num` (Ziffern tabellarisch) |
+| Label, Chip | Geist Mono, Versalien | 11 px / 1.4 | 400 | +0.02em | Filter-Chips, Zähler, `.p-mono`, `.p-chip` (0.42.5, vorher Melange Medium 10 px) |
+| Meta | Geist Mono, Versalien | 11 px | 400 | +0.02em | Anzahl · Datum unter Karten (`.p-card-meta`), Quelle und Datum auf Text-Karten, Notiz-Kennung und Fuß (0.42.5) |
+| Zahl im Index | Melange | 12 px | 350 | 0 | `.p-num` (Ziffern tabellarisch) |
 | UI | Melange | 13–13.5 px | 400 | 0 | Navigation, Menüs |
 | Karten-Titel | Melange Semi-Light | 14 px | 350 | 0 | Zonenname auf der Karte |
 | Index-Zeile | Melange Semi-Light | 19 px | 350 | −0.01em | Zonenname im Index |
@@ -107,8 +108,9 @@ Für die Typografie gilt:
 
 - Grundschrift ist seit 0.42.2 Melange, Typo-System „A Leise“ (`--sans`),
   seit 0.42.3 fest ohne Wahl im Labor. Semi-Light (350) trägt Köpfe und
-  Inhalt, die Hierarchie entsteht über Grau statt über Größe. Etiketten sind
-  Melange Medium statt Geist Mono. Tray und Observer setzen fest Geist.
+  Inhalt, die Hierarchie entsteht über Grau statt über Größe. Etiketten, Chips
+  und Daten sind seit 0.42.5 wieder Geist Mono (Variante B „Etikett-Mono“ aus
+  Figma, Lukas 27.10.; `--p-mono`). Tray und Observer setzen fest Geist.
 - Melange ist kommerziell (kimera, Freigabe für den internen Gebrauch) und
   liegt nicht in diesem Repo. Der Build holt die woff2-Schnitte 100, 300, 350
   (Semi-Light), 350 kursiv, 400, 400 kursiv, 500, 600 und 700 aus dem privaten
@@ -121,7 +123,7 @@ Für die Typografie gilt:
   Köpfen und Sätzen. Nur Geist Mono in Versalien bekommt +0.02em, die
   Notiz-Blätter in Systemschrift behalten ihre eigenen Werte.
 - Mono ist für Daten und Etiketten da, nicht für Fließtext.
-- Gewichte sind 350 (Inhalt, Köpfe), 400 (Bedienung), 500 (Etiketten) und 600
+- Gewichte sind 350 (Inhalt, Köpfe), 400 (Bedienung, Etiketten in Geist Mono), 500 und 600
   (Geist-Stand).
 - Neue Größen werden auf diese Stufen gerundet. Im Code stecken heute auch
   10, 14, 16 und 19 px. Diese Größen werden bei Gelegenheit auf die Stufen
@@ -1003,6 +1005,8 @@ sie nur auf ausdrückliches Go.
 - **`--muted` (`#8a8a8e`) und `--p-dim` (`#8c8c8c`)** sind fast gleich und
   sollen zu einem Token werden.
 - **`.btn.primary:hover`** nutzt fest `#dcdcdc` statt eines Tokens.
+- **Farben und Etikett-Mono aus 0.42.5 nur in der App.** Extension, Tray und
+  Viewer stehen noch auf den Werten davor (Hellgrund `#f4f4f4`).
 
 ---
 

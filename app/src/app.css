@@ -7883,16 +7883,16 @@ button.p-list:hover {
 }
 
 :root {
-  --p-mono: var(--sans);
+  --p-mono: "Geist Mono", ui-monospace, "SF Mono", monospace;
 }
 html:root body,
 html:root .p-sheet { font-weight: 350; }
 html:root :is(.p-nav-btn, .p-nav-search) { font-weight: 400; }
 html:root .p-num { font-variant-numeric: tabular-nums; letter-spacing: 0; font-size: 12px; }
 html:root .p-card-body { font-size: 14px; }
-html:root .p-card-meta { font-size: 12px; letter-spacing: 0; }
-html:root .p-mono { font-weight: 500; font-size: 10px; letter-spacing: 0.09em; }
-html:root .p-chip { font-family: var(--sans); }
+html:root .p-card-meta { font-family: var(--p-mono); font-weight: 400; font-size: 11px; letter-spacing: 0.02em; text-transform: uppercase; }
+html:root .p-mono { font-weight: 400; font-size: 11px; letter-spacing: 0.02em; }
+html:root .p-chip { font-family: var(--p-mono); font-weight: 400; }
 html:root .p-index .p-row.p-zone .zone-card-name { font-size: 19px; font-weight: 350; letter-spacing: -0.01em; }
 html:root .p-say { font-weight: 350; }
 
@@ -7909,9 +7909,9 @@ html:root .p-sheet .p-head {
 /* Text-Karten und Notizen in Melange */
 html:root :is(.text-sheet, .note-paper) { font-family: var(--sans); }
 html:root :is(.text-sheet .ts-label, .text-sheet .ts-foot, .note-paper .np-label, .note-paper .np-foot) {
-  font-family: var(--sans);
-  font-weight: 500;
-  letter-spacing: 0.09em;
+  font-family: var(--p-mono);
+  font-weight: 400;
+  letter-spacing: 0.02em;
   text-transform: uppercase;
 }
 html:root .card-text .ts-body { font-weight: 350; line-height: 1.25; letter-spacing: -0.01em; }
@@ -7923,7 +7923,7 @@ html:root .np-body { font-weight: 350; font-size: 16px; line-height: 1.5; }
 html:not(.light) {
   --p-text: #f0f0ee;
   --p-dim: #9d9d9b;
-  --p-faint: #6d6d6b;
+  --p-faint: #666664;
 }
 
 /* Abstand zwischen Kopf und Zonen gestrafft */
@@ -7938,22 +7938,30 @@ html.light {
   --ink: #111111;
   --ink-rgb: 17, 17, 17;
   --ink-inverse: #f4f5f7;
-  --bg-solid: #f4f5f7;
-  --bg: #f4f5f7;
-  --panel: #f4f5f7;
-  --card-bg: #e9ebee;
+  --bg-solid: #fafafa;
+  --bg: #fafafa;
+  --panel: #fafafa;
+  --card-bg: #f2f2f2;
   --thumb-bg: #e3e5e8;
   --sheet-bg: #eef0f2;
   --lightbox-bg: rgba(244, 245, 247, 0.97);
   --p-text: #111111;
   --p-dim: #5e6064;
-  --p-faint: #8f9196;
+  --p-faint: #b2b2b2;
   --p-rule: rgba(17, 17, 17, 0.1);
-  --p-pill: rgba(233, 235, 238, 0.94);
+  --p-pill: #ebebeb;
   --menu-bg: rgba(247, 248, 250, 0.98);
-  --splash-bg: #f4f5f7;
+  --splash-bg: #fafafa;
 }
 html.light :is(.p-card, .p-block, .p-list) { background: #e9ebee; }
+html.light .p-card:not(.p-new):not(:hover) { background: var(--card-bg); }
 /* Seitenblatt auf dem Mac im selben Ton statt neutral grau (html.mac.light weiter oben) */
 html.mac.light { --sheet-bg: #eef0f2; }
 html.light .p-nav { box-shadow: 0 6px 24px rgba(0, 0, 0, 0.06); }
+
+/* ---- 0.42.5: Farben aus Figma (Lukas 27.10.) ----
+   Dunkel etwas tiefer, Karten neutral statt weiß getönt. Hell siehe html.light oben. */
+:root {
+  --bg-solid: #1a1a1a;
+}
+html:not(.light) .p-card:not(.p-new):not(:hover):not(.drop-target) { background: rgba(150, 150, 150, 0.055); }
