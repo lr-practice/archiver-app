@@ -280,7 +280,7 @@ jobs:
   # Lief der Build schon oder gibt es einen neueren Lauf, bleibt es beim Abbruch.
   retry:
     needs: build
-    if: always() && needs.build.result == 'cancelled' && inputs.versuch < 3
+    if: always() && (needs.build.result == 'cancelled' || needs.build.result == 'failure') && inputs.versuch < 3
     runs-on: ubuntu-latest
     permissions:
       actions: write
