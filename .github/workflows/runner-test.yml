@@ -1,0 +1,10 @@
+# Vorübergehend (27.10.): bekommt das Konto überhaupt gehostete Runner?
+name: Runner-Test
+on:
+  push:
+    paths: [.github/workflows/runner-test.yml]
+jobs:
+  ubuntu:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "Ubuntu-Runner $RUNNER_NAME"
