@@ -266,7 +266,7 @@
   }
 
   function saveCard(card, folder, source) {
-    // Textkarten (mit Farbe) landen bei laufender App als .txt in der Zone (background.js asTextFile)
+    // Textkarten (mit Farbe) landen bei laufender App als Notiz (.md) in der Zone (background.js asTextFile)
     sendSave({ type: "download-image", url: card.dataUrl, suggestedName: card.name, folder, tone: card.tone, textCard: !!card.tone, ...source });
   }
 

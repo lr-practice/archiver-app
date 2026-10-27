@@ -2648,7 +2648,8 @@ impl Library {
             f
         } else if let Some(text) = pasted.text.filter(|t| !t.trim().is_empty()) {
             let text: String = text.trim().chars().take(TEXT_MAX_CHARS).collect();
-            let f = tmp.join(format!("{}.txt", paste_name(&text)));
+            // 0.42.5: eingefügter Text wird eine Notiz (.md) statt .txt
+            let f = tmp.join(format!("{}.md", paste_name(&text)));
             fs::write(&f, text).map_err(err)?;
             f
         } else {
@@ -3429,10 +3430,10 @@ mod tests {
         let png = fs::read(src.join("a.png")).unwrap();
         let r = lib.paste_into("Typo", Pasted { image: Some(png), ..Default::default() }).unwrap();
         assert_eq!(r.imported, 1);
-        // Text wird zur Textkarte, benannt nach den ersten Wörtern
+        // Text wird zur Notiz, benannt nach den ersten Wörtern
         let r = lib.paste_into("Typo", Pasted { text: Some("  Form folgt Funktion, sagt man  ".into()), ..Default::default() }).unwrap();
         assert_eq!(r.imported, 1);
-        assert!(root.join("Typo/Form folgt Funktion, sagt man.txt").is_file());
+        assert!(root.join("Typo/Form folgt Funktion, sagt man.md").is_file());
         // Dateien aus dem Finder gehen vor Bild und Text
         write_png(&src.join("b.png"), 4, 4, 20);
         let r = lib

@@ -1100,7 +1100,8 @@ async function saveToDownloads(message, sender) {
 function asTextFile(message) {
   if (!message.textCard || !message.quote) return message;
   const base = String(message.suggestedName || "Text").replace(/\.png$/i, "");
-  return { ...message, url: "data:text/plain;charset=utf-8," + encodeURIComponent(String(message.quote).trim() + "\n"), suggestedName: base + ".txt" };
+  // 3.30.0: als Notiz (.md) statt .txt, in der App bearbeitbar und verknüpfbar
+  return { ...message, url: "data:text/markdown;charset=utf-8," + encodeURIComponent(String(message.quote).trim() + "\n"), suggestedName: base + ".md" };
 }
 
 async function handleDownload(message, sender) {

@@ -1,6 +1,13 @@
 # Changelog
 
+## Extension 3.30.0
+
+- Markierter Text landet bei laufender App als Notiz (.md) statt als .txt in
+  der Zone und ist dort bearbeitbar und verknüpfbar. Ohne App bleibt es das Bild.
+
 ## App 0.42.5
+
+- Eingefügter Text (⌘V in einer Zone) wird eine Notiz (.md) statt .txt.
 
 - Farben aus der Figma-Datei: Fenster Dunkel #1a1a1a, Hell #fafafa. Karten
   Dunkel neutral grau statt weiß getönt, Hell #f2f2f2. Navigation Hell #ebebeb
