@@ -1,6 +1,6 @@
 # Archiver – Design-System
 
-Stand: App 0.42.6 · Extension 3.30.0
+Stand: App 0.42.7 · Extension 3.30.0
 
 Diese Datei hält fest, wie Archiver aussieht und warum. Sie gilt für die Mac-App
 (`app/src`) und die Extension (`extension/`, in Chrome und in Safari). Wer an der Oberfläche
@@ -910,6 +910,8 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
   Mono-Anzahl in Spalte 1, die Bilder beginnen genau auf der linken Kante der
   zweiten Active-Karte. Bilder in Höhe der Zeilen-Miniatur (mind. 40 px),
   13:10, 4 px Abstand, Rundung `--r-sm`, höchstens 24, danach „+N“ in Mono.
+  Seit 0.42.7 als Raster wie die Karten-Fläche: Spalten dehnen sich, bis die
+  Reihe bis zum rechten Rand bündig ist, keine leere Endspalte.
 - **Ansichten der Startseite:** Mix (bis 0.42.4 „Übersicht“), Karten, Index. Die geteilte
   Vorschau-Ansicht (Liste links, Mosaik rechts) ist seit 0.40.11 entfernt.
 - **Fokus:** Ring (4.1) um die ganze Zeile, keine Farbe.

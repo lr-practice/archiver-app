@@ -7810,9 +7810,21 @@ html:not(.light) .p-card:not(.p-new):not(:hover):not(.drop-target) { background:
   overflow: hidden;
   align-content: start;
 }
-.p-card-thumbs .p-sheet-thumb {
+.p-card-thumbs .p-sheet-thumb,
+.p-sheet-row .p-sheet-thumb {
   width: 100%;
   height: auto;
+}
+/* Index-Zeilen ebenso bündig bis zum rechten Rand, ohne leere Endspalte */
+.p-sheet-row .p-sheet-thumbs {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(calc(max(40px, var(--row-thumb, 40px)) * 1.3), 1fr));
+  grid-auto-rows: max-content;
+  align-content: start;
+}
+.p-sheet-row .p-sheet-more {
+  justify-self: center;
+  padding: 0;
 }
 .p-card-thumbs .p-sheet-more {
   align-self: center;
