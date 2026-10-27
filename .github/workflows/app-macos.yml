@@ -30,6 +30,10 @@ on:
         description: "Nur bei freigeben: Version unter „vorab“, z. B. 0.37.0"
         type: string
         default: ""
+      versuch:
+        description: "Zähler für den automatischen Neustart (nicht ändern)"
+        type: number
+        default: 1
 
 permissions:
   contents: write
@@ -270,6 +274,33 @@ jobs:
             gh release upload "$TAG" upd/* -R "$REPO" --clobber
             gh release edit "$TAG" -R "$REPO" --latest --notes-file docs/beta.md
           fi
+
+  # 0.42.8: Ist kein Mac frei, bricht GitHub den Build nach rund 15 Minuten ab,
+  # bevor er beginnt (kein Runner). Dann neu anstoßen, höchstens bis Versuch 3.
+  # Lief der Build schon oder gibt es einen neueren Lauf, bleibt es beim Abbruch.
+  retry:
+    needs: build
+    if: always() && needs.build.result == 'cancelled' && inputs.versuch < 3
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      R: ${{ github.repository }}
+      RUN: ${{ github.run_id }}
+      BRANCH: ${{ github.ref_name }}
+      CHANNEL: ${{ inputs.ausspielen }}
+      VERSION: ${{ inputs.version }}
+      NEXT: ${{ inputs.versuch + 1 }}
+    steps:
+      - name: Ohne Mac abgebrochen? Neu starten
+        run: |
+          RUNNER=$(gh api "repos/$R/actions/runs/$RUN/jobs" --jq '.jobs[] | select(.name == "build") | .runner_name')
+          if [ -n "$RUNNER" ]; then echo "Build lief auf $RUNNER, kein Neustart"; exit 0; fi
+          NEWEST=$(gh api "repos/$R/actions/workflows/app-macos.yml/runs?branch=$BRANCH&per_page=1" --jq '.workflow_runs[0].id')
+          if [ "$NEWEST" != "$RUN" ]; then echo "Neuerer Lauf $NEWEST, kein Neustart"; exit 0; fi
+          echo "Kein Mac bekommen, starte Versuch $NEXT"
+          gh workflow run app-macos.yml -R "$R" --ref "$BRANCH" -f ausspielen="$CHANNEL" -f version="$VERSION" -f versuch="$NEXT"
 
   # Vorabversion an alle freigeben, ohne neuen Build
   promote:
