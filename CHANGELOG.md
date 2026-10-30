@@ -1,5 +1,16 @@
 # Changelog
 
+## App 0.43.1
+
+- rustls und webpki aktualisiert (bekannte Lücken geschlossen).
+- Sicherheit (Prüfung 30.10.): Die HTTP-Brücke für Safari ist aus, bis die
+  Safari-Extension gekoppelt werden kann; ohne Geheimnis hätte jedes Programm
+  auf dem Mac sie ansprechen können. Der Safari-Hinweis in den Einstellungen
+  ist so lange ausgeblendet.
+- Feedback geht an feedback@archery-visual.com.
+- Die alten Beta-Freischalt-Codes gelten nicht mehr. Wer nur damit
+  freigeschaltet war, meldet sich einmal mit seiner E-Mail an.
+
 ## App 0.43.0 · Extension 3.31.0
 
 - Archiver heißt jetzt Archery: Schriftzug, Fenstertitel, Menü, alle Texte
@@ -12,13 +23,6 @@
 - Ein per Auto-Update aktualisiertes Programm behält den Dateinamen
   `Archiver.app`, zeigt aber überall Archery. Wer neu aus dem DMG installiert,
   bekommt `Archery.app` und löscht das alte `Archiver.app`.
-- Sicherheit (Prüfung 30.10.): Die HTTP-Brücke für Safari ist aus, bis die
-  Safari-Extension gekoppelt werden kann; ohne Geheimnis hätte jedes Programm
-  auf dem Mac sie ansprechen können. Der Safari-Hinweis in den Einstellungen
-  ist so lange ausgeblendet.
-- Feedback geht an feedback@archery-visual.com.
-- Die alten Beta-Freischalt-Codes gelten nicht mehr. Wer nur damit
-  freigeschaltet war, meldet sich einmal mit seiner E-Mail an.
 
 ## Extension 3.30.0
 
