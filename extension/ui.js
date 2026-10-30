@@ -587,7 +587,7 @@
   function buildToolbar(gallery, sizeTarget) {
     // Schwebende Navigation wie in der App: Archiver (Home) › Zone, dazu Einstellungen und Info.
     const toolbar = el("div", "gallery-toolbar");
-    const home = button("nav-btn nav-home active", "Archiver", () => gallery.setFocus(null));
+    const home = button("nav-btn nav-home active", "Archery", () => gallery.setFocus(null));
     const crumb = el("span", "nav-crumb");
     toolbar.appendChild(home);
     toolbar.appendChild(crumb);
@@ -930,7 +930,7 @@
       show(exportRow, !appInfo);
       show(exportHint, !appInfo);
       if (appInfo) {
-        appStatus.textContent = t("appConnected", [appInfo.library || "Archiver"]);
+        appStatus.textContent = t("appConnected", [appInfo.library || "Archery"]);
         appHint.textContent = t("appZonesHint");
       }
       // Mit App: nur die vier Active Zones; Zonen anlegen und ordnen geht in der App
@@ -957,7 +957,7 @@
   // reduziert (eine Größe, Weiß und Grau, feine Linien).
   function buildInfoPanel() {
     const panel = el("div", "panel-inner");
-    panel.appendChild(pageHeader("Archiver", t("aboutClaim")));
+    panel.appendChild(pageHeader("Archery", t("aboutClaim")));
 
     const how = block(t("infoHow"));
     for (const key of ["Save", "Store", "View", "Sort", "Full"]) {
@@ -975,7 +975,7 @@
       if (data.shortcut && data.shortcut.key) overlayKey.textContent = formatShortcutLabel(data.shortcut);
     });
 
-    panel.appendChild(el("div", "page-foot", "Archiver " + chrome.runtime.getManifest().version));
+    panel.appendChild(el("div", "page-foot", "Archery " + chrome.runtime.getManifest().version));
     return { el: panel, destroy: () => panel.remove() };
   }
 

@@ -1410,7 +1410,7 @@ impl Library {
             rank(a).cmp(&rank(b)).then_with(|| a.path.to_lowercase().cmp(&b.path.to_lowercase()))
         });
         if let Some(&count) = counts.get("") {
-            let name = self.root.file_name().and_then(|n| n.to_str()).unwrap_or("Archiver").to_string();
+            let name = self.root.file_name().and_then(|n| n.to_str()).unwrap_or("Archery").to_string();
             zones.insert(1.min(zones.len()), Zone { path: String::new(), name, count, external: false });
         }
         Ok(zones)

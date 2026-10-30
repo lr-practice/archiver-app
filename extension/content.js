@@ -1982,7 +1982,7 @@
   function sendSave(message) {
     const lost = () => {
       const own = t("extensionReloaded");
-      const text = own !== "extensionReloaded" ? own : /^de/i.test(navigator.language) ? "Archiver wurde aktualisiert. Bitte lade die Seite neu." : "Archiver was updated. Please reload the page.";
+      const text = own !== "extensionReloaded" ? own : /^de/i.test(navigator.language) ? "Archery wurde aktualisiert. Bitte lade die Seite neu." : "Archery was updated. Please reload the page.";
       if (rootEl) UI.showToast(rootEl, text, false);
     };
     try {

@@ -433,8 +433,8 @@ impl Library {
             return Err("Nichts ausgewählt".into());
         }
         let name = crate::library::clean_segment(title);
-        let name = if name.is_empty() { "Archiver".to_string() } else { name };
-        let dir = crate::library::unique_path(dest, &format!("{name} (Archiver)"));
+        let name = if name.is_empty() { "Archery".to_string() } else { name };
+        let dir = crate::library::unique_path(dest, &format!("{name} (Archery)"));
         fs::create_dir_all(&dir).map_err(err)?;
 
         let mut files = Vec::new();
@@ -750,7 +750,7 @@ mod tests {
         let rep = lib.export_package(&paths, "Plakate", "2 Objekte", &out, true).unwrap();
         assert_eq!((rep.count, rep.internal), (2, 1));
         let dir = PathBuf::from(&rep.path);
-        assert!(dir.ends_with("Plakate (Archiver)"));
+        assert!(dir.ends_with("Plakate (Archery)"));
         for f in ["a.png", "b.png", "Quellen.csv", "Quellen.md", "Kontaktbogen.pdf"] {
             assert!(dir.join(f).is_file(), "{f} fehlt");
         }

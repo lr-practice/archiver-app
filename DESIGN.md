@@ -1,8 +1,8 @@
-# Archiver – Design-System
+# Archery – Design-System
 
-Stand: App 0.42.8 · Extension 3.30.0
+Stand: App 0.43.0 · Extension 3.31.0
 
-Diese Datei hält fest, wie Archiver aussieht und warum. Sie gilt für die Mac-App
+Diese Datei hält fest, wie Archery aussieht und warum. Sie gilt für die Mac-App
 (`app/src`) und die Extension (`extension/`, in Chrome und in Safari). Wer an der Oberfläche
 arbeitet, Mensch oder KI, liest sie vorher. Die Werte stammen aus dem Code.
 Wo Code und Datei auseinanderlaufen, gilt der Code, und die Datei wird im
@@ -194,7 +194,7 @@ die Zone, die Glasleiste beim Ziehen, Geist und die Bibliothek oben rechts.
 Safari nutzt denselben Code und sieht gleich aus (4.27).
 
 **Am ganzen Mac** (`palette.*`, `dropbar.*`, `src-tauri/src/system.rs`):
-schwebende Fenster über anderen Programmen, auch wenn das Archiver-Fenster zu
+schwebende Fenster über anderen Programmen, auch wenn das Archery-Fenster zu
 ist. Sie nutzen dieselben Karten, Ringe und Glaswerte wie die App (4.12, 4.13).
 
 ---
@@ -217,7 +217,7 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
 - **Nicht:** Keine `outline`, keine Akzentfarbe und kein zweiter Rahmen.
 
 ### 4.2 Navigation (`.p-nav`)
-- **Zweck:** Wechsel zwischen Archiver (Start), Zonen, Alle Objekte und Suche,
+- **Zweck:** Wechsel zwischen Archery (Start), Zonen, Alle Objekte und Suche,
   dazu das Menü ≡.
 - **Form:** Eine Glas-Pille oben, auf der Mittellinie der Fensterknöpfe.
   Aktive Knöpfe sind gefüllt.
@@ -256,7 +256,7 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
   Einstellungen › Bibliothek (Verknüpfung im Bibliotheksordner). Sieht aus wie
   jede Zone; ✕ löst nur die Verknüpfung. Seit 0.39.1 heißt das überall
   „Trennen“ (⋯-Menü, Einstellungen, Rückfrage mit `.btn primary` statt rot),
-  und Ordner oder Unterzonen in einer externen Zone haben kein Löschen: Archiver
+  und Ordner oder Unterzonen in einer externen Zone haben kein Löschen: Archery
   löscht nie etwas außerhalb der Bibliothek. Seit 0.31.0 gelten dieselben Schranken
   wie für eine Bibliothek (kein Benutzer- oder Systemordner, höchstens 20.000
   Dateien), und verschachtelte Ziele werden abgelehnt. Ist das Ziel nicht
@@ -527,8 +527,8 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
   ⇧-Klick und ⇧ + Pfeile wählen einen Bereich. Jedes gewählte Objekt trägt
   den Ring (4.1). Ziehen und ⌘C nehmen alle gewählten mit, esc hebt die Wahl
   zuerst auf, ein Pfeil ohne ⇧ ebenso.
-- **Nicht:** Sie aktiviert Archiver nicht und holt das Hauptfenster nicht nach vorne.
-  Liegt Archiver hinten, wird das Hauptfenster beim Öffnen weggelegt und beim
+- **Nicht:** Sie aktiviert Archery nicht und holt das Hauptfenster nicht nach vorne.
+  Liegt Archery hinten, wird das Hauptfenster beim Öffnen weggelegt und beim
   Schließen hinter alle Fenster zurückgelegt (0.28).
 
 ### 4.13 Zonenleiste am ganzen Mac (`dropbar.css`)
@@ -587,7 +587,7 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
   Einstellungen › Mac & Browser (0.40.24): „Mit ⌥“ (Standard), „Immer“
   (sobald Dateien gezogen werden, `dropbarAlways`) oder „Aus“; erst diese
   Wahl zählt (`dropbarAltChosen`). Im Browser übernimmt die Extension.
-- **Nicht:** Erscheint nicht, wenn Archiver selbst vorne ist, und nicht bei
+- **Nicht:** Erscheint nicht, wenn Archery selbst vorne ist, und nicht bei
   Text oder Links ohne Datei. Zeigt nie „Gesichert“, bevor es gesichert ist.
   Im Browser (Extension 3.29.5) erscheint sie nur, wenn das Ziehen auf der
   Seite beginnt, nicht bei Dateien von außen. Regler, Links und kleine
@@ -624,7 +624,7 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
 - **Nicht:** Keine Bilder, keine Akzentfarbe, kein eigenes Inhaltsverzeichnis.
 
 ### 4.16 Hinweisleiste (`.p-update`, `.p-ext`)
-- **Zweck:** Ein Hinweis, der bleibt, bis man handelt: „Archiver X ist da“
+- **Zweck:** Ein Hinweis, der bleibt, bis man handelt: „Archery X ist da“
   und seit 0.30 „Extension X ist da“ bzw. „Keine Extension verbunden“.
 - **Form:** Glas-Pille oben rechts (12 px vom Rand), `--p-pill`, Text 13 px,
   danach Handlung in Mono 12 px in Klammern („(Laden)“) und ×. Immer nur
@@ -736,9 +736,9 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
   Darunter „Abbrechen“ als Mono-Etikett 11 px, Großbuchstaben, gedimmt.
 
 ### 4.22 Name zum Testen (App 0.37.3, Information › App)
-- **Zweck:** Andere Namen statt „Archiver“ ausprobieren, ohne Build.
+- **Zweck:** Andere Namen statt „Archery“ ausprobieren, ohne Build.
 - **Form:** Zeile wie „Dein Name“ (Titel, gedimmter Satz, Eingabe rechts,
-  `p-input note-field`), Platzhalter „Archiver“. Greift beim Tippen.
+  `p-input note-field`), Platzhalter „Archery“. Greift beim Tippen.
 - **Gilt für:** Navigation (`#navBrand`), Startbild, Sperrbild, Kopf von
   Information, Fenstertitel. Nicht: Tray, Extension, PDF, Dateinamen.
 
@@ -1000,13 +1000,13 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
 
 ### 4.27 Safari-Extension (in Arbeit, `safari/`, `http_bridge.rs`)
 - **Zweck:** Dieselbe Extension in Safari am Mac. Sie steckt als
-  App-Erweiterung in Archiver.app (`Contents/PlugIns`) und wird nur in Safari
+  App-Erweiterung in Archery.app (`Contents/PlugIns`) und wird nur in Safari
   eingeschaltet, nicht geladen.
 - **Form:** Kein eigener Look. Overlay, Galerie, Zonenleiste, Toasts und
   Panels sind die aus `extension/`, Byte für Byte. Was in Chrome gilt, gilt
   hier (4.17, 4.18, 4.20).
-- **Unterschiede:** Ohne laufende App versucht die Extension, Archiver zu
-  starten. Klappt das nicht, kommt ein Toast („Archiver läuft nicht …“) statt
+- **Unterschiede:** Ohne laufende App versucht die Extension, Archery zu
+  starten. Klappt das nicht, kommt ein Toast („Archery läuft nicht …“) statt
   eines Sicherns in Downloads. ⇧ nach Downloads gibt es nicht (Toast). Die
   Linkkarte hat kein Seitenarchiv (Safari kennt kein pageCapture). Links auf
   `chrome://`-Seiten im Panel tun in Safari nichts.

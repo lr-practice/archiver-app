@@ -93,7 +93,7 @@
   }
 
   const countText = (n) => (n === 1 ? t("countImage") : t("countImages", { n }));
-  const zoneName = (path) => (path === "" ? (state.snap && state.snap.name) || "Archiver" : path.split("/").join(" / "));
+  const zoneName = (path) => (path === "" ? (state.snap && state.snap.name) || "Archery" : path.split("/").join(" / "));
 
   // ---- Daten ----
 

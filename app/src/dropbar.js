@@ -34,7 +34,7 @@
     }
   }
 
-  const zoneName = (path) => (path === "" ? (state.snap && state.snap.name) || "Archiver" : path.split("/").join(" / "));
+  const zoneName = (path) => (path === "" ? (state.snap && state.snap.name) || "Archery" : path.split("/").join(" / "));
 
   // Reihenfolge wie in der App: die ersten vier sind die Active Zones
   function orderZones(zones) {

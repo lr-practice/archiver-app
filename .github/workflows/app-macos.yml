@@ -183,7 +183,7 @@ jobs:
           VERSION=$(node -p "require('./app/src-tauri/tauri.conf.json').version")
           BUNDLE=app/src-tauri/target/release/bundle
           mkdir -p dist
-          NAME=Archiver
+          NAME=Archery
           APP=$(ls -d "$BUNDLE"/macos/*.app | head -1)
           ditto -c -k --keepParent "$APP" "dist/$NAME-$VERSION-mac-arm64.zip"
           cp "$BUNDLE"/dmg/*.dmg "dist/$NAME-$VERSION-mac-arm64.dmg"
@@ -199,7 +199,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          TAG=app-latest; TITLE="Archiver App (Testversion)"
+          TAG=app-latest; TITLE="Archery App (Testversion)"
           if [ "$APPLE_NOTARIZE" = "true" ]; then
             NOTES="Testversion ${{ steps.out.outputs.version }} aus ${GITHUB_REF_NAME} (${GITHUB_SHA::7}). Von Apple signiert und notarisiert."
           else
@@ -230,12 +230,12 @@ jobs:
           BUNDLE=app/src-tauri/target/release/bundle/macos
           TGZ=$(ls "$BUNDLE"/*.app.tar.gz | head -1)
           mkdir -p upd
-          cp "$TGZ" "upd/Archiver-$VERSION-mac-arm64.app.tar.gz"
-          cp "dist/Archiver-$VERSION-mac-arm64.dmg" upd/
+          cp "$TGZ" "upd/Archery-$VERSION-mac-arm64.app.tar.gz"
+          cp "dist/Archery-$VERSION-mac-arm64.dmg" upd/
           # Erweiterung für Tester:innen, fester Name für einen stabilen Link.
-          (cd extension && zip -qr ../upd/Archiver-Extension.zip . -x '.*')
+          (cd extension && zip -qr ../upd/Archery-Extension.zip . -x '.*')
           SIG=$(cat "$TGZ.sig")
-          URL="https://github.com/$REPO/releases/download/$TAG/Archiver-$VERSION-mac-arm64.app.tar.gz"
+          URL="https://github.com/$REPO/releases/download/$TAG/Archery-$VERSION-mac-arm64.app.tar.gz"
           jq -n --arg v "$VERSION" --arg s "$SIG" --arg u "$URL" --arg d "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
             '{version:$v, notes:"", pub_date:$d, platforms:{"darwin-aarch64":{signature:$s, url:$u}}}' > "upd/$FEED"
           cat "upd/$FEED"
@@ -246,31 +246,33 @@ jobs:
           fi
           if [ "$CHANNEL" = "vorab" ]; then
             # Ein fester Tag, immer nur die jüngste Vorabversion; nie „latest“
-            gh release view vorab -R "$REPO" >/dev/null 2>&1 || gh release create vorab -R "$REPO" --prerelease --latest=false --title "Archiver Vorab" --notes "Nur zum Testen. Freigabe an alle: App macOS mit „freigeben“."
+            gh release view vorab -R "$REPO" >/dev/null 2>&1 || gh release create vorab -R "$REPO" --prerelease --latest=false --title "Archery Vorab" --notes "Nur zum Testen. Freigabe an alle: App macOS mit „freigeben“."
             # Version wählen (0.38.1): jede Vorabversion bleibt zusätzlich unter
             # vorab-X.Y.Z liegen, auch die, die hier gleich ersetzt wird.
             keep() {
               local v=$1 dir=$2 tag=vorab-$1
               gh release view "$tag" -R "$REPO" >/dev/null 2>&1 && return 0
               mkdir -p "keep-$v"
-              cp "$dir/Archiver-$v-mac-arm64.app.tar.gz" "keep-$v/"
-              jq --arg u "https://github.com/$REPO/releases/download/$tag/Archiver-$v-mac-arm64.app.tar.gz" \
+              # Bis 0.42.x hießen die Pakete Archiver-…, ab 0.43 Archery-…
+              local pkg=$(cd "$dir" && ls *-$v-mac-arm64.app.tar.gz | head -1)
+              cp "$dir/$pkg" "keep-$v/"
+              jq --arg u "https://github.com/$REPO/releases/download/$tag/$pkg" \
                 '.platforms["darwin-aarch64"].url = $u' "$dir/vorab.json" > "keep-$v/vorab.json"
-              gh release create "$tag" -R "$REPO" --prerelease --latest=false --title "Archiver Vorab $v" \
+              gh release create "$tag" -R "$REPO" --prerelease --latest=false --title "Archery Vorab $v" \
                 --notes "Ältere Vorabversion, in der App unter Information › Updates wählbar." "keep-$v"/*
             }
             mkdir -p prev
             if gh release download vorab -R "$REPO" -D prev -p 'vorab.json' -p '*.app.tar.gz' 2>/dev/null; then
               PREV=$(jq -r .version prev/vorab.json)
-              [ -n "$PREV" ] && [ "$PREV" != "$VERSION" ] && [ -f "prev/Archiver-$PREV-mac-arm64.app.tar.gz" ] && keep "$PREV" prev || true
+              [ -n "$PREV" ] && [ "$PREV" != "$VERSION" ] && ls prev/*-"$PREV"-mac-arm64.app.tar.gz >/dev/null 2>&1 && keep "$PREV" prev || true
             fi
             OLD=$(gh release view vorab -R "$REPO" --json assets -q '.assets[].name')
             for a in $OLD; do gh release delete-asset vorab "$a" -R "$REPO" -y; done
             gh release upload vorab upd/* -R "$REPO" --clobber
-            gh release edit vorab -R "$REPO" --prerelease --latest=false --title "Archiver Vorab $VERSION"
+            gh release edit vorab -R "$REPO" --prerelease --latest=false --title "Archery Vorab $VERSION"
             keep "$VERSION" upd
           else
-            gh release view "$TAG" -R "$REPO" >/dev/null 2>&1 || gh release create "$TAG" -R "$REPO" --title "Archiver $VERSION" --notes-file docs/beta.md --latest
+            gh release view "$TAG" -R "$REPO" >/dev/null 2>&1 || gh release create "$TAG" -R "$REPO" --title "Archery $VERSION" --notes-file docs/beta.md --latest
             gh release upload "$TAG" upd/* -R "$REPO" --clobber
             gh release edit "$TAG" -R "$REPO" --latest --notes-file docs/beta.md
           fi
@@ -329,12 +331,12 @@ jobs:
       - name: An alle freigeben
         run: |
           TAG=v$VERSION
-          PKG="Archiver-$VERSION-mac-arm64.app.tar.gz"
+          PKG="Archery-$VERSION-mac-arm64.app.tar.gz"
           URL="https://github.com/$REPO/releases/download/$TAG/$PKG"
           jq --arg u "$URL" --arg d "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
             '.platforms["darwin-aarch64"].url = $u | .pub_date = $d' upd/vorab.json > upd/latest.json
           rm upd/vorab.json
           cat upd/latest.json
-          gh release view "$TAG" -R "$REPO" >/dev/null 2>&1 || gh release create "$TAG" -R "$REPO" --title "Archiver $VERSION" --notes-file docs/beta.md --latest
+          gh release view "$TAG" -R "$REPO" >/dev/null 2>&1 || gh release create "$TAG" -R "$REPO" --title "Archery $VERSION" --notes-file docs/beta.md --latest
           gh release upload "$TAG" upd/* -R "$REPO" --clobber
           gh release edit "$TAG" -R "$REPO" --latest --notes-file docs/beta.md

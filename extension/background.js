@@ -326,7 +326,7 @@ async function appBridge() {
     // ext: eigene Version, damit die App einen Hinweis zeigen kann, wenn sie veraltet ist
     const r = await hostCall("hello", IS_SAFARI ? { ext: chrome.runtime.getManifest().version, browser: "safari" } : { ext: chrome.runtime.getManifest().version });
     appAnswered = true;
-    if (r.library) info = { library: r.library, name: r.name || "Archiver", version: r.version, libraries: Array.isArray(r.libraries) ? r.libraries : [] };
+    if (r.library) info = { library: r.library, name: r.name || "Archery", version: r.version, libraries: Array.isArray(r.libraries) ? r.libraries : [] };
   } catch {}
   bridgeCache = { at: Date.now(), info };
   if (info) {

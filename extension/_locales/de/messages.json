@@ -1,18 +1,18 @@
 {
   "extName": {
-    "message": "Archiver"
+    "message": "Archery"
   },
   "extDescription": {
     "message": "Bilder sichern, indem du sie in Ablage-Zonen am unteren Bildschirmrand ziehst. Danach sortieren, sichten und wiederfinden."
   },
   "actionTitle": {
-    "message": "Archiver"
+    "message": "Archery"
   },
   "commandToggle": {
     "message": "Overlay ein- oder ausblenden"
   },
   "dashboardTitle": {
-    "message": "Archiver — Übersicht"
+    "message": "Archery — Übersicht"
   },
   "fullView": {
     "message": "Vollansicht"
@@ -80,7 +80,7 @@
     "message": "Von oben nach unten = von links nach rechts am Bildschirmrand. Auch Pfade wie <code>Kunden/Projekt-A</code> möglich. Eine Zone namens <code>Downloads</code> legt ohne Unterordner ab (<a>Downloads-Ordner ändern</a>)."
   },
   "shortcutHintHtml": {
-    "message": "Blendet das Overlay auf der aktuellen Seite ein. Zusätzlich gilt Chromes eigene Archiver-Kombination, änderbar unter <a>Erweiterungen › Tastenkombinationen</a>."
+    "message": "Blendet das Overlay auf der aktuellen Seite ein. Zusätzlich gilt Chromes eigene Archery-Kombination, änderbar unter <a>Erweiterungen › Tastenkombinationen</a>."
   },
   "noImagesYet": {
     "message": "Noch keine Bilder."
@@ -149,10 +149,10 @@
     "message": "Export fehlgeschlagen"
   },
   "exportHint": {
-    "message": "Legt archiver-export.json in deinen Downloads ab. Die Archiver-App übernimmt damit alle Bilder samt Quellen in ihre Bibliothek."
+    "message": "Legt archiver-export.json in deinen Downloads ab. Die Archery-App übernimmt damit alle Bilder samt Quellen in ihre Bibliothek."
   },
   "appConnected": {
-    "message": "Mit der Archiver-App verbunden · $LIB$",
+    "message": "Mit der Archery-App verbunden · $LIB$",
     "placeholders": {
       "lib": {
         "content": "$1"
@@ -166,7 +166,7 @@
     "message": "Bild konnte nicht an die App übergeben werden"
   },
   "appOfflineSaved": {
-    "message": "Archiver antwortet nicht. Gesichert in $FOLDER$ statt in der Bibliothek",
+    "message": "Archery antwortet nicht. Gesichert in $FOLDER$ statt in der Bibliothek",
     "placeholders": {
       "folder": {
         "content": "$1"
@@ -174,16 +174,16 @@
     }
   },
   "appNotRunning": {
-    "message": "Archiver läuft nicht. Bitte die App öffnen und noch einmal ablegen"
+    "message": "Archery läuft nicht. Bitte die App öffnen und noch einmal ablegen"
   },
   "appNoLibrary": {
-    "message": "In Archiver ist noch keine Bibliothek eingerichtet"
+    "message": "In Archery ist noch keine Bibliothek eingerichtet"
   },
   "safariNoDownloads": {
     "message": "In Safari geht alles in die Bibliothek, nicht in Downloads"
   },
   "extensionReloaded": {
-    "message": "Archiver wurde aktualisiert. Bitte lade die Seite neu."
+    "message": "Archery wurde aktualisiert. Bitte lade die Seite neu."
   },
   "appZoneFailed": {
     "message": "Zone konnte nicht angelegt werden"
@@ -218,13 +218,13 @@
     "message": "Sichern"
   },
   "infoSaveText": {
-    "message": "Bild auf einer Webseite ziehen und auf einer Zone loslassen. Archiver holt die größte verfügbare Version."
+    "message": "Bild auf einer Webseite ziehen und auf einer Zone loslassen. Archery holt die größte verfügbare Version."
   },
   "infoStoreTitle": {
     "message": "Ablegen"
   },
   "infoStoreText": {
-    "message": "Mit der Archiver-App landet das Bild in deiner Bibliothek, sonst in einem Ordner in deinen Downloads."
+    "message": "Mit der Archery-App landet das Bild in deiner Bibliothek, sonst in einem Ordner in deinen Downloads."
   },
   "infoViewTitle": {
     "message": "Ansehen"
@@ -319,7 +319,7 @@
     "message": "Active Zones"
   },
   "openApp": {
-    "message": "Archiver öffnen"
+    "message": "Archery öffnen"
   },
   "openAppTitle": {
     "message": "Alles Weitere in der App: Zonen, Sortieren, Suche"

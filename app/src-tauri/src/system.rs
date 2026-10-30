@@ -128,7 +128,7 @@ pub fn apply(app: &AppHandle, prefs: &SystemPrefs) -> Result<(), String> {
 fn create_windows(app: &AppHandle) {
     use tauri::window::{Effect, EffectState, EffectsBuilder};
     let palette = WebviewWindowBuilder::new(app, PALETTE, WebviewUrl::App("palette.html".into()))
-        .title("Archiver")
+        .title("Archery")
         .inner_size(860.0, 620.0)
         .resizable(false)
         .decorations(false)
@@ -148,7 +148,7 @@ fn create_windows(app: &AppHandle) {
         }
     }
     let bar = WebviewWindowBuilder::new(app, DROPBAR, WebviewUrl::App("dropbar.html".into()))
-        .title("Archiver")
+        .title("Archery")
         .inner_size(1200.0, 280.0)
         .resizable(false)
         .decorations(false)

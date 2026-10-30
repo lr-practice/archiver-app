@@ -105,7 +105,7 @@ pub fn install_manifests() -> Vec<PathBuf> {
     let Ok(exe) = std::env::current_exe() else { return Vec::new() };
     let manifest = json!({
         "name": HOST_NAME,
-        "description": "Archiver",
+        "description": "Archery",
         "path": exe.to_string_lossy(),
         "type": "stdio",
         "allowed_origins": EXTENSION_IDS.iter().map(|id| format!("chrome-extension://{id}/")).collect::<Vec<_>>(),

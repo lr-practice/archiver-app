@@ -262,7 +262,7 @@ pub fn contact_sheet(title: &str, meta: &str, items: &[SheetItem], layout: Layou
         let meta_bytes = fit(meta, 9.0, page_w / 2.0 - MARGIN);
         content.extend_from_slice(format!("{GREY}\n").as_bytes());
         text_op(&mut content, "F1", 9.0, page_w - MARGIN - text_width(&meta_bytes, 9.0), page_h - MARGIN - 9.0, &meta_bytes);
-        text_op(&mut content, "F1", SMALL, MARGIN, MARGIN - 4.0, b"Archiver");
+        text_op(&mut content, "F1", SMALL, MARGIN, MARGIN - 4.0, b"Archery");
         let num: Vec<u8> = format!("{} / {}", p + 1, pages).into_bytes();
         text_op(&mut content, "F1", SMALL, page_w - MARGIN - text_width(&num, SMALL), MARGIN - 4.0, &num);
         content.extend_from_slice(b"0 g\n");
@@ -588,7 +588,7 @@ pub fn moodboard(title: &str, meta: &str, board: &Board) -> Vec<u8> {
     let meta_bytes = fit(meta, 9.0, page_w / 2.0 - MARGIN);
     content.extend_from_slice(format!("{dim}\n").as_bytes());
     text_op(&mut content, "F1", 9.0, page_w - MARGIN - text_width(&meta_bytes, 9.0), page_h - MARGIN - 9.0, &meta_bytes);
-    text_op(&mut content, "F1", SMALL, MARGIN, MARGIN - 4.0, b"Archiver");
+    text_op(&mut content, "F1", SMALL, MARGIN, MARGIN - 4.0, b"Archery");
 
     for b in &board.items {
         let w = (b.w.clamp(0.01, 1.0)) * aw;

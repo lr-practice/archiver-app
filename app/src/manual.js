@@ -5,7 +5,7 @@
 const MANUAL = {
   de: {
     title: "Handbuch",
-    lead: "Alles, was Archiver kann, an einem Ort. Jede Zone ist ein Ordner, die Bibliothek ein normaler Ordner auf dem Mac.",
+    lead: "Alles, was Archery kann, an einem Ort. Jede Zone ist ein Ordner, die Bibliothek ein normaler Ordner auf dem Mac.",
     sections: [
       {
         id: "prinzip",
@@ -16,15 +16,15 @@ const MANUAL = {
           { t: "Zone", d: "Jeder Ordner der obersten Ebene. Seine Unterordner erscheinen in der Zone als Ordnerkarten. Alles ohne Ziel landet in der Standard-Zone „Unsorted“. Sie entsteht mit jeder Bibliothek und steht als erste Zone vorn." },
           { t: "Active Zones", d: "Die vier Zonen, an denen du gerade arbeitest. Sie stehen überall gleich: oben in der Übersicht, in der Leiste beim Ziehen, in der Extension und im Tray. Eine Zone aus dem Index auf eine Active Zone ziehen tauscht beide.", k: ["1", "2", "3", "4"] },
           { t: "Objekte", d: "Bilder, Video, Audio, PDF, Textkarten und Notizen. Alles bleibt eine normale Datei im Finder." },
-          { t: "Quelle", d: "Zu jedem gesicherten Objekt merkt sich Archiver Seite, Titel und Bildadresse. „Quelle“ öffnet die Ursprungsseite, bei Textkarten an der zitierten Stelle." },
+          { t: "Quelle", d: "Zu jedem gesicherten Objekt merkt sich Archery Seite, Titel und Bildadresse. „Quelle“ öffnet die Ursprungsseite, bei Textkarten an der zitierten Stelle." },
         ],
       },
       {
         id: "app",
         title: "App",
-        lead: "Das Fenster schließen beendet Archiver nicht, es läuft für Tray und Zonenleiste weiter. `⌘Q` beendet.",
+        lead: "Das Fenster schließen beendet Archery nicht, es läuft für Tray und Zonenleiste weiter. `⌘Q` beendet.",
         rows: [
-          { t: "Übersicht", d: "Klick auf „Archiver“ führt hierhin. Oben die Active Zones, darunter alle Zonen als Karten, Vorschau oder Index. Rechtsklick auf eine Zone: Öffnen, Zur Active Zone machen, Als PDF ausgeben." },
+          { t: "Übersicht", d: "Klick auf „Archery“ führt hierhin. Oben die Active Zones, darunter alle Zonen als Karten, Vorschau oder Index. Rechtsklick auf eine Zone: Öffnen, Zur Active Zone machen, Als PDF ausgeben." },
           { t: "Zone", d: "Raster (quadratisch) oder Original (Seitenverhältnis). Rechts oben die Ordnerkarten, darunter Chips zum Filtern. Mosaik oder Abschnitte je Ordner; Objekte lassen sich von Abschnitt zu Abschnitt ziehen.", k: ["+", "−"] },
           { t: "Ordner", d: "Rechtsklick: „Neuer Unterordner“ oder „Neuer Unterordner mit Auswahl“. Objekte auf Ordnerkarten ziehen, Ordner in Ordner ziehen. Finder-Ordner ins Fenster ziehen wird Zone oder Unterordner.", k: ["esc", "⌘↑"] },
           { t: "Sortieren", d: "Objekte per Ziehen umsortieren oder in andere Zonen ablegen, per Rechtsklick „Ablegen in“ oder mit den Zifferntasten. Alles lässt sich mehrfach zurücknehmen.", k: ["1–4", "⌘Z"] },
@@ -32,7 +32,7 @@ const MANUAL = {
           { t: "Lightbox", d: "Objekt groß, mit Zoom, Player für Audio und Video und PDF seitenweise. Unten Zähler, Zoom, Info, Quelle und „Ablegen in“. Klick neben das Objekt schließt.", k: ["Space", "←", "→", "Z", "T"] },
           { t: "Details", d: "Seitenblatt mit Name, Maßen, Format, Quelle, Zone, Bildtext und Rechten.", k: ["⌘D", "I"] },
           { t: "Zuletzt gelöscht", d: "Gelöschtes bleibt 7 Tage in der Bibliothek und lässt sich wiederherstellen. Auch was 7 Tage in Unsorted liegt, kommt hierher, in jedem Ordner namens Unsorted, auch selbst angelegt (an oder aus unter Einstellungen › Bibliothek); die letzten zwei Tage zeigt das Objekt „noch n T.“. Danach geht es in den Papierkorb des Macs. Letzte Zeile im Index und im ≡-Menü.", k: ["⌫"] },
-          { t: "Dateinamen", d: "Einstellungen › Bibliothek › Dateinamen: ein Schema für einheitliche Namen, etwa Datum_Zone_Nr oder ein eigenes aus Bausteinen. Ab Werk bleibt jeder Name, wie er ist. Umbenannt wird nur, wenn du es selbst auslöst, nie beim Sichern. Auswahl, Rechtsklick „Umbenennen …“ (auch in der Lightbox und in geteilten Libraries), Liste alt → neu prüfen, einzelne Namen ändern, bestätigen. Uneinheitliche Namen wie IMG_… sind markiert. In den Details schlägt Archiver aus Seitentitel, Motiv und Farbe einen Namen vor; er gilt erst, wenn du ihn übernimmst." },
+          { t: "Dateinamen", d: "Einstellungen › Bibliothek › Dateinamen: ein Schema für einheitliche Namen, etwa Datum_Zone_Nr oder ein eigenes aus Bausteinen. Ab Werk bleibt jeder Name, wie er ist. Umbenannt wird nur, wenn du es selbst auslöst, nie beim Sichern. Auswahl, Rechtsklick „Umbenennen …“ (auch in der Lightbox und in geteilten Libraries), Liste alt → neu prüfen, einzelne Namen ändern, bestätigen. Uneinheitliche Namen wie IMG_… sind markiert. In den Details schlägt Archery aus Seitentitel, Motiv und Farbe einen Namen vor; er gilt erst, wenn du ihn übernimmst." },
           { t: "PDF", d: "Auswahl, Zone oder Suche als Kontaktbogen, Plakat oder Moodboard. 1 bis 16 pro Seite, A4 quer oder hoch.", k: ["⌘P"] },
           { t: "Kopieren und ziehen", d: "`⌘C` legt Bilddaten in die Zwischenablage, bei Textkarten Text und Bild. Objekte lassen sich aus Raster und Lightbox in jedes Programm ziehen.", k: ["⌘C"] },
           { t: "Einfügen", d: "`⌘V` legt die Zwischenablage in die offene Zone: Dateien aus dem Finder, kopierte Bilder und Screenshots, Text als Textkarte. Auf der Startseite landet es in Unsorted. Geht auch im Tray, wenn eine Zone offen ist.", k: ["⌘V"] },
@@ -52,17 +52,17 @@ const MANUAL = {
           { t: "Bild mit Text", d: "Bild und Text zusammen markieren und sichern: Das Bild wird gesichert, der Text wird sein Bildtext." },
           { t: "Mehrere Stellen", d: "Mit gedrückter `⌥` weiteren Text markieren oder Bilder anklicken, nochmal anklicken nimmt sie raus. Ein Zug in eine Zone sichert alles. Klick daneben oder `esc` hebt die Markierung auf. `⌘`-Klick bleibt beim Browser und öffnet Links im neuen Tab.", k: ["⌥"] },
           { t: "Links und Medien", d: "Links und Seiten werden Karten, PDF-, Video- und Audio-Links Dateien. YouTube und Vimeo als Video-Karte, Instagram-Karussells und Reels im Original. Die Adresse der offenen Seite in eine Zone gezogen sichert die ganze Seite offline hinter der Karte; „Gesichert“ in der Lightbox öffnet sie." },
-          { t: "Overlay", d: "Die Active Zones auf jeder Seite. „Archiver öffnen ↗“ führt in die App.", k: ["⌥⇧A"] },
+          { t: "Overlay", d: "Die Active Zones auf jeder Seite. „Archery öffnen ↗“ führt in die App.", k: ["⌥⇧A"] },
           { t: "Version", d: "Fehlt die Extension oder ist sie älter, als die App sie braucht, steht oben rechts ein Hinweis mit „(Laden)“. Den Stand zeigt Einstellungen › Mac & Browser." },
         ],
       },
       {
         id: "observer",
         title: "Observer",
-        lead: "Ein schlankes Fenster für Dateien aus dem Finder. Doppelklick oder „Öffnen mit › Archiver“ öffnet nur den Observer.",
+        lead: "Ein schlankes Fenster für Dateien aus dem Finder. Doppelklick oder „Öffnen mit › Archery“ öffnet nur den Observer.",
         rows: [
           { t: "Ansehen", d: "Blättert durch den Ordner. Zoom per Trackpad, `⌘` und Scrollen oder Doppelklick.", k: ["←", "→", "⌘0"] },
-          { t: "Sichern", d: "„● Archiver“ ist grau, solange die Datei nicht in der Bibliothek liegt. Klick öffnet „Ablegen in“. Blau heißt gesichert, Klick zeigt sie in der App.", k: ["1–4"] },
+          { t: "Sichern", d: "„● Archery“ ist grau, solange die Datei nicht in der Bibliothek liegt. Klick öffnet „Ablegen in“. Blau heißt gesichert, Klick zeigt sie in der App.", k: ["1–4"] },
           { t: "Info", d: "Maße, Größe, Format, Datum, Ordner und Zone.", k: ["I"] },
           { t: "Formate", d: "Bilder, PDF, Video und Audio. Unter Einstellungen › Mac & Browser je Format als Standard festlegen." },
         ],
@@ -70,7 +70,7 @@ const MANUAL = {
       {
         id: "tray",
         title: "Tray",
-        lead: "Archiver in jedem Programm, auch wenn das Fenster zu ist. `esc` bringt dich ins vorige Programm zurück.",
+        lead: "Archery in jedem Programm, auch wenn das Fenster zu ist. `esc` bringt dich ins vorige Programm zurück.",
         rows: [
           { t: "Öffnen", d: "Kürzel unter Einstellungen › Mac & Browser: `⌥ Space`, `⌃⌥ Space`, `⇧⌥ Space` oder aus.", k: ["⌥ Space"] },
           { t: "Finden", d: "Active Zones als Karten, Suche über Zonen und Objekte.", k: ["1–4", "⌘1–4"] },
@@ -128,7 +128,7 @@ const MANUAL = {
   },
   en: {
     title: "Manual",
-    lead: "Everything Archiver does, in one place. Each zone is a folder, the library a normal folder on your Mac.",
+    lead: "Everything Archery does, in one place. Each zone is a folder, the library a normal folder on your Mac.",
     sections: [
       {
         id: "prinzip",
@@ -139,15 +139,15 @@ const MANUAL = {
           { t: "Zone", d: "Every top-level folder. Its subfolders appear inside the zone as folder cards. Anything without a target goes to the default zone “Unsorted”. Every library gets it from the start, as the first zone." },
           { t: "Active Zones", d: "The four zones you are working on right now. They are the same everywhere: at the top of the overview, in the bar while dragging, in the extension and in the Tray. Dragging a zone from the index onto an Active Zone swaps them.", k: ["1", "2", "3", "4"] },
           { t: "Objects", d: "Images, video, audio, PDF, text cards and notes. Everything stays a normal file in the Finder." },
-          { t: "Source", d: "For every saved object Archiver keeps the page, its title and the image address. “Source” opens the original page, for text cards at the quoted passage." },
+          { t: "Source", d: "For every saved object Archery keeps the page, its title and the image address. “Source” opens the original page, for text cards at the quoted passage." },
         ],
       },
       {
         id: "app",
         title: "App",
-        lead: "Closing the window does not quit Archiver, it keeps running for the Tray and the zone bar. `⌘Q` quits.",
+        lead: "Closing the window does not quit Archery, it keeps running for the Tray and the zone bar. `⌘Q` quits.",
         rows: [
-          { t: "Overview", d: "Click “Archiver” to get here. Active Zones on top, all zones below as cards, preview or index. Right-click a zone: Open, Make Active Zone, Export as PDF." },
+          { t: "Overview", d: "Click “Archery” to get here. Active Zones on top, all zones below as cards, preview or index. Right-click a zone: Open, Make Active Zone, Export as PDF." },
           { t: "Zone", d: "Grid (square) or Original (aspect ratio). Folder cards top right, chips below to filter. Mosaic or sections per folder; drag items from one section to another.", k: ["+", "−"] },
           { t: "Folders", d: "Right-click: “New subfolder” or “New subfolder with selection”. Drag objects onto folder cards, folders into folders. A Finder folder dropped on the window becomes a zone or subfolder.", k: ["esc", "⌘↑"] },
           { t: "Sorting", d: "Drag objects to reorder or into other zones, right-click “Move to”, or use the number keys. Everything can be undone, step by step.", k: ["1–4", "⌘Z"] },
@@ -155,7 +155,7 @@ const MANUAL = {
           { t: "Lightbox", d: "The object large, with zoom, a player for audio and video and PDFs page by page. Below: counter, zoom, info, source and “Move to”. Click beside the object to close.", k: ["Space", "←", "→", "Z", "T"] },
           { t: "Details", d: "Side sheet with name, size, format, source, zone, caption and rights.", k: ["⌘D", "I"] },
           { t: "Recently deleted", d: "Deleted items stay in the library for 7 days and can be restored. Anything left in Unsorted for 7 days ends up here too, in any folder named Unsorted, including ones you made (on or off under Settings › Library); for the last two days the item shows “n d left”. After that they go to the Mac’s Trash. Last row of the index and in the ≡ menu.", k: ["⌫"] },
-          { t: "File names", d: "Settings › Library › File names: one scheme for consistent names, such as Date_Zone_No or your own from building blocks. By default every name stays as it is. Names only change when you trigger it yourself, never when saving. Select, right-click “Rename …” (also in the lightbox and in shared libraries), check the old → new list, change single names, confirm. Inconsistent names such as IMG_… are marked. In the details Archiver suggests a name from page title, subject and colour; it only applies once you accept it." },
+          { t: "File names", d: "Settings › Library › File names: one scheme for consistent names, such as Date_Zone_No or your own from building blocks. By default every name stays as it is. Names only change when you trigger it yourself, never when saving. Select, right-click “Rename …” (also in the lightbox and in shared libraries), check the old → new list, change single names, confirm. Inconsistent names such as IMG_… are marked. In the details Archery suggests a name from page title, subject and colour; it only applies once you accept it." },
           { t: "PDF", d: "Selection, zone or search as contact sheet, poster or moodboard. 1 to 16 per page, A4 landscape or portrait.", k: ["⌘P"] },
           { t: "Copy and drag", d: "`⌘C` puts image data on the clipboard, for text cards text and image. Drag objects from the grid or the lightbox into any program.", k: ["⌘C"] },
           { t: "Paste", d: "`⌘V` puts the clipboard into the open zone: files from the Finder, copied images and screenshots, text as a text card. On the start page it goes to Unsorted. Works in the Tray too while a zone is open.", k: ["⌘V"] },
@@ -175,25 +175,25 @@ const MANUAL = {
           { t: "Image with text", d: "Select an image together with text and save it: the image is saved, the text becomes its caption." },
           { t: "Several pieces", d: "Hold `⌥` to select more text or click images; click again to remove one. One drag into a zone saves everything. Click elsewhere or press `esc` to clear. `⌘`-click stays with the browser and opens links in a new tab.", k: ["⌥"] },
           { t: "Links and media", d: "Links and pages become cards, PDF, video and audio links become files. YouTube and Vimeo as video cards, Instagram carousels and reels in their original. Drag the address of the open page into a zone and the whole page is saved offline behind the card; “Saved page” in the lightbox opens it." },
-          { t: "Overlay", d: "The Active Zones on any page. “Open Archiver ↗” takes you to the app.", k: ["⌥⇧A"] },
+          { t: "Overlay", d: "The Active Zones on any page. “Open Archery ↗” takes you to the app.", k: ["⌥⇧A"] },
           { t: "Version", d: "If the extension is missing or older than the app needs, a note with “(Download)” appears at the top right. Settings › Mac & browser shows which version is connected." },
         ],
       },
       {
         id: "observer",
         title: "Observer",
-        lead: "A slim window for files from the Finder. Double-click or “Open With › Archiver” opens only the Observer.",
+        lead: "A slim window for files from the Finder. Double-click or “Open With › Archery” opens only the Observer.",
         rows: [
           { t: "View", d: "Pages through the folder. Zoom with the trackpad, `⌘` and scroll, or double-click.", k: ["←", "→", "⌘0"] },
-          { t: "Save", d: "“● Archiver” is grey while the file is not in the library. Click to open “Move to”. Blue means saved, click to show it in the app.", k: ["1–4"] },
+          { t: "Save", d: "“● Archery” is grey while the file is not in the library. Click to open “Move to”. Blue means saved, click to show it in the app.", k: ["1–4"] },
           { t: "Info", d: "Dimensions, size, format, date, folder and zone.", k: ["I"] },
-          { t: "Formats", d: "Images, PDF, video and audio. Set Archiver as default per format under Settings › Mac & browser." },
+          { t: "Formats", d: "Images, PDF, video and audio. Set Archery as default per format under Settings › Mac & browser." },
         ],
       },
       {
         id: "tray",
         title: "Tray",
-        lead: "Archiver in any program, even with the window closed. `esc` takes you back to the program before.",
+        lead: "Archery in any program, even with the window closed. `esc` takes you back to the program before.",
         rows: [
           { t: "Open", d: "Shortcut under Settings › Mac & browser: `⌥ Space`, `⌃⌥ Space`, `⇧⌥ Space` or off.", k: ["⌥ Space"] },
           { t: "Find", d: "Active Zones as cards, search across zones and objects.", k: ["1–4", "⌘1–4"] },

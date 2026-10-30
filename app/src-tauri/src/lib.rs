@@ -462,7 +462,7 @@ async fn start_info(app: AppHandle, state: State<'_, AppState>) -> Result<StartI
     Ok(StartInfo {
         library: state.library.lock().unwrap().as_ref().map(|l| l.root.to_string_lossy().into_owned()),
         pending: load_settings(&app).library.filter(|p| Path::new(p).is_dir()),
-        suggested_library: home.join("Archiver").to_string_lossy().into_owned(),
+        suggested_library: home.join("Archery").to_string_lossy().into_owned(),
         extension_export: export.is_file().then(|| export.to_string_lossy().into_owned()),
     })
 }
@@ -484,7 +484,7 @@ async fn pick_folder(app: AppHandle) -> Option<String> {
 
 #[tauri::command]
 async fn pick_export_file(app: AppHandle) -> Option<String> {
-    let mut dialog = app.dialog().file().add_filter("Archiver Export", &["json"]);
+    let mut dialog = app.dialog().file().add_filter("Archery Export", &["json"]);
     if let Some(dir) = dirs::download_dir() {
         dialog = dialog.set_directory(dir);
     }
@@ -904,7 +904,7 @@ async fn snapshot(state: State<'_, AppState>) -> Result<Snapshot, String> {
         let user = lib.user.lock().unwrap().clone();
         Ok(Snapshot {
             root: lib.root.to_string_lossy().into_owned(),
-            name: lib.root.file_name().and_then(|n| n.to_str()).unwrap_or("Archiver").to_string(),
+            name: lib.root.file_name().and_then(|n| n.to_str()).unwrap_or("Archery").to_string(),
             zones: lib.zones()?,
             items: lib.items()?,
             order: lib.item_order(),
@@ -1818,7 +1818,7 @@ pub fn run() {
             set_system_prefs,
         ])
         .build(tauri::generate_context!())
-        .expect("Archiver konnte nicht starten")
+        .expect("Archery konnte nicht starten")
         .run(|app, event| match event {
             // Bild aus dem Finder („Öffnen mit“ oder Doppelklick)
             #[cfg(any(target_os = "macos", target_os = "ios"))]

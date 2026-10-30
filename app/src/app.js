@@ -3181,7 +3181,7 @@
   // Name zum Testen (0.37.3): ersetzt den Schriftzug „Archiver“ in der
   // Navigation, auf Start- und Sperrbild, hier oben und im
   // Fenstertitel. Nur lokal, leer = Archiver.
-  const brandName = () => String(pref("brandName", "") || "").trim() || "Archiver";
+  const brandName = () => String(pref("brandName", "") || "").trim() || "Archery";
   function applyBrand() {
     const name = brandName();
     document.title = name;
@@ -3226,7 +3226,7 @@
     const meta = block(t("aboutApp"));
     const brand = el("input", "p-input note-field");
     brand.value = pref("brandName", "");
-    brand.placeholder = "Archiver";
+    brand.placeholder = "Archery";
     brand.spellcheck = false;
     brand.addEventListener("input", () => {
       setPref("brandName", brand.value.trim());
@@ -5623,7 +5623,7 @@
       imageUrl = lbRow(t("imageUrl"), link);
     }
     inner.appendChild(
-      lbBlock("Archiver", [
+      lbBlock("Archery", [
         lbRow(t("zone"), panel ? zoneSelect(item.zone, (zone) => moveSelection(zone)) : zoneLabel(item.zone)),
         subfolderOf(item) ? lbRow(t("subfolder"), subfolderOf(item).split("/").join(" / ")) : null,
         source || lbRow(t("source"), t("noSource")),
@@ -5917,7 +5917,7 @@
       if (item) invoke("open_web_archive", { hash: item.hash }).catch(fail);
     });
     const action = $("lbAction");
-    action.replaceChildren(el("span", "lb-dot"), el("span", "lb-action-zone", "Archiver"));
+    action.replaceChildren(el("span", "lb-dot"), el("span", "lb-action-zone", "Archery"));
     action.title = t("dropBar");
     action.addEventListener("click", () => ($("lbZones").hidden ? lbOpenZones() : lbCloseZones()));
     // 0.28: Klick neben das Objekt schließt (offene Zonen erst zuklappen, gezoomt nicht)
@@ -6840,7 +6840,7 @@
         body.style.setProperty("--gap-x", (P.gap / w) * 100 + "cqw");
         items.slice(p * per, p * per + per).forEach((item, k) => body.appendChild(pdfCell(item, p * per + k)));
         const foot = el("div", "pdf-foot");
-        foot.append(el("span", null, "Archiver"), el("span", null, `${p + 1} / ${Math.max(1, Math.ceil(items.length / per))}`));
+        foot.append(el("span", null, "Archery"), el("span", null, `${p + 1} / ${Math.max(1, Math.ceil(items.length / per))}`));
         page.append(head, body, foot);
         page.classList.toggle("no-captions", !opts.captions);
         page.classList.toggle("with-notes", opts.captions && opts.notes && !opts.poster);
@@ -6975,7 +6975,7 @@
       const area = el("div", "pdf-board");
       items.forEach((item) => area.appendChild(boardCell(item, area)));
       const foot = el("div", "pdf-foot");
-      foot.append(el("span", null, "Archiver"), el("span"));
+      foot.append(el("span", null, "Archery"), el("span"));
       page.append(head, area, foot);
       stage.replaceChildren(page);
       stage.classList.toggle("portrait", opts.portrait);
@@ -7085,7 +7085,7 @@
     async function run() {
       if (!items.length) return;
       const { cols, rows } = grid();
-      const name = (opts.title.replace(/[„“"]/g, "").replace(/[\/:*?<>|]+/g, " – ").trim() || "Archiver") + ".pdf";
+      const name = (opts.title.replace(/[„“"]/g, "").replace(/[\/:*?<>|]+/g, " – ").trim() || "Archery") + ".pdf";
       save.disabled = true;
       save.textContent = t("pdfWorking");
       try {

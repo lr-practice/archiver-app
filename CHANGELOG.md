@@ -1,5 +1,18 @@
 # Changelog
 
+## App 0.43.0 · Extension 3.31.0
+
+- Archiver heißt jetzt Archery: Schriftzug, Fenstertitel, Menü, alle Texte
+  (Deutsch und Englisch), Handbuch, PDF-Fußzeile, DMG und Update-Pakete.
+- Was intern bleibt, damit bestehende Libraries, Einstellungen und die
+  Verbindung zur Extension beim Update erhalten bleiben: Bundle-ID
+  `app.archiver.desktop`, Brücke `app.archiver.bridge`, der verborgene Ordner
+  `.archiver` in jeder Library, `Downloads/Archiver-Transfer`, die Protokolle
+  unter `~/Library/Logs/Archiver` und das Update-Repository Archiver-Releases.
+- Ein per Auto-Update aktualisiertes Programm behält den Dateinamen
+  `Archiver.app`, zeigt aber überall Archery. Wer neu aus dem DMG installiert,
+  bekommt `Archery.app` und löscht das alte `Archiver.app`.
+
 ## Extension 3.30.0
 
 - Markierter Text landet bei laufender App als Note (.md) statt als .txt in
