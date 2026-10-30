@@ -1113,10 +1113,11 @@
   }
 
   // Ecken wie in der App: Die Bibliothek meldet die Stufe (storage.local
-  // "appRadius", von background.js). Ohne App bleibt es bei „Rund“.
+  // "appRadius", von background.js). Ohne App gilt „Weich“ wie ab Werk in der App.
   function watchRadius(target) {
     const apply = (id) => {
-      if (id && id !== "round") target.dataset.radius = id;
+      id = id || "soft";
+      if (id !== "round") target.dataset.radius = id;
       else delete target.dataset.radius;
     };
     if (!chrome.storage || !chrome.storage.local) return;

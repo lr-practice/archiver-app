@@ -1,6 +1,6 @@
 # Archery – Design-System
 
-Stand: App 0.43.2 · Extension 3.31.0
+Stand: App 0.43.2 · Extension 3.31.1
 
 Diese Datei hält fest, wie Archery aussieht und warum. Sie gilt für die Mac-App
 (`app/src`) und die Extension (`extension/`, in Chrome und in Safari). Wer an der Oberfläche
@@ -129,12 +129,18 @@ Für die Typografie gilt:
   10, 14, 16 und 19 px. Diese Größen werden bei Gelegenheit auf die Stufen
   gezogen und nicht neu eingeführt.
 
+### 2.2a Schriftzug
+- „Archery“ als Schriftzug (Navigation, Startbild, Willkommen, Kopf unter
+  Information): das y steht in `<span class="wm-y">` mit `margin-left:
+  0.035em` (+35/1000 em, Brand Guideline › Logo). Gilt für jede Größe und
+  für Melange wie Geist. Fenstertitel und Fließtext bleiben ohne.
+
 ### 2.3 Form und Raum
 
 | Token | Wert | Zweck |
 |---|---|---|
 | `--r-lg` / `--r-md` / `--r-sm` | 8 / 6 / 5 px | Karten, Menüs, kleine Flächen |
-| Rundung „Eckig“ / „Weich“ / „Rund“ / „Sehr rund“ | `--r-lg` 0 / 4 / 8 / 14 px (`data-radius`) | Einstellung, keine weiteren Stufen. Gilt seit 0.30 auch in Tray, Zonenleiste und Extension (über die Bibliothek gemeldet). Ab Werk „Weich“ (0.40.4, vorher „Rund“); neue Entwürfe werden mit „Weich“ gestaltet (4 / 3 / 3 px) |
+| Rundung „Eckig“ / „Weich“ / „Rund“ / „Sehr rund“ | `--r-lg` 0 / 4 / 8 / 14 px (`data-radius`) | Einstellung, keine weiteren Stufen. Gilt seit 0.30 auch in Tray, Zonenleiste und Extension (über die Bibliothek gemeldet). Ab Werk „Weich“ (0.40.4, vorher „Rund“), seit Extension 3.31.1 auch in der Extension ohne App; neue Entwürfe werden mit „Weich“ gestaltet (4 / 3 / 3 px) |
 | Pille | 999 px | Navigation, Pillen |
 | Objekt (Bild) | 0 | Bilder bleiben rechteckig, wie das Original |
 | `--p-pad` | 40 px | Seitenrand |

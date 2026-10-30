@@ -7948,3 +7948,8 @@ html:root .lb-note-card .np-body {
 .lb-note .np-count {
   margin-right: auto;
 }
+
+/* Schriftzug „Archery“: das y steht 35/1000 em weiter weg (Brand Guideline, Logo) */
+.wm-y {
+  margin-left: 0.035em;
+}

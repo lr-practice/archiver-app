@@ -3164,7 +3164,9 @@
   // Info: Wortmarke mit Claim, dann Zahlen zur Sammlung und das Kleingedruckte
   function renderAbout() {
     const wrap = el("div", "p-sheet-inner p-about");
-    wrap.appendChild(headline("Archery", t("aboutClaim")));
+    const head = headline("Archer", t("aboutClaim"));
+    head.firstChild.appendChild(el("span", "wm-y", "y")); // Schriftzug: Abstand vor dem y (DESIGN 2.2a)
+    wrap.appendChild(head);
 
     const how = block(t("aboutHow"));
     for (const key of ["Collect", "Library", "Sort", "View", "Share", "Viewer"]) {

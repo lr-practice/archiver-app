@@ -1,6 +1,6 @@
 # Changelog
 
-## App 0.43.2
+## App 0.43.2 · Extension 3.31.1
 
 - Einstellungen › Labor ist weg. Zonenkarten laufen unten nicht mehr aus, die
   Video-Vorschau ist fest „Skim“. Drop-Feedback steht jetzt unter Darstellung.
@@ -13,6 +13,8 @@
   Bibliothek öffnet sich dann nicht. Das Feld „Dein Name“ heißt dort „Kürzel“,
   ohne eigenes gelten die Initialen des Benutzernamens.
 - Das Testfeld „Name“ unter Information ist entfernt.
+- Schriftzug „Archery“: das y steht 35/1000 em weiter weg.
+- Extension: Ohne App gelten die Ecken „Weich“ wie ab Werk in der App (vorher „Rund“).
 
 ## App 0.43.1
 
