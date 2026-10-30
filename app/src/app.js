@@ -94,21 +94,12 @@
     } catch {}
   }
 
-  // Labor (Einstellungen › Labor, 0.40.12): Varianten zum Ausprobieren, nur auf
-  // diesem Mac. fade = wie die kleinen Bilder einer Karte unten auslaufen
-  // (0.42.6, DESIGN 4.24b), video = Vorschau eines Videos beim Darüberfahren.
-  const LAB_FADE = ["off", "color", "blur"];
-  const LAB_VIDEO = ["flip", "skim", "play", "off"];
-  // 0.40.18: head = Mechanik des Seitenkopfs (01–14, DESIGN 4.24c), size = Größe
-  // S–XL, title/text = Farbe von Titel und Satz, font = Geist oder Melange.
+  // Drop-Feedback (Einstellungen › Darstellung, bis 0.43.1 im Labor): nur auf
+  // diesem Mac, dropfx.js liest archiver.lab selbst (DESIGN 4.24b).
   const LAB_DROPS = ["mini", "check", "ring", "count", "name", "after", "glow"];
   function lab() {
     const v = pref("lab", null) || {};
-    return {
-      fade: LAB_FADE.includes(v.fade) ? v.fade : "off",
-      video: LAB_VIDEO.includes(v.video) ? v.video : "flip",
-      drop: LAB_DROPS.includes(v.drop) ? v.drop : "mini",
-    };
+    return { drop: LAB_DROPS.includes(v.drop) ? v.drop : "mini" };
   }
   function setLab(patch) {
     setPref("lab", { ...lab(), ...patch });
@@ -120,8 +111,15 @@
   const FEATURES = ["rights", "package"]; // „notes“ (Feld Notiz) ist seit 0.30 Teil des Bildtexts
   function feat(id) {
     if (!FEATURES.includes(id)) return true;
-    return pref("feat." + id, true) !== false;
+    return studioOn() && pref("feat." + id, true) !== false;
   }
+
+  // Studio (0.43.2) ist ein eigenes Abo. Freigegeben über app_metadata.studio im
+  // Konto, das nur der Server setzen kann. In der Beta prüft das nur die
+  // Oberfläche, fest wird es mit der signierten Lizenz (H1).
+  const studioOn = () => !!account()?.studio;
+  // Geteilte Bibliothek ohne Studio: Sperre statt Bibliothek (applyLock)
+  const sharedBlocked = () => state.shared && !studioOn();
 
   // Seit 0.43.0 nur noch mit Konto, die alten Freischalt-Codes gelten nicht mehr.
   function isUnlocked() {
@@ -133,7 +131,7 @@
   const SUPABASE = "https://azaslhrsoziwasehynoe.supabase.co";
   const SUPABASE_KEY = "sb_publishable_wvcS4mzs6mqEC2Nc0wnNcQ_NPBlECfw";
 
-  // Angemeldet: { email, id, refresh, at } oder null
+  // Angemeldet: { email, id, refresh, at, studio, name } oder null
   function account() {
     const a = pref("account", null);
     return a && a.email ? a : null;
@@ -146,8 +144,67 @@
       body: JSON.stringify(body),
     });
     const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(data.msg || data.error_description || data.message || "HTTP " + res.status);
+    if (!res.ok) throw Object.assign(new Error(data.msg || data.error_description || data.message || "HTTP " + res.status), { status: res.status });
     return data;
+  }
+
+  // Nur im Speicher: zum Ändern des Benutzernamens (PUT /user)
+  let accessToken = null;
+
+  function saveSession(data, base) {
+    accessToken = data.access_token || null;
+    const u = data.user || {};
+    setPref("account", {
+      ...base,
+      email: u.email || base.email,
+      id: u.id || base.id || null,
+      refresh: data.refresh_token || base.refresh || null,
+      studio: u.app_metadata?.studio === true,
+      name: String(u.user_metadata?.username || ""),
+    });
+  }
+
+  // Beim Start und stündlich beim Server nachfragen: Ein gesperrtes oder
+  // gelöschtes Konto sperrt die App wieder, Studio und Name kommen von dort.
+  // Ohne Netz bleibt alles, wie es ist.
+  async function checkAccount() {
+    const a = account();
+    if (!a) return;
+    if (!a.refresh) return signOut();
+    try {
+      saveSession(await auth("token?grant_type=refresh_token", { refresh_token: a.refresh }), a);
+    } catch (e) {
+      if (e.status >= 400 && e.status < 500) signOut();
+      return;
+    }
+    applyLock();
+    renderZones();
+    if (state.page === "settings") renderPage(true);
+  }
+
+  async function setUsername(name) {
+    if (!accessToken) await checkAccount();
+    if (!accessToken) throw new Error(t("accountOffline"));
+    const res = await fetch(SUPABASE + "/auth/v1/user", {
+      method: "PUT",
+      headers: { apikey: SUPABASE_KEY, Authorization: "Bearer " + accessToken, "Content-Type": "application/json" },
+      body: JSON.stringify({ data: { username: name } }),
+    });
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    setPref("account", { ...account(), name });
+  }
+
+  // Abmelden: vergisst das Konto, danach steht die Sperre wie beim ersten Start da
+  function signOut() {
+    setPref("unlock", null);
+    setPref("account", null);
+    accessToken = null;
+    lockState.email = "";
+    $("lockList").replaceChildren();
+    state.settingsSub = null;
+    closePage();
+    applyLock();
+    renderZones();
   }
 
   const sendCode = (email) => auth("otp", { email, create_user: true });
@@ -155,17 +212,16 @@
   async function verifyCode(email, token) {
     const data = await auth("verify", { type: "email", email, token });
     setPref("unlock", null); // Übergang: mit Konto braucht es den alten Code nicht mehr
-    setPref("account", { email: data.user?.email || email, id: data.user?.id || null, refresh: data.refresh_token || null, at: Date.now() });
+    saveSession(data, { email, at: Date.now() });
   }
 
   function applyLock() {
-    // Vorschau „Anmelden“ (Einstellungen › Konto › Ansicht) zeigt die Sperre auch freigeschaltet
-    const preview = isUnlocked() && pref("accountPreview", null) === "login";
-    const locked = !isUnlocked() || preview;
-    $("lockEnd").hidden = !preview;
+    const shared = isUnlocked() && sharedBlocked();
+    const locked = !isUnlocked() || shared;
     document.body.classList.toggle("locked", locked);
     $("lock").hidden = !locked;
-    if (locked && !$("lockList").firstChild) renderLockForm("mail");
+    if (shared) renderLockForm("shared");
+    else if (locked && (!$("lockList").firstChild || lockState.step === "shared")) renderLockForm("mail");
   }
 
   // Sperre als Liste: "mail" (E-Mail eingeben), "code" (Code aus der Mail), "beta" (Freischalt-Code)
@@ -174,11 +230,13 @@
   // ein einziges Feld in Satzgröße auf einer Linie, rechts ein runder Pfeil.
   // Zwei Schritte: "mail" (E-Mail) und "code" (Code aus der Mail).
   function renderLockForm(step) {
+    lockState.step = step;
     const form = $("lockList");
     const foot = $("lockGo");
     form.replaceChildren();
     foot.replaceChildren();
     form.onsubmit = null;
+    form.hidden = step === "shared";
     form.classList.remove("wrong");
     const input = el("input", "p-lock-input");
     input.spellcheck = false;
@@ -196,6 +254,25 @@
       form.classList.add("wrong");
       go.disabled = false;
     };
+
+    // Geteilte Bibliothek ohne Studio (0.43.2): nur eine andere Bibliothek wählen
+    if (step === "shared") {
+      $("lockTitle").textContent = t("lockSharedTitle");
+      $("lockText").textContent = t("lockSharedText");
+      foot.append(
+        link(t("lockSharedPick"), async () => {
+          const path = await invoke("pick_folder");
+          if (!path) return;
+          try {
+            await invoke("open_library", { path });
+            await afterLibrarySwitch();
+          } catch (e) {
+            libraryFail(e);
+          }
+        })
+      );
+      return;
+    }
 
     if (step === "code") {
       $("lockTitle").textContent = t("lockCodeTitle");
@@ -216,7 +293,6 @@
         status.textContent = t("lockChecking");
         try {
           await verifyCode(lockState.email, token);
-          setPref("accountPreview", "beta");
           applyLock();
           if (state.page) renderPage(true);
           toast(t("lockWelcome", { email: lockState.email }));
@@ -577,6 +653,7 @@
     state.byPath = new Map(snap.items.map((i) => [i.path, i]));
     state.order = snap.order || {};
     state.shared = !!snap.shared;
+    applyLock();
     state.inboxSeen = snap.inboxSeen || {};
     state.expireZone = snap.expireZone === undefined ? "Unsorted" : snap.expireZone;
     state.structure = snap.structure || { depth: 2, skip: [], subzones: false };
@@ -1522,36 +1599,11 @@
 
   function renderHome() {
     const wrap = el("div", "p-page p-home p-home-" + state.home);
-    // Vorschau Lese-Modus (Einstellungen › Konto): Satz und Liste, was geht und was ruht
-    const reading = accountView() === "read";
-    if (reading) {
-      const read = el("div", "p-group p-read");
-      read.append(
-        say(t("readTitle"), t("readText")),
-        groupLabel("(" + t("accountReadMode") + ")"),
-        list([
-          [t("readRowRead"), t("readRowReadValue"), "●"],
-          [t("readRowSearch"), t("readRowSearchValue"), "●"],
-          [t("readRowSave"), t("readPaused"), "○"],
-          ["Extension", t("readPaused"), "○"],
-        ])
-      );
-      wrap.appendChild(read);
-    } else wrap.appendChild(
-      // 0.40.10: „Übersicht“ in voller Farbe, darunter die Zahlen gedimmt (56 px)
-      homeHero()
-    );
+    // 0.40.10: „Übersicht“ in voller Farbe, darunter die Zahlen gedimmt (56 px)
+    wrap.appendChild(homeHero());
 
     const bar = el("div", "p-bar");
     bar.appendChild(mono(t("allZonesLabel") + " (" + state.zones.length + ")", "strong"));
-    if (reading)
-      bar.appendChild(
-        chip("(" + t("readEnd") + ")", false, () => {
-          setPref("accountPreview", "beta");
-          renderZones();
-          if (state.page === "settings") renderPage(true);
-        })
-      );
     bar.appendChild(el("span", "p-flex"));
     for (const [id, label] of [
       ["overview", "layoutOverview"],
@@ -2057,11 +2109,10 @@
 
   // Kartenfläche (0.42.6): kleine Bilder wie in den Index-Zeilen über die volle
   // Breite. Mit eigenem Titelbild steht es groß, darunter eine Reihe der ersten
-  // Bilder (Entwurf J). Labor › Ausblenden lässt die späteren unten auslaufen.
+  // Bilder (Entwurf J). Seit 0.43.2 ohne Auslaufen (Labor entfernt).
   function thumbCover(zone, items) {
     const own = coverItem(zone.path, items);
-    const fade = lab().fade;
-    const cover = el("div", "p-card-cover p-thumb-cover" + (own ? " has-own" : fade !== "off" ? " fade-" + fade : ""));
+    const cover = el("div", "p-card-cover p-thumb-cover" + (own ? " has-own" : ""));
     if (own) {
       const big = el("div", "p-cover-big");
       big.appendChild(previewImg(own));
@@ -2071,19 +2122,9 @@
     } else if (items.length) {
       const strip = thumbStrip(items, 48);
       cover.appendChild(strip);
-      if (fade !== "off") cutWatch.observe(strip);
     } else cover.classList.add("empty");
     return cover;
   }
-  // Ausblenden nur bei abgeschnittener letzter Reihe, sonst liegt Blur oder
-  // Verlauf über leerer Fläche (Kante, Farbschein)
-  const cutWatch = new ResizeObserver((entries) => {
-    for (const { target } of entries) {
-      if (!target.isConnected) cutWatch.unobserve(target);
-      else target.parentElement.classList.toggle("cut", target.scrollHeight > target.clientHeight + 1);
-    }
-  });
-
   function thumbStrip(items, max) {
     const box = el("div", "p-sheet-thumbs p-card-thumbs");
     for (const item of items.slice(0, max)) {
@@ -2450,10 +2491,10 @@
   // Zeile am Griff ziehen: wandert live mit, beim Loslassen wird gespeichert
   // Einstellungen: oben das Konto, darunter eine ruhige Liste der Bereiche, jeder öffnet sein Untermenü.
   // 0.40.8: aus zehn Bereichen werden fünf, Version und Updates stehen unter „App“
-  const SETTINGS_SECTIONS = ["library", "display", "mac", "studio", "app", "lab"];
+  const SETTINGS_SECTIONS = ["library", "display", "mac", "app"];
 
   function sectionTitle(id) {
-    return t({ account: "setAccount", library: "setLibrary", display: "setSecDisplay", mac: isMac ? "setSecMac" : "setExtension", studio: "setStudio", app: "setSecApp", lab: "setSecLab" }[id]);
+    return t({ account: "setAccount", library: "setLibrary", display: "setSecDisplay", mac: isMac ? "setSecMac" : "setExtension", studio: "setStudio", app: "setSecApp" }[id]);
   }
 
   function sectionSummary(id) {
@@ -2475,12 +2516,9 @@
       return (p.shortcut ? (key && key[1]) || p.shortcut : t("setOff")) + " · " + t("setExtensionSummary");
     }
     if (id === "studio") {
+      if (!studioOn()) return t("setStudioLocked");
       const on = FEATURES.filter(feat).length;
       return on + " / " + FEATURES.length + (state.shared ? " · " + t("featSharedOn") : "");
-    }
-    if (id === "lab") {
-      const l = lab();
-      return t("labCard") + " " + l.card + " · " + t("labVideo_" + l.video);
     }
     return (state.appVersion ? state.appVersion + " · " : "") + (lang === "de" ? "Deutsch" : "English");
   }
@@ -2571,14 +2609,19 @@
       wrap.appendChild(headline(t("settings"), t("settingsText")));
       wrap.appendChild(accountCard());
       const list = el("section", "p-block p-settings-nav");
-      for (const id of SETTINGS_SECTIONS) {
+      const link = (id, into) => {
         const row = button("p-settings-link", null, () => openSettingsSection(id));
         row.appendChild(el("span", "p-settings-link-title", sectionTitle(id)));
         row.appendChild(el("span", "p-settings-link-sum", sectionSummary(id)));
         row.appendChild(el("span", "p-settings-link-arrow", "›"));
-        list.appendChild(row);
-      }
+        into.appendChild(row);
+      };
+      for (const id of SETTINGS_SECTIONS) link(id, list);
       wrap.appendChild(list);
+      // Studio (0.43.2): eigenes Abo, abgesetzt unter den Bereichen
+      const studio = el("section", "p-block p-settings-nav");
+      link("studio", studio);
+      wrap.appendChild(studio);
       return wrap;
     }
     wrap.appendChild(button("p-settings-back", "‹ " + t("settings"), () => openSettingsSection(null)));
@@ -2714,6 +2757,21 @@
       );
       wrap.appendChild(look);
       wrap.appendChild(renderGlassSettings());
+      // Ablegen in der App und in der Zonenleiste am ganzen Mac (4.13); die Leiste liest archiver.lab
+      const drops = block(t("labDrops"));
+      drops.appendChild(blockRow(el("div", "p-block-text", t("labDropsText"))));
+      const cur = lab();
+      // sieben Varianten in zwei Reihen, sonst passt die Zeile nicht ins Blatt
+      for (const [i, part] of [LAB_DROPS.slice(0, 4), LAB_DROPS.slice(4)].entries()) {
+        drops.appendChild(
+          blockRow(i ? "" : t("labDrop"), choice(part.map((id) => [id, t("labDrop_" + id)]), cur.drop, (id) => {
+            setLab({ drop: id });
+            rerender();
+          }))
+        );
+      }
+      drops.appendChild(blockRow(el("div", "p-block-text", t("labDropText_" + cur.drop))));
+      wrap.appendChild(drops);
 
     // Start: Öffnung und Startton gehören zum selben Moment
       const open = block(t("setSecStart"));
@@ -2793,44 +2851,6 @@
 
     if (sub === "studio") renderStudioSettings(wrap, rerender);
 
-    // Labor: Varianten umschalten und gleich in der App ansehen
-    if (sub === "lab") {
-      wrap.appendChild(el("p", "p-block-hint p-studio-lead", t("labText")));
-      const cur = lab();
-      const cards = block(t("labCards"));
-      cards.appendChild(blockRow(el("div", "p-block-text", t("labCardsText"))));
-      cards.appendChild(
-        blockRow(t("labFade"), choice(LAB_FADE.map((id) => [id, t("labFade_" + id)]), cur.fade, (id) => {
-          setLab({ fade: id });
-          rerender();
-        }))
-      );
-      wrap.appendChild(cards);
-      const video = block(t("labVideos"));
-      video.appendChild(blockRow(el("div", "p-block-text", t("labVideosText"))));
-      video.appendChild(
-        blockRow(t("labVideo"), choice(LAB_VIDEO.map((id) => [id, t("labVideo_" + id)]), cur.video, (id) => {
-          setLab({ video: id });
-          rerender();
-        }))
-      );
-      wrap.appendChild(video);
-      // Ablegen in der Zonenleiste am ganzen Mac (4.13); die Leiste liest archiver.lab
-      const drops = block(t("labDrops"));
-      drops.appendChild(blockRow(el("div", "p-block-text", t("labDropsText"))));
-      // sieben Varianten in zwei Reihen, sonst passt die Zeile nicht ins Blatt
-      for (const [i, part] of [LAB_DROPS.slice(0, 4), LAB_DROPS.slice(4)].entries()) {
-        drops.appendChild(
-          blockRow(i ? "" : t("labDrop"), choice(part.map((id) => [id, t("labDrop_" + id)]), cur.drop, (id) => {
-            setLab({ drop: id });
-            rerender();
-          }))
-        );
-      }
-      drops.appendChild(blockRow(el("div", "p-block-text", t("labDropText_" + cur.drop))));
-      wrap.appendChild(drops);
-    }
-
     // App: Version und Updates, Sprache, Feedback, Tasten
     if (sub === "app") {
       for (const b of renderVersion()) wrap.appendChild(b);
@@ -2876,6 +2896,19 @@
   // Studio: Schalter je Funktion, dazu Name und geteilte Bibliothek
   function renderStudioSettings(wrap, rerender) {
     wrap.appendChild(el("p", "p-block-hint p-studio-lead", t("setStudioText")));
+    // Ohne Studio-Abo: nur zeigen, was dazugehört
+    if (!studioOn()) {
+      const what = block(t("featTools"));
+      what.appendChild(blockRow(el("div", "p-block-text", t("setStudioLockedText"))));
+      for (const [title, text] of [
+        ["featRights", "featRightsText"],
+        ["featPackage", "featPackageText"],
+        ["featShared", "featSharedText"],
+      ])
+        what.appendChild(blockRow([el("div", null, t(title)), el("div", "p-block-text dim", t(text))]));
+      wrap.appendChild(what);
+      return;
+    }
     const tools = block(t("featTools"));
     for (const [id, title, text] of [
       ["rights", "featRights", "featRightsText"],
@@ -2899,7 +2932,9 @@
     team.appendChild(blockRow(el("div", "p-block-text", t("featSharedText"))));
     const name = el("input", "p-input note-field");
     name.value = state.user || "";
-    name.placeholder = t("featUserPlaceholder");
+    // Kürzel (0.43.2): ohne eigene Angabe die Initialen des Benutzernamens
+    const initials = account()?.name ? monogram(account().name) : "";
+    name.placeholder = initials || t("featUserPlaceholder");
     name.spellcheck = false;
     const saveName = () => {
       const v = name.value.trim();
@@ -2919,7 +2954,7 @@
         choice([["off", t("featSharedOff")], ["on", t("featSharedOn")]], state.shared ? "on" : "off", async (v) => {
           const shared = v === "on";
           if (shared === state.shared) return;
-          const user = name.value.trim();
+          const user = name.value.trim() || initials;
           if (shared && !user) {
             name.focus();
             return toast(t("featSharedNeedsName"), false);
@@ -3013,26 +3048,10 @@
   }
 
   // Vorschau: "beta" (heute), "subscriber" (Jahresabo aktiv) oder "read" (ohne Abo)
-  function accountView() {
-    const v = pref("accountPreview", null);
-    if (["beta", "subscriber", "read", "login"].includes(v)) return v;
-    return pref("readPreview", false) ? "read" : "beta"; // 0.40.4 kannte nur den Lese-Modus
-  }
-
-  function accountUntil() {
-    const d = new Date();
-    d.setFullYear(d.getFullYear() + 1);
-    return d.toLocaleDateString(lang === "de" ? "de-DE" : "en-GB", { day: "numeric", month: "long", year: "numeric" });
-  }
-
+  // Seit 0.43.2 ohne Vorschau: angemeldet heißt Beta, Abo und Lese-Modus kommen mit der Lizenz
   function accountCard() {
-    const view = accountView() === "login" ? "beta" : accountView();
     const open = () => openSettingsSection("account");
-    const rows = {
-      beta: [[t("accountStatus"), t("accountBonus"), "›"], [t("accountAfter"), t("accountAfterBeta")]],
-      subscriber: [[t("accountStatus"), t("accountStatusSub"), "›"], [t("accountRunsUntil"), accountUntil()]],
-      read: [[t("accountStatus"), t("accountNone"), "›"], [t("accountAfter"), t("accountReadMode")]],
-    }[view];
+    const rows = [[t("accountStatus"), t("accountBonus"), "›"], [t("accountAfter"), t("accountAfterBeta")]];
     const card = el("div", "p-group p-account");
     card.append(groupLabel("(" + t("setAccount") + ")", account()?.email || ""), list(rows, open));
     return card;
@@ -3040,9 +3059,6 @@
 
   // Kopf von Einstellungen › Konto: Zustand als Satz
   function accountSay() {
-    const view = accountView() === "login" ? "beta" : accountView();
-    if (view === "subscriber") return say(t("accountActive"), t("accountUntil", { date: accountUntil() }));
-    if (view === "read") return say(t("accountNoneTitle"), t("readText"));
     return say(t("accountBonus") + ".", t("accountBonusText"));
   }
 
@@ -3056,49 +3072,32 @@
       const me = block(t("setAccount"));
       const since = new Date(acc.at).toLocaleDateString(lang === "de" ? "de-DE" : "en-GB", { day: "numeric", month: "long", year: "numeric" });
       me.appendChild(blockRow(t("accountMail"), acc.email));
+      // Benutzername (0.43.2): liegt im Konto bei Supabase, gleich auf jedem Mac
+      const name = el("input", "p-input note-field");
+      name.value = acc.name || "";
+      name.placeholder = t("accountNamePlaceholder");
+      name.spellcheck = false;
+      name.addEventListener("blur", () => {
+        const v = name.value.trim();
+        if (v === (account()?.name || "")) return;
+        setUsername(v)
+          .then(() => toast(t("accountNameSaved")))
+          .catch((e) => {
+            name.value = account()?.name || "";
+            fail(e);
+          });
+      });
+      name.addEventListener("keydown", (e) => {
+        e.stopPropagation();
+        if (e.key === "Enter" || e.key === "Escape") name.blur();
+      });
+      me.appendChild(blockRow(t("accountName"), name));
       me.appendChild(blockRow(t("accountSince"), since));
+      me.appendChild(blockRow(t("setStudio"), t(studioOn() ? "accountStudioOn" : "accountStudioSoon")));
       frag.appendChild(me);
     }
-    if (accountView() === "subscriber") {
-      const sub = block(t("accountSub"));
-      const now = new Date().toLocaleTimeString(lang === "de" ? "de-DE" : "en-GB", { hour: "2-digit", minute: "2-digit" });
-      sub.appendChild(blockRow(t("accountPlan"), t("accountPlanYear")));
-      sub.appendChild(blockRow(t("accountDevices"), t("accountDevicesValue")));
-      sub.appendChild(blockRow(t("accountBilling"), t("accountBillingValue")));
-      sub.appendChild(blockRow(t("accountChecked"), t("accountCheckedValue", { time: now })));
-      frag.appendChild(sub);
-    }
-    const preview = block(t("accountPreview"));
-    preview.appendChild(
-      blockRow(
-        t("accountView"),
-        choice(
-          [["beta", "Beta"], ["subscriber", t("accountViewSub")], ["read", t("accountReadMode")], ["login", t("accountViewLogin")]],
-          accountView(),
-          (id) => {
-            setPref("accountPreview", id);
-            applyLock();
-            renderZones();
-            renderPage(true);
-          }
-        )
-      )
-    );
-    preview.appendChild(el("p", "p-block-hint", t("accountReadModeText")));
-    frag.appendChild(preview);
-    // Abmelden: vergisst das Konto, danach steht die Sperre wie beim ersten Start da
     if (isUnlocked()) {
-      const out = button("p-link p-account-out", t("accountSignOut"), () => {
-        setPref("unlock", null);
-        setPref("account", null);
-        setPref("accountPreview", "beta");
-        lockState.email = "";
-        $("lockList").replaceChildren();
-        state.settingsSub = null;
-        closePage();
-        applyLock();
-        renderZones();
-      });
+      const out = button("p-link p-account-out", t("accountSignOut"), signOut);
       frag.appendChild(out);
       frag.appendChild(el("p", "p-block-hint", t("accountSignOutText")));
     }
@@ -3162,23 +3161,10 @@
     invoke("play_startup_sound", { volume: pref("startSoundVolume", 0.35) }).catch(() => {});
   }
 
-  // Name zum Testen (0.37.3): ersetzt den Schriftzug „Archiver“ in der
-  // Navigation, auf Start- und Sperrbild, hier oben und im
-  // Fenstertitel. Nur lokal, leer = Archiver.
-  const brandName = () => String(pref("brandName", "") || "").trim() || "Archery";
-  function applyBrand() {
-    const name = brandName();
-    document.title = name;
-    for (const node of [$("navBrand"), document.querySelector(".splash-word"), document.querySelector(".p-lock-mark")])
-      if (node) node.textContent = name;
-    const head = document.querySelector(".p-about .p-head-title");
-    if (head) head.textContent = name;
-  }
-
   // Info: Wortmarke mit Claim, dann Zahlen zur Sammlung und das Kleingedruckte
   function renderAbout() {
     const wrap = el("div", "p-sheet-inner p-about");
-    wrap.appendChild(headline(brandName(), t("aboutClaim")));
+    wrap.appendChild(headline("Archery", t("aboutClaim")));
 
     const how = block(t("aboutHow"));
     for (const key of ["Collect", "Library", "Sort", "View", "Share", "Viewer"]) {
@@ -3208,19 +3194,6 @@
     wrap.appendChild(stats);
 
     const meta = block(t("aboutApp"));
-    const brand = el("input", "p-input note-field");
-    brand.value = pref("brandName", "");
-    brand.placeholder = "Archery";
-    brand.spellcheck = false;
-    brand.addEventListener("input", () => {
-      setPref("brandName", brand.value.trim());
-      applyBrand();
-    });
-    brand.addEventListener("keydown", (e) => {
-      e.stopPropagation();
-      if (e.key === "Enter" || e.key === "Escape") brand.blur();
-    });
-    meta.appendChild(blockRow([el("div", null, t("aboutBrand")), el("div", "p-block-text dim", t("aboutBrandText"))], brand));
     meta.appendChild(blockRow(t("setLibrary"), pathEl(state.root)));
     meta.appendChild(blockRow(t("aboutFont"), "SIL OFL"));
     wrap.appendChild(meta);
@@ -4050,18 +4023,11 @@
     return card;
   }
 
-  // Kurzversion eines Videos: acht Standbilder aus dem ganzen Clip, nacheinander
-  // (wie ein Daumenkino), solange der Zeiger auf der Karte liegt. Ohne Ton.
-  const SCRUB_FRAMES = 8;
-  const SCRUB_MS = 320;
-  // Labor: „skim“ folgt der Maus waagerecht durch den Clip, „play“ spielt ihn stumm ab.
+  // Video-Vorschau (Skim, fest seit 0.43.2): solange der Zeiger auf der Karte
+  // liegt, folgt die Zeit im Clip der Maus waagerecht. Ohne Ton.
   function videoScrub(card) {
     const item = state.byPath.get(card.dataset.path);
     if (!item || kindOf(item) !== "video" || card.querySelector(".card-scrub")) return;
-    const mode = lab().video;
-    if (mode === "off") return;
-    if (mode !== "skim" && matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-    let timer = 0;
     let video = null;
     let lastX = 0.5;
     const track = (e) => {
@@ -4069,10 +4035,8 @@
       lastX = Math.min(0.999, Math.max(0, (e.clientX - r.left) / r.width));
       if (video && isFinite(video.duration) && video.duration > 0) video.currentTime = lastX * video.duration;
     };
-    if (mode === "skim") card.addEventListener("pointermove", track);
+    card.addEventListener("pointermove", track);
     const stop = () => {
-      clearTimeout(timer);
-      clearInterval(timer);
       card.removeEventListener("pointerleave", stop);
       card.removeEventListener("pointermove", track);
       if (video) {
@@ -4082,41 +4046,20 @@
       }
     };
     card.addEventListener("pointerleave", stop);
-    // kurz verweilen, damit Überfahren keine Videos lädt
-    timer = setTimeout(() => {
-      video = document.createElement("video");
-      video.className = "card-scrub";
-      video.muted = true;
-      video.playsInline = true;
-      video.preload = "auto";
-      video.src = fileSrc(item.abs);
-      card.appendChild(video);
-      let k = 0;
-      let at = [];
-      const step = () => {
-        if (!at.length) return;
-        video.currentTime = at[k++ % at.length];
-      };
-      video.addEventListener("loadedmetadata", () => {
-        const d = video.duration;
-        if (!isFinite(d) || d <= 0) return stop();
-        if (mode === "skim") {
-          video.currentTime = lastX * d;
-          return;
-        }
-        if (mode === "play") {
-          video.loop = true;
-          video.addEventListener("playing", () => video.classList.add("on"), { once: true });
-          video.play().catch(stop);
-          return;
-        }
-        at = Array.from({ length: SCRUB_FRAMES }, (_, i) => ((i + 0.5) / SCRUB_FRAMES) * d);
-        step();
-        timer = setInterval(step, SCRUB_MS);
-      });
-      video.addEventListener("seeked", () => video.classList.add("on"), { once: true });
-      video.addEventListener("error", stop);
-    }, mode === "skim" ? 0 : 250);
+    video = document.createElement("video");
+    video.className = "card-scrub";
+    video.muted = true;
+    video.playsInline = true;
+    video.preload = "auto";
+    video.src = fileSrc(item.abs);
+    card.appendChild(video);
+    video.addEventListener("loadedmetadata", () => {
+      const d = video.duration;
+      if (!isFinite(d) || d <= 0) return stop();
+      video.currentTime = lastX * d;
+    });
+    video.addEventListener("seeked", () => video.classList.add("on"), { once: true });
+    video.addEventListener("error", stop);
   }
 
   function setFocus(path) {
@@ -7790,12 +7733,6 @@
   // ---- Ereignisse ----
 
   function bindEvents() {
-    $("lockEnd").textContent = "(" + t("readEnd") + ")";
-    $("lockEnd").addEventListener("click", () => {
-      setPref("accountPreview", "beta");
-      applyLock();
-      if (state.page) renderPage(true);
-    });
     $("libTabBtn").addEventListener("click", (e) => {
       e.stopPropagation();
       openLibMenu();
@@ -8662,7 +8599,6 @@
     });
 
   async function boot() {
-    applyBrand();
     bindEvents();
     TAURI.event.listen("library-changed", debounce(refresh, 120));
     // Fehler im Hintergrund (Einlesen, Ordner nicht lesbar) und vergessene
@@ -8695,6 +8631,8 @@
       await showApp();
     } else showWelcome(info);
     hideSplash();
+    checkAccount();
+    setInterval(checkAccount, 60 * 60 * 1000);
     setTimeout(checkUpdate, 3000);
     setTimeout(checkExtension, 6000);
     // Auch im laufenden Betrieb: alle 30 Minuten und wenn das Fenster wieder nach vorne kommt

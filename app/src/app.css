@@ -7350,16 +7350,6 @@ button.p-list:hover {
   content: "→";
 }
 
-/* Lese-Modus (Vorschau): Satz und eine kurze Liste, was geht und was ruht */
-.p-read {
-  width: min(560px, 100%);
-  margin-bottom: 28px;
-}
-
-.p-read .p-say {
-  margin-bottom: 8px;
-}
-
 /* Kopf der Seiten (Übersicht, Zone, Alle Objekte): so groß wie der Satz in 4.26 */
 .p-page .p-head {
   max-width: 22em;
@@ -7379,15 +7369,6 @@ button.p-list:hover {
 
 .p-lock-inner .p-say {
   margin-bottom: 28px;
-}
-
-.p-lock-preview {
-  align-self: flex-end;
-  margin-bottom: 18px;
-  font-family: var(--p-mono);
-  font-size: 11px;
-  letter-spacing: 0.02em;
-  text-transform: uppercase;
 }
 
 .p-lock-line {
@@ -7866,29 +7847,6 @@ html:not(.light) .p-card:not(.p-new):not(:hover):not(.drop-target) { background:
 .p-card-thumbs .text-sheet.mini {
   padding: 9%;
 }
-/* Ausblenden nur, wenn die Bilder unten abgeschnitten sind (.cut, app.js) */
-.fade-color.cut .p-card-thumbs {
-  -webkit-mask-image: linear-gradient(to bottom, #000 35%, transparent 100%);
-  mask-image: linear-gradient(to bottom, #000 35%, transparent 100%);
-}
-/* unter dem Blur laufen die Bilder ganz unten aus, sonst bleibt am Rand der
-   Bildfläche eine harte Kante */
-.fade-blur.cut .p-card-thumbs {
-  -webkit-mask-image: linear-gradient(to bottom, #000 60%, transparent 90%);
-  mask-image: linear-gradient(to bottom, #000 60%, transparent 90%);
-}
-.fade-blur.cut::after {
-  content: "";
-  position: absolute;
-  inset: auto 0 0;
-  height: 45%;
-  -webkit-backdrop-filter: blur(14px);
-  backdrop-filter: blur(14px);
-  -webkit-mask-image: linear-gradient(to bottom, transparent, #000 50%, #000 80%, transparent);
-  mask-image: linear-gradient(to bottom, transparent, #000 50%, #000 80%, transparent);
-  pointer-events: none;
-}
-
 /* ---- 0.42.6: Note als eine Funktion ----
    Punkt im Raster 14 px (Bildtext oder Note). Verknüpfte stehen in voller Höhe
    24 px rechts neben dem Blatt, „+“ als Rahmen 44 px. Höhe setzt app.js

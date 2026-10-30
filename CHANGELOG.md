@@ -1,5 +1,19 @@
 # Changelog
 
+## App 0.43.2
+
+- Einstellungen › Labor ist weg. Zonenkarten laufen unten nicht mehr aus, die
+  Video-Vorschau ist fest „Skim“. Drop-Feedback steht jetzt unter Darstellung.
+- Konto abgeriegelt: Der Umschalter Beta / Abonnent / Lese-Modus / Anmelden
+  ist entfernt. Beim Start und stündlich prüft die App die Anmeldung beim
+  Server; ein gesperrtes oder gelöschtes Konto ist danach abgemeldet.
+- Benutzername im Konto, gespeichert im Konto selbst (gleich auf jedem Mac).
+- Studio ist ein eigenes Abo und steht abgesetzt unten in den Einstellungen.
+  Ohne Freigabe sind Rechte, Paket und geteilte Bibliothek aus; eine geteilte
+  Bibliothek öffnet sich dann nicht. Das Feld „Dein Name“ heißt dort „Kürzel“,
+  ohne eigenes gelten die Initialen des Benutzernamens.
+- Das Testfeld „Name“ unter Information ist entfernt.
+
 ## App 0.43.1
 
 - rustls und webpki aktualisiert (bekannte Lücken geschlossen).

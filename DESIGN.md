@@ -1,6 +1,6 @@
 # Archery – Design-System
 
-Stand: App 0.43.1 · Extension 3.31.0
+Stand: App 0.43.2 · Extension 3.31.0
 
 Diese Datei hält fest, wie Archery aussieht und warum. Sie gilt für die Mac-App
 (`app/src`) und die Extension (`extension/`, in Chrome und in Safari). Wer an der Oberfläche
@@ -102,7 +102,7 @@ Für die Farbe gilt:
 | Seitenkopf | Melange Semi-Light | 30 px / 1.16 | 350 | −0.02em | alle Seiten und Einstellungen, Titel voll, Satz hell (`--p-faint`) im selben Absatz |
 | Einstellungen | Melange Semi-Light | 20 px | 350 | −0.012em | Bereiche in der Vollbild-Liste |
 | Notiz | Melange Semi-Light | Titel 28 px, Text 16 px / 1.5 | 350 | −0.02em / 0 | Lightbox-Notiz |
-| Satz | Melange | 34 px / 1.14 | 350 | 0 | Konto, Sperre, Lese-Modus (`.p-say`) |
+| Satz | Melange | 34 px / 1.14 | 350 | 0 | Konto, Sperre (`.p-say`) |
 
 Für die Typografie gilt:
 
@@ -229,7 +229,7 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
   - Einfahren
   - Ziel unter dem Zeiger (Ring)
   - Herkunftszone (Inhalt auf 45 % zurückgenommen, Glas bleibt)
-  - Abgelegt (Miniatur wie in 4.13, dann fährt die Leiste aus; das frühere Glühen nur noch im Labor)
+  - Abgelegt (Miniatur wie in 4.13, dann fährt die Leiste aus; das frühere Glühen nur noch als Wahl unter Drop-Feedback, 4.24b)
 - **Angeschnitten (0.35, Einstellungen › Darstellung, ab Werk „Ganz“):** Wahlweise
   ragen die Karten erst 90 px herein (`.p-dropbar.strip`), wie früher die Leiste
   der Extension (4.13): oben gerundet, unten bündig, ohne Hinweis. Zeiger in
@@ -572,7 +572,7 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
   steht „+N“ in Mono davor. Das Bild kommt direkt aus der abgelegten Datei
   (`dropbar_preview` gibt nur diese Bilddatei frei), noch bevor gesichert ist;
   „Gesichert“ steht weiter erst danach. Ohne Bild (Video, PDF) bleibt nur der
-  Hinweis. Danach steht die Leiste 0.7 s und blendet in 0.28 s aus (2.5). Labor › Ablegen (4.24b)
+  Hinweis. Danach steht die Leiste 0.7 s und blendet in 0.28 s aus (2.5). Darstellung › Drop-Feedback (4.24b)
   bietet Varianten: Haken vor „Gesichert“, Ring schließt sich, Zähler (Nummer
   rollt auf „+N“), Dateiname (Name rollt zum Dateinamen, mindestens 0.6 s, und
   zurück), Nachbild (graues Bild × 0.22 verblasst in 1.6 s), Glühen (bisher).
@@ -580,7 +580,7 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
   abgewartet wird. Die Position aus `onDragDropEvent` ist auf macOS schon in
   Punkten; nie durch `devicePixelRatio` teilen (0.26 bis 0.40.22 taten es, der
   Drop landete auf Retina links daneben). Die Extension zeigt seit 3.29.8 fest die
-  Miniatur (`.zone-stamp` in `overlay.css`), ohne Labor-Varianten und ohne
+  Miniatur (`.zone-stamp` in `overlay.css`), ohne die Varianten aus 4.24b und ohne
   „+N“; die Leiste steht dort 0.7 s ab dem Loslassen, weil sie das Sichern nicht abwartet.
 - **Ab Werk an (0.40.21, vorher ab 0.32.1 aus):** Weil sie nur mit ⌥ kommt,
   ist sie wieder an, auch wenn die alte Leiste ausgeschaltet war.
@@ -735,12 +735,9 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
   ganze Breite, 40 px hoch, `--r-md`, ⌘↩ rechts in Mono 11 px (0.55).
   Darunter „Abbrechen“ als Mono-Etikett 11 px, Großbuchstaben, gedimmt.
 
-### 4.22 Name zum Testen (App 0.37.3, Information › App)
-- **Zweck:** Andere Namen statt „Archery“ ausprobieren, ohne Build.
-- **Form:** Zeile wie „Dein Name“ (Titel, gedimmter Satz, Eingabe rechts,
-  `p-input note-field`), Platzhalter „Archery“. Greift beim Tippen.
-- **Gilt für:** Navigation (`#navBrand`), Startbild, Sperrbild, Kopf von
-  Information, Fenstertitel. Nicht: Tray, Extension, PDF, Dateinamen.
+### 4.22 Name zum Testen (App 0.37.3 bis 0.43.1, entfernt)
+- Das Feld unter Information › App ist seit 0.43.2 weg: Der Name steht fest
+  (Archery), und jeder hätte ihn sonst in seiner App überschreiben können.
 
 ### 4.22a Updates (App 0.38.1, seit 0.40.8 Einstellungen › App)
 - **Zweck:** Kanal wählen (Beta oder Vorab) und jede veröffentlichte Version
@@ -919,43 +916,49 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
 - **Fokus:** Ring (4.1) um die ganze Zeile, keine Farbe.
 - **Schmal (< 700 px):** Name über den Bildern, eine Spalte.
 
-### 4.24b Labor (App 0.40.12, Einstellungen › Labor, `.p-lab-*`)
-- **Zweck:** Varianten ausprobieren, bevor sie Regel werden. Gespeichert nur
-  lokal (`archiver.lab`), an der Bibliothek ändert sich nichts.
-- **Zonenkarten › Ausblenden (0.42.6):** Aus (Standard), Farbverlauf (die
-  Bilder laufen ab 35 % der Höhe per Maske in die Kartenfläche aus) oder
-  Glas-Blur (`backdrop-filter: blur(14px)` über den unteren 45 %, oben und
-  unten per Maske weich; darunter laufen die Bilder ab 60 % aus, so bleibt
-  am unteren Rand keine Kante). Nicht bei Karten mit Titelbild. Seit 0.42.8
-  nur, wenn die letzte Reihe abgeschnitten ist (`.cut`, gesetzt von einem
-  ResizeObserver); sonst lag der Blur über leerer Fläche (Kante, Farbschein). Die Varianten A–I und
-  „Active Zones als Zeilen“ (bis 0.42.5) sind entfernt: I ist die Karte,
-  Zeilen sind der Index (4.24a).
-- **Video-Vorschau:** Daumenkino (Standard, 8 Standbilder), Skim (Zeiger
-  waagerecht = Zeit im Clip), Abspielen (stumm, Schleife), Aus.
-- **Ablegen (0.40.22):** Rückmeldung der Active-Zone-Karte in der App und am
-  ganzen Mac (4.13, seit 0.40.23 beide): Miniatur (Standard), Haken, Ring,
-  Zähler, Dateiname, Nachbild, Glühen, in zwei Reihen (4 + 3).
-  Die Stehzeit danach ist fest (0.7 s, 2.5), die Wahl „Danach“ (0.40.22/23)
-  ist weg. `dropfx.js` liest `archiver.lab` selbst (`drop`). Klassen der Karte heißen
-  `fx-is-<variante>`, nie `fx-<variante>` (sonst greifen die Regeln der
-  Bauteile wie `.fx-ring` auf die Karte).
-- **Bewegung:** Bei `prefers-reduced-motion` laufen Daumenkino und
-  Abspielen nicht. Skim bleibt, weil es der Hand folgt.
-- **Regel:** Eine Variante, die bleibt, wandert aus dem Labor in die normale
-  Darstellung und bekommt hier ihren eigenen Abschnitt.
+### 4.24b Drop-Feedback und frühere Labor-Varianten (Labor 0.40.12 bis 0.43.1)
+- **Labor ist seit 0.43.2 entfernt.** Was blieb, steht fest oder ist in die
+  Darstellung gewandert.
+- **Zonenkarten:** Die kleinen Bilder laufen nicht mehr aus (fest „Aus“). Die
+  Varianten Farbverlauf und Glas-Blur samt `.fade-*`/`.cut` sind entfernt.
+- **Video-Vorschau:** fest Skim (Zeiger waagerecht = Zeit im Clip, ohne Ton,
+  ohne Verzögerung). Daumenkino, Abspielen und Aus sind entfernt. Skim läuft
+  auch bei `prefers-reduced-motion`, weil es der Hand folgt.
+- **Drop-Feedback (Einstellungen › Darstellung, nach Glas):** Rückmeldung der
+  Active-Zone-Karte in der App und am ganzen Mac (4.13): Miniatur (Standard),
+  Haken, Ring, Zähler, Dateiname, Nachbild, Glühen, in zwei Reihen (4 + 3),
+  darunter ein Satz zur gewählten Variante. Gespeichert nur lokal
+  (`archiver.lab`, Schlüssel `drop`), `dropfx.js` liest es selbst. Die Stehzeit
+  danach ist fest (0.7 s, 2.5). Klassen der Karte heißen `fx-is-<variante>`,
+  nie `fx-<variante>` (sonst greifen die Regeln der Bauteile wie `.fx-ring`
+  auf die Karte).
 
 ### 4.25a Einstellungen (App 0.40.8, `.p-settings-nav`)
-- **Aufbau:** Seitenkopf, darunter die Konto-Liste (4.26), darunter fünf
+- **Aufbau:** Seitenkopf, darunter die Konto-Liste (4.26), darunter vier
   Bereiche als ruhige Liste: Bibliothek, Darstellung, Mac & Browser (ohne Mac
-  nur „Extension“), Studio, App, Labor (4.24b). Rechts je eine Zusammenfassung in
-  `--p-dim` und ›.
+  nur „Extension“), App. Rechts je eine Zusammenfassung in `--p-dim` und ›.
+  Darunter, als eigene Fläche abgesetzt (0.43.2): Studio (4.25b).
 - **Bereiche:** Bibliothek = Plätze, verknüpfte Ordner, Standardzone,
   Struktur, Zonen, Dateinamen. Darstellung = Ansicht, Aussehen, Glas, Start,
   Startton. Mac & Browser = Extension, Tray und Zonenleiste, Vorschau-Formate.
   App = Version und Updates (4.22a), Sprache, Feedback, Tasten.
 - **Regel:** Ein neuer Schalter kommt in einen dieser Bereiche, nicht in
   einen neuen. Jeder Block trägt seinen Titel, auch wenn er allein steht.
+
+### 4.25b Studio (eigenes Abo, App 0.43.2)
+- **Freigabe:** `app_metadata.studio` im Supabase-Konto (setzt nur der Server,
+  bis zum Bezahlweg Lukas von Hand). Die App liest es beim Anmelden und beim
+  Abgleich (Start, stündlich). In der Beta prüft nur die Oberfläche; fest
+  wird es mit der signierten Lizenz (H1).
+- **Ohne Studio:** Zusammenfassung „Eigenes Abo“. Die Seite zeigt den Lead,
+  darunter einen Block mit dem Satz „Studio ist ein eigenes Abo …“ und Rechte,
+  Paket, Geteilte Bibliothek als Zeilen ohne Schalter. Rechte und Paket sind
+  aus (`feat()`).
+- **Mit Studio:** wie bisher, das Feld „Dein Name“ heißt „Kürzel“; leer gilt
+  das Monogramm des Benutzernamens (Platzhalter zeigt es).
+- **Geteilte Bibliothek ohne Studio:** Die Sperre (4.26) zeigt „Geteilte
+  Bibliothek. Geteilte Bibliotheken gehören zu Studio. Wähle eine andere
+  Bibliothek.“ und nur „(Bibliothek wählen)“, ohne Linie und Feld.
 
 ### 4.26 Konto, Sperre und Lese-Modus als Liste (App 0.40.6, `.p-say`, `.p-list`, `.p-lock-*`)
 - **Ansatz (Lukas 20.10.: „3 aber ohne Highlight“):** Wie die Einstellungen.
@@ -979,21 +982,21 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
   „(Wir schicken einen Code, kein Passwort)“ bzw. „(Neuer Code) (Andere
   E-Mail)“, rechts die Meldung. Schritt Code: Satz „Code aus der Mail.
   Gesendet an …“, Ziffern mit 0.06em Laufweite, 6 bis 8 Ziffern. Keine
-  Fläche, keine Zeilen „Weg“ und „Beta“. In der Vorschau steht oben rechts
-  „(Vorschau beenden)“. Den alten Freischalt-Code gibt es seit 0.43.0 nicht
+  Fläche, keine Zeilen „Weg“ und „Beta“. Den alten Freischalt-Code gibt es seit 0.43.0 nicht
   mehr, auch nicht als Übergang: frei ist nur, wer ein Konto hat. Abmelden
   vergisst das Konto.
 - **Konto (Einstellungen):** Oben über der Liste der Bereiche: „(Konto)“ und
   eine Liste als Knopf mit Status und Danach (Abonnent: Läuft bis). Öffnet
-  Einstellungen › Konto. Dort ist der Kopf ein Satz zum Zustand (Beta-Bonus,
-  „Jahr, aktiv.“ oder „Kein Abo.“).
-- **Vorschau (0.40.5):** Einstellungen › Konto › Ansicht wählt zwischen Beta,
-  Abonnent, Lese-Modus und Anmelden (zeigt die Sperre auch freigeschaltet, oben
-  rechts „(Vorschau beenden)“), `archiver.accountPreview`. Es wird nichts
-  gebucht. „Abmelden“ vergisst den Freischalt-Code.
-- **Lese-Modus (Vorschau):** Auf der Startseite statt des Kopfs der Satz
-  „Lese-Modus.“ und eine Liste Lesen, Suchen, Ablegen, Extension mit ● und ○.
-  In der Filterzeile steht „(Vorschau beenden)“. Es wird nichts gesperrt.
+  Einstellungen › Konto. Dort ist der Kopf ein Satz zum Zustand (seit 0.43.2
+  nur Beta-Bonus). Block „Konto“: E-Mail, Benutzername (Eingabe rechts wie
+  „Kürzel“, gespeichert in `user_metadata.username`, gleich auf jedem Mac),
+  Angemeldet, Studio („Aktiv“ oder „Bald dazubuchbar“).
+- **Abgleich (0.43.2):** Beim Start und stündlich tauscht die App den
+  Refresh-Token beim Server. Lehnt er ab (4xx), ist das Konto abgemeldet und
+  die Sperre steht da. Ohne Netz bleibt alles, wie es ist.
+- **Vorschau und Lese-Modus (0.40.5 bis 0.43.1):** entfernt. Der Umschalter
+  Beta / Abonnent / Lese-Modus / Anmelden erlaubte, zwischen Zuständen zu
+  springen. Abo und Lese-Modus kommen mit der Lizenz zurück.
 - **Nicht:** Keine Highlights, keine Eingabekästen mit Rahmen, keine großen
   Titelblätter.
 
