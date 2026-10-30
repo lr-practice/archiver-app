@@ -16,6 +16,7 @@
   Safari-Extension gekoppelt werden kann; ohne Geheimnis hätte jedes Programm
   auf dem Mac sie ansprechen können. Der Safari-Hinweis in den Einstellungen
   ist so lange ausgeblendet.
+- Feedback geht an feedback@archery-visual.com.
 - Die alten Beta-Freischalt-Codes gelten nicht mehr. Wer nur damit
   freigeschaltet war, meldet sich einmal mit seiner E-Mail an.
 

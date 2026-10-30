@@ -7742,7 +7742,7 @@
   }
 
   // Beta: fertige Mail mit Version und drei Fragen.
-  const FEEDBACK_TO = "feedback@archiver-app.com";
+  const FEEDBACK_TO = "feedback@archery-visual.com";
   async function sendFeedback() {
     const version = TAURI.app && TAURI.app.getVersion ? await TAURI.app.getVersion().catch(() => "") : "";
     const body = t("feedbackBody").replace("{version}", version);
