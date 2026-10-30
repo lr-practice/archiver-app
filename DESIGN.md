@@ -634,7 +634,7 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
   (`bridge.rs`) oder ohne Version = veraltet. Hat sich nie eine gemeldet,
   kommt der Hinweis erst nach zwei Tagen. × blendet ihn aus, bis sich Zustand
   oder Mindestversion ändern. Einstellungen › Mac & Browser zeigt den Stand,
-  am Mac darunter eine Zeile für Safari (4.27).
+  am Mac darunter eine Zeile für Safari (4.27), solange die Safari-Brücke an ist.
 - **Nicht:** Kein Toast, keine Akzentfarbe, kein Dialog beim Start.
 
 ### 4.17 Mehrfachmarkierung (Extension 3.27.0, `content.js`)
@@ -980,10 +980,9 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
   E-Mail)“, rechts die Meldung. Schritt Code: Satz „Code aus der Mail.
   Gesendet an …“, Ziffern mit 0.06em Laufweite, 6 bis 8 Ziffern. Keine
   Fläche, keine Zeilen „Weg“ und „Beta“. In der Vorschau steht oben rechts
-  „(Vorschau beenden)“. Den alten Freischalt-Code gibt es nicht mehr zum
-  Eingeben; wer ihn schon hat, bleibt frei (Übergang, `archiver.unlock`) und
-  sieht unter Konto „(Beta-Code)“ mit „Anmelden“. Abmelden vergisst Konto und
-  alten Code.
+  „(Vorschau beenden)“. Den alten Freischalt-Code gibt es seit 0.43.0 nicht
+  mehr, auch nicht als Übergang: frei ist nur, wer ein Konto hat. Abmelden
+  vergisst das Konto.
 - **Konto (Einstellungen):** Oben über der Liste der Bereiche: „(Konto)“ und
   eine Liste als Knopf mit Status und Danach (Abonnent: Läuft bis). Öffnet
   Einstellungen › Konto. Dort ist der Kopf ein Satz zum Zustand (Beta-Bonus,
@@ -1014,7 +1013,8 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
   Chrome-Stand eine Zeile in `.p-block-text`: „Safari: Extension verbunden“
   oder der Weg zum Einschalten (Safari › Einstellungen › Erweiterungen, ohne
   Apple-Signatur vorher Entwickler › „Unsignierte Erweiterungen erlauben“).
-  Kein neuer Block, kein Knopf.
+  Kein neuer Block, kein Knopf. Seit 0.43.0 ist die Brücke aus
+  (`http_bridge::ENABLED`, Sicherheitsprüfung 30.10.), die Zeile fehlt dann.
 - **Nicht:** Keine Safari-eigenen Farben, Icons oder Abstände. Was nur in
   Safari anders sein muss, regelt `background.js` (`IS_SAFARI`), nie CSS.
 

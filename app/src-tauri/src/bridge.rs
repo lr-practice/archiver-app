@@ -155,6 +155,7 @@ pub fn extension_status() -> Value {
         "version": seen.get("version").cloned().unwrap_or(Value::Null),
         "seen": seen.get("seen").cloned().unwrap_or(Value::Null),
         "safari": seen.get("safari").cloned().unwrap_or(Value::Null),
+        "safariBridge": crate::http_bridge::ENABLED,
         "min": EXTENSION_MIN,
     })
 }

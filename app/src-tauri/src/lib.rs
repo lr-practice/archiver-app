@@ -1687,7 +1687,9 @@ pub fn run() {
             // Brücke zur Safari-Extension: HTTP auf 127.0.0.1 (http_bridge.rs).
             // Nur in der laufenden App; der Chrome-Host startet ohne setup.
             #[cfg(target_os = "macos")]
-            http_bridge::start();
+            if http_bridge::ENABLED {
+                http_bridge::start();
+            }
             // Die Bibliothek öffnet die Oberfläche selbst (open_library), damit das
             // Fenster sofort erscheint, auch wenn das Einlesen dauert.
             if let Some(path) = viewer::from_args() {

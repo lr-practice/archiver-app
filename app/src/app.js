@@ -123,14 +123,9 @@
     return pref("feat." + id, true) !== false;
   }
 
-  // 0.40.8 Übergang: Neue Freischalt-Codes lassen sich nicht mehr eingeben. Wer
-  // schon freigeschaltet ist (nur der Hash liegt in den Einstellungen), bleibt
-  // drin, bis er sich abmeldet. Danach geht es nur noch mit Konto.
-  const UNLOCK_HASHES = ["12004fa6495855edcff5595961e8da1e62e9eed6502338060283a8bb0efa5646", "4ffbc1224a6cd30617b443e4665695d19c63d76ba51f6b16bdcdc8b28a2d1e13"];
-  const legacyUnlock = () => UNLOCK_HASHES.includes(pref("unlock", null));
-
+  // Seit 0.43.0 nur noch mit Konto, die alten Freischalt-Codes gelten nicht mehr.
   function isUnlocked() {
-    return legacyUnlock() || !!account();
+    return !!account();
   }
 
   // ---- Konto (0.40.7): Anmelden mit E-Mail und 6-stelligem Code über Supabase ----
@@ -2745,7 +2740,7 @@
       const get = button("p-link", t("extGet"), openExtensionDownload);
       get.hidden = true;
       Promise.all([invoke("bridge_browsers").catch(() => []), extensionState()]).then(([chromium, s]) => {
-        const list = s && s.safari ? [...chromium, "Safari"] : chromium;
+        const list = s && s.safari && s.safariBridge ? [...chromium, "Safari"] : chromium;
         if (!list.length) return (ext.textContent = t("setBridgeOff"));
         const kind = s ? s.kind : "missing";
         get.hidden = kind === "ok";
@@ -2757,8 +2752,13 @@
       // Safari: Erweiterung steckt in Archiver.app, nur einschalten (http_bridge.rs)
       if (isMac) {
         const safari = el("div", "p-block-text", "…");
-        extensionState().then((s) => (safari.textContent = s && s.safari ? t("extSafariOn") : t("extSafariHint")));
-        extBlock.appendChild(blockRow(safari));
+        const row = blockRow(safari);
+        row.hidden = true; // Brücke aus (http_bridge::ENABLED): kein Hinweis auf Safari
+        extensionState().then((s) => {
+          row.hidden = !(s && s.safariBridge);
+          safari.textContent = s && s.safari ? t("extSafariOn") : t("extSafariHint");
+        });
+        extBlock.appendChild(row);
       }
       wrap.appendChild(extBlock);
     }
@@ -3034,7 +3034,7 @@
       read: [[t("accountStatus"), t("accountNone"), "›"], [t("accountAfter"), t("accountReadMode")]],
     }[view];
     const card = el("div", "p-group p-account");
-    card.append(groupLabel("(" + t("setAccount") + ")", account()?.email || (legacyUnlock() ? "(" + t("accountLegacy") + ")" : "")), list(rows, open));
+    card.append(groupLabel("(" + t("setAccount") + ")", account()?.email || ""), list(rows, open));
     return card;
   }
 
@@ -3052,22 +3052,6 @@
     plan.appendChild(el("div", "p-block-text p-account-plan", t("accountText")));
     frag.appendChild(plan);
     const acc = account();
-    // Übergang: mit altem Beta-Code frei, aber noch ohne Konto
-    if (!acc && legacyUnlock()) {
-      const legacy = block(t("setAccount"));
-      legacy.appendChild(
-        blockRow(
-          el("div", "p-block-text", t("accountLegacyText")),
-          button("p-link", t("lockSignIn"), () => {
-            setPref("accountPreview", "login");
-            lockState.email = "";
-            renderLockForm("mail");
-            applyLock();
-          })
-        )
-      );
-      frag.appendChild(legacy);
-    }
     if (acc) {
       const me = block(t("setAccount"));
       const since = new Date(acc.at).toLocaleDateString(lang === "de" ? "de-DE" : "en-GB", { day: "numeric", month: "long", year: "numeric" });
@@ -8404,7 +8388,7 @@
     const check = () =>
       Promise.all([invoke("bridge_browsers"), extensionState()])
         .then(([chromium, s]) => {
-          const list = s && s.safari ? [...chromium, "Safari"] : chromium;
+          const list = s && s.safari && s.safariBridge ? [...chromium, "Safari"] : chromium;
           // Verbunden heißt: Die Extension hat sich gemeldet (nicht nur die Brücke eingerichtet)
           const on = list.length > 0 && !!s && s.kind !== "missing";
           status.textContent = on ? t("onbExtOn", { list: list.join(", ") }) : t("onbExtWaiting");
@@ -8623,7 +8607,7 @@
     const s = await invoke("extension_status").catch(() => null);
     if (!s) return null;
     const kind = !s.seen ? "missing" : !s.version || versionLess(s.version, s.min) ? "old" : "ok";
-    return { kind, version: s.version, min: s.min, safari: s.safari || null };
+    return { kind, version: s.version, min: s.min, safari: s.safari || null, safariBridge: !!s.safariBridge };
   }
 
   async function checkExtension() {

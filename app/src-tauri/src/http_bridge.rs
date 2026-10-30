@@ -27,6 +27,11 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::time::Duration;
 
+/// Aus bis zur Safari-Extension (Sicherheitsprüfung 30.10.): Die Brücke hat
+/// noch kein Geheimnis, jede andere Safari-Erweiterung und jedes Programm auf
+/// dem Mac könnte sie ansprechen. Erst mit Koppeln wieder einschalten.
+pub const ENABLED: bool = false;
+
 /// Feste Ports, der erste freie gilt. Die Extension probiert dieselbe Liste.
 pub const PORTS: [u16; 3] = [47613, 47614, 47615];
 const ORIGIN_PREFIX: &str = "safari-web-extension://";
