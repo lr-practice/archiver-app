@@ -18,7 +18,7 @@
     zones: null,
     library: null,
     rel: null, // relativer Pfad in der Bibliothek, wenn das Bild schon drin ist
-    rootName: "Archiver",
+    rootName: "Archery",
     infoOpen: false,
   };
 
@@ -275,7 +275,7 @@
   // blau = schon abgelegt (Klick: in der App zeigen).
   function renderAction() {
     const btn = $("action");
-    btn.replaceChildren(el("span", "v-dot"), document.createTextNode("Archiver"));
+    btn.replaceChildren(el("span", "v-dot"), document.createTextNode("Archery"));
     btn.classList.toggle("saved", state.rel != null);
     btn.title = state.rel != null ? t("viewerShow") : state.library ? t("dropBar") : t("viewerApp");
   }
@@ -345,7 +345,7 @@
 
     if (state.library) {
       const lib = el("section", "v-block");
-      lib.appendChild(el("div", "v-block-title", "Archiver"));
+      lib.appendChild(el("div", "v-block-title", "Archery"));
       const zone = state.rel != null ? state.rel.split("/").slice(0, -1).join("/") : null;
       lib.appendChild(row(t("viewerInLibrary"), zone != null ? zoneLabel(zone) : t("viewerNotInLibrary")));
       inner.appendChild(lib);
@@ -378,7 +378,7 @@
 
   // Eckenrundung wie in der App (Einstellungen › Anzeige › Radien)
   {
-    const r = pref("radius", "round");
+    const r = pref("radius", "soft");
     if (r !== "round") document.documentElement.dataset.radius = r;
   }
 
@@ -523,7 +523,7 @@
     const target = path || s.path;
     if (!target) return;
     state.library = s.library;
-    state.rootName = s.library ? baseName(s.library) : "Archiver";
+    state.rootName = s.library ? baseName(s.library) : "Archery";
     state.zones = null;
     state.files = [target];
     state.index = 0;

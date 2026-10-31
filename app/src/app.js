@@ -68,28 +68,15 @@
   }
 
   // Auswahl: ruhige gestrichelte Outline oder eine, die langsam um das Objekt läuft
-  // Fensterhintergrund (Mac): wie stark die Farbe die macOS-Unschärfe deckt, getrennt von den Zonen
-  function applyWinAlpha(v) {
-    const root = document.documentElement;
-    if (typeof v !== "number") {
-      delete root.dataset.winalpha;
-      root.style.removeProperty("--win-alpha");
-    } else {
-      root.dataset.winalpha = "on";
-      root.style.setProperty("--win-alpha", String(v));
-    }
+  // Fensterhintergrund (Mac): --win-alpha deckt die macOS-Unschärfe. Den Wert setzt
+  // seit 0.30 der Glas-Regler (i18n.js applyGlass), Standard wie der Tray.
+  function applyWinAlpha() {
+    document.documentElement.dataset.winalpha = "on";
   }
 
   function applyFocusAnim(on) {
     if (on) document.documentElement.dataset.focusanim = "on";
     else delete document.documentElement.dataset.focusanim;
-  }
-
-  // Position der Navigation: oben/unten, jeweils links, Mitte, rechts
-  const NAV_POS = ["tl", "tc", "tr", "bl", "bc", "br"];
-  function applyNavPos(id) {
-    if (id && id !== "tl" && NAV_POS.includes(id)) document.documentElement.dataset.nav = id;
-    else delete document.documentElement.dataset.nav;
   }
 
   function pref(key, fallback) {
@@ -107,45 +94,259 @@
     } catch {}
   }
 
+  // Drop-Feedback (Einstellungen › Darstellung, bis 0.43.1 im Labor): nur auf
+  // diesem Mac, dropfx.js liest archiver.lab selbst (DESIGN 4.24b).
+  const LAB_DROPS = ["mini", "check", "ring", "count", "name", "after", "glow"];
+  function lab() {
+    const v = pref("lab", null) || {};
+    return { drop: LAB_DROPS.includes(v.drop) ? v.drop : "mini" };
+  }
+  function setLab(patch) {
+    setPref("lab", { ...lab(), ...patch });
+  }
+
   // Studio-Funktionen (Einstellungen › Studio): jede einzeln abschaltbar, Standard an.
   // Die geteilte Bibliothek ist kein Schalter hier, sie hängt an der Bibliothek selbst.
   // Schaltbare Studio-Werkzeuge. Moodboard und eigene Reihenfolge sind seit 0.24.6 immer an.
-  const FEATURES = ["notes", "rights", "package"];
+  const FEATURES = ["rights", "package"]; // „notes“ (Feld Notiz) ist seit 0.30 Teil des Bildtexts
   function feat(id) {
     if (!FEATURES.includes(id)) return true;
-    return pref("feat." + id, true) !== false;
+    return studioOn() && pref("feat." + id, true) !== false;
   }
 
-  // ---- Freischalten: ein gemeinsamer Code, nur sein Hash steht im Code ----
+  // Studio (0.43.2) ist ein eigenes Abo. Freigegeben über app_metadata.studio im
+  // Konto, das nur der Server setzen kann. In der Beta prüft das nur die
+  // Oberfläche, fest wird es mit der signierten Lizenz (H1).
+  const studioOn = () => !!account()?.studio;
+  // Geteilte Bibliothek ohne Studio: Sperre statt Bibliothek (applyLock)
+  const sharedBlocked = () => state.shared && !studioOn();
 
-  // Gültige Codes (nur Hashes): der aktuelle und der bisherige, damit niemand gesperrt wird
-  const UNLOCK_HASHES = ["12004fa6495855edcff5595961e8da1e62e9eed6502338060283a8bb0efa5646", "4ffbc1224a6cd30617b443e4665695d19c63d76ba51f6b16bdcdc8b28a2d1e13"];
-
+  // Seit 0.43.0 nur noch mit Konto, die alten Freischalt-Codes gelten nicht mehr.
   function isUnlocked() {
-    return UNLOCK_HASHES.includes(pref("unlock", null));
+    return !!account();
   }
 
-  async function unlockHash(code) {
-    const clean = String(code).toUpperCase().replace(/[^A-Z0-9]/g, "");
-    const data = new TextEncoder().encode("archiver-unlock:" + clean);
-    const buf = await crypto.subtle.digest("SHA-256", data);
-    return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("");
+  // ---- Konto (0.40.7): Anmelden mit E-Mail und 6-stelligem Code über Supabase ----
+  // Öffentliche Projekt-URL und publishable key, dürfen im Code stehen (Zugriff regelt RLS)
+  const SUPABASE = "https://azaslhrsoziwasehynoe.supabase.co";
+  const SUPABASE_KEY = "sb_publishable_wvcS4mzs6mqEC2Nc0wnNcQ_NPBlECfw";
+
+  // Angemeldet: { email, id, refresh, at, studio, name } oder null
+  function account() {
+    const a = pref("account", null);
+    return a && a.email ? a : null;
+  }
+
+  async function auth(path, body) {
+    const res = await fetch(SUPABASE + "/auth/v1/" + path, {
+      method: "POST",
+      headers: { apikey: SUPABASE_KEY, "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw Object.assign(new Error(data.msg || data.error_description || data.message || "HTTP " + res.status), { status: res.status });
+    return data;
+  }
+
+  // Nur im Speicher: zum Ändern des Benutzernamens (PUT /user)
+  let accessToken = null;
+
+  function saveSession(data, base) {
+    accessToken = data.access_token || null;
+    const u = data.user || {};
+    setPref("account", {
+      ...base,
+      email: u.email || base.email,
+      id: u.id || base.id || null,
+      refresh: data.refresh_token || base.refresh || null,
+      studio: u.app_metadata?.studio === true,
+      name: String(u.user_metadata?.username || ""),
+    });
+  }
+
+  // Beim Start und stündlich beim Server nachfragen: Ein gesperrtes oder
+  // gelöschtes Konto sperrt die App wieder, Studio und Name kommen von dort.
+  // Ohne Netz bleibt alles, wie es ist.
+  async function checkAccount() {
+    const a = account();
+    if (!a) return;
+    if (!a.refresh) return signOut();
+    try {
+      saveSession(await auth("token?grant_type=refresh_token", { refresh_token: a.refresh }), a);
+    } catch (e) {
+      if (e.status >= 400 && e.status < 500) signOut();
+      return;
+    }
+    applyLock();
+    renderZones();
+    if (state.page === "settings") renderPage(true);
+  }
+
+  async function setUsername(name) {
+    if (!accessToken) await checkAccount();
+    if (!accessToken) throw new Error(t("accountOffline"));
+    const res = await fetch(SUPABASE + "/auth/v1/user", {
+      method: "PUT",
+      headers: { apikey: SUPABASE_KEY, Authorization: "Bearer " + accessToken, "Content-Type": "application/json" },
+      body: JSON.stringify({ data: { username: name } }),
+    });
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    setPref("account", { ...account(), name });
+  }
+
+  // Abmelden: vergisst das Konto, danach steht die Sperre wie beim ersten Start da
+  function signOut() {
+    setPref("unlock", null);
+    setPref("account", null);
+    accessToken = null;
+    lockState.email = "";
+    $("lockList").replaceChildren();
+    state.settingsSub = null;
+    closePage();
+    applyLock();
+    renderZones();
+  }
+
+  const sendCode = (email) => auth("otp", { email, create_user: true });
+
+  async function verifyCode(email, token) {
+    const data = await auth("verify", { type: "email", email, token });
+    setPref("unlock", null); // Übergang: mit Konto braucht es den alten Code nicht mehr
+    saveSession(data, { email, at: Date.now() });
   }
 
   function applyLock() {
-    const locked = !isUnlocked();
+    const shared = isUnlocked() && sharedBlocked();
+    const locked = !isUnlocked() || shared;
     document.body.classList.toggle("locked", locked);
     $("lock").hidden = !locked;
-    if (locked && !$("lockForm").firstChild) {
-      $("lockForm").appendChild(unlockForm());
-      setTimeout(() => $("lockForm").querySelector("input")?.focus(), 60);
+    if (shared) renderLockForm("shared");
+    else if (locked && (!$("lockList").firstChild || lockState.step === "shared")) renderLockForm("mail");
+  }
+
+  // Sperre als Liste: "mail" (E-Mail eingeben), "code" (Code aus der Mail), "beta" (Freischalt-Code)
+  const lockState = { email: "" };
+  // Anmelden (0.40.9, Variante B „Satz“): Der Satz sagt, was zu tun ist, darunter
+  // ein einziges Feld in Satzgröße auf einer Linie, rechts ein runder Pfeil.
+  // Zwei Schritte: "mail" (E-Mail) und "code" (Code aus der Mail).
+  function renderLockForm(step) {
+    lockState.step = step;
+    const form = $("lockList");
+    const foot = $("lockGo");
+    form.replaceChildren();
+    foot.replaceChildren();
+    form.onsubmit = null;
+    form.hidden = step === "shared";
+    form.classList.remove("wrong");
+    const input = el("input", "p-lock-input");
+    input.spellcheck = false;
+    input.addEventListener("keydown", (e) => e.stopPropagation());
+    input.addEventListener("input", () => form.classList.remove("wrong"));
+    const go = el("button", "p-lock-go", "→");
+    go.type = "submit";
+    form.append(input, go);
+    const status = el("span", "p-lock-msg");
+    const link = (label, fn) => button("p-lock-end", "(" + label + ")", fn);
+    const fail = (text) => {
+      status.textContent = text;
+      form.classList.remove("wrong");
+      void form.offsetWidth;
+      form.classList.add("wrong");
+      go.disabled = false;
+    };
+
+    // Geteilte Bibliothek ohne Studio (0.43.2): nur eine andere Bibliothek wählen
+    if (step === "shared") {
+      $("lockTitle").textContent = t("lockSharedTitle");
+      $("lockText").textContent = t("lockSharedText");
+      foot.append(
+        link(t("lockSharedPick"), async () => {
+          const path = await invoke("pick_folder");
+          if (!path) return;
+          try {
+            await invoke("open_library", { path });
+            await afterLibrarySwitch();
+          } catch (e) {
+            libraryFail(e);
+          }
+        })
+      );
+      return;
     }
+
+    if (step === "code") {
+      $("lockTitle").textContent = t("lockCodeTitle");
+      $("lockText").textContent = t("lockCodeText", { email: lockState.email });
+      input.type = "text";
+      input.inputMode = "numeric";
+      input.autocomplete = "one-time-code";
+      input.placeholder = "12345678";
+      input.maxLength = 10;
+      input.classList.add("is-code");
+      go.setAttribute("aria-label", t("lockSignInGo"));
+      form.onsubmit = async (e) => {
+        e.preventDefault();
+        const token = input.value.replace(/\D/g, "");
+        // Supabase verschickt je nach Projekt 6 oder 8 Ziffern
+        if (token.length < 6 || token.length > 8) return fail(t("lockCodeShort"));
+        go.disabled = true;
+        status.textContent = t("lockChecking");
+        try {
+          await verifyCode(lockState.email, token);
+          applyLock();
+          if (state.page) renderPage(true);
+          toast(t("lockWelcome", { email: lockState.email }));
+        } catch (err) {
+          // abgelaufen/falsch → eigene Meldung, alles andere mit dem Grund von Supabase
+          const why = String((err && err.message) || "");
+          fail(/expired|invalid/i.test(why) || !why ? t("lockWrongCode") : why);
+        }
+      };
+      const again = link(t("lockResend"), async () => {
+        status.textContent = t("lockSending");
+        try {
+          await sendCode(lockState.email);
+          status.textContent = t("lockSent");
+        } catch (err) {
+          fail(String(err.message || err));
+        }
+      });
+      foot.append(again, link(t("lockOtherMail"), () => renderLockForm("mail")), status);
+      setTimeout(() => input.focus(), 60);
+      return;
+    }
+
+    $("lockTitle").textContent = t("lockTitle");
+    $("lockText").textContent = t("lockText");
+    input.type = "email";
+    input.autocomplete = "email";
+    input.placeholder = t("lockMailPlaceholder");
+    input.value = lockState.email;
+    go.setAttribute("aria-label", t("lockSendCode"));
+    form.onsubmit = async (e) => {
+      e.preventDefault();
+      const email = input.value.trim();
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return fail(t("lockBadMail"));
+      go.disabled = true;
+      status.textContent = t("lockSending");
+      try {
+        await sendCode(email);
+        lockState.email = email;
+        renderLockForm("code");
+      } catch (err) {
+        fail(String(err.message || err));
+      }
+    };
+    foot.append(el("span", "p-lock-hint", "(" + t("lockHow") + ")"), status);
+    setTimeout(() => input.focus(), 60);
   }
 
   // ---- Zustand ----
 
   const SIZES = [72, 96, 120, 160, 220, 300];
+  const LIST_THUMBS = [24, 32, 40, 56, 72, 96]; // Liste: Bildhöhe je Stufe
   const ALL = "\u0000all";
+  const DELETED = "\u0000deleted"; // „Zuletzt gelöscht“ (0.27)
   const isZone = (f) => f != null && !String(f).startsWith("\u0000");
   // Startseite: Vorschaubilder im Index, Spalten im Mosaik, Titelbild der Karten
   const HOME_SIZES = [
@@ -155,11 +356,10 @@
     { thumb: 96, cols: 2, cover: 320 },
   ]; // state.focus für „Alle Bilder“
 
-  applyRadius(pref("radius", "round"));
+  applyRadius(pref("radius", "soft"));
   applyTopFade(pref("topFade", "fade"));
   applyFocusAnim(pref("focusAnim", false));
-  applyWinAlpha(pref("winAlpha", null));
-  applyNavPos(pref("navPos", "tl"));
+  applyWinAlpha();
 
   const state = {
     root: "",
@@ -169,16 +369,15 @@
     byPath: new Map(),
     // Pfad der allein gezeigten Zone, sonst null (alte Seiten-Werte "\u0000…" verwerfen)
     focus: null, // jeder Start beginnt auf der Startseite (Zonen als Karten)
-    page: null, // Seite, die von rechts hereingleitet: null | "settings" | "about"
-    home: "overview", // Startseite: "overview" | "index" | "preview" | "cards"; jeder Start beginnt mit der Übersicht
-    hover: null, // Zone in der Vorschau (Layout "preview")
+    page: null, // Seite, die von rechts hereingleitet: null | "settings" | "about" | "manual"
+    home: "overview", // Startseite: "overview" | "index" | "cards"; jeder Start beginnt mit der Übersicht
     // Bildgröße auf der Startseite, Stufe 0–3, je Ansicht getrennt
-    homeSizes: pref("homeSizes", null) || { index: pref("homeSize", 1), preview: pref("homeSize", 1), cards: pref("homeSize", 1) },
+    homeSizes: pref("homeSizes", null) || { index: pref("homeSize", 1), cards: pref("homeSize", 1) },
     // (Übersicht: Größe wie die Karten, solange nichts eigenes gespeichert ist)
     query: "",
     filters: { kind: null, color: null, orient: null, format: null, period: null, dup: false, label: null, site: null, by: null, fresh: false },
     found: null, // Seite „Finden“: Treffer nach Rangfolge, null ohne Suche und Filter
-    view: pref("view", "grid"),
+    view: ["grid", "original", "list"].includes(pref("view", "grid")) ? pref("view", "grid") : "grid", // „form“ (0.40.0) ist wieder raus
     size: pref("size", 120),
     infoOpen: pref("infoOpen", false),
     selection: new Set(),
@@ -189,7 +388,8 @@
     order: {}, // Zone → Hashes in eigener Reihenfolge (zones.json, Schlüssel "sort")
     shared: false, // geteilte Bibliothek (studio.rs)
     user: "", // Name für „abgelegt von“
-    folder: null, // gewählter Ordner in der offenen Zone (Chips), null = alle
+    folder: null, // Filter in der offenen Zone (Chips), null = alle
+    level: null, // betretener Ordner (Karten, Pfad), null = oberste Ebene der Zone
   };
 
   // ---- Helfer ----
@@ -243,6 +443,12 @@
     });
   }
 
+  // Liste: kurzes Datum wie im Finder, „12. Okt. 2026“
+  function shortDate(ms) {
+    if (!ms) return "–";
+    return new Date(ms).toLocaleDateString(lang === "de" ? "de-DE" : "en-GB", { day: "numeric", month: "short", year: "numeric" });
+  }
+
   const Media = window.ArchiverMedia;
   const kindOf = (item) => Media.kind(item.format || item.filename);
 
@@ -258,7 +464,7 @@
   // markiert sie (Text-Fragment #:~:text=Anfang,Ende; Chrome, Safari, Edge).
   function sourceUrl(item) {
     const url = item.pageUrl;
-    const quote = (item.quote || "").replace(/\s+/g, " ").trim();
+    const quote = (item.quote || "").replace(/^\s*#+\s*/gm, "").replace(/\s+/g, " ").trim();
     if (!url || !quote || /#:~:/.test(url)) return url;
     const enc = (t) => encodeURIComponent(t).replace(/-/g, "%2D").replace(/,/g, "%2C").replace(/&/g, "%26");
     const words = quote.split(" ");
@@ -270,6 +476,7 @@
   // nur als Bild; dann aus der Texterkennung („TEXT … domain · Datum“).
   function quoteOf(item) {
     if (item.quote) return item.quote;
+    if (isNote(item)) return " "; // leere Notiz bleibt ein Blatt
     if (item.width !== 1400 || item.imageUrl || !item.text || item.format !== "png") return "";
     const m = /^TEXT\s+([\s\S]+?)(?:\s+(?:[\w.-]+\.[a-z]{2,}\s+·\s+)?[\d./-]+)?\s*$/i.exec(item.text.trim());
     return m ? m[1].trim() : "";
@@ -285,13 +492,19 @@
     violet: ["#7030a0", "#e2c8f5", 0.75],
     cyan: ["#00b0f0", "#003d54", 0.7],
     yellow: ["#ffff00", "#5c5c00", 0.75],
-    white: ["#f4f3ef", "#141414", 0.5],
+    white: ["#ffffff", "#141414", 0.5],
+    black: ["#141414", "#ededed", 0.5],
   };
+  // 0.30: eine Farbreihe für Textkarten und Notizen, aus den bestehenden Farben
+  const TONES = ["red", "green", "violet", "cyan", "yellow", "white", "black"];
   const RANDOM_TONES = ["red", "green", "violet", "cyan", "yellow"];
+  // 0.41.0: Farbmarken in der Übersicht, dieselben fünf Farben (studio.rs MARKS)
+  const MARKS = RANDOM_TONES;
   // Eigene Farbe (beim Markieren im Web bestimmt oder in den Details gewählt),
   // sonst fest aus dem Inhalt abgeleitet
   function quoteTone(item) {
     if (QUOTE_TONES[item.tone]) return QUOTE_TONES[item.tone];
+    if (isNote(item)) return QUOTE_TONES.white; // Notizen: Weiß, bis eine Farbe gewählt ist
     const key = String(item.hash || item.path || "");
     let h = 0;
     for (let i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) >>> 0;
@@ -299,11 +512,13 @@
   }
   function toneKey(item) {
     if (QUOTE_TONES[item.tone]) return item.tone;
+    if (isNote(item)) return "white";
     return RANDOM_TONES.find((k) => QUOTE_TONES[k] === quoteTone(item));
   }
 
   // Textkarte als Text statt Bild: Kennung, Zitat, Quelle und Datum
   function textSheet(item, cls) {
+    if (isNote(item)) return noteSheet(item, cls);
     const len = quoteOf(item).length;
     const sheet = el("div", cls + (len < 140 ? " short" : len < 400 ? " medium" : " long"));
     const [bg, fg, dim] = quoteTone(item);
@@ -348,7 +563,9 @@
   }
 
   function fail(e) {
-    toast(t("error", { msg: String(e && e.message ? e.message : e) }), false);
+    const msg = String(e && e.message ? e.message : e);
+    toast(t("error", { msg }), false);
+    invoke("log_error", { area: "app", msg }).catch(() => {});
   }
 
   function debounce(fn, ms) {
@@ -368,20 +585,27 @@
   }
 
   // Eigene Reihenfolge der Zonen (Einstellungen › Zonen). Neue Zonen hinten.
-  // Der Betrachter liest denselben Eintrag.
+  // Sie gehört zur Bibliothek (.archiver/zones.json) und kommt mit dem Snapshot;
+  // vorher galt eine Reihenfolge für alle Bibliotheken und überschrieb beim
+  // Wechsel die der anderen (0.31.0). Palette und Zonenleiste lesen die Kopie
+  // in localStorage „zoneOrder“, die hier mit der aktiven Bibliothek mitzieht.
   function orderZones(zones) {
-    const order = pref("zoneOrder", []);
+    const order = state.zoneOrder || [];
     if (!order.length) return zones;
     // Zone, die früher in Unterzonen geteilt war: Platz ihrer ersten Unterzone
     const rank = (z) => {
       let i = order.indexOf(z.path);
       if (i < 0 && z.path) i = order.findIndex((p) => p.startsWith(z.path + "/"));
+      // 0.33.2: neu hinzugekommene Standard-Zone (Unsorted) steht vorn, als erste
+      // Active Zone, bis man sie selbst verschiebt
+      if (i < 0 && z.path === state.defaultZone) return -1;
       return i < 0 ? order.length : i;
     };
     return zones.map((z, i) => [z, i]).sort((a, b) => rank(a[0]) - rank(b[0]) || a[1] - b[1]).map(([z]) => z);
   }
 
   function setZoneOrder(paths) {
+    state.zoneOrder = paths;
     setPref("zoneOrder", paths);
     state.zones = orderZones(state.zones);
     syncZoneOrder();
@@ -401,12 +625,10 @@
   }
 
   function renameInOrder(oldPath, newPath) {
-    const order = pref("zoneOrder", []);
+    const order = state.zoneOrder || [];
     if (!order.length) return;
-    setPref(
-      "zoneOrder",
-      order.map((p) => (p === oldPath ? newPath : p.startsWith(oldPath + "/") ? newPath + p.slice(oldPath.length) : p))
-    );
+    state.zoneOrder = order.map((p) => (p === oldPath ? newPath : p.startsWith(oldPath + "/") ? newPath + p.slice(oldPath.length) : p));
+    setPref("zoneOrder", state.zoneOrder);
   }
 
   async function refresh() {
@@ -416,17 +638,29 @@
     } catch (e) {
       return fail(e);
     }
+    if (snap.root !== state.root || !state.zoneOrder) {
+      // Bibliothek (neu) geladen: ihre eigene Reihenfolge übernehmen
+      state.zoneOrder = snap.zoneOrder || [];
+      syncedOrder = JSON.stringify(state.zoneOrder);
+      if (JSON.stringify(pref("zoneOrder", [])) !== syncedOrder) setPref("zoneOrder", state.zoneOrder);
+    }
     state.root = snap.root;
     state.name = snap.name;
+    state.defaultZone = snap.defaultZone || "Unsorted";
     state.zones = orderZones(displayZones(snap.zones));
     syncZoneOrder();
     state.items = snap.items;
     state.byPath = new Map(snap.items.map((i) => [i.path, i]));
     state.order = snap.order || {};
     state.shared = !!snap.shared;
-    state.defaultZone = snap.defaultZone || "Unsorted";
+    applyLock();
+    state.inboxSeen = snap.inboxSeen || {};
+    state.expireZone = snap.expireZone === undefined ? "Unsorted" : snap.expireZone;
     state.structure = snap.structure || { depth: 2, skip: [], subzones: false };
     state.user = snap.user || "";
+    state.folders = snap.folders || [];
+    state.deletedCount = snap.deleted || 0;
+    if (state.focus === DELETED) state.deletedItems = await invoke("deleted_items").catch(() => []);
     if (isZone(state.focus) && !state.zones.some((z) => z.path === state.focus)) state.focus = null;
     for (const p of [...state.selection]) if (!state.byPath.has(p)) state.selection.delete(p);
     // Offenes Menü nicht unter der Maus wegzeichnen (z. B. während „Wirklich löschen?“)
@@ -436,31 +670,9 @@
 
   let pendingRender = false;
 
-  // ⌘R: Bibliothek neu einlesen. Mit „Welle“ blenden die sichtbaren Objekte
-  // diagonal von oben links nach unten rechts ein, schnell und ohne Einzelauftritt.
+  // ⌘R: Bibliothek neu einlesen
   async function reloadObjects() {
     await refresh();
-    if (pref("reloadAnim", "plain") === "wave") reloadWave(document.getElementById("zones") || document.body);
-  }
-
-  function reloadWave(root) {
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-    const vw = window.innerWidth;
-    const vh = window.innerHeight;
-    const nodes = root.querySelectorAll(".card, .p-card, .p-row:not(.p-row-head), .p-block-row");
-    for (const n of nodes) {
-      const r = n.getBoundingClientRect();
-      if (r.bottom < 0 || r.top > vh || r.width === 0) continue;
-      const d = Math.round((Math.max(0, r.top) / vh) * 160 + (Math.max(0, r.left) / vw) * 120);
-      n.classList.remove("p-wave");
-      void n.offsetWidth;
-      n.style.animationDelay = d + "ms";
-      n.classList.add("p-wave");
-      setTimeout(() => {
-        n.classList.remove("p-wave");
-        n.style.animationDelay = "";
-      }, d + 400);
-    }
   }
 
   function applyThumbs(list) {
@@ -492,113 +704,20 @@
 
   const cardCache = new Map(); // Pfad → Bild-Element (bleibt beim Neuzeichnen erhalten)
 
-  // Suche: Dateiname, Quelle, Zone, dazu Bildinhalt, Text im Bild und Farben
-  // (Analyse im Hintergrund, lib.rs). Deutsche Begriffe werden mitübersetzt.
-  const SEARCH_DE = {
-    rot: "red", orange: "orange", gelb: "yellow", grün: "green", gruen: "green", türkis: "teal", blau: "blue",
-    lila: "purple", violett: "purple", rosa: "pink", pink: "pink", braun: "brown", schwarz: "black", grau: "gray",
-    weiß: "white", weiss: "white", mensch: "people", menschen: "people", person: "people", personen: "people",
-    frau: "woman", mann: "man", kind: "child", gesicht: "face", porträt: "portrait", portrait: "portrait",
-    tier: "animal", hund: "dog", katze: "cat", vogel: "bird", pferd: "horse", fisch: "fish",
-    pflanze: "plant", blume: "flower", blumen: "flower", baum: "tree", wald: "forest", gras: "grass",
-    himmel: "sky", wolke: "cloud", wolken: "cloud", wasser: "water", meer: "ocean", see: "lake", strand: "beach",
-    berg: "mountain", berge: "mountain", landschaft: "landscape", natur: "nature", schnee: "snow", sonne: "sun",
-    stadt: "city", straße: "street", strasse: "street", gebäude: "building", haus: "house", architektur: "architecture",
-    innenraum: "interior", raum: "room", zimmer: "room", küche: "kitchen", möbel: "furniture", stuhl: "chair",
-    tisch: "table", sofa: "sofa", lampe: "lamp", licht: "light", fenster: "window", tür: "door", treppe: "stairs",
-    auto: "car", fahrzeug: "vehicle", fahrrad: "bicycle", flugzeug: "airplane", boot: "boat", schiff: "ship",
-    essen: "food", getränk: "drink", obst: "fruit", gemüse: "vegetable", brot: "bread", kaffee: "coffee",
-    kleidung: "clothing", mode: "fashion", schuh: "shoe", schuhe: "shoe", tasche: "bag", hut: "hat",
-    buch: "book", bücher: "book", papier: "paper", zeitschrift: "magazine", plakat: "poster", poster: "poster",
-    schrift: "text", typografie: "typography", text: "text", dokument: "document", zeichnung: "drawing",
-    illustration: "illustration", gemälde: "painting", malerei: "painting", kunst: "art", skulptur: "sculpture",
-    foto: "photo", muster: "pattern", textur: "texture", logo: "logo", bildschirm: "screen", computer: "computer",
-    telefon: "phone", uhr: "clock", musik: "music", instrument: "instrument", sport: "sport", nacht: "night",
-    erwachsener: "adult", leute: "people", gruppe: "group", hand: "hand", hände: "hand", auge: "eye", haar: "hair",
-    körper: "body", tanz: "dance", bühne: "stage", konzert: "concert", kamera: "camera", film: "film",
-    draußen: "outdoor", aussen: "outdoor", außen: "outdoor", drinnen: "indoor", innen: "indoor", büro: "office",
-    wohnzimmer: "living room", schlafzimmer: "bedroom", bad: "bathroom", badezimmer: "bathroom", bett: "bed",
-    regal: "shelf", teppich: "rug", vorhang: "curtain", spiegel: "mirror", vase: "vase", keramik: "ceramic",
-    holz: "wood", stein: "stone", beton: "concrete", metall: "metal", glas: "glass", stoff: "textile",
-    textil: "textile", leder: "leather", ziegel: "brick", marmor: "marble", wand: "wall", boden: "floor",
-    decke: "ceiling", dach: "roof", brücke: "bridge", turm: "tower", kirche: "church", fassade: "facade",
-    garten: "garden", park: "park", feld: "field", wüste: "desert", fluss: "river", insel: "island",
-    küste: "coast", hügel: "hill", felsen: "rock", sand: "sand", eis: "ice", feuer: "fire", rauch: "smoke",
-    sonnenuntergang: "sunset", mond: "moon", stern: "star", regen: "rain", nebel: "fog",
-    blatt: "leaf", blätter: "leaf", kaktus: "cactus", palme: "palm tree", frucht: "fruit", wein: "wine",
-    flasche: "bottle", tasse: "cup", teller: "plate", besteck: "cutlery", kuchen: "cake", pizza: "pizza",
-    schild: "sign", grafik: "graphic", diagramm: "diagram", karte: "map", landkarte: "map", tabelle: "chart",
-    form: "shape", kreis: "circle", linie: "line", streifen: "stripes", punkt: "dot", punkte: "polka dots",
-    raster: "grid", geometrie: "geometric", abstrakt: "abstract", collage: "collage", skizze: "sketch",
-    bildschirmfoto: "screenshot", website: "website", verpackung: "packaging", etikett: "label", flyer: "flyer",
-    broschüre: "brochure", magazin: "magazine", zeitung: "newspaper", cover: "cover", album: "album",
-    möbelstück: "furniture", sessel: "armchair", leuchte: "lamp", kerze: "candle", schmuck: "jewelry",
-    uhrwerk: "watch", brille: "glasses", kleid: "dress", jacke: "jacket", hemd: "shirt", hose: "pants",
-    zug: "train", bahn: "train", bus: "bus", motorrad: "motorcycle", lkw: "truck", straßenbahn: "tram",
-    vogelperspektive: "aerial", luftbild: "aerial", schwarzweiß: "monochrome", monochrom: "monochrome",
-    struktur: "structure", konstruktion: "structure", wohnraum: "interior room", ausstellung: "exhibition",
-    galerie: "gallery", museum: "museum", produkt: "product", werkzeug: "tool", spielzeug: "toy",
-  };
-
-  // Rückweg Englisch → Deutsch für die Motiv-Chips (erster deutscher Begriff gewinnt)
-  const LABEL_DE = {};
-  for (const [de, en] of Object.entries(SEARCH_DE)) if (!LABEL_DE[en]) LABEL_DE[en] = de;
-  Object.assign(LABEL_DE, { "interior room": "innenraum", adult: "erwachsene", people: "menschen", outdoor: "draußen", indoor: "drinnen" });
-  const COLOR_NAMES = new Set(["red", "orange", "yellow", "green", "teal", "blue", "purple", "pink", "brown", "black", "gray", "white"]);
-  const COLOR_SHARE = 0.12; // ab diesem Anteil zählt eine Farbe für Suche und Filter
-
-  const tokens = (text) => String(text || "").toLowerCase().split(/[^\p{L}\p{N}]+/u).filter(Boolean);
-  const stem = (name) => String(name || "").replace(/\.[a-z0-9]{2,5}$/i, "");
-
-  // Suchindex pro Objekt, wird bei neuen Analyse-Ergebnissen verworfen
-  function searchIndex(item) {
-    if (item._idx) return item._idx;
-    const colors = new Map();
-    for (const part of String(item.colors || "").split(" ")) {
-      const [name, share] = part.split(":");
-      if (name) colors.set(name, Number(share) || 0);
-    }
-    item._idx = {
-      name: tokens([stem(item.filename), item.pageTitle, item.title, item.artist, item.album].join(" ")),
-      zone: tokens(item.zone),
-      site: tokens(domainOf(item.pageUrl) + " " + domainOf(item.imageUrl)),
-      labels: String(item.labels || "").toLowerCase().split(",").map((l) => l.trim()).filter(Boolean),
-      text: tokens([item.text, item.quote, feat("notes") ? item.note : "", feat("rights") ? item.credit : "", item.addedBy].join(" ")),
-      colors,
-    };
-    return item._idx;
-  }
-
-  // Punkte für ein Suchwort: ganzes Wort zählt mehr als ein Wortanfang,
-  // Titel mehr als Bildinhalt, Bildinhalt mehr als Text im Bild.
-  function wordScore(idx, w) {
-    const en = SEARCH_DE[w];
-    const hit = (list, exact, prefix) =>
-      list.some((x) => x === w || (en && x === en)) ? exact : prefix && w.length >= 3 && list.some((x) => x.startsWith(w)) ? prefix : 0;
-    let best = Math.max(hit(idx.name, 6, 5), hit(idx.zone, 4, 3.5), hit(idx.site, 4, 3.5), hit(idx.text, 2, w.length >= 4 ? 1.5 : 0));
-    idx.labels.forEach((label, i) => {
-      const words = label.split(" ");
-      const rank = Math.max(1, 4 - i * 0.25); // Apple sortiert nach Sicherheit
-      if (label === w || label === en || words.includes(w) || (en && words.includes(en))) best = Math.max(best, rank);
-      else if (w.length >= 4 && words.some((x) => x.startsWith(w))) best = Math.max(best, rank - 1);
-    });
-    const color = en && COLOR_NAMES.has(en) ? en : COLOR_NAMES.has(w) ? w : null;
-    const share = color ? idx.colors.get(color) || 0 : 0;
-    if (share >= COLOR_SHARE) best = Math.max(best, 2 + share * 4);
-    return best;
-  }
+  // Suche: eine für App und Tray (search.js). Deutsche Begriffe werden
+  // mitübersetzt, Motive zählen erst ab einer sicheren Erkennung.
+  const Find = window.ArchiverSearch;
+  const LABEL_DE = Find.LABEL_DE;
+  const COLOR_SHARE = Find.COLOR_SHARE;
+  const findOpts = () => ({ rights: feat("rights") });
+  const queryWords = () => Find.parse(state.query);
 
   // 0 = kein Treffer; jedes Wort muss irgendwo passen
+  // 0.42.6: ein Bild wird auch über den Text der Note gefunden, die es verknüpft
   function searchScore(item, words) {
-    if (!words.length) return 1;
-    const idx = searchIndex(item);
-    let total = 0;
-    for (const w of words) {
-      const score = wordScore(idx, w);
-      if (!score) return 0;
-      total += score;
-    }
-    return total;
+    const own = Find.score(item, words, findOpts());
+    if (own || isNote(item)) return own;
+    return Math.max(0, ...notesFor(item).map((n) => Find.score(n, words, findOpts()) * 0.5));
   }
 
   function matches(item, words) {
@@ -633,8 +752,8 @@
   function passesFilters(item, dupes) {
     const f = state.filters;
     if (f.kind && kindOf(item) !== f.kind) return false;
-    if (f.color && !((searchIndex(item).colors.get(f.color) || 0) >= COLOR_SHARE)) return false;
-    if (f.label && !searchIndex(item).labels.includes(f.label)) return false;
+    if (f.color && !(Find.colorShare(item, f.color, findOpts()) >= COLOR_SHARE)) return false;
+    if (f.label && !Find.motifs(item, 0, findOpts()).includes(f.label)) return false;
     if (f.site && domainOf(item.pageUrl) !== f.site) return false;
     if (f.orient && orientation(item) !== f.orient) return false;
     if (f.format && formatKey(item) !== f.format) return false;
@@ -700,14 +819,20 @@
     renderZones();
   }
 
-  function filterRow() {
+  const NO_FILTERS = { kind: null, color: null, orient: null, format: null, period: null, dup: false, label: null, site: null, by: null, fresh: false };
+
+  // 0.39.1 (Variante C): Art, Farbe und Zeit stehen immer in einer Zeile.
+  // „(Mehr)“ öffnet darunter Form, Format, Doppelt, Motive, Quellen als Tabelle;
+  // ist sie zu, stehen dort gesetzte Filter als Pillen in der ersten Zeile.
+  function filterRow(more, hidden) {
     const f = state.filters;
     const bar = el("div", "p-bar p-filters");
     bar.appendChild(mono("(" + t("filterTitle") + ")", "dim p-facet-title"));
-    // Art zuerst: Bilder, Tracks, Video, PDF
-    for (const k of ["image", "audio", "video", "pdf"])
-      bar.appendChild(chip("(" + t("kind_" + k) + ")", f.kind === k, () => setFilter("kind", k)));
-    bar.appendChild(el("span", "p-filter-gap"));
+    const chips = el("span", "p-facet-chips");
+    // Art zuerst: Bilder, Tracks, Video, PDF, Notizen
+    for (const k of ["image", "audio", "video", "pdf", "note"])
+      chips.appendChild(chip("(" + t("kind_" + k) + ")", f.kind === k, () => setFilter("kind", k)));
+    chips.appendChild(el("span", "p-filter-gap"));
     const dots = el("span", "p-colors");
     for (const [name, hex] of COLORS) {
       const b = button("p-color" + (f.color === name ? " active" : ""), "", () => setFilter("color", name));
@@ -715,34 +840,46 @@
       b.title = t("color_" + name);
       dots.appendChild(b);
     }
-    bar.appendChild(dots);
-    bar.appendChild(el("span", "p-filter-gap"));
-    for (const o of ["landscape", "portrait", "square"])
-      bar.appendChild(chip("(" + t("orient_" + o) + ")", f.orient === o, () => setFilter("orient", o)));
-    bar.appendChild(el("span", "p-filter-gap"));
-    const formats = [...new Set(state.items.map(formatKey))].filter(Boolean).sort();
-    for (const fmt of formats) bar.appendChild(chip("(" + fmt + ")", f.format === fmt, () => setFilter("format", fmt)));
-    bar.appendChild(el("span", "p-filter-gap"));
+    chips.appendChild(dots);
+    chips.appendChild(el("span", "p-filter-gap"));
     for (const p of Object.keys(PERIODS))
-      bar.appendChild(chip("(" + t("period_" + p) + ")", f.period === p, () => setFilter("period", p)));
-    bar.appendChild(el("span", "p-filter-gap"));
-    bar.appendChild(chip("(" + t("filterDup") + ")", f.dup, () => setFilter("dup", true)));
+      chips.appendChild(chip("(" + t("period_" + p) + ")", f.period === p, () => setFilter("period", p)));
     if (state.shared) {
       const fresh = state.items.filter(isFresh).length;
       if (fresh || f.fresh) {
-        bar.appendChild(el("span", "p-filter-gap"));
-        bar.appendChild(chip("(" + t("filterFresh") + " " + fresh + ")", f.fresh, () => setFilter("fresh", true)));
+        chips.appendChild(el("span", "p-filter-gap"));
+        chips.appendChild(chip("(" + t("filterFresh") + " " + fresh + ")", f.fresh, () => setFilter("fresh", true)));
       }
     }
+    chips.appendChild(el("span", "p-filter-gap"));
+    const toggle = chip("(" + t(more ? "filterLess" : "filterMore") + ")", false, () => {
+      setPref("filtersMore", !more);
+      renderZones();
+    });
+    toggle.classList.add("p-filter-more-btn");
+    toggle.setAttribute("aria-expanded", String(more));
+    chips.appendChild(toggle);
+    // Gesetzte Filter aus „Mehr“, solange es zu ist
+    for (const [key, label] of hidden) {
+      const pill = button("p-filter-pill", label, () => setFilter(key, state.filters[key]));
+      pill.title = t("filterRemove");
+      chips.appendChild(pill);
+    }
+    // Bilderkennung läuft im Hintergrund; bis sie durch ist, finden Motive weniger (0.31.2)
+    if (analysisLeft()) {
+      chips.appendChild(el("span", "p-filter-gap"));
+      chips.appendChild(mono(analysisText(), "dim p-analysis"));
+    }
     if (filtersActive()) {
-      bar.appendChild(el("span", "p-flex"));
-      bar.appendChild(
+      chips.appendChild(el("span", "p-flex"));
+      chips.appendChild(
         chip("(" + t("filterReset") + ")", false, () => {
-          state.filters = { kind: null, color: null, orient: null, format: null, period: null, dup: false, label: null, site: null, by: null, fresh: false };
+          state.filters = { ...NO_FILTERS };
           renderZones();
         })
       );
     }
+    bar.appendChild(chips);
     return bar;
   }
 
@@ -752,7 +889,7 @@
     const sites = new Map();
     for (const item of state.items) {
       if (!matches(item, words)) continue;
-      searchIndex(item).labels.slice(0, 6).forEach((l) => labels.set(l, (labels.get(l) || 0) + 1));
+      Find.motifs(item, 6, findOpts()).forEach((l) => labels.set(l, (labels.get(l) || 0) + 1));
       const site = domainOf(item.pageUrl);
       if (site) sites.set(site, (sites.get(site) || 0) + 1);
     }
@@ -775,23 +912,54 @@
   }
 
   function filterBar() {
+    const f = state.filters;
+    const more = pref("filtersMore", false) === true;
     const wrap = el("div", "p-find-facets");
-    wrap.appendChild(filterRow());
-    const words = state.query.toLowerCase().split(/\s+/).filter(Boolean);
+    const words = queryWords();
     const { labels, sites } = facetCounts(words);
     const motif = (l) => (lang === "de" && LABEL_DE[l] ? LABEL_DE[l][0].toUpperCase() + LABEL_DE[l].slice(1) : l);
-    if (labels.length || state.filters.label) wrap.appendChild(facetRow("facetMotif", labels, "label", motif));
-    if (sites.length || state.filters.site) wrap.appendChild(facetRow("facetSource", sites, "site", (x) => x));
-    // Geteilte Bibliothek: „Von: JP“, wer abgelegt hat
-    if (state.shared) {
-      const people = new Map();
-      for (const item of state.items) if (item.addedBy && matches(item, words)) people.set(item.addedBy, (people.get(item.addedBy) || 0) + 1);
-      if (people.size > 1 || state.filters.by) {
-        const list = [...people].sort((a, b) => b[1] - a[1]);
-        wrap.appendChild(facetRow("facetBy", list, "by", (x) => (x === state.user ? t("byMe") : byInitials(x))));
-      }
+    const people = new Map();
+    if (state.shared) for (const item of state.items) if (item.addedBy && matches(item, words)) people.set(item.addedBy, (people.get(item.addedBy) || 0) + 1);
+    const byLabel = (x) => (x === state.user ? t("byMe") : byInitials(x));
+    const hidden = [];
+    if (!more) {
+      if (f.orient) hidden.push(["orient", t("orient_" + f.orient)]);
+      if (f.format) hidden.push(["format", f.format]);
+      if (f.dup) hidden.push(["dup", t("filterDup")]);
+      if (f.label) hidden.push(["label", motif(f.label)]);
+      if (f.site) hidden.push(["site", f.site]);
+      if (f.by) hidden.push(["by", byLabel(f.by)]);
     }
+    wrap.appendChild(filterRow(more, hidden));
+    if (!more) return wrap;
+    const table = el("div", "p-filter-table");
+    table.appendChild(facetRow("facetForm", ["landscape", "portrait", "square"].map((o) => [o, 0]), "orient", (o) => t("orient_" + o)));
+    const formats = [...new Set(state.items.map(formatKey))].filter(Boolean).sort();
+    if (formats.length || f.format) table.appendChild(facetRow("facetFormat", formats.map((x) => [x, 0]), "format", (x) => x));
+    table.appendChild(facetRow("facetDup", [[true, 0]], "dup", () => t("filterDupOnly")));
+    if (labels.length || f.label) table.appendChild(facetRow("facetMotif", labels, "label", motif));
+    if (sites.length || f.site) table.appendChild(facetRow("facetSource", sites, "site", (x) => x));
+    // Geteilte Bibliothek: „Von: JP“, wer abgelegt hat
+    if (state.shared && (people.size > 1 || f.by)) table.appendChild(facetRow("facetBy", [...people].sort((a, b) => b[1] - a[1]), "by", byLabel));
+    wrap.appendChild(table);
     return wrap;
+  }
+
+  // Bilder ohne Analyse (Farben fehlen noch); Vorschau und Analyse laufen nacheinander
+  function analysisLeft() {
+    let left = 0;
+    let total = 0;
+    for (const item of state.items) {
+      if (kindOf(item) !== "image") continue;
+      total++;
+      if (item.colors == null) left++;
+    }
+    return left ? { left, total } : null;
+  }
+
+  function analysisText() {
+    const a = analysisLeft();
+    return a ? "(" + t("analysisLeft", { n: a.left, total: a.total }) + ")" : "";
   }
 
   // Analyse-Ergebnisse (Inhalt, Text, Farben) kommen nach und nach
@@ -805,6 +973,12 @@
       item.colors = a.colors;
       item._idx = null;
     }
+    const note = document.querySelector(".p-analysis");
+    if (note) {
+      const text = analysisText();
+      if (text) note.textContent = text;
+      else note.remove();
+    }
     if (state.query.trim() || filtersActive()) rerenderSearch();
   }
 
@@ -813,17 +987,27 @@
     renderZones();
   }, 800);
 
+  // Während eines Zeichendurchgangs werden Objekte je Zone und „zuletzt
+  // gesichert“ nur einmal ausgerechnet statt für jede Zeile neu über die ganze
+  // Bibliothek (0.31.0). Außerhalb von render() rechnet alles frisch.
+  let pass = null;
   function render() {
-    renderZones();
-    renderToolbar();
-    renderInfo();
-    renderLibTab();
+    pass = { byZone: null, saved: null };
+    try {
+      renderZones();
+      renderToolbar();
+      renderInfo();
+      renderLibTab();
+    } finally {
+      pass = null;
+    }
   }
 
   // Prototyp: keine Toolbar mehr. Die Navigation schwebt unten in der Mitte,
   // links Zonen (Startseite) bzw. „← Zonen“ in einer Zone, dann Suche und ⋯.
   function renderToolbar() {
     document.documentElement.style.setProperty("--thumb", state.size + "px");
+    document.documentElement.style.setProperty("--lt", LIST_THUMBS[Math.max(0, SIZES.indexOf(state.size))] + "px");
     const main = $("navMain");
     const btns = [];
     const inZone = isZone(state.focus) && !state.query;
@@ -840,6 +1024,10 @@
         if (!last && !exists) b.classList.add("dim");
         btns.push(b);
       });
+    } else if (state.focus === DELETED && !state.query.trim()) {
+      btns.push(navButton(t("navAll"), false, () => setFocus(ALL)));
+      btns.push(el("span", "p-nav-sep", "›"));
+      btns.push(navButton(t("deletedTitle"), true));
     } else {
       btns.push(navButton(t("navAll"), state.focus === ALL || !!state.query.trim(), () => setFocus(ALL)));
     }
@@ -933,7 +1121,16 @@
   }
 
   function zoneItems(path) {
-    return state.items.filter((i) => i.zone === path); // neueste zuerst (Reihenfolge aus Rust)
+    if (!pass) return state.items.filter((i) => i.zone === path); // neueste zuerst (Reihenfolge aus Rust)
+    if (!pass.byZone) {
+      pass.byZone = new Map();
+      for (const i of state.items) {
+        const list = pass.byZone.get(i.zone);
+        if (list) list.push(i);
+        else pass.byZone.set(i.zone, [i]);
+      }
+    }
+    return (pass.byZone.get(path) || []).slice();
   }
 
   // Für Übersichten (Karten-Cover, Index-Thumbs, Vorschau): in der eigenen Reihenfolge der Zone
@@ -973,12 +1170,21 @@
 
   // Ordner einer Ebene mit Anzahl (samt Unterordnern). Oben in der Zone kommen
   // lose Dateien ("") zuletzt; im Ordner zählen nur seine eigenen Unterordner.
-  function zoneFolders(items, base) {
+  function zoneFolders(items, base, zone) {
     const counts = new Map();
     for (const i of items) {
       if (base && !inFolder(i, base)) continue;
       const f = childFolder(i, base);
       counts.set(f, (counts.get(f) || 0) + 1);
+    }
+    // 0.27: auch leere Ordner (gerade angelegt) zeigen
+    if (zone != null) {
+      const pre = (zone ? zone + "/" : "") + (base ? base + "/" : "");
+      for (const d of state.folders || []) {
+        if (!d.startsWith(pre)) continue;
+        const f = (base ? base + "/" : "") + d.slice(pre.length).split("/")[0];
+        if (!counts.has(f)) counts.set(f, 0);
+      }
     }
     const named = [...counts].filter(([f]) => f).sort((a, b) => a[0].localeCompare(b[0], undefined, { numeric: true }));
     return counts.has("") && !base ? [...named, ["", counts.get("")]] : named;
@@ -996,27 +1202,96 @@
 
   // Ordner-Chips unter dem Zonentitel: (All 282) (Typefaces 165) (Loose 3).
   // Im Ordner: (Alle n) für diese Ebene, dahinter nur seine Unterordner.
+  // 0.27: Chips filtern nur, die Ebene (Titel, Pfad, Karten) bleibt stehen.
   function folderChips(zone, folders, total) {
     const wrap = el("span", "p-folder-chips");
-    const base = state.folder || null;
-    wrap.appendChild(chip("(" + t("folderAll") + " " + total + ")", state.folder == null || state.folder === base, () => {
-      state.folder = base;
+    const base = state.level || null;
+    const pick = (f) => {
+      state.folder = f;
       renderZones();
-    }));
-    for (const [f, n] of folders) wrap.appendChild(chip("(" + (f ? lastSegment(f) : t("folderLoose")) + " " + n + ")", state.folder === f, () => openFolder(f)));
+    };
+    wrap.appendChild(chip("(" + t("folderAll") + " " + total + ")", state.folder == null || state.folder === base, () => pick(base)));
+    for (const [f, n] of folders) wrap.appendChild(chip("(" + (f ? lastSegment(f) : t("folderLoose")) + " " + n + ")", state.folder === f, () => pick(f)));
     return wrap;
   }
 
   // Ordner betreten bzw. eine Ebene zurück (Esc, ⌘↑, Klick im Pfad)
   function openFolder(f) {
+    state.level = f;
     state.folder = f;
     state.folderKbd = null;
     renderZones();
   }
 
+  // Neuer Unterordner auf der aktuellen Ebene, auf Wunsch mit der Auswahl darin.
+  // Er heißt erst „Neuer Ordner“ und lässt sich gleich umbenennen (wie im Finder).
+  async function newFolder(withSelection) {
+    if (!isZone(state.focus)) return;
+    const parent = state.focus + (state.level ? "/" + state.level : "");
+    const items = withSelection ? selectedItems() : [];
+    try {
+      const rel = await invoke("create_folder", { parent, name: t("newFolderName") });
+      if (items.length) await invoke("move_items", { paths: items.map((i) => i.path), zone: rel, exact: true });
+      await refresh();
+      renameFolder(rel);
+    } catch (e) {
+      fail(e);
+    }
+  }
+
+  function renameFolder(rel) {
+    const card = [...document.querySelectorAll(".p-folder-card")].find((c) => c.dataset.zone === rel);
+    const name = card && card.querySelector(".zone-card-name");
+    if (!name) return;
+    inlineInput(
+      name,
+      lastSegment(rel),
+      async (value) => {
+        try {
+          const next = await invoke("rename_zone", { zone: rel, name: value });
+          const inZone = (p) => p.slice(state.focus.length + 1);
+          for (const key of ["level", "folder"]) if (state[key] === inZone(rel)) state[key] = inZone(next);
+          await refresh();
+        } catch (e) {
+          fail(e);
+          renderZones();
+        }
+      },
+      renderZones
+    );
+  }
+
+  function openZoneBackgroundMenu(x, y) {
+    closeMenus();
+    closeMoreMenu();
+    const menu = el("div", "zone-menu p-ctx-menu");
+    menu.addEventListener("click", (e) => e.stopPropagation());
+    menu.addEventListener("contextmenu", (e) => e.preventDefault());
+    const noteBtn = button("zone-menu-item", t("noteNew"), () => {
+      closeMenus();
+      newNote();
+    });
+    noteBtn.appendChild(el("span", "p-ctx-key", "⌘⇧N"));
+    menu.appendChild(noteBtn);
+    menu.appendChild(button("zone-menu-item", t("newFolder"), () => {
+      closeMenus();
+      newFolder(false);
+    }));
+    document.body.appendChild(menu);
+    const r = menu.getBoundingClientRect();
+    menu.style.left = Math.max(8, Math.min(x, window.innerWidth - r.width - 8)) + "px";
+    menu.style.top = Math.max(8, Math.min(y, window.innerHeight - r.height - 8)) + "px";
+  }
+
   function folderUp() {
-    if (state.folder == null) return false;
-    openFolder(parentFolder(state.folder));
+    // Erst den Chip-Filter lösen, dann eine Ebene hoch
+    if (state.folder != null && state.folder !== state.level) {
+      state.folder = state.level;
+      renderZones();
+      return true;
+    }
+    if (state.level == null) return false;
+    openFolder(parentFolder(state.level));
     return true;
   }
 
@@ -1034,11 +1309,114 @@
       text.appendChild(el("div", "p-card-meta", n === 1 ? t("countImage") : t("countImages", { n })));
       body.appendChild(text);
       card.appendChild(body);
-      card.addEventListener("click", () => openFolder(f));
+      const rel = zone.path + "/" + f;
+      // 0.28: ⋯ wie bei Zonen (Umbenennen, im Finder zeigen, löschen)
+      const menuWrap = el("span", "zone-menu-wrap");
+      menuWrap.appendChild(zoneMenuButton({ path: rel, count: n }, () => folderMenu(rel, n)));
+      body.appendChild(menuWrap);
+      card.addEventListener("click", (e) => {
+        if (cardDragged || e.target.closest(".zone-menu-btn, .zone-menu, input")) return;
+        openFolder(f);
+      });
+      card.addEventListener("contextmenu", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        closeMenus();
+        const menu = folderMenu(rel, n);
+        menu.classList.add("p-ctx-menu");
+        document.body.appendChild(menu);
+        const r = menu.getBoundingClientRect();
+        menu.style.left = Math.max(8, Math.min(e.clientX, window.innerWidth - r.width - 8)) + "px";
+        menu.style.top = Math.max(8, Math.min(e.clientY, window.innerHeight - r.height - 8)) + "px";
+      });
+      // 0.28: Ordner auf einen anderen Ordner ziehen legt ihn hinein
+      card.addEventListener("pointerdown", (e) => dragFolder(e, card));
+      card.addEventListener("dragstart", (e) => e.preventDefault());
       card.dataset.folder = f;
+      card.dataset.zone = rel; // Ablageziel beim Ziehen (0.27)
       wrap.appendChild(card);
     }
     return wrap;
+  }
+
+  // ⋯-Menü eines Unterordners: dieselben Einträge wie bei einer Zone
+  function folderMenu(rel, count) {
+    const menu = el("div", "zone-menu");
+    menu.addEventListener("click", (e) => e.stopPropagation());
+    menu.addEventListener("contextmenu", (e) => e.preventDefault());
+    menu.appendChild(button("zone-menu-item", t("rename"), () => {
+      closeMenus();
+      renameFolder(rel);
+    }));
+    menu.appendChild(button("zone-menu-item", t("reveal"), () => {
+      closeMenus();
+      invoke("reveal_zone", { zone: rel }).catch(fail);
+    }));
+    // Ordner in einer externen Zone gehören nicht der Bibliothek: kein Löschen (0.39.1)
+    if (insideExternal(rel)) return menu;
+    const del = button("zone-menu-item danger", t("trashZone"));
+    let armed = false;
+    del.addEventListener("click", async () => {
+      if (!armed) {
+        armed = true;
+        del.textContent = t("trashZoneConfirm", { count: count === 1 ? t("countImage") : t("countImages", { n: count }) });
+        del.classList.add("armed");
+        return;
+      }
+      closeMenus();
+      const inZone = rel.slice(state.focus.length + 1);
+      for (const key of ["level", "folder"]) if (state[key] === inZone || (state[key] || "").startsWith(inZone + "/")) state[key] = parentFolder(inZone);
+      trashZone({ path: rel, count });
+    });
+    menu.appendChild(del);
+    return menu;
+  }
+
+  function dragFolder(e, card) {
+    if (e.button !== 0 || e.target.closest(".zone-menu-btn, .zone-menu, input")) return;
+    card.setPointerCapture(e.pointerId);
+    const start = { x: e.clientX, y: e.clientY };
+    let lifted = false;
+    let target = null;
+    const onMove = (ev) => {
+      if (!lifted) {
+        if (Math.hypot(ev.clientX - start.x, ev.clientY - start.y) < DRAG_THRESHOLD) return;
+        lifted = true;
+        card.classList.add("lifted");
+        document.body.classList.add("sorting");
+      }
+      card.style.transform = `translate(${ev.clientX - start.x}px, ${ev.clientY - start.y}px)`;
+      target = null;
+      for (const other of document.querySelectorAll(".p-folder-card")) {
+        if (other === card) continue;
+        const r = other.getBoundingClientRect();
+        if (ev.clientX >= r.left && ev.clientX <= r.right && ev.clientY >= r.top && ev.clientY <= r.bottom) target = other;
+      }
+      for (const other of document.querySelectorAll(".p-folder-card")) other.classList.toggle("drop-target", other === target);
+    };
+    const onUp = async () => {
+      card.removeEventListener("pointermove", onMove);
+      card.removeEventListener("pointerup", onUp);
+      card.removeEventListener("pointercancel", onUp);
+      if (!lifted) return;
+      cardDragged = true;
+      setTimeout(() => (cardDragged = false), 0);
+      document.body.classList.remove("sorting");
+      card.classList.remove("lifted");
+      card.style.transform = "";
+      for (const n of document.querySelectorAll(".drop-target")) n.classList.remove("drop-target");
+      if (!target) return;
+      try {
+        await invoke("move_folder", { from: card.dataset.zone, into: target.dataset.zone });
+        await refresh();
+        toast(t("folderMoved", { folder: lastSegment(card.dataset.zone), into: lastSegment(target.dataset.zone) }));
+      } catch (err) {
+        fail(err);
+      }
+    };
+    card.addEventListener("pointermove", onMove);
+    card.addEventListener("pointerup", onUp);
+    card.addEventListener("pointercancel", onUp);
   }
 
   // Vorschaubild für Startseite und Karten; fehlt das Thumbnail noch, das Original nehmen.
@@ -1047,6 +1425,11 @@
     const img = el("img");
     img.alt = "";
     img.decoding = "async";
+    // Zuletzt gelöscht: PSD, AI, ZIP … aus einer gelöschten Zone, ohne Vorschau
+    if (item.other) {
+      img.src = Media.placeholder((item.format || "").toUpperCase());
+      return img;
+    }
     img.src = thumbSrc(item);
     img.onerror = () => {
       img.onerror = null;
@@ -1073,9 +1456,64 @@
 
   let lastViewKey = "";
 
+  // ---- Farbmarken (0.41.0): Objekte einer Farbe gehören zusammen ----
+  // Chips im Kopf der Zone: je vergebene Farbe ein Quadrat mit Anzahl, Klick filtert
+  function markChips(items) {
+    const counts = MARKS.map((k) => [k, items.filter((i) => i.mark === k).length]).filter(([, n]) => n);
+    if (!counts.length) {
+      state.markFilter = null;
+      return null;
+    }
+    const wrap = el("div", "p-marks");
+    for (const [k, n] of counts) {
+      const on = state.markFilter === k;
+      const c = chip("", on, () => {
+        state.markFilter = on ? null : k;
+        renderZones();
+      });
+      c.classList.add("p-mark-chip");
+      const sw = el("i", "mark-sw");
+      sw.style.setProperty("--mk", QUOTE_TONES[k][0]);
+      c.append(sw, document.createTextNode(String(n)));
+      c.title = t("markFilter", { tone: t("tone_" + k) });
+      wrap.appendChild(c);
+    }
+    return wrap;
+  }
+
+  // Farbe für die Auswahl setzen; dieselbe Farbe noch einmal nimmt sie wieder weg
+  function setMark(items, key) {
+    items = items.filter((i) => i.hash);
+    if (!items.length) return;
+    const next = key && items.every((i) => i.mark === key) ? "" : key || "";
+    for (const i of items) i.mark = next || null;
+    if (state.markFilter && !state.items.some((i) => i.zone === state.focus && i.mark === state.markFilter)) state.markFilter = null;
+    renderZones();
+    invoke("set_note", { hashes: items.map((i) => i.hash), patch: { mark: next } }).catch(fail);
+  }
+
+  function markRow(items, done) {
+    const row = el("div", "p-mark-row");
+    const current = items.every((i) => i.mark === items[0].mark) ? items[0].mark : null;
+    MARKS.forEach((k, n) => {
+      const b = button("mark-sw big" + (current === k ? " active" : ""), "", () => {
+        done();
+        setMark(items, k);
+      });
+      b.style.setProperty("--mk", QUOTE_TONES[k][0]);
+      b.title = t("tone_" + k) + "  ⌥" + (n + 1);
+      row.appendChild(b);
+    });
+    if (items.some((i) => i.mark)) row.appendChild(button("p-mark-none", t("markNone"), () => {
+      done();
+      setMark(items, "");
+    }));
+    return row;
+  }
+
   function renderZones() {
     document.body.classList.toggle("has-selection", state.selection.size > 0);
-    const words = state.query.toLowerCase().split(/\s+/).filter(Boolean);
+    const words = queryWords();
     const filtering = filtersActive();
     const dupes = state.filters.dup ? duplicateHashes() : null;
     state.lists = new Map(state.zones.map((z) => [z.path, []]));
@@ -1094,6 +1532,7 @@
     if (isZone(state.focus) && !words.length && state.lists.has(state.focus)) {
       let list = state.lists.get(state.focus);
       if (state.folder != null) list = list.filter((i) => inFolder(i, state.folder));
+      if (state.markFilter) list = list.filter((i) => i.mark === state.markFilter);
       if (zoneLayout(state.focus) === "sections") {
         const base = state.folder || null;
         const rank = new Map(zoneFolders(list, base).map(([f], i) => [f, i]));
@@ -1104,16 +1543,23 @@
     }
     // Finden: eine Liste nach Relevanz, bei gleicher Punktzahl das Neueste zuerst
     state.found = words.length || filtering ? found.sort((a, b) => b[0] - a[0] || b[1] - a[1]).map((x) => x[2]) : null;
+    // Liste nach Spalte sortiert; Tastatur und Lightbox folgen derselben Reihenfolge
+    const sort = listSort();
+    if (sort) {
+      for (const [zone, list] of state.lists) state.lists.set(zone, sortForList(list, sort));
+      if (state.found) state.found = sortForList(state.found, sort);
+    }
 
     const grid = $("zones");
     const home = state.focus == null && !words.length && !filtering;
     document.body.classList.toggle("at-home", home);
     grid.classList.toggle("original", state.view === "original");
+    grid.classList.toggle("listview", state.view === "list");
     const key = home ? "home:" + state.home : words.length || filtering ? "search" : "zone:" + state.focus;
     const scroll = key === lastViewKey ? grid.scrollTop : 0;
     lastViewKey = key;
 
-    grid.replaceChildren(home ? renderHome() : renderGallery(words.length > 0 || filtering));
+    grid.replaceChildren(home ? renderHome() : state.focus === DELETED && !words.length && !filtering ? renderDeleted() : renderGallery(words.length > 0 || filtering));
     if (home) applyHomeCursor(false);
     layoutMasonry(true);
     grid.scrollTop = scroll;
@@ -1153,18 +1599,8 @@
 
   function renderHome() {
     const wrap = el("div", "p-page p-home p-home-" + state.home);
-    const first = state.items.length ? Math.min(...state.items.map(itemTime).filter(Boolean)) : 0;
-    const since = first
-      ? new Date(first).toLocaleDateString(lang === "de" ? "de-DE" : "en-GB", { month: "long", year: "numeric" })
-      : "";
-    wrap.appendChild(
-      headline(
-        null,
-        state.items.length
-          ? t("headHome", { zones: zonesText(state.zones.length), images: countText(state.items.length), since })
-          : t("headHomeEmpty")
-      )
-    );
+    // 0.40.10: „Übersicht“ in voller Farbe, darunter die Zahlen gedimmt (56 px)
+    wrap.appendChild(homeHero());
 
     const bar = el("div", "p-bar");
     bar.appendChild(mono(t("allZonesLabel") + " (" + state.zones.length + ")", "strong"));
@@ -1172,7 +1608,6 @@
     for (const [id, label] of [
       ["overview", "layoutOverview"],
       ["cards", "layoutCards"],
-      ["preview", "layoutPreview"],
       ["index", "layoutIndex"],
     ]) {
       bar.appendChild(
@@ -1195,28 +1630,22 @@
     if (state.home === "overview") wrap.appendChild(overviewLayout());
     else if (state.home === "cards") {
       // Active Zones stehen in jeder Ansicht oben, je nach Darstellung als Karten oder Zeilen
-      const row = el("div", "p-hotrow");
-      for (let i = 0; i < HOT_ZONES; i++) row.appendChild(state.zones[i] ? hotCard(state.zones[i], i) : hotSlot(i));
-      wrap.appendChild(row);
+      wrap.appendChild(hotRow());
       wrap.appendChild(restBar(state.zones.length - HOT_ZONES));
       wrap.appendChild(cardsLayout());
-    } else if (state.home === "preview") {
-      const split = el("div", "p-split");
-      const lists = el("div", "p-split-lists");
-      lists.appendChild(hotLabel());
-      lists.appendChild(hotList(true));
-      lists.appendChild(restBar(state.zones.length - HOT_ZONES));
-      lists.appendChild(indexList(true, state.zones.slice(HOT_ZONES), HOT_ZONES));
-      split.appendChild(lists);
-      split.appendChild(previewPanel());
-      wrap.appendChild(split);
-    } else {
-      wrap.appendChild(hotLabel());
-      wrap.appendChild(hotList(false));
-      wrap.appendChild(restBar(state.zones.length - HOT_ZONES));
-      wrap.appendChild(indexList(false, state.zones.slice(HOT_ZONES), HOT_ZONES));
-    }
+    } else wrap.appendChild(overviewLayout(true)); // 0.42.6: Index nur aus Zeilenkarten, Active Zones zuerst
     return wrap;
+  }
+
+  function homeHero() {
+    const hero = el("div", "p-home-hero");
+    hero.appendChild(
+      headline(
+        t("headHomeTitle"),
+        state.items.length ? t("headHome", { zones: zonesText(state.zones.length), images: countText(state.items.length) }) : t("headHomeEmpty")
+      )
+    );
+    return hero;
   }
 
   // ---- Startseite per Tastatur: ← → wählen Zonen nacheinander, ↑ ↓ nach
@@ -1297,120 +1726,72 @@
     return Number.isInteger(step) ? Math.max(0, Math.min(HOME_SIZES.length - 1, step)) : 1;
   }
 
-  function indexList(compact, zones = state.zones, offset = 0, swap = offset > 0) {
-    const list = el("div", "p-index" + (compact ? " compact" : ""));
-    const head = el("div", "p-row p-row-head");
-    head.appendChild(mono(t("colNo")));
-    head.appendChild(mono(t("colZone")));
-    head.appendChild(mono(t("colImages")));
-    if (!compact) {
-      head.appendChild(mono(t("colLast")));
-      head.appendChild(mono(t("colPreview"), "right"));
-    }
-    head.appendChild(el("span"));
-    list.appendChild(head);
-
-    zones.forEach((zone, i) => {
-      const index = offset + i;
-      const row = el("div", "p-row p-zone");
-      row.dataset.zone = zone.path;
-      if (swap) {
-        // Übersicht: Zeile per Ziehen mit einer Hot Zone tauschen
-        row.dataset.swap = zone.path;
-        row.addEventListener("pointerdown", (e) => dragSwap(e, row));
-      }
-      if (compact && zone.path === previewZone()) row.classList.add("current");
-      const no = mono(String(index + 1).padStart(2, "0"), "dim");
-      if (index < HOT_ZONES) no.title = t("keyHint", { n: index + 1 });
-      row.appendChild(no);
-      const name = zoneNameEl(zone);
-      row.appendChild(name);
-      row.appendChild(el("span", "p-num", String(zone.count)));
-      if (!compact) {
-        row.appendChild(el("span", "p-num", recentDate(lastSaved(zone.path))));
-        const thumbs = el("span", "p-thumbs");
-        for (const item of orderedItems(zone.path).slice(0, 6)) {
-          thumbs.appendChild(previewImg(item));
-        }
-        row.appendChild(thumbs);
-      }
-      const menuWrap = el("span", "zone-menu-wrap");
-      menuWrap.appendChild(zoneMenuButton(zone));
-      row.appendChild(menuWrap);
-
-      row.addEventListener("click", (e) => {
-        if (cardDragged || e.target.closest(".zone-menu-btn, .zone-menu, input")) return;
-        setFocus(zone.path);
-      });
-      if (compact) {
-        row.addEventListener("mouseenter", () => {
-          if (state.hover === zone.path) return;
-          state.hover = zone.path;
-          for (const r of list.querySelectorAll(".p-zone")) r.classList.toggle("current", r === row);
-          const old = document.querySelector(".p-preview");
-          if (old) old.replaceWith(previewPanel());
-        });
-      }
-      if (canEdit(zone.path)) {
-        name.title = t("renameHint");
-        name.addEventListener("dblclick", (e) => {
-          e.stopPropagation();
-          startRename(name, zone.path);
-        });
-      }
-      list.appendChild(row);
-    });
-
-    const add = el("div", "p-row p-new");
-    add.appendChild(mono("+", "dim"));
-    add.appendChild(el("span", "zone-card-name", t("newZone")));
-    // leere Spalten wie in den Zonen-Zeilen, damit die Zeile gleich hoch ist
-    add.appendChild(el("span", "p-num"));
-    if (!compact) {
-      add.appendChild(el("span", "p-num"));
-      add.appendChild(el("span", "p-thumbs"));
-    }
-    add.appendChild(el("span"));
-    add.addEventListener("click", startNewZone);
-    list.appendChild(add);
-    return list;
-  }
-
-  // ---- Übersicht: oben die vier Hot Zones als Karten, darunter der Index ----
-
-  function hotList(compact) {
-    const list = indexList(compact, state.zones.slice(0, HOT_ZONES), 0, true);
-    list.querySelector(".p-new")?.remove();
-    return list;
-  }
-
-  function hotLabel() {
-    const label = el("div", "p-bar p-overview-bar p-hot-label");
-    label.appendChild(mono(t("hotLabel") + " (" + Math.min(HOT_ZONES, state.zones.length) + ")", "strong"));
-    label.appendChild(el("span", "p-flex"));
-    label.appendChild(mono(t("hotHintRow"), "dim"));
-    return label;
-  }
-
   function restBar(n) {
     const label = el("div", "p-bar p-overview-bar");
     label.appendChild(mono(t("indexLabel") + " (" + Math.max(0, n) + ")", "strong"));
     return label;
   }
 
-  function overviewLayout() {
-    const wrap = el("div", "p-overview");
+  // 0.28: Active Zones brechen wie der Index um; passen keine vier Karten, dann 2 × 2
+  function hotRow() {
     const row = el("div", "p-hotrow");
+    const width = $("zones").clientWidth - 80;
+    // 0.40.9: vier Spalten schon ab 200 px Kartenbreite
+    row.style.setProperty("--hot-cols", Math.floor((width + 10) / 210) >= 4 ? "4" : "2");
     for (let i = 0; i < HOT_ZONES; i++) row.appendChild(state.zones[i] ? hotCard(state.zones[i], i) : hotSlot(i));
-    wrap.appendChild(row);
-    const rest = state.zones.slice(HOT_ZONES);
-    const label = el("div", "p-bar p-overview-bar");
-    label.appendChild(mono(t("indexLabel") + " (" + rest.length + ")", "strong"));
-    label.appendChild(el("span", "p-flex"));
-    label.appendChild(mono(t("hotHint"), "dim"));
-    wrap.appendChild(label);
-    wrap.appendChild(indexList(false, rest, HOT_ZONES));
+    return row;
+  }
+
+  // Übersicht (0.40.11): oben die vier Active Zones als Karten, darunter die
+  // übrigen Zonen als Kontaktbogen (Variante E): je Zone eine Zeile, links Name
+  // und Zahl, rechts klein die Bilder. Bildhöhe folgt den Größen-Chips (--row-thumb).
+  const SHEET_MAX = 24;
+  function overviewLayout(rows) {
+    const wrap = el("div", "p-overview");
+    const hot = hotRow();
+    if (!rows) {
+      wrap.appendChild(hot);
+      wrap.appendChild(restBar(state.zones.length - HOT_ZONES));
+    }
+    const sheet = el("div", "p-sheetlist");
+    // 0.40.13: jede Zeile ist eine Karte, ein Klickziel; Bilder beginnen auf der Kante der zweiten Active-Karte
+    sheet.style.setProperty("--hot-cols", hot.style.getPropertyValue("--hot-cols") || "4");
+    state.zones.slice(rows ? 0 : HOT_ZONES).forEach((zone, i) => sheet.appendChild(sheetRow(zone, rows && i < HOT_ZONES ? i : -1)));
+    wrap.appendChild(sheet);
     return wrap;
+  }
+
+  function sheetRow(zone, hotIndex) {
+      const items = orderedItems(zone.path);
+      const row = el("article", "p-card p-sheet-row");
+      row.dataset.zone = zone.path;
+      row.dataset.swap = zone.path;
+      const head = el("div", "p-sheet-zone");
+      const name = zoneNameEl(zone);
+      if (hotIndex >= 0) head.appendChild(mono(String(hotIndex + 1).padStart(2, "0") + " · " + t("hotZone"), "dim"));
+      head.appendChild(name);
+      head.appendChild(mono(cardMeta(zone), "dim"));
+      if (canEdit(zone.path))
+        name.addEventListener("dblclick", (e) => {
+          e.stopPropagation();
+          startRename(name, zone.path);
+        });
+      const thumbs = el("div", "p-sheet-thumbs");
+      for (const item of items.slice(0, SHEET_MAX)) {
+        const cell = el("span", "p-sheet-thumb");
+        cell.appendChild(previewImg(item));
+        thumbs.appendChild(cell);
+      }
+      if (items.length > SHEET_MAX) thumbs.appendChild(mono("+" + (items.length - SHEET_MAX), "p-sheet-more"));
+      if (!items.length) thumbs.appendChild(mono(t("emptyShort"), "dim"));
+      row.append(head, thumbs);
+      row.addEventListener("click", (e) => {
+        if (cardDragged || e.target.closest("input")) return;
+        setFocus(zone.path);
+      });
+      row.addEventListener("pointerdown", (e) => dragSwap(e, row));
+      row.addEventListener("dragstart", (e) => e.preventDefault());
+      return row;
   }
 
   function hotKey(i) {
@@ -1426,9 +1807,7 @@
     card.dataset.swap = zone.path;
     card.title = t("keyHint", { n: i + 1 });
     const items = orderedItems(zone.path);
-    const cover = el("div", "p-card-cover" + (items.length >= 3 ? " trio" : "") + (items.length ? "" : " empty"));
-    for (const item of items.slice(0, items.length >= 3 ? 3 : 1)) cover.appendChild(previewImg(item));
-    card.appendChild(cover);
+    card.appendChild(thumbCover(zone, items));
     card.appendChild(hotKey(i));
     const body = el("div", "p-card-body");
     const text = el("div");
@@ -1455,14 +1834,23 @@
     return card;
   }
 
+  // Neue-Zone-Karte (0.39.1): nur ein Plus in der Mitte, ein Viertel der
+  // Kartenhöhe, Linien so stark wie die Outline. Der Name steht im Tooltip.
+  function newZonePlus(card) {
+    card.title = t("newZone");
+    card.setAttribute("aria-label", t("newZone"));
+    card.appendChild(el("span", "p-new-plus"));
+  }
+
   // Freier Platz (weniger als vier Zonen): neue Zone anlegen
   function hotSlot(i) {
     const card = el("article", "p-card p-hot-card p-hot-free p-new");
     card.appendChild(el("div", "p-card-cover empty"));
     card.appendChild(hotKey(i));
     const body = el("div", "p-card-body");
-    body.appendChild(el("div", "zone-card-name", "+ " + t("newZone")));
+    body.appendChild(el("div", "zone-card-name", "\u00a0"));
     card.appendChild(body);
+    newZonePlus(card);
     card.addEventListener("click", startNewZone);
     return card;
   }
@@ -1559,41 +1947,6 @@
   }
 
 
-  function previewZone() {
-    if (state.hover && state.zones.some((z) => z.path === state.hover)) return state.hover;
-    let best = state.zones[0];
-    for (const z of state.zones) if (lastSaved(z.path) > lastSaved(best.path)) best = z;
-    return best ? best.path : null;
-  }
-
-  function previewPanel() {
-    const path = previewZone();
-    const panel = el("section", "p-preview");
-    if (path == null) return panel;
-    panel.dataset.zone = path;
-    const items = orderedItems(path);
-    const head = el("div", "p-preview-head");
-    const title = el("div", "p-preview-title");
-    title.appendChild(document.createTextNode(lastSegment(path)));
-    const latest = lastSaved(path);
-    title.appendChild(
-      el("span", "p-head-text", " · " + countText(items.length) + (latest ? " · " + t("lastSaved", { date: recentDate(latest) }) : ""))
-    );
-    head.appendChild(title);
-    head.appendChild(button("p-link", t("openZoneArrow"), () => setFocus(path)));
-    panel.appendChild(head);
-    const mosaic = el("div", "p-mosaic" + (HOME_SIZES[homeStep()].cols < 4 ? " even" : ""));
-    for (const item of items.slice(0, 9)) {
-      const cell = el("div", "p-mosaic-cell");
-      cell.appendChild(previewImg(item));
-      cell.addEventListener("dblclick", () => openLightbox(item));
-      mosaic.appendChild(cell);
-    }
-    if (!items.length) mosaic.appendChild(el("div", "p-empty", t("headZoneEmpty")));
-    panel.appendChild(mosaic);
-    return panel;
-  }
-
   // Karten: Zonen ohne Unterzonen als Karte mit Titelbild, Unterzonen
   // (z. B. Kunden / Studio B) gesammelt in einer Karte als Liste.
   function cardsLayout() {
@@ -1607,6 +1960,8 @@
     for (const [top, zones] of groups) {
       const card = zones.length === 1 && !zones[0].path.includes("/") ? zoneCardTile(zones[0]) : groupCard(top, zones);
       card.dataset.group = top;
+      // eine einzelne Zone lässt sich auch mit einer Active Zone oben tauschen (0.27)
+      if (zones.length === 1) card.dataset.single = card.dataset.swap = zones[0].path;
       card.addEventListener("pointerdown", (e) => dragCard(e, card, [...groups.keys()]));
       card.addEventListener("dragstart", (e) => e.preventDefault());
       cards.push(card);
@@ -1616,10 +1971,11 @@
     add.appendChild(el("div", "p-card-cover empty"));
     const addBody = el("div", "p-card-body");
     const addText = el("div");
-    addText.appendChild(el("div", "zone-card-name", "+ " + t("newZone")));
+    addText.appendChild(el("div", "zone-card-name", "\u00a0"));
     addText.appendChild(el("div", "p-card-meta", "\u00a0"));
     addBody.appendChild(addText);
     add.appendChild(addBody);
+    newZonePlus(add);
     add.addEventListener("click", startNewZone);
     cards.push(add);
 
@@ -1643,6 +1999,7 @@
     const start = { x: e.clientX, y: e.clientY };
     let lifted = false;
     let target = null;
+    let hot = null;
     let after = false;
     const onMove = (ev) => {
       if (!lifted) {
@@ -1653,6 +2010,14 @@
       }
       card.style.transform = `translate(${ev.clientX - start.x}px, ${ev.clientY - start.y}px)`;
       target = null;
+      hot = null;
+      if (card.dataset.single != null) {
+        for (const other of document.querySelectorAll(".p-hotrow .p-hot-card[data-swap]")) {
+          const r = other.getBoundingClientRect();
+          if (ev.clientX >= r.left && ev.clientX <= r.right && ev.clientY >= r.top && ev.clientY <= r.bottom) hot = other;
+        }
+      }
+      for (const other of document.querySelectorAll(".p-hotrow .p-hot-card[data-swap]")) other.classList.toggle("swap-target", other === hot);
       for (const other of document.querySelectorAll(".p-cards .p-card[data-group]")) {
         if (other === card) continue;
         const r = other.getBoundingClientRect();
@@ -1676,7 +2041,19 @@
       document.body.classList.remove("sorting");
       card.classList.remove("lifted");
       card.style.transform = "";
-      for (const n of document.querySelectorAll(".drop-target")) n.classList.remove("drop-target");
+      for (const n of document.querySelectorAll(".drop-target, .swap-target")) n.classList.remove("drop-target", "swap-target");
+      if (hot) {
+        // Mit der Active Zone tauschen: die Zone rückt nach oben, die Active Zone an ihren Platz
+        const zones = state.zones.map((z) => z.path);
+        const a = zones.indexOf(card.dataset.single);
+        const b = zones.indexOf(hot.dataset.swap);
+        if (a < 0 || b < 0) return;
+        [zones[a], zones[b]] = [zones[b], zones[a]];
+        setZoneOrder(zones);
+        renderZones();
+        toast(t("hotSwapped", { zone: zoneLabel(zones[b]) }));
+        return;
+      }
       if (!target) return;
       const tops = order.filter((top) => top !== card.dataset.group);
       tops.splice(tops.indexOf(target.dataset.group) + (after ? 1 : 0), 0, card.dataset.group);
@@ -1697,13 +2074,16 @@
     const latest = lastSaved(zone.path);
     const folders = zoneFolders(zoneItems(zone.path)).filter(([f]) => f).length;
     const inside = folders ? " · " + t(folders === 1 ? "folderCount1" : "folderCount", { n: folders }) : "";
-    return zone.count ? countText(zone.count) + inside + (latest ? " · " + recentDate(latest) : "") : t("emptyShort");
+    const meta = zone.count ? countText(zone.count) + inside + (latest ? " · " + recentDate(latest) : "") : t("emptyShort");
+    // 0.33.1: auch auf der Zonenkarte, nicht nur in der Index-Zeile
+    return isInbox(zone.path) ? (zone.count ? countText(zone.count) + inside : t("emptyShort")) + " · " + t("inboxNote") : meta;
   }
 
   function zoneCardTile(zone) {
     const card = el("article", "p-card");
     card.dataset.zone = zone.path;
-    card.appendChild(cardCover(orderedItems(zone.path)));
+    const items = orderedItems(zone.path);
+    card.appendChild(thumbCover(zone, items));
     const body = el("div", "p-card-body");
     const text = el("div");
     const name = zoneNameEl(zone);
@@ -1725,6 +2105,51 @@
       });
     }
     return card;
+  }
+
+  // Kartenfläche (0.42.6): kleine Bilder wie in den Index-Zeilen über die volle
+  // Breite. Mit eigenem Titelbild steht es groß, darunter eine Reihe der ersten
+  // Bilder (Entwurf J). Seit 0.43.2 ohne Auslaufen (Labor entfernt).
+  function thumbCover(zone, items) {
+    const own = coverItem(zone.path, items);
+    const cover = el("div", "p-card-cover p-thumb-cover" + (own ? " has-own" : ""));
+    if (own) {
+      const big = el("div", "p-cover-big");
+      big.appendChild(previewImg(own));
+      const strip = thumbStrip(items.filter((i) => i !== own), 12);
+      strip.classList.add("p-cover-strip");
+      cover.append(big, strip);
+    } else if (items.length) {
+      const strip = thumbStrip(items, 48);
+      cover.appendChild(strip);
+    } else cover.classList.add("empty");
+    return cover;
+  }
+  function thumbStrip(items, max) {
+    const box = el("div", "p-sheet-thumbs p-card-thumbs");
+    for (const item of items.slice(0, max)) {
+      const cell = el("span", "p-sheet-thumb");
+      cell.appendChild(previewImg(item));
+      box.appendChild(cell);
+    }
+    if (items.length > max) box.appendChild(mono("+" + (items.length - max), "p-sheet-more"));
+    return box;
+  }
+
+  // Eigenes Titelbild einer Zone (0.42.5, Rechtsklick › Als Titelbild). Je
+  // Bibliothek in localStorage; fehlt das Bild, gilt wieder die Variante.
+  function coverItem(zonePath, items) {
+    const want = (pref("covers", {})[state.root] || {})[zonePath];
+    return want ? items.find((i) => i.path === want) || null : null;
+  }
+  function setCover(zonePath, itemPath) {
+    const all = pref("covers", {});
+    const mine = { ...(all[state.root] || {}) };
+    if (itemPath) mine[zonePath] = itemPath;
+    else delete mine[zonePath];
+    all[state.root] = mine;
+    setPref("covers", all);
+    render();
   }
 
   // Titelbild einer Karte: ein Bild oder drei, leer als ruhige Fläche
@@ -1792,7 +2217,10 @@
     const sheet = $("sheet");
     const wasOpen = document.body.classList.contains("page-open");
     const top = sheet.scrollTop;
-    if (state.page) sheet.replaceChildren(state.page === "settings" ? renderSettings() : renderAbout());
+    if (state.page)
+      sheet.replaceChildren(
+        state.page === "settings" ? renderSettings() : state.page === "manual" ? renderManual() : renderAbout()
+      );
     sheet.scrollTop = keepScroll ? top : 0;
     document.body.classList.toggle("page-open", !!state.page);
     renderToolbar();
@@ -1822,23 +2250,6 @@
   function choice(options, current, onPick) {
     const wrap = el("span", "p-choice");
     for (const [id, label] of options) wrap.appendChild(chip("(" + label + ")", current === id, () => onPick(id)));
-    return wrap;
-  }
-
-  // 3 × 2 Punkte wie eine Ausrichtungs-Wahl: oben und unten, je links, Mitte, rechts
-  function navPosPicker(rerender) {
-    const cur = pref("navPos", "tl");
-    const wrap = el("span", "p-navpos");
-    for (const id of NAV_POS) {
-      const b = button("p-navpos-dot" + (cur === id ? " on" : ""), "", () => {
-        setPref("navPos", id);
-        applyNavPos(id);
-        rerender();
-      });
-      b.title = t("navPos_" + id);
-      b.setAttribute("aria-label", t("navPos_" + id));
-      wrap.appendChild(b);
-    }
     return wrap;
   }
 
@@ -1880,11 +2291,6 @@
       }
       renderPage(true);
     };
-    // Aus: eine Zone pro Ordner der obersten Ebene, Unterordner als Ordner darin
-    const levels = [["off", t("setSubzonesOff")], ["2", t("setLevel", { n: 2 })], ["3", t("setLevel", { n: 3 })]];
-    b.appendChild(
-      blockRow(t("setSubzones"), choice(levels, st.subzones ? String(st.depth) : "off", (id) => save(id === "off" ? { subzones: false } : { subzones: true, depth: Number(id) })))
-    );
     const input = el("input", "p-skip-input");
     input.value = st.skip.join(", ");
     input.spellcheck = false;
@@ -1924,6 +2330,19 @@
     });
     b.appendChild(blockRow(t("setDefaultZoneLabel"), select));
     b.appendChild(el("p", "p-block-hint", t("setDefaultZoneHint")));
+    // 0.35: Unsorted leert sich nach 7 Tagen, an oder aus (keine andere Zone);
+    // 0.36.1: auch in geteilten Bibliotheken, dort ab Werk aus
+    const expire = choice([["on", t("setOn")], ["off", t("setOff")]], state.expireZone ? "on" : "off", async (id) => {
+      try {
+        await invoke("set_expire_zone", { zone: id === "on" ? "Unsorted" : "" });
+        await refresh();
+        renderPage(true);
+      } catch (e) {
+        fail(e);
+      }
+    });
+    b.appendChild(blockRow(t("setExpireLabel"), expire));
+    b.appendChild(el("p", "p-block-hint", t("setExpireHint")));
     return b;
   }
 
@@ -2017,25 +2436,20 @@
       row.append(el("span", "p-zone-main"), el("span", "p-block-side"));
       row.firstChild.append(handle, name);
       // Löschen in zwei Schritten: erst fragen, dann in den Papierkorb
-      const del = button("p-arrow p-zone-del", "✕");
-      del.title = t("trashZone");
-      if (!canEdit(zone.path)) del.style.visibility = "hidden";
+      const unlink = externalTop(zone.path);
+      const del = button("p-arrow p-zone-del" + (unlink ? " unlink" : ""), "✕");
+      del.title = t(unlink ? "unlinkZone" : "trashZone");
+      if (!canEdit(zone.path) || insideExternal(zone.path)) del.style.visibility = "hidden";
       let armed = false;
       del.addEventListener("click", async () => {
         if (!armed) {
           armed = true;
-          del.textContent = t("trashZoneConfirm", { count: zone.count === 1 ? t("countImage") : t("countImages", { n: zone.count }) });
+          const other = unlink ? 0 : await invoke("zone_other_files", { zone: zone.path }).catch(() => 0);
+          del.textContent = unlink ? t("unlinkZoneConfirm") : t("trashZoneConfirm", { count: zoneCountText(zone, other) });
           del.classList.add("armed");
           return;
         }
-        try {
-          await invoke("trash_zone", { zone: zone.path });
-          if (state.focus === zone.path) state.focus = null;
-          await refresh();
-          toast(t("zoneTrashed", { zone: zoneLabel(zone.path) }));
-        } catch (e) {
-          fail(e);
-        }
+        await trashZone(zone);
         renderPage(true);
       });
       del.addEventListener("blur", () => {
@@ -2075,35 +2489,96 @@
   }
 
   // Zeile am Griff ziehen: wandert live mit, beim Loslassen wird gespeichert
-  // Einstellungen: oben eine ruhige Liste der Bereiche, jeder öffnet sein Untermenü.
-  // Ganz unten steht immer der Freischalt-Code.
-  const SETTINGS_SECTIONS = ["library", "view", "look", "start", "studio", "connect", "general"];
+  // Einstellungen: oben das Konto, darunter eine ruhige Liste der Bereiche, jeder öffnet sein Untermenü.
+  // 0.40.8: aus zehn Bereichen werden fünf, Version und Updates stehen unter „App“
+  const SETTINGS_SECTIONS = ["library", "display", "mac", "app"];
 
   function sectionTitle(id) {
-    return t({ library: "setLibrary", view: "setSecView", look: "setLook", start: "setSecStart", studio: "setStudio", connect: "setConnect", general: "setGeneral" }[id]);
+    return t({ account: "setAccount", library: "setLibrary", display: "setSecDisplay", mac: isMac ? "setSecMac" : "setExtension", studio: "setStudio", app: "setSecApp" }[id]);
   }
 
   function sectionSummary(id) {
     if (id === "library") {
       const slots = state.libraries || [];
       const i = slots.findIndex((l) => l.active);
-      return i >= 0 ? libraryName(slots[i], i) : shortPath(state.root);
+      const n = state.naming;
+      const names = n && n.preset !== "original" ? t(NAME_PRESET_KEYS[n.preset]) : t("nameOriginal");
+      return (i >= 0 ? libraryName(slots[i], i) : shortPath(state.root)) + " · " + names;
     }
-    if (id === "look") {
+    if (id === "display") {
       const th = window.ArchiverI18n.theme();
-      const scheme = window.ArchiverI18n.scheme() === "sage" ? t("schemeSage") : t("schemeStandard");
-      return t({ system: "themeSystem", light: "themeLight", dark: "themeDark" }[th]) + " · " + scheme;
+      return t(state.view === "original" ? "viewOriginal" : "viewGrid") + " · " + t({ system: "themeSystem", light: "themeLight", dark: "themeDark" }[th]);
     }
-    if (id === "connect") return t("setConnectSummary");
+    if (id === "mac") {
+      const p = state.sysPrefs;
+      if (!isMac || !p) return t("setExtensionSummary");
+      const key = PALETTE_KEYS.find(([k]) => k === p.shortcut);
+      return (p.shortcut ? (key && key[1]) || p.shortcut : t("setOff")) + " · " + t("setExtensionSummary");
+    }
     if (id === "studio") {
+      if (!studioOn()) return t("setStudioLocked");
       const on = FEATURES.filter(feat).length;
       return on + " / " + FEATURES.length + (state.shared ? " · " + t("featSharedOn") : "");
     }
-    if (id === "view")
-      return t(state.view === "original" ? "viewOriginal" : "viewGrid") + " · " + t(pref("folderStyle", "cards") === "list" ? "setFolderList" : "setFolderCards");
-    if (id === "start")
-      return t(pref("revealForm", "wave") === "lid" ? "revealLid" : "revealWave") + " · " + t("setSound") + " " + (pref("startSound", true) ? t("setOn") : t("setOff")).toLowerCase();
-    return lang === "de" ? "Deutsch" : "English";
+    return (state.appVersion ? state.appVersion + " · " : "") + (lang === "de" ? "Deutsch" : "English");
+  }
+
+  // Am ganzen Mac (system.rs): Kürzel der Palette und Zonenleiste beim Ziehen.
+  // Feste Auswahl statt Tastenrekorder; ⌥⌘ Space ist die Finder-Suche.
+  const PALETTE_KEYS = [
+    ["Alt+Space", "⌥ Space"],
+    ["Control+Alt+Space", "⌃⌥ Space"],
+    ["Shift+Alt+Space", "⇧⌥ Space"],
+    ["", null],
+  ];
+  function renderSystemSettings() {
+    const sys = block(t("setSystem"));
+    sys.appendChild(blockRow(el("div", "p-block-text", t("setSystemText"))));
+    const rows = el("div");
+    const show = (prefs) => {
+      const save = (next) =>
+        invoke("set_system_prefs", { prefs: next })
+          .then(() => {
+            state.sysPrefs = next;
+            show(next);
+          })
+          .catch((e) => {
+            const key = PALETTE_KEYS.find(([id]) => id === next.shortcut);
+            if (String(e) === "shortcut-taken") toast(t("setKeyTaken", { key: key ? key[1] : next.shortcut }), false, 6000);
+            else fail(e);
+          });
+      rows.replaceChildren(
+        blockRow(
+          t("setPaletteKey"),
+          choice(
+            PALETTE_KEYS.map(([id, label]) => [id || "off", label || t("setOff")]),
+            prefs.shortcut || "off",
+            (id) => save({ ...prefs, shortcut: id === "off" ? "" : id })
+          )
+        ),
+        blockRow(
+          t("setDropbarSys"),
+          // 0.40.24: mit ⌥, immer beim Ziehen von Dateien oder aus
+          choice(
+            [
+              ["alt", t("setDropbarAlt")],
+              ["always", t("setDropbarAlways")],
+              ["off", t("setOff")],
+            ],
+            !prefs.dropbar ? "off" : prefs.dropbarAlways ? "always" : "alt",
+            (id) => save({ ...prefs, dropbar: id !== "off", dropbarAlways: id === "always", dropbarAltChosen: true })
+          )
+        )
+      );
+    };
+    invoke("system_prefs")
+      .then((p) => {
+        state.sysPrefs = p;
+        show(p);
+      })
+      .catch(fail);
+    sys.appendChild(rows);
+    return sys;
   }
 
   function openSettingsSection(id) {
@@ -2116,21 +2591,41 @@
     const wrap = el("div", "p-sheet-inner");
     const sub = state.settingsSub;
     if (!sub) {
+      if (isMac && !state.sysPrefs)
+        invoke("system_prefs")
+          .then((p) => {
+            state.sysPrefs = p;
+            if (state.page === "settings" && !state.settingsSub) renderPage(true);
+          })
+          .catch(() => {});
+      if (!state.appVersion && TAURI.app && TAURI.app.getVersion)
+        TAURI.app
+          .getVersion()
+          .then((v) => {
+            state.appVersion = v;
+            if (state.page === "settings" && !state.settingsSub) renderPage(true);
+          })
+          .catch(() => {});
       wrap.appendChild(headline(t("settings"), t("settingsText")));
+      wrap.appendChild(accountCard());
       const list = el("section", "p-block p-settings-nav");
-      for (const id of SETTINGS_SECTIONS) {
+      const link = (id, into) => {
         const row = button("p-settings-link", null, () => openSettingsSection(id));
         row.appendChild(el("span", "p-settings-link-title", sectionTitle(id)));
         row.appendChild(el("span", "p-settings-link-sum", sectionSummary(id)));
         row.appendChild(el("span", "p-settings-link-arrow", "›"));
-        list.appendChild(row);
-      }
+        into.appendChild(row);
+      };
+      for (const id of SETTINGS_SECTIONS) link(id, list);
       wrap.appendChild(list);
-      wrap.appendChild(renderUnlock());
+      // Studio (0.43.2): eigenes Abo, abgesetzt unter den Bereichen
+      const studio = el("section", "p-block p-settings-nav");
+      link("studio", studio);
+      wrap.appendChild(studio);
       return wrap;
     }
     wrap.appendChild(button("p-settings-back", "‹ " + t("settings"), () => openSettingsSection(null)));
-    wrap.appendChild(headline(sectionTitle(sub)));
+    wrap.appendChild(sub === "account" ? accountSay() : headline(sectionTitle(sub)));
     const rerender = () => {
       renderZones();
       renderPage(true);
@@ -2138,13 +2633,18 @@
 
     if (sub === "library") {
       wrap.appendChild(renderLibrarySlots());
+      wrap.appendChild(renderExternalZones());
       wrap.appendChild(renderDefaultZone());
       wrap.appendChild(renderStructure());
       wrap.appendChild(renderZoneSettings());
+      wrap.appendChild(renderNamingSettings());
     }
 
-    if (sub === "view") {
-      const view = block(null);
+    if (sub === "account") wrap.appendChild(renderAccount());
+
+    // Darstellung: Ansicht, Aussehen, Glas, Start und Ton auf einer Seite
+    if (sub === "display") {
+      const view = block(t("setSecView"));
       view.appendChild(
         blockRow(
           t("setImages"),
@@ -2165,25 +2665,16 @@
           })
         )
       );
+      // 0.30: ein Schalter für Video und Audio (media.js liest "autoplay")
       view.appendChild(
         blockRow(
-          t("setFolderStyle"),
-          choice([["cards", t("setFolderCards")], ["list", t("setFolderList")]], pref("folderStyle", "cards"), (id) => {
-            setPref("folderStyle", id);
+          t("setAutoplay"),
+          choice([["on", t("setOn")], ["off", t("setOff")]], Media.autoplayOn() ? "on" : "off", (id) => {
+            setPref("autoplay", id === "on");
             rerender();
           })
         )
       );
-      for (const [key, label] of [["autoplayVideo", "setAutoplayVideo"], ["autoplayAudio", "setAutoplayAudio"]])
-        view.appendChild(
-          blockRow(
-            t(label),
-            choice([["on", t("setOn")], ["off", t("setOff")]], pref(key, false) ? "on" : "off", (id) => {
-              setPref(key, id === "on");
-              rerender();
-            })
-          )
-        );
       view.appendChild(
         blockRow(
           t("setInfoPanel"),
@@ -2193,11 +2684,19 @@
           })
         )
       );
+      // 0.35: Leiste beim Ziehen erst angeschnitten wie in der Extension (ab Werk ganz)
+      view.appendChild(
+        blockRow(
+          t("setDropStrip"),
+          choice([["full", t("dropStripFull")], ["strip", t("dropStripPeek")]], pref("dropStrip", false) ? "strip" : "full", (id) => {
+            setPref("dropStrip", id === "strip");
+            rerender();
+          })
+        )
+      );
       wrap.appendChild(view);
-    }
 
-    if (sub === "look") {
-      const look = block(null);
+      const look = block(t("setLook"));
       look.appendChild(
         blockRow(
           t("setTheme"),
@@ -2213,28 +2712,29 @@
       );
       look.appendChild(
         blockRow(
-          t("setScheme"),
-          choice([["standard", t("schemeStandard")], ["sage", t("schemeSage")]], window.ArchiverI18n.scheme(), (id) => {
-            window.ArchiverI18n.setScheme(id);
-            rerender();
-          })
-        )
-      );
-      look.appendChild(
-        blockRow(
           t("setRadius"),
           choice(
             [["square", t("radiusSquare")], ["soft", t("radiusSoft")], ["round", t("radiusRound")], ["xl", t("radiusXl")]],
-            pref("radius", "round"),
+            pref("radius", "soft"),
             (id) => {
               setPref("radius", id);
               applyRadius(id);
+              lookToLibrary();
               rerender();
             }
           )
         )
       );
-      look.appendChild(blockRow(t("setNavPos"), navPosPicker(rerender)));
+      look.appendChild(
+        blockRow(
+          t("setLbText"),
+          choice([["back", t("setLbTextBack")], ["spread", t("setLbTextSpread")]], lbTextStyle(), (id) => {
+            setPref("lbTextStyle", id);
+            rerender();
+          })
+        )
+      );
+      look.appendChild(blockRow(el("div", "p-block-text", t("setLbTextText"))));
       look.appendChild(
         blockRow(
           t("setTopFade"),
@@ -2255,40 +2755,26 @@
           })
         )
       );
-      if (isMac) {
-        const value = mono("", "p-alpha-value");
-        const slider = el("input", "p-volume p-alpha");
-        slider.type = "range";
-        slider.min = "0";
-        slider.max = "100";
-        slider.step = "5";
-        const show = (pct) => (value.textContent = pct + " %");
-        const start = Math.round((typeof pref("winAlpha", null) === "number" ? pref("winAlpha", null) : 0.85) * 100);
-        slider.value = String(start);
-        show(start);
-        slider.addEventListener("input", () => {
-          show(slider.value);
-          applyWinAlpha(Number(slider.value) / 100);
-        });
-        slider.addEventListener("change", () => setPref("winAlpha", Number(slider.value) / 100));
-        look.appendChild(blockRow(t("setWinAlpha"), [slider, value]));
-      }
-      look.appendChild(
-        blockRow(
-          t("setReloadAnim"),
-          choice([["plain", t("setReloadPlain")], ["wave", t("setReloadWave")]], pref("reloadAnim", "plain"), (id) => {
-            setPref("reloadAnim", id);
-            if (id === "wave") reloadWave(document.getElementById("zones") || document.body);
-          })
-        )
-      );
       wrap.appendChild(look);
-      wrap.appendChild(renderDragSettings());
-    }
+      wrap.appendChild(renderGlassSettings());
+      // Ablegen in der App und in der Zonenleiste am ganzen Mac (4.13); die Leiste liest archiver.lab
+      const drops = block(t("labDrops"));
+      drops.appendChild(blockRow(el("div", "p-block-text", t("labDropsText"))));
+      const cur = lab();
+      // sieben Varianten in zwei Reihen, sonst passt die Zeile nicht ins Blatt
+      for (const [i, part] of [LAB_DROPS.slice(0, 4), LAB_DROPS.slice(4)].entries()) {
+        drops.appendChild(
+          blockRow(i ? "" : t("labDrop"), choice(part.map((id) => [id, t("labDrop_" + id)]), cur.drop, (id) => {
+            setLab({ drop: id });
+            rerender();
+          }))
+        );
+      }
+      drops.appendChild(blockRow(el("div", "p-block-text", t("labDropText_" + cur.drop))));
+      wrap.appendChild(drops);
 
     // Start: Öffnung und Startton gehören zum selben Moment
-    if (sub === "start") {
-      const open = block(t("setReveal"));
+      const open = block(t("setSecStart"));
       // Licht-Öffnung nach Getting Started: Welle oder Lid, zum Vergleich abspielbar
       const reveal = choice([["wave", t("revealWave")], ["lid", t("revealLid")]], pref("revealForm", "wave"), (id) => {
         setPref("revealForm", id);
@@ -2305,15 +2791,39 @@
       wrap.appendChild(renderSoundSettings());
     }
 
-    if (sub === "connect") {
+    // Mac & Browser: Extension, Tray und Zonenleiste, Vorschau-Formate
+    if (sub === "mac") {
       const extBlock = block(t("setExtension"));
       const ext = el("div", null, "…");
-      invoke("bridge_browsers")
-        .then((list) => (ext.textContent = list.length ? t("setBridgeOn", { list: list.join(", ") }) : t("setBridgeOff")))
-        .catch(() => (ext.textContent = t("setBridgeOff")));
-      extBlock.appendChild(blockRow(ext, [button("p-link", t("import"), openImportDialog)]));
-      wrap.appendChild(extBlock);
+      const get = button("p-link", t("extGet"), openExtensionDownload);
+      get.hidden = true;
+      Promise.all([invoke("bridge_browsers").catch(() => []), extensionState()]).then(([chromium, s]) => {
+        const list = s && s.safari && s.safariBridge ? [...chromium, "Safari"] : chromium;
+        if (!list.length) return (ext.textContent = t("setBridgeOff"));
+        const kind = s ? s.kind : "missing";
+        get.hidden = kind === "ok";
+        if (kind === "ok") ext.textContent = t("extStatusOk", { version: s.version, list: list.join(", ") });
+        else if (kind === "old") ext.textContent = t("extStatusOld", { version: s.version || "", min: s.min }).replace("  ", " ");
+        else ext.textContent = t("extStatusMissing");
+      });
+      extBlock.appendChild(blockRow(ext, [get, button("p-link", t("import"), openImportDialog)]));
+      // Safari: Erweiterung steckt in Archiver.app, nur einschalten (http_bridge.rs)
       if (isMac) {
+        const safari = el("div", "p-block-text", "…");
+        const row = blockRow(safari);
+        row.hidden = true; // Brücke aus (http_bridge::ENABLED): kein Hinweis auf Safari
+        extensionState().then((s) => {
+          row.hidden = !(s && s.safariBridge);
+          safari.textContent = s && s.safari ? t("extSafariOn") : t("extSafariHint");
+        });
+        extBlock.appendChild(row);
+      }
+      wrap.appendChild(extBlock);
+    }
+
+    if (sub === "mac" && isMac) {
+      wrap.appendChild(renderSystemSettings());
+      {
         const viewerBlock = block(t("setViewer"));
         viewerBlock.appendChild(blockRow(el("div", "p-block-text", t("setViewerText"))));
         const rows = el("div");
@@ -2341,7 +2851,9 @@
 
     if (sub === "studio") renderStudioSettings(wrap, rerender);
 
-    if (sub === "general") {
+    // App: Version und Updates, Sprache, Feedback, Tasten
+    if (sub === "app") {
+      for (const b of renderVersion()) wrap.appendChild(b);
       const general = block(t("setLanguage"));
       general.appendChild(
         blockRow(
@@ -2349,7 +2861,7 @@
           choice([["de", "Deutsch"], ["en", "English"]], lang, (id) => {
             if (id === lang) return;
             setPref("lang", id);
-            sessionStorage.setItem("archiver.reopen", "settings:general");
+            sessionStorage.setItem("archiver.reopen", "settings:app");
             location.reload();
           })
         )
@@ -2371,6 +2883,7 @@
         ["⌘N", t("newZone")],
         ["⌘P", t("pdfExport")],
         ["⌘,", t("settings")],
+        ["⌘I", t("about")],
         ["Esc", t("keyBack")],
       ]) {
         keys.appendChild(blockRow(v, k));
@@ -2383,9 +2896,21 @@
   // Studio: Schalter je Funktion, dazu Name und geteilte Bibliothek
   function renderStudioSettings(wrap, rerender) {
     wrap.appendChild(el("p", "p-block-hint p-studio-lead", t("setStudioText")));
+    // Ohne Studio-Abo: nur zeigen, was dazugehört
+    if (!studioOn()) {
+      const what = block(t("featTools"));
+      what.appendChild(blockRow(el("div", "p-block-text", t("setStudioLockedText"))));
+      for (const [title, text] of [
+        ["featRights", "featRightsText"],
+        ["featPackage", "featPackageText"],
+        ["featShared", "featSharedText"],
+      ])
+        what.appendChild(blockRow([el("div", null, t(title)), el("div", "p-block-text dim", t(text))]));
+      wrap.appendChild(what);
+      return;
+    }
     const tools = block(t("featTools"));
     for (const [id, title, text] of [
-      ["notes", "featNotes", "featNotesText"],
       ["rights", "featRights", "featRightsText"],
       ["package", "featPackage", "featPackageText"],
     ]) {
@@ -2407,7 +2932,9 @@
     team.appendChild(blockRow(el("div", "p-block-text", t("featSharedText"))));
     const name = el("input", "p-input note-field");
     name.value = state.user || "";
-    name.placeholder = t("featUserPlaceholder");
+    // Kürzel (0.43.2): ohne eigene Angabe die Initialen des Benutzernamens
+    const initials = account()?.name ? monogram(account().name) : "";
+    name.placeholder = initials || t("featUserPlaceholder");
     name.spellcheck = false;
     const saveName = () => {
       const v = name.value.trim();
@@ -2427,7 +2954,7 @@
         choice([["off", t("featSharedOff")], ["on", t("featSharedOn")]], state.shared ? "on" : "off", async (v) => {
           const shared = v === "on";
           if (shared === state.shared) return;
-          const user = name.value.trim();
+          const user = name.value.trim() || initials;
           if (shared && !user) {
             name.focus();
             return toast(t("featSharedNeedsName"), false);
@@ -2449,87 +2976,132 @@
   }
 
   // Zonen beim Ziehen: Deckkraft, gilt in der App und (über die Bibliothek) in der Extension
-  function dragAlpha() {
-    const v = pref("zoneAlpha", null);
-    return typeof v === "number" ? v : null;
-  }
-
-  function applyDragAlpha() {
-    const v = dragAlpha();
-    if (v == null) document.documentElement.style.removeProperty("--zone-alpha");
-    else document.documentElement.style.setProperty("--zone-alpha", String(v));
-  }
-
-  function renderDragSettings() {
-    const b = block(t("setDragZones"));
-    b.appendChild(blockRow(el("div", "p-block-text", t("setDragZonesText"))));
+  // Glas: Fenster und Zonen beim Ziehen, je ein Regler in 5-%-Schritten (i18n.js)
+  function glassSlider(title, text, min, get, set, standard, onLive) {
+    const b = block(t(title));
+    b.appendChild(blockRow(el("div", "p-block-text", t(text))));
     const value = mono("", "p-alpha-value");
     const slider = el("input", "p-volume p-alpha");
     slider.type = "range";
-    slider.min = "30";
+    slider.min = String(min);
     slider.max = "100";
     slider.step = "5";
-    const show = (pct) => (value.textContent = pct + " %");
-    const start = Math.round((dragAlpha() ?? 0.9) * 100);
-    slider.value = String(start);
-    show(start);
+    const show = () => {
+      const v = get() ?? standard();
+      slider.value = String(Math.round(v * 100));
+      value.textContent = Math.round(v * 100) + " %";
+    };
+    show();
     slider.addEventListener("input", () => {
-      show(slider.value);
-      document.documentElement.style.setProperty("--zone-alpha", String(Number(slider.value) / 100));
-      previewDropbar(true);
+      set(Number(slider.value) / 100);
+      show();
+      if (onLive) onLive(true);
     });
     slider.addEventListener("change", () => {
-      const v = Number(slider.value) / 100;
-      setPref("zoneAlpha", v);
-      invoke("set_drag_alpha", { alpha: v }).catch(() => {});
-      setTimeout(() => previewDropbar(false), 900);
+      lookToLibrary();
+      if (onLive) setTimeout(() => onLive(false), 900);
     });
-    b.appendChild(blockRow(t("setDragAlpha"), [slider, value]));
+    const reset = button("p-link", t("setGlassReset"), () => {
+      set(null);
+      show();
+      lookToLibrary();
+    });
+    b.appendChild(blockRow(t("setDragAlpha"), [slider, value, reset]));
     return b;
   }
 
-  // Ganz unten: Freischalt-Code eingeben, danach nur noch ein ruhiges „Freigeschaltet“
-  function renderUnlock() {
-    const b = block(t("unlockTitle"));
-    b.classList.add("p-unlock");
-    if (isUnlocked()) {
-      b.appendChild(blockRow(el("div", "p-block-text", t("unlockDone")), mono("●", "p-unlock-dot")));
-      return b;
+  function renderGlassSettings() {
+    const I = window.ArchiverI18n;
+    const frag = document.createDocumentFragment();
+    frag.appendChild(glassSlider("setGlass", "setGlassText", 40, I.glass, I.setGlass, () => (document.documentElement.classList.contains("light") ? 0.78 : 0.72)));
+    frag.appendChild(glassSlider("setZoneGlass", "setZoneGlassText", 30, I.zoneGlass, I.setZoneGlass, () => 0.97, previewDropbar));
+    return frag;
+  }
+
+  // ---- Konto (0.40.4): Karte oben in den Einstellungen. Konten gibt es noch nicht,
+  // die Karte zeigt den Beta-Bonus, das Untermenü erklärt den Plan und hat die
+  // Vorschau des Lese-Modus (nur Ansicht, es wird nichts gesperrt). ----
+
+  // Satz als Überschrift (34 px), Rest gedimmt (4.26)
+  function say(title, text) {
+    const h = el("h1", "p-say");
+    h.append(el("span", null, title), el("span", "p-say-sub", " " + text));
+    return h;
+  }
+
+  function groupLabel(left, right) {
+    const row = el("div", "p-group-label");
+    row.append(el("span", null, left), el("span", null, right || ""));
+    return row;
+  }
+
+  // Gruppierte Zeilen: [Schlüssel, Wert, Zusatz]; mit onClick wird die ganze Liste ein Knopf
+  function list(rows, onClick) {
+    const box = onClick ? button("p-list", null, onClick) : el("div", "p-list");
+    for (const [key, value, side] of rows) {
+      const row = el(onClick ? "span" : "div", "p-list-row");
+      row.append(el("span", "p-list-key", key), el("span", "p-list-value", value));
+      if (side) row.appendChild(el("span", "p-list-side", side));
+      box.appendChild(row);
     }
-    b.appendChild(el("div", "p-block-text p-unlock-text", t("unlockText")));
-    b.appendChild(unlockForm());
-    return b;
+    return box;
   }
 
-  // Eingabe für den Code: in den Einstellungen und direkt im Sperr-Hinweis
-  function unlockForm() {
-    const form = el("form", "p-unlock-form");
-    const input = el("input", "p-unlock-input");
-    input.placeholder = t("unlockPlaceholder");
-    input.spellcheck = false;
-    input.autocomplete = "off";
-    input.setAttribute("autocapitalize", "characters");
-    const go = el("button", "p-unlock-go", t("unlockButton"));
-    go.type = "submit";
-    form.append(input, go);
-    form.addEventListener("submit", async (e) => {
-      e.preventDefault();
-      const hash = await unlockHash(input.value);
-      if (!UNLOCK_HASHES.includes(hash)) {
-        form.classList.remove("wrong");
-        void form.offsetWidth;
-        form.classList.add("wrong");
-        input.select();
-        return;
-      }
-      setPref("unlock", hash);
-      applyLock();
-      if (state.page) renderPage(true);
-      toast(t("unlockOk"));
-    });
-    input.addEventListener("input", () => form.classList.remove("wrong"));
-    input.addEventListener("keydown", (e) => e.stopPropagation());
-    return form;
+  // Vorschau: "beta" (heute), "subscriber" (Jahresabo aktiv) oder "read" (ohne Abo)
+  // Seit 0.43.2 ohne Vorschau: angemeldet heißt Beta, Abo und Lese-Modus kommen mit der Lizenz
+  function accountCard() {
+    const open = () => openSettingsSection("account");
+    const rows = [[t("accountStatus"), t("accountBonus"), "›"], [t("accountAfter"), t("accountAfterBeta")]];
+    const card = el("div", "p-group p-account");
+    card.append(groupLabel("(" + t("setAccount") + ")", account()?.email || ""), list(rows, open));
+    return card;
+  }
+
+  // Kopf von Einstellungen › Konto: Zustand als Satz
+  function accountSay() {
+    return say(t("accountBonus") + ".", t("accountBonusText"));
+  }
+
+  function renderAccount() {
+    const frag = document.createDocumentFragment();
+    const plan = block(null);
+    plan.appendChild(el("div", "p-block-text p-account-plan", t("accountText")));
+    frag.appendChild(plan);
+    const acc = account();
+    if (acc) {
+      const me = block(t("setAccount"));
+      const since = new Date(acc.at).toLocaleDateString(lang === "de" ? "de-DE" : "en-GB", { day: "numeric", month: "long", year: "numeric" });
+      me.appendChild(blockRow(t("accountMail"), acc.email));
+      // Benutzername (0.43.2): liegt im Konto bei Supabase, gleich auf jedem Mac
+      const name = el("input", "p-input note-field");
+      name.value = acc.name || "";
+      name.placeholder = t("accountNamePlaceholder");
+      name.spellcheck = false;
+      name.addEventListener("blur", () => {
+        const v = name.value.trim();
+        if (v === (account()?.name || "")) return;
+        setUsername(v)
+          .then(() => toast(t("accountNameSaved")))
+          .catch((e) => {
+            name.value = account()?.name || "";
+            fail(e);
+          });
+      });
+      name.addEventListener("keydown", (e) => {
+        e.stopPropagation();
+        if (e.key === "Enter" || e.key === "Escape") name.blur();
+      });
+      me.appendChild(blockRow(t("accountName"), name));
+      me.appendChild(blockRow(t("accountSince"), since));
+      me.appendChild(blockRow(t("setStudio"), t(studioOn() ? "accountStudioOn" : "accountStudioSoon")));
+      frag.appendChild(me);
+    }
+    if (isUnlocked()) {
+      const out = button("p-link p-account-out", t("accountSignOut"), signOut);
+      frag.appendChild(out);
+      frag.appendChild(el("p", "p-block-hint", t("accountSignOutText")));
+    }
+    return frag;
   }
 
   // Startton: Ein/Aus, Lautstärke mit Probehören, eigene Datei oder der Standard
@@ -2538,7 +3110,7 @@
     b.appendChild(
       blockRow(
         t("setSoundPlay"),
-        choice([["on", t("setOn")], ["off", t("setOff")]], pref("startSound", true) ? "on" : "off", (id) => {
+        choice([["on", t("setOn")], ["off", t("setOff")]], pref("startSound", false) ? "on" : "off", (id) => {
           setPref("startSound", id === "on");
           renderPage(true);
         })
@@ -2548,6 +3120,7 @@
     slider.type = "range";
     slider.min = "0";
     slider.max = "100";
+    slider.step = "5";
     slider.value = String(Math.round(pref("startSoundVolume", 0.35) * 100));
     slider.addEventListener("change", () => {
       setPref("startSoundVolume", Number(slider.value) / 100);
@@ -2584,14 +3157,16 @@
   }
 
   function playStartSound(force) {
-    if (!force && !pref("startSound", true)) return;
+    if (!force && !pref("startSound", false)) return;
     invoke("play_startup_sound", { volume: pref("startSoundVolume", 0.35) }).catch(() => {});
   }
 
   // Info: Wortmarke mit Claim, dann Zahlen zur Sammlung und das Kleingedruckte
   function renderAbout() {
-    const wrap = el("div", "p-sheet-inner");
-    wrap.appendChild(headline("Archiver", t("aboutClaim")));
+    const wrap = el("div", "p-sheet-inner p-about");
+    const head = headline("Archer", t("aboutClaim"));
+    head.firstChild.appendChild(el("span", "wm-y", "y")); // Schriftzug: Abstand vor dem y (DESIGN 2.2a)
+    wrap.appendChild(head);
 
     const how = block(t("aboutHow"));
     for (const key of ["Collect", "Library", "Sort", "View", "Share", "Viewer"]) {
@@ -2621,14 +3196,164 @@
     wrap.appendChild(stats);
 
     const meta = block(t("aboutApp"));
-    const version = el("span", null, "–");
-    if (TAURI.app && TAURI.app.getVersion) TAURI.app.getVersion().then((v) => (version.textContent = v)).catch(() => {});
-    meta.appendChild(blockRow(t("aboutVersion"), version));
     meta.appendChild(blockRow(t("setLibrary"), pathEl(state.root)));
     meta.appendChild(blockRow(t("aboutFont"), "SIL OFL"));
     wrap.appendChild(meta);
 
     wrap.appendChild(el("div", "p-sheet-foot", "© 2026 Lukas Rudolph"));
+    return wrap;
+  }
+
+  // Einstellungen › App: Version, darunter der Block „Updates“ (Kanal, Version wählen, 0.38.1)
+  function renderVersion() {
+    const meta = block(t("setVersion"));
+    const version = el("span", null, "–");
+    let number = "";
+    const showVersion = (pre) => (version.textContent = number + (pre ? " · " + t("aboutPrerelease") : ""));
+    if (TAURI.app && TAURI.app.getVersion)
+      Promise.all([TAURI.app.getVersion(), invoke("update_channel").catch(() => false)])
+        .then(([v, pre]) => {
+          number = v;
+          state.appVersion = v;
+          showVersion(pre);
+        })
+        .catch(() => {});
+    // ⌥-Klick blendet den Block „Updates“ ein. Ab Werk sehen ihn nur Macs mit
+    // Vorabversionen; Beta-Tester bekommen nur Freigegebenes, solange sie ihn
+    // nicht selbst aufdecken.
+    const updates = block(t("aboutUpdates"));
+    updates.hidden = true;
+    version.addEventListener("click", (e) => {
+      if (!e.altKey) return;
+      setPref("updatesShown", true);
+      updates.hidden = false;
+    });
+    meta.appendChild(blockRow(t("setVersionNow"), [version, button("p-link", t("updCheck"), () => checkUpdate(true))]));
+    renderUpdates(updates, showVersion);
+    return [meta, updates];
+  }
+
+  // ---- Einstellungen › App › Updates: Kanal Beta/Vorab und Version wählen (0.38.1) ----
+  // Die Liste kommt aus Archiver-Releases (lib.rs: update_versions). Installiert
+  // wird wie bei einem Update, auch rückwärts; vorher fragt ein Dialog.
+  async function renderUpdates(box, showVersion) {
+    const pre = await invoke("update_channel").catch(() => false);
+    box.hidden = !(pre || pref("updatesShown", false));
+    const current = TAURI.app && TAURI.app.getVersion ? await TAURI.app.getVersion().catch(() => "") : "";
+    const head = box.firstChild;
+    box.replaceChildren(head);
+    box.appendChild(
+      blockRow(
+        [el("div", null, t("updChannel")), el("div", "p-block-text dim", t(pre ? "updChannelPreText" : "updChannelBetaText"))],
+        choice([["beta", "Beta"], ["pre", t("aboutPrerelease")]], pre ? "pre" : "beta", async (id) => {
+          const next = id === "pre";
+          if (next === pre) return;
+          try {
+            await invoke("set_update_channel", { prerelease: next });
+          } catch (err) {
+            return fail(err);
+          }
+          setPref("updatesShown", true);
+          showVersion(next);
+          toast(t(next ? "prereleaseOn" : "prereleaseOff"));
+          renderUpdates(box, showVersion);
+          checkUpdate();
+        })
+      )
+    );
+    const list = el("div", "p-upd-list");
+    const load = button("p-link", t("updLoad"), async () => {
+      load.disabled = true;
+      load.textContent = t("updLoading");
+      let versions = [];
+      try {
+        versions = await invoke("update_versions");
+      } catch (err) {
+        load.disabled = false;
+        load.textContent = t("updLoad");
+        return toast(t("updOffline"), false, 4000);
+      }
+      load.remove();
+      list.replaceChildren();
+      if (!versions.length) list.appendChild(blockRow(el("div", "p-block-text dim", t("updNone"))));
+      for (const v of versions.slice(0, 12)) {
+        const name = [el("div", null, v.version + (v.prerelease ? " · " + t("aboutPrerelease") : ""))];
+        if (v.date) name.push(el("div", "p-block-text dim", recentDate(Date.parse(v.date))));
+        const side =
+          v.version === current
+            ? el("span", "dim", t("updCurrent"))
+            : button("p-link", t("updInstallThis"), () => askInstallVersion(v, current));
+        list.appendChild(blockRow(name, side));
+      }
+    });
+    box.appendChild(
+      blockRow([el("div", null, t("updPick")), el("div", "p-block-text dim", t("updPickText"))], load)
+    );
+    box.appendChild(list);
+  }
+
+  function askInstallVersion(v, current) {
+    const older = current && cmpVersion(v.version, current) < 0;
+    const dialog = el("div", "dialog confirm");
+    dialog.appendChild(el("h3", null, t("updAsk", { version: v.version })));
+    dialog.appendChild(el("p", null, t(older ? "updAskOlder" : "updAskNewer")));
+    const foot = el("div", "confirm-foot");
+    const ok = button("btn primary", t("updInstallThis"), go);
+    function go() {
+      ok.disabled = true;
+      ok.textContent = t("updateLoading");
+      invoke("update_install_version", { tag: v.tag }).catch((err) => {
+        closeModal();
+        if (String(err) === "installed") toast(t("updCurrent"));
+        else fail(err);
+      });
+    }
+    foot.appendChild(button("btn", t("cancel"), closeModal));
+    foot.appendChild(ok);
+    dialog.appendChild(foot);
+    openModal(dialog, go);
+    ok.focus();
+  }
+
+  function cmpVersion(a, b) {
+    const pa = String(a).split(".").map(Number);
+    const pb = String(b).split(".").map(Number);
+    for (let i = 0; i < 3; i++) if ((pa[i] || 0) !== (pb[i] || 0)) return (pa[i] || 0) - (pb[i] || 0);
+    return 0;
+  }
+
+  // ---- Handbuch (manual.js): dieselben Blöcke wie Information ----
+  // Links Titel und Text, rechts die Tasten. `x` im Text wird zur Taste.
+
+  function manualText(text) {
+    const node = el("div", "p-block-text");
+    String(text || "")
+      .split("`")
+      .forEach((part, i) => part && node.appendChild(i % 2 ? el("kbd", null, part) : document.createTextNode(part)));
+    return node;
+  }
+
+  function manualKeys(keys) {
+    if (!keys || !keys.length) return null;
+    const wrap = el("span", "p-keys");
+    for (const k of keys) wrap.appendChild(el("kbd", null, k));
+    return wrap;
+  }
+
+  function renderManual() {
+    const m = MANUAL[lang] || MANUAL.en;
+    const wrap = el("div", "p-sheet-inner p-manual");
+    wrap.appendChild(headline(m.title, m.lead));
+    for (const sec of m.sections) {
+      const b = block(sec.title);
+      if (sec.lead) b.appendChild(blockRow(manualText(sec.lead)));
+      for (const row of sec.rows) {
+        const main = sec.keys ? [el("div", null, row.t)] : [el("div", null, row.t), manualText(row.d)];
+        b.appendChild(blockRow(main, manualKeys(row.k)));
+      }
+      wrap.appendChild(b);
+    }
+    wrap.appendChild(el("div", "p-sheet-foot", "archiver-app.com/manual"));
     return wrap;
   }
 
@@ -2640,26 +3365,29 @@
     const wrap = el("div", "p-page p-gallery");
 
     const all = single && shown[0] ? zoneItems(shown[0].path) : [];
-    const hasFolders = zoneFolders(all).some(([f]) => f);
+    const zonePath = single && shown[0] ? shown[0].path : null;
+    const hasFolders = zoneFolders(all, null, zonePath).some(([f]) => f);
     // Ebenenweise: im Ordner nur seine eigenen Unterordner
-    const folders = zoneFolders(all, state.folder || null);
-    const here = state.folder ? all.filter((i) => inFolder(i, state.folder)) : all;
+    const folders = zoneFolders(all, state.level || null, zonePath);
+    const here = state.level ? all.filter((i) => inFolder(i, state.level)) : all;
     if (single && shown[0]) {
       const zone = shown[0];
       const items = all;
       const latest = lastSaved(zone.path);
-      const named = zoneFolders(all).filter(([f]) => f).length;
+      const named = zoneFolders(all, null, zone.path).filter(([f]) => f).length;
       const sentence = items.length
         ? [t("headZone", { count: countText(items.length), date: recentDate(latest) }).replace(/\.\.$/, "."), hasFolders ? t(named === 1 ? "headFolder1" : "headFolders", { n: named }) : "", topDomains(items)].filter(Boolean).join(" ")
         : t("headZoneEmpty");
-      const h = headline(lastSegment(zone.path), sentence);
+      // 0.32: Unsorted räumt sich nach 7 Tagen selbst auf (library.rs expire_inbox).
+      // 0.33: dort steht nur dieser Satz, ohne Anzahl, Datum und Quellen
+      const h = headline(lastSegment(zone.path), isInbox(zone.path) ? t("headUnsorted") : sentence);
       if (canEdit(zone.path)) {
         const title = h.querySelector(".p-head-title");
         title.classList.add("zone-card-name");
         title.title = t("renameHint");
         title.addEventListener("dblclick", () => startRename(title, zone.path));
       }
-      if (hasFolders && state.folder != null) {
+      if (hasFolders && state.level != null) {
         // Im Unterordner: Pfad „Zone / Ordner / Unterordner“, jeder Teil führt auf seine Ebene
         const title = h.querySelector(".p-head-title");
         const back = (node, target) => {
@@ -2668,7 +3396,7 @@
           node.addEventListener("click", () => openFolder(target));
         };
         back(title, null);
-        const parts = state.folder ? state.folder.split("/") : [""];
+        const parts = state.level ? state.level.split("/") : [""];
         let after = title;
         parts.forEach((part, i) => {
           const span = el("span", "p-head-title p-head-folder", " / " + (part || t("folderLoose")));
@@ -2678,8 +3406,8 @@
         });
       }
       if (hasFolders) {
-        // Kopfzeile am Bildraster: Titel links, Ordner rechts als Karten (3/6) oder Liste (2/6)
-        const row = el("div", "p-head-row " + (pref("folderStyle", "cards") === "list" ? "is-list" : "is-cards"));
+        // Kopfzeile am Bildraster: Titel links, Ordner rechts als Karten (3/6)
+        const row = el("div", "p-head-row is-cards");
         row.append(h, folderCards(zone, folders, here));
         wrap.appendChild(row);
       } else wrap.appendChild(h);
@@ -2700,6 +3428,10 @@
     else if (single && shown[0]) bar.appendChild(mono(t("allLabel") + " (" + shown[0].count + ")", "strong"));
     else if (state.found) bar.appendChild(mono(t("foundLabel") + " (" + state.found.length + ")", "strong"));
     else bar.appendChild(mono(t("allZonesLabel") + " (" + state.zones.length + ")", "strong"));
+    if (single && shown[0]) {
+      const marks = markChips(here);
+      if (marks) bar.appendChild(marks);
+    }
     bar.appendChild(el("span", "p-flex"));
     if (single && shown[0]) {
       const copies = cloudCopies(all);
@@ -2712,17 +3444,19 @@
       }
     }
     if (single && shown[0] && hasFolders) {
-      for (const l of ["mosaic", "sections"])
-        bar.appendChild(chip("(" + t(l === "mosaic" ? "layoutMosaic" : "layoutSections") + ")", zoneLayout(shown[0].path) === l, () => setZoneLayout(shown[0].path, l)));
+      // Ein Chip zum An- und Ausklicken: aus ist das Mosaik (0.39.1)
+      const seg = zoneLayout(shown[0].path) === "sections";
+      bar.appendChild(chip("(" + t("layoutSections") + ")", seg, () => setZoneLayout(shown[0].path, seg ? "mosaic" : "sections")));
       bar.appendChild(el("span", "p-filter-gap"));
     }
-    for (const v of ["grid", "original"]) {
-      const c = chip("(" + t(v === "grid" ? "viewGrid" : "viewOriginal") + ")", state.view === v, () => {
+    const views = ["grid", "original", "list"];
+    for (const v of views) {
+      const c = chip("(" + t({ grid: "viewGrid", original: "viewOriginal", list: "viewList" }[v]) + ")", state.view === v, () => {
         state.view = v;
         setPref("view", v);
         render();
       });
-      c.title = t(v === "grid" ? "viewGridTitle" : "viewOriginalTitle");
+      c.title = t({ grid: "viewGridTitle", original: "viewOriginalTitle", list: "viewListTitle" }[v]);
       bar.appendChild(c);
     }
     bar.appendChild(sizeChips(Math.max(0, SIZES.indexOf(state.size)), SIZES.length, (step) => {
@@ -2783,6 +3517,64 @@
     renderZones();
   }
 
+  // Liste: Spaltenköpfe über den Zeilen. Klick sortiert (0.34.2): aufsteigend,
+  // absteigend, dann wieder die Reihenfolge der Zone. Maße, Größe und Datum
+  // beginnen mit dem Größten bzw. Neuesten.
+  const LIST_COLS = [["name", "listName"], ["kind", "viewerFormat"], ["dims", "viewerSize"], ["bytes", "listBytes"], ["src", "source"], ["date", "listDate"]];
+  const listSort = () => (state.view === "list" && pref("listSort", null)) || null;
+
+  function listHead(sortable = true) {
+    const head = el("div", "p-list-head");
+    const s = listSort();
+    for (const [key, label] of LIST_COLS) {
+      if (!sortable) {
+        head.appendChild(mono(t(label), "dim"));
+        continue;
+      }
+      const on = !!s && s.key === key;
+      const b = button("p-list-sort" + (on ? " active" : ""), t(label) + (on ? (s.dir > 0 ? " ↑" : " ↓") : ""), () => {
+        const first = ["dims", "bytes", "date"].includes(key) ? -1 : 1;
+        setPref("listSort", !on ? { key, dir: first } : s.dir === first ? { key, dir: -first } : null);
+        renderZones();
+      });
+      b.title = t("listSortTitle");
+      head.appendChild(b);
+    }
+    return head;
+  }
+
+  // Name in der Liste: bei Text- und Notizkarten der Anfang des Texts
+  function listName(item) {
+    const q = quoteOf(item);
+    if (!q.trim()) return item.filename;
+    if (isNote(item)) {
+      const { title, body } = noteParts(item.quote);
+      return (title || t("noteUntitled")) + (body ? " · " + body.replace(/\s+/g, " ") : "");
+    }
+    return q.replace(/\s+/g, " ").trim();
+  }
+
+  function listValue(item, key) {
+    if (key === "name") return listName(item);
+    if (key === "kind") return (item.format || item.filename.split(".").pop() || "").toUpperCase();
+    if (key === "dims") return (item.width || 0) * (item.height || 0);
+    if (key === "bytes") return item.bytes || 0;
+    if (key === "src") return domainOf(item.pageUrl);
+    return item.capturedAt || item.addedAt || 0;
+  }
+
+  // Leere Werte (ohne Quelle, ohne Maße) stehen immer unten
+  function sortForList(list, s) {
+    const cmp = (a, b) => {
+      const x = listValue(a, s.key);
+      const y = listValue(b, s.key);
+      if (!x !== !y) return !x ? 1 : -1;
+      const d = typeof x === "string" ? x.localeCompare(y, lang, { numeric: true, sensitivity: "base" }) : x - y;
+      return d * s.dir;
+    };
+    return list.slice().sort(cmp);
+  }
+
   function gallerySection(zone, index, withHeader, searching) {
     const list = state.lists.get(zone.path) || [];
     const card = el("section", "zone-card p-section");
@@ -2798,6 +3590,7 @@
     }
     const body = el("div", "zone-card-grid");
     body.tabIndex = -1;
+    if (state.view === "list") body.appendChild(listHead());
     const items = el("div", "zone-card-items");
     if (state.view === "original") {
       items.classList.add("p-masonry");
@@ -2809,6 +3602,16 @@
     return card;
   }
 
+  function sectionRel(zonePath, folder, base) {
+    return folder ? zonePath + "/" + folder : base ? zonePath + "/" + base : zonePath;
+  }
+
+  // Abschnitt, in dem ein Objekt gerade steht (nur in „Sections“)
+  function itemSection(item) {
+    const base = state.folder || null;
+    return sectionRel(item.zone, childFolder(item, base), base);
+  }
+
   // „Sections“: je Ordner eine Kopfzeile, darunter sein Raster
   function folderSections(zone) {
     const list = state.lists.get(zone.path) || [];
@@ -2817,7 +3620,9 @@
     for (const [folder, n] of zoneFolders(list, base).concat(base && list.some((i) => childFolder(i, base) === "") ? [["", 0]] : [])) {
       const part = list.filter((i) => childFolder(i, base) === folder);
       const card = el("section", "zone-card p-section p-folder-section");
-      card.dataset.zone = zone.path;
+      // 0.35: Ablageziel ist der Ordner des Abschnitts (lose = die Ebene selbst)
+      card.dataset.zone = sectionRel(zone.path, folder, base);
+      card.dataset.section = "1";
       const head = el("h2", "p-head p-folder-head");
       head.appendChild(el("span", "p-head-title", folder ? lastSegment(folder) : base ? lastSegment(base) : t("folderLoose")));
       head.appendChild(el("span", "p-head-text", " " + countText(part.length)));
@@ -2840,6 +3645,7 @@
     const card = el("section", "zone-card p-section p-found");
     const body = el("div", "zone-card-grid");
     body.tabIndex = -1;
+    if (state.view === "list") body.appendChild(listHead());
     const items = el("div", "zone-card-items");
     if (state.view === "original") {
       items.classList.add("p-masonry");
@@ -2869,6 +3675,13 @@
   }
 
   function lastSaved(zonePath) {
+    if (pass) {
+      if (!pass.saved) {
+        pass.saved = new Map();
+        for (const item of state.items) pass.saved.set(item.zone, Math.max(pass.saved.get(item.zone) || 0, item.capturedAt || item.addedAt || 0));
+      }
+      return pass.saved.get(zonePath) || 0;
+    }
     let latest = 0;
     for (const item of state.items) {
       if (item.zone === zonePath) latest = Math.max(latest, item.capturedAt || item.addedAt || 0);
@@ -2877,7 +3690,7 @@
   }
 
   function canEdit(path) {
-    return path !== "" && path !== (state.defaultZone || "Unsorted");
+    return path !== "" && path !== "Unsorted" && path !== (state.defaultZone || "Unsorted");
   }
 
   // ---- Zonen-Menü (⋯): Umbenennen, im Finder zeigen, löschen ----
@@ -2893,7 +3706,7 @@
     }
   }
 
-  function zoneMenuButton(zone) {
+  function zoneMenuButton(zone, makeMenu) {
     const btn = button("zone-menu-btn", "⋯");
     btn.title = t("zoneOptions");
     btn.addEventListener("click", (e) => {
@@ -2902,7 +3715,7 @@
       closeMenus();
       if (open) return;
       // Schwebt über allem: Karten schneiden ihren Inhalt ab
-      const menu = zoneMenu(zone);
+      const menu = makeMenu ? makeMenu() : zoneMenu(zone);
       menu.classList.add("floating");
       document.body.appendChild(menu);
       const r = btn.getBoundingClientRect();
@@ -2954,13 +3767,14 @@
         })
       );
     }
-    if (canEdit(zone.path)) {
-      const del = button("zone-menu-item danger", t("trashZone"));
+    if (canEdit(zone.path) && !insideExternal(zone.path)) {
+      const unlink = externalTop(zone.path);
+      const del = button("zone-menu-item" + (unlink ? "" : " danger"), t(unlink ? "unlinkZone" : "trashZone"));
       let armed = false;
       del.addEventListener("click", async () => {
         if (!armed) {
           armed = true;
-          del.textContent = t("trashZoneConfirm", { count: zone.count === 1 ? t("countImage") : t("countImages", { n: zone.count }) });
+          del.textContent = unlink ? t("unlinkZoneConfirm") : t("trashZoneConfirm", { count: zone.count === 1 ? t("countImage") : t("countImages", { n: zone.count }) });
           del.classList.add("armed");
           return;
         }
@@ -3004,32 +3818,59 @@
     menu.style.top = Math.max(8, Math.min(window.innerHeight - h - 8, y)) + "px";
   }
 
+  // Externe Zonen (0.39.1): die Verknüpfung selbst lässt sich nur trennen,
+  // Ordner darin gar nicht löschen. Der Ordner auf dem Mac bleibt immer.
+  function externalTop(path) {
+    return !!path && state.zones.some((z) => z.path === path && z.external) && !path.includes("/");
+  }
+  function insideExternal(path) {
+    const top = (path || "").split("/")[0];
+    return path !== top && state.zones.some((z) => z.external && (z.path === top || z.path.startsWith(top + "/")));
+  }
+
   async function trashZone(zone) {
+    const unlink = externalTop(zone.path);
     try {
       await invoke("trash_zone", { zone: zone.path });
-      if (state.focus === zone.path) state.focus = null;
+      if (state.focus === zone.path || (state.focus || "").startsWith(zone.path + "/")) state.focus = null;
       await refresh();
-      toast(t("zoneTrashed", { zone: zoneLabel(zone.path) }));
+      toast(t(unlink ? "zoneUnlinked" : "zoneTrashed", { zone: zoneLabel(zone.path) }));
     } catch (e) {
-      fail(e);
+      if (String(e && e.message ? e.message : e) === "external-folder") toast(t("externalFolder"), false, 5200);
+      else fail(e);
     }
+  }
+
+  // „12 Bilder“, „12 Bilder und 3 Dateien ohne Vorschau“, „3 Dateien ohne Vorschau“
+  function zoneCountText(zone, other) {
+    const parts = [];
+    if (zone.count) parts.push(zone.count === 1 ? t("countImage") : t("countImages", { n: zone.count }));
+    if (other) parts.push(other === 1 ? t("countOtherFile") : t("countOtherFiles", { n: other }));
+    return parts.length ? parts.join(" " + t("and") + " ") : t("countImages", { n: 0 });
   }
 
   // ⌫ auf der Startseite: gewählte oder überfahrene Zone löschen, nach Rückfrage.
   function askTrashZone(path) {
     const zone = state.zones.find((z) => z.path === path);
-    if (!zone || !canEdit(zone.path)) return false;
+    if (!zone || !canEdit(zone.path) || insideExternal(zone.path)) return false;
+    const unlink = externalTop(zone.path);
     const dialog = el("div", "dialog confirm");
-    dialog.appendChild(el("h3", null, t("trashZoneAsk", { zone: zoneLabel(zone.path) })));
-    const count = zone.count === 1 ? t("countImage") : t("countImages", { n: zone.count });
-    dialog.appendChild(el("p", null, zone.count ? t("trashZoneAskText", { count }) : t("trashZoneAskEmpty")));
+    dialog.appendChild(el("h3", null, t(unlink ? "unlinkZoneAsk" : "trashZoneAsk", { zone: zoneLabel(zone.path) })));
+    const text = el("p", null, unlink ? t("unlinkZoneAskText") : zone.count ? t("trashZoneAskText", { count: zoneCountText(zone, 0) }) : t("trashZoneAskEmpty"));
+    dialog.appendChild(text);
+    // Dateien ohne Vorschau (PSD, AI, ZIP …) wandern mit, also nennen
+    if (!unlink) invoke("zone_other_files", { zone: zone.path })
+      .then((other) => {
+        if (other) text.textContent = t("trashZoneAskText", { count: zoneCountText(zone, other) });
+      })
+      .catch(() => {});
     const foot = el("div", "confirm-foot");
     const go = () => {
       closeModal();
       trashZone(zone);
     };
     foot.appendChild(button("btn", t("cancel"), closeModal));
-    const ok = button("btn danger-fill", t("trashZoneDo"), go);
+    const ok = button(unlink ? "btn primary" : "btn danger-fill", t(unlink ? "unlinkZone" : "trashZoneDo"), go);
     foot.appendChild(ok);
     dialog.appendChild(foot);
     const modal = $("modal");
@@ -3054,9 +3895,40 @@
       if (!force && node.dataset.cols === String(count)) continue;
       node.dataset.cols = String(count);
       const cols = Array.from({ length: count }, () => el("div", "p-masonry-col"));
-      list.forEach((item, i) => cols[i % count].appendChild(itemCard(item)));
+      list.forEach((item, i) => {
+        cols[i % count].appendChild(itemCard(item));
+      });
       node.replaceChildren(...cols);
     }
+  }
+
+  // Zone, die sich nach 7 Tagen leert (Einstellungen › Bibliothek, 0.33.1): seit 0.36.0
+  // jeder Ordner namens Unsorted, auch selbst angelegt (library.rs is_unsorted)
+  function isUnsortedPath(zonePath) {
+    return String(zonePath || "")
+      .split("/")
+      .some((seg) => seg.trim().replace(/^[\d_.\- ]+/, "").toLowerCase() === "unsorted");
+  }
+  function isInbox(zonePath) {
+    return !!state.expireZone && isUnsortedPath(zonePath);
+  }
+  // Resttage eines Objekts in Unsorted, gezählt ab dem ersten Sehen (library.rs inbox_seen)
+  function inboxDaysLeft(item) {
+    if (!isInbox(item.zone)) return Infinity;
+    const since = (state.inboxSeen || {})[item.hash];
+    if (!since) return DELETED_DAYS;
+    return Math.max(1, Math.ceil(DELETED_DAYS - (Date.now() - since) / 86400000));
+  }
+
+  // ---- Bildtext (0.29): Kennung, Text, Notiz – in der Lightbox ----
+  function hasCaption(item) {
+    return !!(item && item.caption);
+  }
+
+  // Kennung wie im Magazin: Zone—Nummer Position/Anzahl, etwa TYPO—02 3/7
+  function captionId(item, i, total) {
+    const n = state.zones.findIndex((z) => z.path === item.zone);
+    return zoneLabel(item.zone) + "—" + String(n + 1).padStart(2, "0") + (total ? " " + (i + 1) + "/" + total : "");
   }
 
   function itemCard(item) {
@@ -3076,6 +3948,16 @@
       card.appendChild(el("div", "card-badge"));
       card.appendChild(el("div", "card-media"));
       card.appendChild(el("span", "card-fresh"));
+      card.appendChild(el("div", "card-days"));
+      card.appendChild(el("span", "card-dot"));
+      card.appendChild(el("span", "card-mark"));
+      // Liste: Dateiname und Angaben neben bzw. unter dem Bild
+      const info = el("div", "card-info");
+      info.appendChild(el("span", "card-name"));
+      const meta = el("span", "card-meta");
+      for (const k of ["kind", "dims", "bytes", "src", "date"]) meta.appendChild(el("span", "card-m card-m-" + k));
+      info.appendChild(meta);
+      card.appendChild(info);
       cardCache.set(item.path, card);
     }
     const label = mediaLabel(item);
@@ -3085,13 +3967,15 @@
     const img = card.querySelector("img");
     const quote = quoteOf(item);
     card.classList.toggle("card-text", !!quote);
+    card.classList.toggle("card-note", isNote(item));
     let sheet = card.querySelector(".text-sheet");
     if (quote) {
       const tone = toneKey(item);
-      if (!sheet || sheet.dataset.quote !== quote || sheet.dataset.tone !== tone) {
+      const key = quote + "|" + (item.links || []).length;
+      if (!sheet || sheet.dataset.quote !== key || sheet.dataset.tone !== tone) {
         if (sheet) sheet.remove();
         sheet = textSheet(item, "text-sheet");
-        sheet.dataset.quote = quote;
+        sheet.dataset.quote = key;
         sheet.dataset.tone = tone;
         card.insertBefore(sheet, img);
       }
@@ -3116,7 +4000,68 @@
     else card.style.removeProperty("--ar");
     card.classList.toggle("selected", state.selection.has(item.path));
     card.classList.toggle("fresh", isFresh(item));
+    const info = card.querySelector(".card-info");
+    info.querySelector(".card-name").textContent = listName(item);
+    info.querySelector(".card-m-kind").textContent = (item.format || item.filename.split(".").pop() || "").toUpperCase();
+    info.querySelector(".card-m-dims").textContent = item.width && item.height ? item.width + " × " + item.height : "–";
+    info.querySelector(".card-m-bytes").textContent = item.bytes ? formatBytes(item.bytes) : "–";
+    info.querySelector(".card-m-src").textContent = domainOf(item.pageUrl);
+    info.querySelector(".card-m-date").textContent = shortDate(item.capturedAt || item.addedAt);
+    // 0.33.1: Bild mit Bildtext trägt einen Punkt in der Farbe seiner Textkarte,
+    // 0.42.6 auch ein Bild mit Note (Farbe der Note)
+    const dot = card.querySelector(".card-dot");
+    const dotNote = hasCaption(item) ? null : notesFor(item)[0];
+    dot.hidden = !(hasCaption(item) || dotNote) || !!quote || isNote(item);
+    if (!dot.hidden) dot.style.setProperty("--ts-bg", quoteTone(dotNote || item)[0]);
+    // 0.41.0: Farbmarke als Kontur (DESIGN.md 4.6a)
+    const mark = card.querySelector(".card-mark");
+    mark.hidden = !MARKS.includes(item.mark);
+    if (!mark.hidden) mark.style.setProperty("--mk", QUOTE_TONES[item.mark][0]);
+    // 0.33: In Unsorted die letzten zwei Tage vor „Zuletzt gelöscht“ zeigen
+    const days = card.querySelector(".card-days");
+    const left = inboxDaysLeft(item);
+    days.hidden = !(left <= 2);
+    days.textContent = days.hidden ? "" : t("deletedDays", { n: left });
     return card;
+  }
+
+  // Video-Vorschau (Skim, fest seit 0.43.2): solange der Zeiger auf der Karte
+  // liegt, folgt die Zeit im Clip der Maus waagerecht. Ohne Ton.
+  function videoScrub(card) {
+    const item = state.byPath.get(card.dataset.path);
+    if (!item || kindOf(item) !== "video" || card.querySelector(".card-scrub")) return;
+    let video = null;
+    let lastX = 0.5;
+    const track = (e) => {
+      const r = card.getBoundingClientRect();
+      lastX = Math.min(0.999, Math.max(0, (e.clientX - r.left) / r.width));
+      if (video && isFinite(video.duration) && video.duration > 0) video.currentTime = lastX * video.duration;
+    };
+    card.addEventListener("pointermove", track);
+    const stop = () => {
+      card.removeEventListener("pointerleave", stop);
+      card.removeEventListener("pointermove", track);
+      if (video) {
+        video.removeAttribute("src");
+        video.load();
+        video.remove();
+      }
+    };
+    card.addEventListener("pointerleave", stop);
+    video = document.createElement("video");
+    video.className = "card-scrub";
+    video.muted = true;
+    video.playsInline = true;
+    video.preload = "auto";
+    video.src = fileSrc(item.abs);
+    card.appendChild(video);
+    video.addEventListener("loadedmetadata", () => {
+      const d = video.duration;
+      if (!isFinite(d) || d <= 0) return stop();
+      video.currentTime = lastX * d;
+    });
+    video.addEventListener("seeked", () => video.classList.add("on"), { once: true });
+    video.addEventListener("error", stop);
   }
 
   function setFocus(path) {
@@ -3124,6 +4069,8 @@
     if (path !== state.focus && isZone(state.focus) && state.shared) markSeen(zoneItems(state.focus));
     if (path !== state.focus) {
       state.folder = null;
+      state.markFilter = null;
+      state.level = null;
       state.folderKbd = null;
     }
     state.focus = path;
@@ -3255,6 +4202,7 @@
 
   function columnsOf(zone) {
     if (state.view === "original") return 1;
+    if (state.view === "list") return 1;
     const node = document.querySelector(`.zone-card[data-zone="${CSS.escape(zone)}"] .zone-card-items`);
     return node ? getComputedStyle(node).gridTemplateColumns.split(" ").filter(Boolean).length || 1 : 1;
   }
@@ -3355,12 +4303,15 @@
   const undoStack = [];
   const UNDO_MAX = 30;
 
+  // Jeder Schritt gehört zu seiner Bibliothek: Die Pfade sind relativ, nach
+  // einem Wechsel (⌘1–4, Palette) träfen sie sonst fremde Dateien.
   function pushUndo(label, run) {
-    undoStack.push({ label, run });
+    undoStack.push({ label, run, root: state.root });
     if (undoStack.length > UNDO_MAX) undoStack.shift();
   }
 
   async function undo() {
+    while (undoStack.length && undoStack[undoStack.length - 1].root !== state.root) undoStack.pop();
     const step = undoStack.pop();
     if (!step) return toast(t("undoNothing"));
     try {
@@ -3372,24 +4323,25 @@
     }
   }
 
-  async function moveSelection(zone) {
-    const items = selectedItems().filter((i) => i.zone !== zone);
+  const dirOf = (p) => p.slice(0, Math.max(0, p.lastIndexOf("/")));
+
+  async function moveSelection(zone, exact) {
+    const items = selectedItems().filter((i) => (exact ? itemSection(i) !== zone : i.zone !== zone && dirOf(i.path) !== zone));
     if (!items.length) return;
     const pos = rememberPosition(items);
     try {
-      const moved = await invoke("move_items", { paths: items.map((i) => i.path), zone });
+      const moved = await invoke("move_items", { paths: items.map((i) => i.path), zone, exact: !!exact });
       if (Array.isArray(moved) && moved.length === items.length) {
         // zurück in den genauen Ordner (auch Unterordner einer Zone)
         const back = items.map((i, k) => [moved[k], i.path.includes("/") ? i.path.slice(0, i.path.lastIndexOf("/")) : i.zone]);
         pushUndo(t("undoMove"), async () => {
           for (const z of new Set(back.map(([, z]) => z))) {
-            await invoke("move_items", { paths: back.filter(([, b]) => b === z).map(([p]) => p), zone: z });
+            await invoke("move_items", { paths: back.filter(([, b]) => b === z).map(([p]) => p), zone: z, exact: true });
           }
         });
       }
       await refresh();
       selectNextAt(pos);
-      tourStats.drops++;
       toast(t("moved", { n: items.length, zone: zoneLabel(zone) }));
     } catch (e) {
       fail(e);
@@ -3403,6 +4355,19 @@
     const quote = items.length === 1 ? quoteOf(items[0]) : null;
     invoke("copy_images", { paths: items.map((i) => i.abs), text: quote || null })
       .then(() => toast(quote ? t("copiedText") : items.length === 1 ? t("copiedOne") : t("copiedMany", { n: items.length })))
+      .catch(fail);
+  }
+
+  // ⌘V (0.32): in die offene Zone bzw. ihren Ordner, auf der Startseite nach Unsorted
+  function pasteIntoZone() {
+    const zone = isZone(state.focus) ? (state.level ? state.focus + "/" + state.level : state.focus) : "";
+    invoke("paste_into", { zone })
+      .then((r) => {
+        if (r.imported) toast(t("pasted", { zone: zoneLabel(zone || state.defaultZone) }));
+        else if (r.duplicates) toast(t("importDone", { imported: 0, duplicates: r.duplicates, sources: 0 }));
+        else toast(t("pasteEmpty"));
+        return refresh();
+      })
       .catch(fail);
   }
 
@@ -3549,6 +4514,696 @@
   const LB_PAD = { top: 48, bottom: 84, side: 32 };
   const lbView = { w: 0, h: 0, scale: 1, x: 0, y: 0, fitted: true };
   let lbInfoOpen = false;
+  // 0.30.1: Bildtext als farbige Karte im Ton des Bildes, wie die Textkarten.
+  // „Rückseite“: das Bild wird gewendet, ein Eselsohr unten rechts zeigt, dass
+  // es eine hat. „Doppelseite“: die Karte steht links neben dem Bild, gleich
+  // hoch, im Hochformat 3:4. Einstellungen › Darstellung. Der Text ist editierbar.
+  // Video, PDF und Audio: Karte unten links.
+  const LB_TEXT_W = 300;
+  const LB_GAP = 24;
+  const LB_CARD_MIN = 260;
+  let lbFlipped = false;
+  function lbTextStyle() {
+    return pref("lbTextStyle", "back") === "spread" ? "spread" : "back";
+  }
+  function lbCaptionItem() {
+    const item = lightboxItem();
+    return item && (hasCaption(item) || notesFor(item).length) && !quoteOf(item) ? item : null;
+  }
+  // 0.42.6: Bild ohne Bildtext, aber mit Note zeigt die Note an derselben Stelle
+  function lbNoteOf(item) {
+    return item && !hasCaption(item) ? notesFor(item)[0] || null : null;
+  }
+  function lbBackMode() {
+    return lbTextStyle() === "back" && lbMode === "image";
+  }
+  function lbTextShown() {
+    if (lbInfoOpen || !lbCaptionItem()) return false;
+    return lbBackMode() ? lbFlipped : pref("lbText", true) !== false;
+  }
+  function lbSpread() {
+    return lbMode === "image" && lbTextStyle() === "spread" && lbView.w > 0 && lbTextShown();
+  }
+  function lbCardW(h) {
+    return Math.max(LB_CARD_MIN, h * 0.75);
+  }
+
+  function captionCard(item) {
+    const lb = state.lightbox;
+    const len = item.caption.length;
+    const card = el("div", "text-sheet lb-cap-card " + (len < 140 ? "short" : len < 400 ? "medium" : "long"));
+    const [bg, fg, dim] = quoteTone(item);
+    card.style.setProperty("--ts-bg", bg);
+    card.style.setProperty("--ts-fg", fg);
+    card.style.setProperty("--ts-dim", dim);
+    card.appendChild(el("div", "ts-label", t("captionTitle").toUpperCase() + "  ·  " + captionId(item, lb.index, lbList(lb).length)));
+    const body = el("div", "ts-body", item.caption);
+    editableText(body, () => item.caption, (v) => {
+      item.caption = v;
+      saveNote(item, { caption: v });
+      lbRenderText();
+    });
+    card.appendChild(body);
+    const date = new Date(item.capturedAt || item.addedAt || 0).toLocaleDateString(lang === "de" ? "de-DE" : "en-GB");
+    card.appendChild(el("div", "ts-foot", [domainOf(item.pageUrl), item.capturedAt || item.addedAt ? date : ""].filter(Boolean).join("  ·  ")));
+    return card;
+  }
+
+  // 0.42.6: Note eines Bildes als Blatt neben (bzw. hinter) dem Bild. Klick öffnet
+  // die Note zum Schreiben, die Lightbox blättert dann durch Note und Verknüpfte.
+  function noteCard(note, item) {
+    const { title, body } = noteParts(note.quote);
+    const card = el("button", "note-paper lb-note-card");
+    card.type = "button";
+    lbNoteTone(card, note);
+    card.appendChild(el("div", "np-label", [t("noteLabel"), zoneLabel(note.zone), noteDate(note, true)].join(" · ")));
+    card.appendChild(el("div", "np-title", title || t("noteUntitled")));
+    card.appendChild(el("div", "np-body", body));
+    const n = linkedItems(note).length;
+    const foot = el("div", "np-foot");
+    foot.append(el("span", null, t("noteWords", { n: noteWords(title + " " + body) })), el("span", null, n > 1 ? t("noteObjects", { n }) : ""));
+    card.appendChild(foot);
+    card.title = t("noteOpen");
+    card.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const list = [note, ...linkedItems(note)];
+      state.lightbox = { zone: null, list, index: 0 };
+      showLightboxItem();
+    });
+    return card;
+  }
+
+  // 0.30.1: Text auf Karten in der Lightbox direkt ändern (Bildtext, Textkarte).
+  // Esc oder ⌘↩ beendet, gesichert wird beim Verlassen.
+  function editableText(body, current, save) {
+    body.contentEditable = "plaintext-only";
+    body.spellcheck = false;
+    body.addEventListener("keydown", (e) => {
+      e.stopPropagation();
+      if (e.key === "Escape" || (e.key === "Enter" && (e.metaKey || e.ctrlKey))) {
+        e.preventDefault();
+        body.blur();
+      }
+    });
+    body.addEventListener("blur", () => {
+      const v = body.innerText.trim();
+      if (v !== current()) save(v);
+    });
+  }
+
+  function lbRenderText() {
+    const item = lightboxItem();
+    const box = $("lbText");
+    const btn = $("lbTextBtn");
+    const cap = lbCaptionItem();
+    if (!cap) lbFlipped = false;
+    btn.hidden = !cap;
+    btn.textContent = t(lbNoteOf(cap) ? "noteChip" : "captionChip");
+    btn.title = t(lbBackMode() ? "captionFlipTitle" : "captionLbTitle");
+    btn.classList.toggle("active", lbTextShown());
+    const on = lbTextShown();
+    $("lightbox").classList.toggle("text-open", on);
+    $("lightbox").classList.toggle("flipped", on && lbBackMode());
+    box.hidden = !on;
+    // Während geschrieben wird, nicht neu aufbauen (library-changed nach dem Sichern)
+    if (on && !box.contains(document.activeElement)) box.replaceChildren(lbNoteOf(item) ? noteCard(lbNoteOf(item), item) : captionCard(item));
+    lbPlaceText();
+  }
+
+  // Bild-Modus: Rückseite deckt das Bild genau, Doppelseite steht links daneben.
+  function lbPlaceText() {
+    const box = $("lbText");
+    lbPlaceEar();
+    if (box.hidden) return;
+    let r;
+    if (lbMode === "image" && lbView.w) {
+      const w = lbView.w * lbView.scale;
+      const h = lbView.h * lbView.scale;
+      if (lbBackMode()) r = { left: lbView.x, top: lbView.y, width: w, height: h };
+      else {
+        const cw = lbCardW(h);
+        r = { left: lbView.x - LB_GAP - cw, top: lbView.y, width: cw, height: h };
+      }
+    } else {
+      const h = Math.min(LB_TEXT_W * (4 / 3), window.innerHeight - LB_PAD.top - LB_PAD.bottom);
+      r = { left: LB_PAD.side, top: window.innerHeight - LB_PAD.bottom - h, width: LB_TEXT_W, height: h };
+    }
+    box.style.visibility = lbMode === "image" && !lbBackMode() && !lbView.fitted ? "hidden" : "";
+    for (const k in r) box.style[k] = Math.round(r[k]) + "px";
+  }
+
+  // Eselsohr in der Farbe der Karte: dieses Bild hat eine Rückseite
+  function lbPlaceEar() {
+    let ear = $("lbEar");
+    if (!ear) {
+      ear = el("button", "lb-ear");
+      ear.id = "lbEar";
+      ear.type = "button";
+      ear.title = t("captionFlipTitle");
+      ear.addEventListener("click", (e) => {
+        e.stopPropagation();
+        lbToggleText();
+      });
+      $("lightbox").appendChild(ear);
+    }
+    const item = lbCaptionItem();
+    const show = !!item && lbBackMode() && !lbFlipped && !lbInfoOpen && lbView.w > 0;
+    ear.hidden = !show;
+    if (!show) return;
+    ear.style.setProperty("--ts-bg", quoteTone(lbNoteOf(item) || item)[0]);
+    ear.style.left = Math.round(lbView.x + lbView.w * lbView.scale) + "px";
+    ear.style.top = Math.round(lbView.y + lbView.h * lbView.scale) + "px";
+  }
+
+  function lbToggleText() {
+    if (!lbCaptionItem()) return;
+    if (lbInfoOpen) lbToggleInfo();
+    if (lbBackMode()) return lbFlip();
+    setPref("lbText", !(pref("lbText", true) !== false));
+    lbRenderText();
+    if (lbView.fitted) lbFit(true);
+    else {
+      lbClamp();
+      lbApply(true);
+    }
+  }
+
+  // Wenden um die senkrechte Mitte: erst das Bild (bzw. die Karte) auf die
+  // Kante, dann die andere Seite von der Kante zurück. 2 × 0.18 s.
+  function lbFlip() {
+    if (!lbView.fitted) lbFit(false);
+    const toBack = !lbFlipped;
+    const done = () => {
+      lbFlipped = toBack;
+      lbRenderText();
+    };
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return done();
+    const stage = $("lightboxStage");
+    const cx = lbView.x + (lbView.w * lbView.scale) / 2;
+    const cy = lbView.y + (lbView.h * lbView.scale) / 2;
+    stage.style.transformOrigin = `${cx}px ${cy}px`;
+    const edge = (deg) => [{ transform: "perspective(2400px) rotateY(0deg)" }, { transform: `perspective(2400px) rotateY(${deg}deg)` }];
+    const out = toBack ? stage : $("lbText");
+    $("lbEar").hidden = true;
+    out.animate(edge(90), { duration: 180, easing: "ease-in" }).finished.then(() => {
+      done();
+      const inn = toBack ? $("lbText") : stage;
+      inn.animate(edge(-90).reverse(), { duration: 180, easing: "ease-out" });
+    });
+  }
+
+  // ---- Notiz-Objekte (0.29): ein Blatt im Raster, geschrieben wird in der Lightbox ----
+  // Der Text liegt als .md in der Zone. Erste Zeile = Titel (beim Verlassen auch
+  // Dateiname), Verknüpfungen stehen links neben dem Blatt.
+  const NOTE_TONES = TONES;
+  function isNote(item) {
+    return !!item && kindOf(item) === "note";
+  }
+
+  function noteParts(text) {
+    const lines = String(text || "").replace(/\r\n?/g, "\n").split("\n");
+    const i = lines.findIndex((l) => l.trim());
+    if (i < 0) return { title: "", body: "" };
+    return { title: lines[i].replace(/^\s*#+\s*/, "").trim(), body: lines.slice(i + 1).join("\n").replace(/^\n+/, "").trimEnd() };
+  }
+  function noteText(title, body) {
+    title = title.trim();
+    body = body.trimEnd();
+    return (title ? "# " + title + (body ? "\n\n" : "\n") : "") + body;
+  }
+  function noteDate(item, year) {
+    const d = new Date(item.addedAt || item.mtime || Date.now());
+    return d.toLocaleDateString(lang === "de" ? "de-DE" : "en-GB", year ? undefined : { day: "2-digit", month: "2-digit" });
+  }
+  function noteWords(text) {
+    const m = String(text).match(/[^\s#]+/g);
+    return m ? m.length : 0;
+  }
+  function linkedItems(item) {
+    const byHash = new Map(state.items.map((i) => [i.hash, i]));
+    return (item.links || []).map((h) => byHash.get(h)).filter(Boolean);
+  }
+  // Rückweg (0.42.6): welche Notes ein Objekt verknüpfen. Neu gebaut, wenn die
+  // Bibliothek neu geladen ist oder sich Verknüpfungen ändern.
+  let noteIdx = null;
+  let noteRev = 0;
+  function notesFor(item) {
+    if (!noteIdx || noteIdx.items !== state.items || noteIdx.rev !== noteRev) {
+      const map = new Map();
+      for (const n of state.items) if (isNote(n)) for (const h of n.links || []) map.set(h, [...(map.get(h) || []), n]);
+      noteIdx = { items: state.items, rev: noteRev, map };
+    }
+    return (item && noteIdx.map.get(item.hash)) || [];
+  }
+
+  // Blatt im Raster (A1): Kennung, fetter Titel, Text, Fuß mit Verknüpfungen
+  function noteSheet(item, cls) {
+    const { title, body } = noteParts(item.quote);
+    const len = (title + body).length;
+    const sheet = el("div", cls + " note-sheet" + (len < 140 ? " short" : len < 400 ? " medium" : " long"));
+    const [bg, fg, dim] = quoteTone(item);
+    sheet.style.setProperty("--ts-bg", bg);
+    sheet.style.setProperty("--ts-fg", fg);
+    sheet.style.setProperty("--ts-dim", dim);
+    sheet.dataset.tone = toneKey(item);
+    sheet.appendChild(el("div", "ts-label", t("noteLabel") + " · " + noteDate(item)));
+    sheet.appendChild(el("div", "ts-title", title || t("noteUntitled")));
+    sheet.appendChild(el("div", "ts-body", body));
+    const n = linkedItems(item).length;
+    sheet.appendChild(el("div", "ts-foot", [domainOf(item.pageUrl), n ? t("noteObjects", { n }) : ""].filter(Boolean).join("  ·  ")));
+    return sheet;
+  }
+
+  // Speichern der Reihe nach: der Hash ändert sich mit jedem Text, Farbe und
+  // Verknüpfungen müssen den aktuellen treffen.
+  let noteQueue = Promise.resolve();
+  function noteChain(fn) {
+    noteQueue = noteQueue.then(fn, fn).catch(fail);
+    return noteQueue;
+  }
+
+  let noteEd = null;
+  async function noteSave(rename) {
+    const ed = noteEd;
+    if (!ed) return;
+    clearTimeout(ed.timer);
+    const text = noteText(ed.title.value, ed.body.value);
+    if (!ed.dirty && !(rename && ed.renameDue)) return false;
+    ed.dirty = false;
+    if (!rename) ed.renameDue = true;
+    else ed.renameDue = false;
+    ed.status.textContent = t("noteSaving");
+    const item = ed.item;
+    await noteChain(async () => {
+      let r;
+      try {
+        r = await invoke("write_note", { path: item.path, text, rename: !!rename });
+      } catch (e) {
+        // Nicht gesichert: Text bleibt „ungespeichert“, der nächste Anlauf
+        // (Tippen, ⌘S, Schließen) versucht es erneut (0.31.0)
+        ed.dirty = true;
+        if (rename) ed.renameDue = true;
+        if (noteEd === ed) ed.status.textContent = t("noteSaveFailed");
+        throw e;
+      }
+      const old = item.path;
+      Object.assign(item, { hash: r.hash, quote: text.trim() || null, path: r.path, mtime: Date.now() });
+      if (r.path !== old) {
+        item.abs = item.abs.slice(0, item.abs.length - old.length) + r.path;
+        item.filename = r.path.split("/").pop();
+        state.byPath.delete(old);
+        state.byPath.set(r.path, item);
+        cardCache.delete(old);
+      }
+      if (noteEd === ed) {
+        ed.status.textContent = t("noteSaved");
+        setLbName(item.filename);
+      }
+    });
+    return true;
+  }
+
+  function noteLeave() {
+    if (!noteEd) return;
+    const ed = noteEd;
+    noteSave(true).then((saved) => saved && render());
+    noteEd = null;
+    closeNoteChooser();
+    return ed;
+  }
+
+  // Lightbox (A2): Papier zum Schreiben, Verknüpfungen links daneben
+  function lbNoteEditor(item, box) {
+    const { title, body } = noteParts(item.quote);
+    const wrap = el("div", "lb-note");
+    const paper = el("div", "note-paper");
+    lbNoteTone(paper, item);
+    paper.appendChild(el("div", "np-label", [t("noteLabel"), zoneLabel(item.zone), noteDate(item, true)].join(" · ")));
+    const titleIn = el("input", "np-title");
+    titleIn.value = title;
+    titleIn.placeholder = t("noteTitlePh");
+    titleIn.spellcheck = false;
+    const bodyIn = el("textarea", "np-body");
+    bodyIn.value = body;
+    bodyIn.placeholder = t("noteBodyPh");
+    const foot = el("div", "np-foot");
+    const words = el("span", null, t("noteWords", { n: noteWords(title + " " + body) }));
+    const status = el("span", null, t("noteSaved"));
+    foot.append(words, el("span", "np-count"), status);
+    // 0.42.6: Zitat aus dem Web behält seine Herkunft; Klick führt zur Stelle
+    if (item.pageUrl) {
+      const src = el("button", "np-source", "↗ " + domainOf(item.pageUrl));
+      src.type = "button";
+      src.title = item.pageTitle || item.pageUrl;
+      src.addEventListener("click", (e) => {
+        e.stopPropagation();
+        invoke("open_url", { url: sourceUrl(item) }).catch(fail);
+      });
+      foot.insertBefore(src, status);
+    }
+    paper.append(titleIn, bodyIn, foot);
+    // 0.42.6: Verknüpfte stehen in voller Höhe direkt neben dem Blatt
+    wrap.append(paper, noteLinks(item));
+    box.appendChild(wrap);
+    const n = linkedItems(item).length;
+    foot.querySelector(".np-count").textContent = n ? t("noteObjects", { n }) : "";
+    noteFit(wrap);
+    noteEd = { item, title: titleIn, body: bodyIn, status, paper, dirty: false, renameDue: false, timer: null };
+    const ed = noteEd;
+    const changed = () => {
+      ed.dirty = true;
+      words.textContent = t("noteWords", { n: noteWords(titleIn.value + " " + bodyIn.value) });
+      status.textContent = "";
+      clearTimeout(ed.timer);
+      ed.timer = setTimeout(() => noteEd === ed && noteSave(false), 600);
+    };
+    for (const f of [titleIn, bodyIn]) {
+      f.addEventListener("input", changed);
+      f.addEventListener("keydown", (e) => {
+        e.stopPropagation(); // Pfeile, Leertaste, 1–4 gehören hier dem Text
+        if (e.key === "Escape") {
+          e.preventDefault();
+          f.blur();
+        } else if ((e.metaKey || e.ctrlKey) && e.key === "s") {
+          e.preventDefault();
+          noteSave(false);
+        } else if (f === titleIn && (e.key === "Enter" || (e.key === "ArrowDown" && !e.shiftKey))) {
+          e.preventDefault();
+          bodyIn.focus();
+          bodyIn.setSelectionRange(0, 0);
+        } else if (f === bodyIn && e.key === "ArrowUp" && bodyIn.selectionStart === 0 && bodyIn.selectionEnd === 0) {
+          e.preventDefault();
+          titleIn.focus();
+        } else if (f === bodyIn && e.key === "Backspace" && bodyIn.selectionStart === 0 && bodyIn.selectionEnd === 0) {
+          e.preventDefault();
+          titleIn.focus();
+          titleIn.setSelectionRange(titleIn.value.length, titleIn.value.length);
+        }
+      });
+    }
+    // Ohne Schreibrechte (geteilte Zone eines anderen) nur lesen
+    if (!canEdit(item.zone)) {
+      titleIn.readOnly = bodyIn.readOnly = true;
+      status.textContent = "";
+    }
+    $("lightboxZoom").textContent = "";
+    lbRenderTones(item);
+    return ed;
+  }
+
+  function lbNoteTone(node, item) {
+    node.dataset.tone = toneKey(item);
+    const [bg, fg, dim] = quoteTone(item);
+    node.style.setProperty("--ts-bg", bg);
+    node.style.setProperty("--ts-fg", fg);
+    node.style.setProperty("--ts-dim", dim);
+  }
+
+  // Farbpunkte in der Leiste, nur bei Notizen
+  // Dateiname in der Leiste (0.37.1): passt er nicht, wird er in der Mitte
+  // gekürzt, damit Anfang und Endung sichtbar bleiben. Neu gemessen, sobald
+  // sich die Breite ändert (Fenster, Info, Zoom-Anzeige).
+  function setLbName(name) {
+    const el = $("lbName");
+    el.dataset.full = name;
+    el.title = name;
+    fitLbName();
+  }
+
+  function fitLbName() {
+    const el = $("lbName");
+    const name = el.dataset.full || "";
+    el.textContent = name;
+    // Breite des Textes selbst messen: scrollWidth meldet hier bis zu 30 px zu viel
+    const pad = parseFloat(getComputedStyle(el).paddingLeft) + parseFloat(getComputedStyle(el).paddingRight);
+    const room = el.clientWidth - pad;
+    const range = document.createRange();
+    const fits = () => {
+      range.selectNodeContents(el);
+      return range.getBoundingClientRect().width <= room;
+    };
+    if (fits()) return;
+    const dot = name.lastIndexOf(".");
+    const ext = dot > 0 ? name.length - dot : 0;
+    const cut = (n) => {
+      const tail = Math.min(n - 4, Math.max(ext + 6, Math.round(n * 0.35)));
+      return name.slice(0, n - tail).trimEnd() + " … " + name.slice(name.length - tail).trimStart();
+    };
+    let lo = 8;
+    let hi = name.length - 1;
+    while (lo < hi) {
+      const mid = Math.ceil((lo + hi) / 2);
+      el.textContent = cut(mid);
+      if (fits()) lo = mid;
+      else hi = mid - 1;
+    }
+    el.textContent = cut(lo);
+  }
+
+  new ResizeObserver(() => {
+    if (!$("lightbox").hidden) fitLbName();
+  }).observe($("lbName"));
+  document.fonts.ready.then(() => {
+    if (!$("lightbox").hidden) fitLbName();
+  });
+
+  function lbRenderTones(item) {
+    const box = $("lbTones");
+    box.hidden = !isNote(item);
+    if (box.hidden) return box.replaceChildren();
+    const current = toneKey(item);
+    box.replaceChildren(
+      ...NOTE_TONES.map((key) => {
+        const b = el("button", "tone-dot" + (key === current ? " active" : ""));
+        b.type = "button";
+        b.title = t("tone_" + key);
+        b.style.setProperty("--dot", QUOTE_TONES[key][0]);
+        b.addEventListener("click", () => setNoteTone(item, key));
+        return b;
+      })
+    );
+  }
+
+  function setNoteTone(item, key) {
+    if (key === toneKey(item)) return;
+    item.tone = key;
+    saveNote(item, { tone: key });
+    if (noteEd && noteEd.item === item) lbNoteTone(noteEd.paper, item);
+    lbRenderTones(item);
+    render();
+  }
+
+  // Verknüpfungen (0.42.6): in voller Höhe direkt rechts neben dem Blatt, wie die
+  // Doppelseite beim Bildtext. „+“ wählt weitere aus der Bibliothek.
+  function noteLinks(item) {
+    const col = el("aside", "note-links");
+    const fill = () => {
+      const list = linkedItems(item);
+      const tiles = list.map((it, i) => {
+        const tile = el("button", "nl-tile");
+        tile.type = "button";
+        tile.title = it.filename;
+        const text = !!quoteOf(it);
+        tile.style.setProperty("--ar", text ? 0.75 : Math.min(3, Math.max(0.3, (it.width || 1) / (it.height || 1))));
+        tile.appendChild(text ? textSheet(it, "text-sheet mini") : Object.assign(el("img"), { src: thumbSrc(it), alt: "", loading: "lazy" }));
+        if (canEdit(item.zone)) {
+          const x = el("span", "nl-remove", "×");
+          x.title = t("noteLinkRemove");
+          x.addEventListener("click", (e) => {
+            e.stopPropagation();
+            setNoteLinks(item, (item.links || []).filter((h) => h !== it.hash));
+            fill();
+          });
+          tile.appendChild(x);
+        }
+        tile.addEventListener("click", () => openNoteLink(item, i));
+        return tile;
+      });
+      if (canEdit(item.zone)) {
+        const add = el("button", "nl-tile nl-add", "+");
+        add.type = "button";
+        add.title = t("noteLinkAdd");
+        add.addEventListener("click", (e) => {
+          e.stopPropagation();
+          openNoteChooser(item, add, fill);
+        });
+        tiles.push(add);
+      }
+      col.replaceChildren(...tiles);
+      const count = col.parentElement && col.parentElement.querySelector(".np-count");
+      if (count) count.textContent = list.length ? t("noteObjects", { n: list.length }) : "";
+      if (col.parentElement) noteFit(col.parentElement);
+    };
+    fill();
+    return col;
+  }
+
+  // Höhe für Blatt und Verknüpfte: alles in einer Reihe, so groß wie möglich.
+  // Passt es selbst bei 320 px nicht, läuft die Reihe waagerecht weiter.
+  const NOTE_PAPER = { w: 620, h: 760, min: 320, add: 44 };
+  function noteFit(wrap) {
+    const cs = getComputedStyle(wrap);
+    const availW = wrap.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+    const availH = wrap.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
+    if (availW <= 0 || availH <= 0) return;
+    const tiles = [...wrap.querySelectorAll(".nl-tile")];
+    const ars = tiles.filter((t) => !t.classList.contains("nl-add")).map((t) => parseFloat(t.style.getPropertyValue("--ar")) || 1);
+    const fixed = tiles.length * LB_GAP + (tiles.length > ars.length ? NOTE_PAPER.add : 0);
+    const per = NOTE_PAPER.w / NOTE_PAPER.h + ars.reduce((a, b) => a + b, 0);
+    const h = Math.max(Math.min(NOTE_PAPER.min, availH), Math.min(NOTE_PAPER.h, availH, (availW - fixed) / per));
+    wrap.style.setProperty("--nh", Math.floor(h) + "px");
+  }
+  addEventListener("resize", () => noteEd && noteFit(noteEd.paper.parentElement));
+
+  function setNoteLinks(item, links) {
+    item.links = links.length ? links : null;
+    noteRev++;
+    saveNote(item, { links });
+  }
+
+  // Verknüpftes Objekt groß: die Lightbox blättert dann durch Notiz und Verknüpfte
+  function openNoteLink(item, i) {
+    const list = [item, ...linkedItems(item)];
+    noteLeave();
+    state.lightbox = { zone: null, list, index: i + 1 };
+    showLightboxItem();
+  }
+
+  let noteChooser = null;
+  function closeNoteChooser() {
+    if (!noteChooser) return;
+    noteChooser.remove();
+    noteChooser = null;
+  }
+
+  // Auswahl (0.29.1, Variante A): erst die Zonen als kleine Karten wie im Tray,
+  // Klick öffnet die Zone mit ihren Objekten. Das Suchfeld durchsucht alles.
+  function openNoteChooser(item, anchor, onChange) {
+    closeNoteChooser();
+    const pop = el("div", "note-chooser zone-menu p-ctx-menu");
+    noteChooser = pop;
+    pop.addEventListener("click", (e) => e.stopPropagation());
+    pop.addEventListener("pointerdown", (e) => e.stopPropagation());
+    const input = el("input", "nc-search");
+    input.placeholder = t("noteLinkSearch");
+    const head = el("div", "nc-head");
+    const body = el("div", "nc-body");
+    const foot = el("div", "nc-foot");
+    let zone = null;
+    const tile = (it, linked) => {
+      const b = el("button", "nc-tile" + (linked.has(it.hash) ? " on" : ""));
+      b.type = "button";
+      b.title = it.filename;
+      b.appendChild(quoteOf(it) ? textSheet(it, "text-sheet mini") : Object.assign(el("img"), { src: thumbSrc(it), alt: "", loading: "lazy" }));
+      b.addEventListener("click", () => {
+        const now = new Set(item.links || []);
+        if (now.has(it.hash)) now.delete(it.hash);
+        else now.add(it.hash);
+        setNoteLinks(item, [...now]);
+        b.classList.toggle("on", now.has(it.hash));
+        onChange();
+        footer();
+      });
+      return b;
+    };
+    const zoneCard = (z) => {
+      const list = orderedItems(z.path).filter((i) => i !== item);
+      const c = el("button", "nc-zone");
+      c.type = "button";
+      const cover = el("div", "nc-cover" + (list.length >= 3 ? " trio" : "") + (list.length ? "" : " empty"));
+      for (const it of list.slice(0, list.length >= 3 ? 3 : 1)) cover.appendChild(quoteOf(it) ? textSheet(it, "text-sheet mini") : Object.assign(el("img"), { src: thumbSrc(it), alt: "", loading: "lazy" }));
+      const name = el("div", "nc-zone-name");
+      name.append(el("span", null, lastSegment(z.path) || z.name), el("span", "nc-count", String(list.length)));
+      c.append(cover, name);
+      c.title = zoneLabel(z.path);
+      c.addEventListener("click", () => {
+        zone = z.path;
+        fill();
+      });
+      return c;
+    };
+    const footer = () => {
+      const n = (item.links || []).length;
+      foot.replaceChildren(el("span", null, zone || input.value.trim() ? t("noteLinkHintPick") : t("noteLinkHintZone")), el("span", null, n ? t("noteObjects", { n }) : ""));
+    };
+    const fill = () => {
+      const words = Find.parse(input.value);
+      const linked = new Set(item.links || []);
+      const pool = state.items.filter((i) => i !== item && i.hash !== item.hash);
+      let tiles = null;
+      if (words.length) {
+        head.replaceChildren(el("span", null, t("noteLinkFound")));
+        tiles = pool.filter((i) => matches(i, words));
+      } else if (zone != null) {
+        const back = el("button", "nc-back", "‹ " + t("noteLinkZones"));
+        back.type = "button";
+        back.addEventListener("click", () => {
+          zone = null;
+          fill();
+        });
+        const list = orderedItems(zone).filter((i) => i !== item && i.hash !== item.hash);
+        head.replaceChildren(back, el("span", "nc-crumb", "/ " + zoneLabel(zone) + " (" + list.length + ")"));
+        tiles = list;
+      } else {
+        head.replaceChildren(el("span", null, t("noteLinkZones") + " (" + state.zones.length + ")"));
+        body.className = "nc-body nc-zones";
+        body.replaceChildren(...state.zones.map(zoneCard));
+      }
+      if (tiles) {
+        body.className = "nc-body nc-grid";
+        const shown = tiles.slice(0, 120).map((it) => tile(it, linked));
+        body.replaceChildren(...(shown.length ? shown : [el("div", "nc-empty", t("noteLinkEmpty"))]));
+      }
+      footer();
+    };
+    input.addEventListener("input", debounce(fill, 120));
+    input.addEventListener("keydown", (e) => {
+      e.stopPropagation();
+      if (e.key === "Escape") {
+        if (input.value) {
+          input.value = "";
+          fill();
+        } else if (zone != null) {
+          zone = null;
+          fill();
+        } else closeNoteChooser();
+      }
+    });
+    pop.append(input, head, body, foot);
+    document.body.appendChild(pop);
+    fill();
+    const r = anchor.getBoundingClientRect();
+    const pr = pop.getBoundingClientRect();
+    pop.style.left = Math.max(8, Math.min(r.left, window.innerWidth - pr.width - 8)) + "px";
+    pop.style.top = Math.max(8, Math.min(r.bottom + 8, window.innerHeight - pr.height - 8)) + "px";
+    input.focus();
+    setTimeout(() => document.addEventListener("pointerdown", closeNoteChooser, { once: true }), 0);
+  }
+
+  // Neue Notiz auf der aktuellen Ebene, öffnet gleich zum Schreiben.
+  // 0.42.6: mit `objects` neben ihnen (Ordner des ersten) und gleich mit ihnen verknüpft.
+  async function newNote(objects) {
+    const first = objects && objects[0];
+    if (!first && (!isZone(state.focus) || !canEdit(state.focus))) return toast(t("noteNeedsZone"));
+    const dir = first ? first.path.split("/").slice(0, -1).join("/") : state.focus + (state.level ? "/" + state.level : "");
+    try {
+      const rel = await invoke("create_note", { dir, title: t("noteNew") });
+      await refresh();
+      const item = state.byPath.get(rel);
+      if (!item) return;
+      if (first) {
+        setNoteLinks(item, objects.map((i) => i.hash));
+        await noteQueue;
+      }
+      openLightbox(item);
+      if (noteEd && noteEd.item === item) {
+        noteEd.title.focus();
+        noteEd.title.select();
+      }
+    } catch (e) {
+      fail(e);
+    }
+  }
 
   function lbArea() {
     const right = lbInfoOpen ? $("lbInfo").offsetWidth : 0;
@@ -3562,12 +5217,22 @@
 
   function lbBox() {
     const a = lbArea();
-    return {
+    const box = {
       left: LB_PAD.side,
       top: LB_PAD.top,
       width: Math.max(1, a.width - LB_PAD.side * 2),
       height: Math.max(1, a.height - LB_PAD.top - LB_PAD.bottom),
     };
+    // Doppelseite: Karte und Bild gleich hoch, zusammen mittig
+    if (lbSpread()) {
+      const ar = lbView.w / lbView.h;
+      const hd = Math.min(box.height, lbView.h, (box.width - LB_GAP) / (ar + 0.75));
+      const cw = lbCardW(hd);
+      const iw = Math.max(1, Math.min(hd * ar, box.width - cw - LB_GAP));
+      box.left += (box.width - (cw + LB_GAP + iw)) / 2 + cw + LB_GAP;
+      box.width = iw;
+    }
+    return box;
   }
 
   function lbFitScale() {
@@ -3581,6 +5246,7 @@
     img.classList.toggle("anim", !!animate);
     img.style.transform = `translate(${lbView.x}px, ${lbView.y}px) scale(${lbView.scale})`;
     $("lightbox").classList.toggle("zoomed", !lbView.fitted);
+    lbPlaceText();
     // PDF, Video und Audio führen ihr eigenes Etikett (Seite bzw. Dauer)
     if (lbMode === "image") $("lightboxZoom").textContent = "(" + (lbView.fitted ? t("viewerFit") : `${Math.round(lbView.scale * 100)} %`) + ")";
   }
@@ -3628,6 +5294,7 @@
   // Finden: die Lightbox blättert durch die Treffer in ihrer Rangfolge, sonst durch die Zone
   const FOUND = "\u0000found";
   function lbList(lb) {
+    if (lb.list) return lb.list; // Notiz und ihre Verknüpfungen
     return lb.zone === FOUND ? state.found || [] : state.lists.get(lb.zone) || [];
   }
 
@@ -3654,22 +5321,49 @@
     const list = lbList(lb);
     const item = list[Math.min(lb.index, list.length - 1)];
     if (!item) return closeLightbox();
+    noteLeave();
+    lbRenderTones(item);
+    if (lb.shown !== item) lbFlipped = false;
+    lb.shown = item;
     lb.index = list.indexOf(item);
-    $("lbName").textContent = item.filename;
-    $("lbName").title = item.filename;
+    setLbName(item.filename);
     // Quelle nur, wenn es eine gibt; der blaue Knopf zeigt die Zone
     $("lbSourceBtn").hidden = !item.pageUrl;
     $("lbSourceBtn").title = item.pageUrl || "";
+    // 0.30.1: Linkkarte mit gesicherter Seite (Extension, aus der Adressleiste gezogen)
+    $("lbOfflineBtn").hidden = true;
+    if (item.pageUrl && item.hash)
+      invoke("web_archive", { hash: item.hash })
+        .then((p) => lightboxItem() === item && ($("lbOfflineBtn").hidden = !p))
+        .catch(() => {});
     const zoneName = $("lbAction").querySelector(".lb-action-zone");
     if (zoneName) zoneName.textContent = zoneLabel(item.zone);
     $("lbBrowse").hidden = list.length < 2;
     $("lbCount").textContent = `${lb.index + 1} / ${list.length}`;
     lbCloseZones();
+    // Zuletzt gelöscht: nur ansehen, zurückholen oder endgültig löschen
+    const gone = !!lb.deleted;
+    $("lightbox").classList.toggle("is-deleted", gone);
+    $("lbAction").hidden = gone;
+    $("lbInfoBtn").hidden = gone;
+    $("lbCloudBtn").hidden = gone || !window.ArchiverCloud;
+    $("lbRestoreBtn").hidden = !gone;
+    $("lbRemoveBtn").hidden = !gone;
+    if (gone && lbInfoOpen) lbToggleInfo();
     if (lbInfoOpen) lbRenderInfo(item);
-    selectAndShow(item.path);
+    lbRenderText();
+    if (gone) {
+      state.delSel = new Set([item.abs]);
+      const card = document.querySelector(`.card.del[data-del="${CSS.escape(item.abs)}"]`);
+      document.querySelectorAll(".card.del.selected").forEach((c) => c !== card && c.classList.remove("selected"));
+      if (card) {
+        card.classList.add("selected");
+        card.scrollIntoView({ block: "nearest" });
+      }
+    } else selectAndShow(item.path);
     if (lbShowMedia(item)) return;
     const img = $("lightboxImg");
-    const src = fileSrc(item.abs);
+    const src = item.other ? Media.placeholder((item.format || "").toUpperCase()) : fileSrc(item.abs);
     img.classList.add("loading");
     img.onload = () => {
       if (img.getAttribute("src") !== src) return;
@@ -3715,7 +5409,8 @@
 
   // Zeigt PDF oder Video statt des Bildes. false = normales Bild.
   function lbShowMedia(item) {
-    const k = quoteOf(item) ? "text" : kindOf(item);
+    const gone = state.lightbox && state.lightbox.deleted;
+    const k = isNote(item) && !gone ? "note" : quoteOf(item) ? "text" : kindOf(item);
     const box = $("lbMedia");
     const img = $("lightboxImg");
     lbMode = k;
@@ -3738,9 +5433,21 @@
     if (lbPdf) lbPdf.destroy();
     lbPdf = null;
     box.replaceChildren();
+    if (k === "note") {
+      lbNoteEditor(item, box);
+      return true;
+    }
     if (k === "text") {
       const wrap = el("div", "lb-text");
-      wrap.appendChild(textSheet(item, "text-sheet large"));
+      const sheet = textSheet(item, "text-sheet large");
+      // Das PNG bleibt, wie es gesichert wurde; die App zeigt den geänderten Text
+      const body = sheet.querySelector(".ts-body");
+      if (item.quote) editableText(body, () => item.quote, (v) => {
+        if (!v) return (body.textContent = item.quote);
+        item.quote = v;
+        invoke("set_quote", { hash: item.hash, quote: v }).catch(fail);
+      });
+      wrap.appendChild(sheet);
       box.appendChild(wrap);
       $("lightboxZoom").textContent = "";
       return true;
@@ -3813,8 +5520,20 @@
     const lead = [size, formatBytes(item.bytes)].filter(Boolean).join(", ");
     head.appendChild(el("span", "lead", lead + "."));
     inner.appendChild(head);
-    if (quoteOf(item)) inner.appendChild(lbBlock(t("quote"), [quoteBox(item, "lb-quote"), lbRow(t("toneLabel"), tonePicker(item))]));
-    if (feat("notes")) inner.appendChild(lbBlock(t("note"), [noteField(item, "note", t("notePlaceholder"), true)]));
+    if (!isNote(item)) {
+      const slot = el("div");
+      slot.hidden = true;
+      inner.appendChild(slot);
+      nameSuggestion(item, slot);
+    }
+    if (isNote(item)) inner.appendChild(lbBlock(t("noteLabelTitle"), [lbRow(t("noteLinks"), String(linkedItems(item).length)), lbRow(t("toneLabel"), tonePicker(item))]));
+    else if (quoteOf(item)) inner.appendChild(lbBlock(t("quote"), [quoteBox(item, "lb-quote"), lbRow(t("toneLabel"), tonePicker(item))]));
+    // 0.33: Farbe der Bildtext-Karte wählbar wie bei Textkarten und Notizen
+    if (!quoteOf(item)) {
+      const rows = [noteField(item, "caption", t("captionPlaceholder"), true)];
+      if (!isNote(item)) rows.push(lbRow(t("toneLabel"), tonePicker(item)));
+      inner.appendChild(lbBlock(t("captionTitle"), rows));
+    }
 
     let source = null;
     if (item.pageUrl) {
@@ -3833,7 +5552,7 @@
       imageUrl = lbRow(t("imageUrl"), link);
     }
     inner.appendChild(
-      lbBlock("Archiver", [
+      lbBlock("Archery", [
         lbRow(t("zone"), panel ? zoneSelect(item.zone, (zone) => moveSelection(zone)) : zoneLabel(item.zone)),
         subfolderOf(item) ? lbRow(t("subfolder"), subfolderOf(item).split("/").join(" / ")) : null,
         source || lbRow(t("source"), t("noSource")),
@@ -3922,7 +5641,7 @@
   function tonePicker(item) {
     const row = el("div", "tone-picker");
     const current = toneKey(item);
-    for (const key of [...RANDOM_TONES, "white"]) {
+    for (const key of TONES) {
       const b = el("button", "tone-dot" + (key === current ? " active" : ""));
       b.type = "button";
       b.title = t("tone_" + key);
@@ -3933,7 +5652,12 @@
         saveNote(item, { tone: key });
         for (const d of row.children) d.classList.toggle("active", d === b);
         render();
-        if (state.lightbox && lightboxItem() === item) showLightboxItem();
+        if (state.lightbox && lightboxItem() === item) {
+          if (noteEd && noteEd.item === item) {
+            lbNoteTone(noteEd.paper, item);
+            lbRenderTones(item);
+          } else showLightboxItem();
+        }
       });
       row.appendChild(b);
     }
@@ -3941,6 +5665,8 @@
   }
 
   function saveNote(item, patch) {
+    // Notiz-Objekte: nach dem Text, damit der neue Hash getroffen wird
+    if (isNote(item)) return noteChain(() => invoke("set_note", { hashes: [item.hash], patch }));
     invoke("set_note", { hashes: [item.hash], patch }).catch(fail);
   }
 
@@ -3969,10 +5695,12 @@
   }
 
   function lbToggleInfo() {
+    if (!lbInfoOpen && state.lightbox && state.lightbox.deleted) return;
     lbInfoOpen = !lbInfoOpen;
     $("lightbox").classList.toggle("info-open", lbInfoOpen);
     $("lbInfoBtn").classList.toggle("active", lbInfoOpen);
     if (lbInfoOpen) lbRenderInfo();
+    lbRenderText();
     if (lbView.fitted) lbFit(true);
     else {
       lbClamp();
@@ -4037,7 +5765,36 @@
     showLightboxItem();
   }
 
+  // Atlas (0.39.1 als Wolke): weitere Referenzen um das offene Objekt sammeln (cloud.js)
+  function openCloud() {
+    const item = lightboxItem();
+    if (item && window.ArchiverCloud) window.ArchiverCloud.open(item);
+  }
+
+  // Auswahl in der Zone › Im Atlas öffnen (0.42.0): das erste Bild ist die Mitte
+  function openAtlas(items) {
+    const list = items.filter((i) => kindOf(i) === "image" || i.thumb);
+    if (!list.length || !window.ArchiverCloud) return;
+    closeMenus();
+    window.ArchiverCloud.open(list[0], list.slice(1));
+  }
+
+  // Aus dem Atlas zurück: Zone öffnen, Bild wählen und zeigen
+  function showItemInZone(item) {
+    if (!$("lightbox").hidden) closeLightbox();
+    setFocus(item.zone);
+    requestAnimationFrame(() => selectAndShow(item.path));
+  }
+
   function closeLightbox() {
+    closeMenus();
+    noteLeave();
+    $("lightbox").classList.remove("is-deleted");
+    $("lbAction").hidden = false;
+    $("lbInfoBtn").hidden = false;
+    $("lbRestoreBtn").hidden = true;
+    $("lbRemoveBtn").hidden = true;
+    $("lbTones").hidden = true;
     state.lightbox = null;
     lbCloseZones();
     if (lbPdf) lbPdf.destroy();
@@ -4061,17 +5818,50 @@
     $("lightboxZoom").addEventListener("click", () => lbToggleZoom());
     $("lbInfoBtn").textContent = t("viewerInfo");
     $("lbInfoBtn").addEventListener("click", lbToggleInfo);
+    $("lbCloudBtn").textContent = t("cloud");
+    $("lbCloudBtn").title = t("cloudTitle");
+    $("lbCloudBtn").addEventListener("click", openCloud);
+    $("lbTextBtn").textContent = t("captionChip");
+    $("lbTextBtn").title = t("captionLbTitle");
+    $("lbTextBtn").addEventListener("click", lbToggleText);
+    $("lbRestoreBtn").textContent = t("deletedRestore");
+    $("lbRestoreBtn").addEventListener("click", () => {
+      const item = lightboxItem();
+      if (item) restoreDeleted([item.abs]);
+    });
+    $("lbRemoveBtn").textContent = t("deletedRemove");
+    $("lbRemoveBtn").addEventListener("click", () => {
+      const item = lightboxItem();
+      if (item) askRemoveDeleted([item.abs]);
+    });
     $("lbSourceBtn").textContent = t("source");
     $("lbSourceBtn").addEventListener("click", () => {
       const item = lightboxItem();
       if (item && item.pageUrl) invoke("open_url", { url: sourceUrl(item) }).catch(fail);
     });
+    $("lbOfflineBtn").textContent = t("offlinePage");
+    $("lbOfflineBtn").title = t("offlinePageTitle");
+    $("lbOfflineBtn").addEventListener("click", () => {
+      const item = lightboxItem();
+      if (item) invoke("open_web_archive", { hash: item.hash }).catch(fail);
+    });
     const action = $("lbAction");
-    action.replaceChildren(el("span", "lb-dot"), el("span", "lb-action-zone", "Archiver"));
+    action.replaceChildren(el("span", "lb-dot"), el("span", "lb-action-zone", "Archery"));
     action.title = t("dropBar");
     action.addEventListener("click", () => ($("lbZones").hidden ? lbOpenZones() : lbCloseZones()));
-    stage.addEventListener("click", lbCloseZones);
-    $("lbMedia").addEventListener("click", lbCloseZones);
+    // 0.28: Klick neben das Objekt schließt (offene Zonen erst zuklappen, gezoomt nicht)
+    const backdropClick = (e) => {
+      if (!$("lbZones").hidden) return lbCloseZones();
+      const bg = e.target === stage || e.target === $("lbMedia") || e.target.classList.contains("pdf-scroll") || e.target.classList.contains("lb-note");
+      if (bg && lbView.fitted && state.lightbox) closeLightbox();
+    };
+    stage.addEventListener("click", backdropClick);
+    $("lightbox").addEventListener("contextmenu", (e) => {
+      if (e.target.closest("input, textarea, [contenteditable], .lb-bar, .lb-info")) return;
+      e.preventDefault();
+      openLightboxMenu(e.clientX, e.clientY);
+    });
+    $("lbMedia").addEventListener("click", backdropClick);
     // PDF: Zwei-Finger-Zoom bzw. ⌘ + Scrollen zoomt, Scrollen blättert
     $("lbMedia").addEventListener(
       "wheel",
@@ -4124,7 +5914,7 @@
     });
     stage.addEventListener("pointerdown", (e) => {
       if (e.button !== 0 || !lbView.fitted || lbMode !== "image") return;
-      if (e.target !== $("lightboxImg")) return;
+      if (e.target !== $("lightboxImg") || state.lightbox.deleted) return;
       lift = { x: e.clientX, y: e.clientY };
     });
     stage.addEventListener("pointermove", (e) => {
@@ -4197,12 +5987,22 @@
       else return false;
       return true;
     }
+    if (state.lightbox.deleted) {
+      if (e.key === "Backspace" || e.key === "Delete") {
+        const item = lightboxItem();
+        if (item) askRemoveDeleted([item.abs]);
+        return true;
+      }
+      if (/^[1-4]$/.test(e.key) || e.key === "Enter" || e.key === "i" || e.key === "I") return true;
+    }
     if (lbMode === "pdf" && lbPdf && (e.key === "ArrowDown" || e.key === "ArrowUp")) lbPdf.step(e.key === "ArrowDown" ? 1 : -1);
     else if (lbMode === "pdf" && lbPdf && e.key === "Escape" && !lbPdf.fitted() && $("lbZones").hidden) lbPdf.setZoom(1);
     else if (e.key === "ArrowRight") stepLightbox(1);
     else if (e.key === "ArrowLeft") stepLightbox(-1);
+    else if ((e.key === "w" || e.key === "W") && !$("lbCloudBtn").hidden) openCloud();
     else if (e.key === "z" || e.key === "Z") lbToggleZoom();
     else if (e.key === "i" || e.key === "I") lbToggleInfo();
+    else if ((e.key === "t" || e.key === "T") && lbCaptionItem()) lbToggleText();
     else if (e.key === "Enter") $("lbZones").hidden ? lbOpenZones() : lbCloseZones();
     else if (e.key === "Escape" && !$("lbZones").hidden) lbCloseZones();
     else if (e.key === "Escape" && lbMode === "video" && lbVZoom && lbVZoom.scale() > 1) lbVZoom.reset();
@@ -4302,6 +6102,9 @@
   // Die Tasten 1–4 legen in genau diese vier.
   // Zone, in der alle gezogenen Objekte schon liegen: wird nicht hervorgehoben
   let dragHome = null;
+  let dragSection = null; // Abschnitt in „Sections“, in dem alle gezogenen Objekte stehen
+  // Ziel, auf dem das Ablegen nichts bewegt: die eigene Zone bzw. der eigene Abschnitt
+  const isHomeTarget = (target) => (target.dataset.section ? target.dataset.zone === dragSection : target.dataset.zone === dragHome);
   function showDropbar() {
     const bar = $("dropbar");
     if (!bar.hidden) return;
@@ -4315,6 +6118,7 @@
       return c;
     });
     bar.replaceChildren(...cards);
+    bar.classList.toggle("strip", !!pref("dropStrip", false));
     bar.hidden = false;
     document.body.classList.add("dragging");
   }
@@ -4327,6 +6131,7 @@
     if (on) {
       if (bar.hidden) {
         showDropbar();
+        bar.classList.remove("strip");
         document.body.classList.remove("dragging");
         bar.classList.add("preview");
       }
@@ -4337,25 +6142,54 @@
     }
   }
 
-  // Abgelegt: Liegt das Ziel in der Leiste, bleibt sie kurz stehen und
-  // blendet dann ruhig aus (kein Glühen, keine Bewegung).
+  // Streifen (0.35, wie Extension 3.25): Zeiger im Streifen → volle Höhe,
+  // mehr als 24 px über der vollen Leiste → wieder Streifen
+  const DROP_STRIP_PX = 90;
+  function trackDropStrip(y) {
+    const bar = $("dropbar");
+    if (bar.hidden || !pref("dropStrip", false) || y < 0) return;
+    const fromBottom = window.innerHeight - y;
+    const strip = bar.classList.contains("strip");
+    if (strip && fromBottom < DROP_STRIP_PX) bar.classList.remove("strip");
+    else if (!strip && fromBottom > Math.min(window.innerHeight * 0.3, 260) + 24) bar.classList.add("strip");
+  }
+
+  // Abgelegt: Liegt das Ziel in der Leiste, zeigt die Karte das Ankommen
+  // (dropfx.js, Labor › Ablegen), dann blendet die Leiste aus (0.40.22).
   let landingUntil = 0;
-  function landOn(target) {
+  function landOn(target, paths, pos) {
     const bar = $("dropbar");
     if (!target) return hideDropbar();
     if (bar.hidden || !bar.contains(target)) return hideDropbar();
-    bar.classList.add("leaving");
-    landingUntil = Date.now() + 500;
-    setTimeout(() => {
-      landingUntil = 0;
-      hideDropbar();
-    }, 500);
+    const parts = {
+      num: target.querySelector(".p-drop-key"),
+      name: target.querySelector(".zone-card-name"),
+      hint: target.querySelector(".p-hot-hint"),
+    };
+    // eigenes Objekt: sein Vorschaubild, es wird gleich verschoben
+    const own = insideLibrary(paths[0]) ? state.byPath.get(paths[0].slice(state.root.length + 1)) : null;
+    const url = own ? thumbSrc(own) : null;
+    landingUntil = Date.now() + 10000;
+    (async () => {
+      const play = await window.ArchiverDropFx.begin(target, parts, { paths, pos, invoke, src: fileSrc, url });
+      parts.hint.textContent = t("dropDone");
+      const delay = await window.ArchiverDropFx.land(play, lastSegment(target.dataset.zone));
+      bar.style.setProperty("--leave-delay", delay / 1000 + "s");
+      bar.classList.add("leaving");
+      landingUntil = Date.now() + delay + 300;
+      setTimeout(() => {
+        landingUntil = 0;
+        hideDropbar();
+      }, delay + 300);
+    })();
   }
 
   function hideDropbar() {
     if (Date.now() < landingUntil) return;
     $("dropbar").classList.remove("leaving");
+    $("dropbar").style.removeProperty("--leave-delay");
     dragHome = null;
+    dragSection = null;
     $("dropbar").hidden = true;
     document.body.classList.remove("dragging");
   }
@@ -4370,6 +6204,8 @@
     };
     const zones = new Set(items.map((i) => i.zone));
     dragHome = zones.size === 1 ? [...zones][0] : null;
+    const sections = new Set(items.map(itemSection));
+    dragSection = sections.size === 1 ? [...sections][0] : null;
     if (!document.body.classList.contains("at-home")) showDropbar();
     const first = items[0];
     // kleines Drag-Bild, damit die Zonen beim Ziehen sichtbar bleiben
@@ -4407,6 +6243,7 @@
   function reorderTarget(x, y) {
     if (!feat("order") || !isZone(state.focus) || state.query.trim() || filtersActive()) return null;
     if (state.folder != null || zoneLayout(state.focus) === "sections") return null; // nur im vollen Raster
+    if (listSort()) return null; // nach Spalte sortiert: keine eigene Reihenfolge
     if (!dragPaths.length || dragHome !== state.focus) return null;
     const rels = dragPaths.filter(insideLibrary).map((p) => p.slice(state.root.length + 1));
     if (rels.length !== dragPaths.length || rels.some((r) => (state.byPath.get(r) || {}).zone !== state.focus)) return null;
@@ -4422,7 +6259,6 @@
   let dragPaths = [];
   let lastTarget = null;
   let lastReorder = null;
-  let dropCount = 0; // für die Tour: wurde schon etwas abgelegt?
 
   function onDragDrop(event) {
     if (!isUnlocked()) return;
@@ -4442,11 +6278,12 @@
     let target = zoneCardAt(x, y);
 
     if (p.type === "enter" || p.type === "over") {
+      trackDropStrip(y);
       clearDropUi();
       lastTarget = target;
-      lastReorder = target && target.dataset.zone !== dragHome ? null : reorderTarget(x, y);
+      lastReorder = target && !isHomeTarget(target) ? null : reorderTarget(x, y);
       if (lastReorder) lastReorder.card.classList.add("drop-target");
-      if (target && target.dataset.zone !== dragHome) target.classList.add("drop-active");
+      if (target && !isHomeTarget(target)) target.classList.add("drop-active");
       return;
     }
     // Beim Drop gilt das zuletzt markierte Ziel: ist die Leiste schon weg,
@@ -4456,7 +6293,7 @@
     const reorder = lastReorder;
     lastReorder = null;
 
-    if (p.type === "drop" && reorder && (!target || target.dataset.zone === dragHome)) {
+    if (p.type === "drop" && reorder && (!target || isHomeTarget(target))) {
       clearDropUi();
       hideDropbar();
       dragPaths = [];
@@ -4465,25 +6302,37 @@
 
     if (p.type === "drop") {
       clearDropUi();
-      landOn(target && dragPaths.length && target.dataset.zone !== dragHome ? target : null);
+      landOn(target && dragPaths.length && !isHomeTarget(target) ? target : null, dragPaths, { x, y });
       const paths = dragPaths;
       dragPaths = [];
-      if (!target || !paths.length) return;
-      dropCount++;
-      tourStats.drops++;
+      if (!paths.length) return;
+      if (!target) {
+        // 0.27: Ordner (und Dateien) von außen ohne Ziel: Ordner werden zu Zonen,
+        // lose Dateien landen in der Standard-Zone
+        const outside = paths.filter((path) => !insideLibrary(path));
+        if (outside.length && state.focus !== DELETED)
+          invoke("import_files", { paths: outside, zone: "" })
+            .then((r) => {
+              toast(t("importDone", { imported: r.imported, duplicates: r.duplicates, sources: r.withSource }));
+              return refresh();
+            })
+            .catch(fail);
+        return;
+      }
       const zone = target.dataset.zone;
       // Aus der Lightbox auf eine ihrer Zonen: wie ein Klick auf die Zone
       const lbItem = state.lightbox && target.classList.contains("lb-chip") ? lightboxItem() : null;
       if (lbItem && paths.length === 1 && paths[0] === lbItem.abs) return lbMoveTo(zone);
       const own = paths.filter(insideLibrary).map((path) => path.slice(state.root.length + 1));
       const foreign = paths.filter((path) => !insideLibrary(path));
+      const exact = !!target.dataset.section;
       const toMove = own.filter((rel) => {
         const item = state.byPath.get(rel);
-        return item && item.zone !== zone;
+        return item && (exact ? itemSection(item) !== zone : item.zone !== zone && dirOf(rel) !== zone);
       });
       if (toMove.length) {
         state.selection = new Set(toMove);
-        moveSelection(zone);
+        moveSelection(zone, exact);
       }
       if (foreign.length) {
         invoke("import_files", { paths: foreign, zone })
@@ -4537,7 +6386,7 @@
       source: i.quote ? i.pageTitle || null : [i.artist, i.album].filter(Boolean).join(" · ") || domainOf(i.pageUrl) || null,
       quote: i.quote || null,
       label: String(i.format || "").toUpperCase(),
-      note: feat("notes") ? i.note || null : null,
+      note: i.caption || null, // PDF „Mit Bildtext“
     };
   }
 
@@ -4607,6 +6456,73 @@
     return "board." + h.toString(36);
   }
 
+  // ---- Plakat, Anordnung Index und Paar (0.37.2) ----
+  // Wie die Sort-Office-Vorlagen: Bilder ungeschnitten, oben bündig in einem
+  // 12er-Raster, die Breiten wechseln von Reihe zu Reihe, freie Felder bleiben
+  // frei. Maße in Punkten, y von oben; pdf.rs flow_sheet setzt dieselben Werte.
+  const FLOW = { margin: 14, gap: 6, top: 58, bottom: 26, caption: 12 };
+  const FLOW_ROWS = {
+    index: {
+      land: [[[0, 5], [5, 4], [9, 3]], [[0, 3], [9, 3]], [[0, 4], [4, 3], [7, 5]], [[2, 4], [8, 4]]],
+      port: [[[0, 5], [5, 4], [9, 3]], [[0, 4], [8, 4]], [[0, 3], [3, 5], [8, 4]]],
+    },
+    pair: {
+      land: [[[0, 5], [5, 7]], [[0, 7], [7, 5]]],
+      port: [[[0, 12]], [[0, 7], [7, 5]]],
+    },
+  };
+
+  // Seiten mit gesetzten Feldern: [[{ index, x, y, w, h }]]
+  function flowPages(items, mode, portrait, captions) {
+    const P = PDF_PAGE;
+    const [W, H] = portrait ? [P.short, P.long] : [P.long, P.short];
+    const { margin: M, gap: G, top: TOP, bottom: BOT } = FLOW;
+    const capH = captions ? FLOW.caption : 0;
+    const colW = (W - 2 * M - 11 * G) / 12;
+    const patterns = FLOW_ROWS[mode][portrait ? "port" : "land"];
+    const pages = [];
+    let page = [];
+    let y = TOP;
+    let k = 0;
+    for (let pi = 0; k < items.length; pi++) {
+      const row = [];
+      for (const [c0, n] of patterns[pi % patterns.length]) {
+        if (k >= items.length) break;
+        const w = n * colW + (n - 1) * G;
+        row.push({ index: k, x: M + c0 * (colW + G), w, h: w / boardRatio(items[k]) });
+        k++;
+      }
+      const shrink = (f) => row.forEach((r) => ((r.w *= f), (r.h *= f)));
+      let rowH = Math.max(...row.map((r) => r.h)) + capH;
+      // Reihe passt nicht mehr: auf der Seite schrumpfen, wenn noch genug Platz
+      // ist, sonst auf die nächste Seite (und dort höchstens seitenhoch)
+      const room = H - BOT - y;
+      if (rowH > room) {
+        if (page.length && room < (H - TOP - BOT) * 0.3) {
+          pages.push(page);
+          page = [];
+          y = TOP;
+          shrink(Math.min(1, (H - TOP - BOT - capH) / (rowH - capH)));
+          rowH = Math.max(...row.map((r) => r.h)) + capH;
+        } else {
+          shrink((room - capH) / (rowH - capH));
+          rowH = room;
+        }
+      }
+      // Paar: geschrumpfte Bilder rücken zusammen
+      if (mode === "pair") for (let i = 1; i < row.length; i++) row[i].x = row[i - 1].x + row[i - 1].w + G;
+      row.forEach((r) => page.push({ ...r, y }));
+      y += rowH + G * 2.2;
+      if (y > H - BOT - 40) {
+        pages.push(page);
+        page = [];
+        y = TOP;
+      }
+    }
+    if (page.length || !pages.length) pages.push(page);
+    return pages;
+  }
+
   // Helligkeit unten links im Vorschaubild (wo die Plakat-Beschriftung steht).
   // Klappt nur, wenn das Bild lesbar ist; sonst bleibt die Schrift dunkel.
   function captionTone(img) {
@@ -4638,9 +6554,13 @@
       captions: pref("pdfCaptions", true),
       poster: pref("pdfPoster", false),
       board: feat("moodboard") && pref("pdfBoard", false),
-      notes: feat("notes") && pref("pdfNotes", false),
+      notes: pref("pdfNotes", false),
       dark: pref("pdfBoardDark", false),
+      // Plakat: Raster (angeschnitten), Index oder Paar (ungeschnitten)
+      arrange: pref("pdfArrange", "grid"),
+      desc: "",
     };
+    const flowing = () => opts.poster && !opts.board && opts.arrange !== "grid";
     if (preset && preset.poster) opts.board = false;
     // Moodboard: Lage je Objekt (Pfad → x, y, w, h), Reihenfolge der Liste = Stapel
     const saved = pref(boardKey(items), null);
@@ -4655,7 +6575,8 @@
     if (preset && preset.poster && !opts.poster) Object.assign(opts, { poster: true, portrait: true, layout: "16" });
     if (items.length <= 2 && !["1", "2"].includes(opts.layout)) opts.layout = items.length === 1 ? "1" : "2";
     const date = new Date().toLocaleDateString(lang === "de" ? "de-DE" : "en-GB", { day: "numeric", month: "long", year: "numeric" });
-    const meta = () => t(items.length === 1 ? "pdfCount1" : "pdfCount", { n: items.length }) + " · " + date;
+    const countText = () => t(items.length === 1 ? "pdfCount1" : "pdfCount", { n: items.length });
+    const meta = () => countText() + " · " + date;
     const grid = () => {
       const entry = PDF_LAYOUTS.find(([k]) => k === opts.layout) || PDF_LAYOUTS[3];
       const [cols, rows] = opts.portrait ? entry[2] : entry[1];
@@ -4677,9 +6598,21 @@
       renderPages();
     });
     side.appendChild(field(t("pdfTitleLabel"), titleInput));
+    const descInput = el("textarea", "pdf-input pdf-desc");
+    descInput.rows = 4;
+    descInput.spellcheck = false;
+    descInput.addEventListener("input", () => {
+      opts.desc = descInput.value;
+      renderPages();
+    });
+    const descField = field(t("pdfDescLabel"), descInput);
+    side.appendChild(descField);
 
     const styleRow = el("div", "pdf-chips");
     side.appendChild(field(t("pdfStyleLabel"), styleRow));
+    const arrangeRow = el("div", "pdf-chips");
+    const arrangeField = field(t("pdfArrangeLabel"), arrangeRow);
+    side.appendChild(arrangeField);
     const layoutRow = el("div", "pdf-layouts");
     side.appendChild(field(t("pdfLayoutLabel"), layoutRow));
     const formatRow = el("div", "pdf-chips");
@@ -4762,8 +6695,15 @@
             setOpt("board", true, "pdfBoard");
           })
         );
-      layoutField.hidden = opts.board;
+      layoutField.hidden = opts.board || flowing();
       bgField.hidden = !opts.board;
+      arrangeField.hidden = !opts.poster || opts.board;
+      descField.hidden = !flowing();
+      arrangeRow.replaceChildren(
+        ...[["grid", "pdfArrangeGrid"], ["index", "pdfArrangeIndex"], ["pair", "pdfArrangePair"]].map(([key, label]) =>
+          chip("(" + t(label) + ")", opts.arrange === key, () => setOpt("arrange", key, "pdfArrange"))
+        )
+      );
       bgRow.replaceChildren(
         chip("(" + t("pdfBoardLight") + ")", !opts.dark, () => setOpt("dark", false, "pdfBoardDark")),
         chip("(" + t("pdfBoardDark") + ")", opts.dark, () => setOpt("dark", true, "pdfBoardDark")),
@@ -4787,10 +6727,10 @@
       const capChips = [];
       if (!opts.board) capChips.push(chip("(" + t("setOn") + ")", capMode === "on", () => setCaps(true, false)));
       capChips.push(chip("(" + t("setOff") + ")", capMode === "off", () => setCaps(false, false)));
-      if (feat("notes") && !opts.poster) capChips.push(chip("(" + t("pdfCaptionsNotes") + ")", capMode === "note", () => setCaps(true, true)));
+      if (!opts.poster) capChips.push(chip("(" + t("pdfCaptionsNotes") + ")", capMode === "note", () => setCaps(true, true)));
       captionRow.replaceChildren(...capChips);
       const { cols, rows } = grid();
-      const pages = opts.board ? 1 : Math.max(1, Math.ceil(items.length / (cols * rows)));
+      const pages = opts.board ? 1 : flowing() ? flowPages(items, opts.arrange, opts.portrait, opts.captions).length : Math.max(1, Math.ceil(items.length / (cols * rows)));
       count.textContent = meta() + " · " + t(pages === 1 ? "pdfPages1" : "pdfPagesN", { n: pages });
       save.disabled = !items.length;
     }
@@ -4808,6 +6748,7 @@
       hint.textContent = t(opts.board ? "pdfBoardHint" : "pdfHint");
       if (opts.board) return renderBoard();
       stage.classList.remove("board");
+      if (flowing()) return renderFlow();
       const { cols, rows } = grid();
       const per = cols * rows;
       const P = PDF_PAGE;
@@ -4828,7 +6769,7 @@
         body.style.setProperty("--gap-x", (P.gap / w) * 100 + "cqw");
         items.slice(p * per, p * per + per).forEach((item, k) => body.appendChild(pdfCell(item, p * per + k)));
         const foot = el("div", "pdf-foot");
-        foot.append(el("span", null, "Archiver"), el("span", null, `${p + 1} / ${Math.max(1, Math.ceil(items.length / per))}`));
+        foot.append(el("span", null, "Archery"), el("span", null, `${p + 1} / ${Math.max(1, Math.ceil(items.length / per))}`));
         page.append(head, body, foot);
         page.classList.toggle("no-captions", !opts.captions);
         page.classList.toggle("with-notes", opts.captions && opts.notes && !opts.poster);
@@ -4856,7 +6797,7 @@
       const name = opts.poster ? s.name.replace(/\.[a-z0-9]{1,5}$/i, "") : s.name;
       cap.append(el("span", null, name), el("span", "dim", s.source || ""));
       if (opts.notes && !opts.poster && s.note) cap.appendChild(el("span", "pdf-note", s.note));
-      if (opts.poster && !item.quote) {
+      if (opts.poster && !flowing() && !item.quote) {
         // Wie im PDF: Schrift hell auf dunklem Grund, sonst dunkel
         const img = box.querySelector("img");
         img.addEventListener("load", () => {
@@ -4907,6 +6848,45 @@
       for (const c of stage.querySelectorAll(".lifted")) c.classList.remove("lifted");
     }
 
+    // Index und Paar: Kopfzeile in vier Spalten, darunter Nummer, Titel,
+    // Beschreibung und Jahr, dann die Reihen aus flowPages
+    function renderFlow() {
+      const P = PDF_PAGE;
+      const [w, h] = opts.portrait ? [P.short, P.long] : [P.long, P.short];
+      const pages = flowPages(items, opts.arrange, opts.portrait, opts.captions);
+      const u = (v) => `calc(var(--u) * ${v})`;
+      stage.replaceChildren(
+        ...pages.map((cells, p) => {
+          const page = el("div", "pdf-page flow" + (opts.captions ? "" : " no-captions"));
+          page.style.aspectRatio = `${w} / ${h}`;
+          const inner = el("div", "pdf-flow");
+          const head = el("div", "pdf-frow pdf-fhead");
+          head.append(el("span", null, opts.title), el("span", null, countText()), el("span", null, date), el("span", null, `${p + 1} / ${pages.length}`));
+          const info = el("div", "pdf-frow pdf-finfo");
+          info.append(
+            el("span", null, `[${String(p + 1).padStart(2, "0")}]`),
+            el("span", null, opts.title),
+            el("span", "pdf-fdesc", p === 0 ? opts.desc : ""),
+            el("span"),
+            el("span", null, String(new Date().getFullYear()))
+          );
+          inner.append(head, info);
+          for (const c of cells) {
+            const cell = pdfCell(items[c.index], c.index);
+            cell.style.left = u(c.x);
+            cell.style.top = u(c.y);
+            cell.style.width = u(c.w);
+            cell.style.setProperty("--h", u(c.h));
+            inner.appendChild(cell);
+          }
+          page.appendChild(inner);
+          return page;
+        })
+      );
+      stage.classList.toggle("portrait", opts.portrait);
+      stage.classList.remove("dense");
+    }
+
     function renderAll() {
       renderControls();
       renderPages();
@@ -4924,7 +6904,7 @@
       const area = el("div", "pdf-board");
       items.forEach((item) => area.appendChild(boardCell(item, area)));
       const foot = el("div", "pdf-foot");
-      foot.append(el("span", null, "Archiver"), el("span"));
+      foot.append(el("span", null, "Archery"), el("span"));
       page.append(head, area, foot);
       stage.replaceChildren(page);
       stage.classList.toggle("portrait", opts.portrait);
@@ -5016,8 +6996,9 @@
     }
 
     function onKey(e) {
-      if (e.key === "Escape" && document.activeElement !== titleInput) close();
-      else if (e.key === "Escape") titleInput.blur();
+      const typing = document.activeElement === titleInput || document.activeElement === descInput;
+      if (e.key === "Escape" && !typing) close();
+      else if (e.key === "Escape") document.activeElement.blur();
       else if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) run();
       else return;
       e.preventDefault();
@@ -5033,11 +7014,25 @@
     async function run() {
       if (!items.length) return;
       const { cols, rows } = grid();
-      const name = (opts.title.replace(/[„“"]/g, "").replace(/[\/:*?<>|]+/g, " – ").trim() || "Archiver") + ".pdf";
+      const name = (opts.title.replace(/[„“"]/g, "").replace(/[\/:*?<>|]+/g, " – ").trim() || "Archery") + ".pdf";
       save.disabled = true;
       save.textContent = t("pdfWorking");
       try {
-        const path = opts.board
+        const path = flowing()
+          ? await invoke("export_flow", {
+              fileName: name,
+              flow: {
+                portrait: opts.portrait,
+                captions: opts.captions,
+                head: [opts.title, countText(), date],
+                desc: opts.desc.trim(),
+                year: String(new Date().getFullYear()),
+                pages: flowPages(items, opts.arrange, opts.portrait, opts.captions).map((cells) =>
+                  cells.map((c) => ({ ...sheetItem(items[c.index]), x: c.x, y: c.y, w: c.w, h: c.h }))
+                ),
+              },
+            })
+          : opts.board
           ? await invoke("export_moodboard", {
               title: opts.title,
               meta: meta(),
@@ -5057,7 +7052,6 @@
               layout: { cols, rows, portrait: opts.portrait, captions: opts.captions, poster: opts.poster, notes: opts.captions && opts.notes && !opts.poster },
             });
         if (path) {
-          tourStats.pdfs++;
           toast(t("pdfDone", { name: path.split("/").pop() }));
           close();
           return;
@@ -5072,6 +7066,37 @@
     document.addEventListener("keydown", onKey, true);
     document.body.appendChild(root);
     renderAll();
+  }
+
+  // ---- Rechtsklick in der Lightbox (0.36.4): Umbenennen, Öffnen, Quelle, Finder, Kopieren ----
+  function openLightboxMenu(x, y) {
+    const lb = state.lightbox;
+    const item = lightboxItem();
+    if (!lb || !item || lb.deleted || isNote(item)) return;
+    closeMenus();
+    closeMoreMenu();
+    selectOnly(item.path);
+    const menu = el("div", "zone-menu p-ctx-menu");
+    menu.addEventListener("click", (e) => e.stopPropagation());
+    menu.addEventListener("contextmenu", (e) => e.preventDefault());
+    const entry = (text, fn, key) => {
+      const b = button("zone-menu-item", text, () => {
+        closeMenus();
+        fn();
+      });
+      if (key) b.appendChild(el("span", "p-ctx-key", key));
+      menu.appendChild(b);
+    };
+    entry(t("renameItems"), () => openRenameSheet([item]));
+    menu.appendChild(el("div", "p-more-rule"));
+    entry(t("openFile"), () => invoke("open_file", { path: item.abs }).catch(fail));
+    if (item.pageUrl) entry(t("ctxSource"), () => invoke("open_url", { url: sourceUrl(item) }).catch(fail));
+    entry(t("reveal"), () => invoke("reveal", { path: item.abs }).catch(fail));
+    entry(t("ctxCopy"), () => copyImages([item]), "⌘C");
+    document.body.appendChild(menu);
+    const r = menu.getBoundingClientRect();
+    menu.style.left = Math.max(8, Math.min(x, window.innerWidth - r.width - 8)) + "px";
+    menu.style.top = Math.max(8, Math.min(y, window.innerHeight - r.height - 8)) + "px";
   }
 
   // ---- Rechtsklick auf ein Bild: Vorschau, Öffnen, Quelle, Ablegen in, Kopieren … ----
@@ -5097,10 +7122,22 @@
     };
     const rule = () => menu.appendChild(el("div", "p-more-rule"));
     if (!one) menu.appendChild(el("div", "p-more-label", t("ctxSelected", { n: items.length })));
+    // 0.42.6: Note zu einem oder mehreren Objekten, gleich verknüpft
+    const forNote = items.filter((i) => !isNote(i));
+    const noteZone = forNote.length && isZone(forNote[0].zone) && canEdit(forNote[0].zone) ? forNote[0].zone : null;
+    if (!one && noteZone) {
+      entry(menu, t("ctxNoteForN", { n: forNote.length }), () => newNote(forNote));
+      rule();
+    }
     if (one) {
       entry(menu, t("ctxPreview"), () => openLightbox(one), "␣");
       entry(menu, t("openFile"), () => invoke("open_file", { path: one.abs }).catch(fail));
       if (one.pageUrl) entry(menu, t("ctxSource"), () => invoke("open_url", { url: sourceUrl(one) }).catch(fail));
+      if (isZone(one.zone)) {
+        const isCover = coverItem(one.zone, [one]) === one;
+        entry(menu, t(isCover ? "ctxCoverOff" : "ctxCover"), () => setCover(one.zone, isCover ? null : one.path));
+      }
+      if (noteZone) entry(menu, t("ctxNoteFor"), () => newNote(forNote));
       rule();
     }
     // Ablegen in: alle Zonen als Kästchen in zwei Spalten, Active Zones zuerst mit Taste
@@ -5125,6 +7162,12 @@
     });
     menu.appendChild(grid);
     rule();
+    menu.appendChild(el("div", "p-more-label", t("markLabel")));
+    menu.appendChild(markRow(items, closeMenus));
+    rule();
+    if (window.ArchiverCloud && items.some((i) => kindOf(i) === "image" || i.thumb)) entry(menu, t("ctxAtlas"), () => openAtlas(items));
+    if (isZone(state.focus) && !state.query.trim() && canEdit(state.focus)) entry(menu, t("newFolderWith"), () => newFolder(true));
+    entry(menu, t("renameItems"), () => openRenameSheet(items));
     entry(menu, t("ctxCopy"), () => copyImages(items), "⌘C");
     if (one) entry(menu, t("reveal"), () => invoke("reveal", { path: one.abs }).catch(fail));
     entry(menu, t("pdfExport"), exportPdf, "⌘P");
@@ -5136,6 +7179,506 @@
     menu.style.top = Math.max(8, Math.min(y, window.innerHeight - r.height - 8)) + "px";
   }
 
+  // ---- Dateinamen (F10, F11, 0.36.0) ----
+  // Schema einmal in Einstellungen › Bibliothek › Dateinamen, Umbenennen-Blatt zum Aufräumen
+  // (Auswahl › Rechtsklick), Namensvorschlag aus dem Inhalt in der Info-Spalte.
+  // Ab Werk bleibt jeder Name, wie er ist. Der Kern liegt in naming.rs.
+
+  const NAME_PRESETS = ["original", "date-zone-nr", "zone-nr", "date-source-nr", "zone-content", "custom"];
+  const NAME_PRESET_KEYS = { original: "nameOriginal", "date-zone-nr": "nameDateZoneNr", "zone-nr": "nameZoneNr", "date-source-nr": "nameDateSourceNr", "zone-content": "nameZoneContent", custom: "nameCustom" };
+  const NAME_PARTS = ["prefix", "zone", "date", "nr", "source", "library", "kind", "content"];
+  const NAME_PART_KEYS = { prefix: "partPrefix", zone: "partZone", date: "partDate", nr: "partNr", source: "partSource", library: "partLibrary", kind: "partKind", content: "partContent" };
+
+  async function loadNaming() {
+    try {
+      const n = await invoke("naming_prefs");
+      const tz = -new Date().getTimezoneOffset();
+      if (n.lang !== lang || n.tz !== tz) {
+        n.lang = lang;
+        n.tz = tz;
+        await invoke("set_naming_prefs", { prefs: n });
+      }
+      state.naming = n;
+    } catch (e) {}
+    return state.naming;
+  }
+
+  function saveNaming(next) {
+    next.lang = lang;
+    next.tz = -new Date().getTimezoneOffset();
+    state.naming = next;
+    return invoke("set_naming_prefs", { prefs: next }).catch(fail);
+  }
+
+  const nameStem = (name) => String(name || "").replace(/\.[^.]+$/, "");
+
+  function renderNamingSettings() {
+    const host = el("div");
+    const sample = () => selectedItems()[0] || state.items[0];
+    const draw = async () => {
+      const n = state.naming || (await loadNaming());
+      if (!n) return;
+      const set = (patch, custom) => {
+        const next = { ...n, ...patch };
+        if (custom) next.preset = "custom";
+        saveNaming(next).then(draw);
+      };
+      const s = sample();
+      const plan = (scheme) => (s ? invoke("name_plan", { paths: [s.path], scheme }).then((p) => (p[0] && p[0].new) || "").catch(() => "") : Promise.resolve(""));
+
+      const schema = block(t("nameScheme"));
+      for (const id of NAME_PRESETS) {
+        const ex = el("span", "nm-ex", "");
+        const label = el("div", null, "");
+        label.appendChild(el("span", "nm-radio"));
+        label.appendChild(document.createTextNode(t(NAME_PRESET_KEYS[id])));
+        if (id === "original") label.appendChild(el("span", "nm-note", " · " + t("nameOriginalNote")));
+        if (id === "zone-content") label.appendChild(el("span", "nm-note", " · " + t("nameContentNote")));
+        const row = blockRow(label, ex);
+        row.classList.add("nm-row");
+        if (n.preset === id) row.classList.add("nm-on");
+        row.addEventListener("click", () => set({ preset: id }));
+        if (id === "original") ex.textContent = s ? s.filename : "";
+        else plan(id).then((v) => (ex.textContent = v));
+        schema.appendChild(row);
+      }
+
+      const custom = block(t("nameCustom"));
+      const active = n.parts.filter((p) => NAME_PARTS.includes(p));
+      const bricks = el("div", "nm-bricks");
+      active.forEach((p, i) => {
+        if (i) bricks.appendChild(el("span", "nm-sep", n.sep === "" ? "" : n.sep));
+        const b = el("span", "nm-brick");
+        if (i > 0) b.appendChild(button("nm-mv", "‹", () => {
+          const parts = [...active];
+          [parts[i - 1], parts[i]] = [parts[i], parts[i - 1]];
+          set({ parts }, true);
+        }));
+        b.appendChild(el("span", null, t(NAME_PART_KEYS[p])));
+        b.appendChild(button("nm-mv", "×", () => set({ parts: active.filter((q) => q !== p) }, true)));
+        bricks.appendChild(b);
+      });
+      const more = el("div", "nm-bricks nm-more");
+      for (const p of NAME_PARTS.filter((q) => !active.includes(q)))
+        more.appendChild(button("nm-brick off", "+ " + t(NAME_PART_KEYS[p]), () => set({ parts: [...active, p] }, true)));
+      const prev = el("div", "nm-prev", "");
+      plan("custom").then((v) => (prev.textContent = v || "…"));
+      custom.appendChild(blockRow([bricks, more, prev]));
+      custom.appendChild(
+        blockRow(t("nameSep"), choice([["_", "_"], ["-", "-"], ["·", "·"], ["", t("nameSepNone")]], n.sep, (id) => set({ sep: id }, true)))
+      );
+      custom.appendChild(blockRow(t("nameDate"), choice([["iso", "2026-10-14"], ["short", "261014"]], n.date, (id) => set({ date: id }, true))));
+      custom.appendChild(blockRow(t("nameLower"), choice([["on", t("setOn")], ["off", t("setOff")]], n.lower ? "on" : "off", (id) => set({ lower: id === "on" }, true))));
+      const input = el("input", "nm-input");
+      input.value = n.prefix;
+      input.spellcheck = false;
+      input.placeholder = "ar";
+      input.addEventListener("change", () => set({ prefix: input.value.trim() }, true));
+      custom.appendChild(blockRow(t("partPrefix"), input));
+
+      const apply = block(t("nameApply"));
+      apply.appendChild(
+        blockRow(
+          [el("div", null, t("nameFlag")), el("div", "p-block-text nm-hint", t("nameFlagText"))],
+          choice([["on", t("setOn")], ["off", t("setOff")]], n.flag ? "on" : "off", (id) => set({ flag: id === "on" }))
+        )
+      );
+      schema.appendChild(el("div", "p-block-text nm-hint", t("nameManual")));
+      host.replaceChildren(schema, custom, apply);
+    };
+    draw();
+    return host;
+  }
+
+  // Umbenennen-Blatt: Liste alt → neu, prüfen, einzelne Namen ändern, bestätigen
+  async function openRenameSheet(items) {
+    if (!items.length) return;
+    closeMenus();
+    const n = state.naming || (await loadNaming()) || { preset: "original", flag: true };
+    let scheme = n.preset === "original" ? "date-zone-nr" : n.preset;
+    let rows = [];
+    const dim = el("div", "rn-dim");
+    const sheet = el("div", "rn-sheet");
+    const close = () => {
+      document.removeEventListener("keydown", onKey, true);
+      dim.remove();
+      sheet.remove();
+    };
+    const onKey = (e) => {
+      if (e.target && e.target.tagName === "INPUT") return;
+      // Blatt über der Lightbox: Pfeile und Leertaste blättern nicht dahinter
+      if (state.lightbox) e.stopPropagation();
+      if (e.key === "Escape") {
+        e.preventDefault();
+        e.stopPropagation();
+        close();
+      }
+    };
+    document.addEventListener("keydown", onKey, true);
+    dim.addEventListener("click", close);
+    const confirmBtn = button("ok", "", async () => {
+      const list = rows.filter((r) => r.on && r.name && r.name !== r.item.filename).map((r) => [r.item.path, r.name]);
+      close();
+      if (!list.length) return;
+      try {
+        const done = await invoke("rename_items", { items: list });
+        const wasOpen = state.lightbox;
+        const shown = wasOpen ? lightboxItem() : null;
+        await refresh();
+        state.selection = new Set(done.map(([, to]) => to));
+        updateSelectionClasses();
+        if (wasOpen && shown) {
+          const to = (done.find(([from]) => from === shown.path) || [])[1] || shown.path;
+          const at = lbList(state.lightbox).findIndex((i) => i.path === to);
+          if (at >= 0) state.lightbox.index = at;
+          showLightboxItem();
+        }
+        toast(t("nameDone", { n: done.length }));
+      } catch (e) {
+        fail(e);
+      }
+    });
+    const foot = el("div", "rn-foot");
+    const summary = el("span", "sp");
+    foot.append(summary, button("no", t("cancel"), close), confirmBtn);
+    const head = el("div", "rn-h", items.length === 1 ? t("renameTitleOne") : t("renameTitle", { n: items.length }));
+    const sub = el("div", "rn-sub", t("renameText"));
+    const schemeRow = el("div", "rn-scheme");
+    schemeRow.appendChild(document.createTextNode(t("nameScheme") + " "));
+    const list = el("div", "rn-list");
+    const update = () => {
+      const on = rows.filter((r) => r.on && r.name && r.name !== r.item.filename).length;
+      confirmBtn.textContent = t("renameDo", { n: on });
+      confirmBtn.disabled = !on;
+      summary.textContent = t("renameSummary", { on, all: rows.length });
+    };
+    const draw = () => {
+      list.replaceChildren(
+        ...rows.map((r) => {
+          const row = el("div", "rn-row");
+          const chk = el("span", "rn-chk" + (r.on ? "" : " off"));
+          chk.addEventListener("click", () => {
+            r.on = !r.on;
+            draw();
+          });
+          const img = el("img");
+          img.src = thumbSrc(r.item);
+          img.draggable = false;
+          const old = el("span", "rn-old", r.item.filename);
+          if ((n.flag !== false) && r.messy) old.appendChild(el("span", "flag", t("nameMessy")));
+          const nu = el("span", "rn-new" + (r.edited ? " edit" : ""), r.name || "—");
+          nu.title = t("renameEdit");
+          if (!r.on) nu.style.opacity = "0.4";
+          nu.addEventListener("click", () => {
+            const input = el("input", "rn-input");
+            input.value = nameStem(r.name || r.item.filename);
+            input.spellcheck = false;
+            nu.replaceChildren(input);
+            input.focus();
+            input.select();
+            let done = false;
+            const finish = (commit) => {
+              if (done) return;
+              done = true;
+              const v = input.value.trim();
+              if (commit && v) {
+                const ext = (r.item.filename.match(/\.[^.]+$/) || [""])[0];
+                r.name = v.endsWith(ext) ? v : v + ext;
+                r.edited = true;
+              }
+              draw();
+            };
+            input.addEventListener("keydown", (e) => {
+              e.stopPropagation();
+              if (e.key === "Enter") finish(true);
+              else if (e.key === "Escape") finish(false);
+            });
+            input.addEventListener("blur", () => finish(true));
+          });
+          row.append(chk, img, old, el("span", "rn-arrow", "→"), nu);
+          return row;
+        })
+      );
+      update();
+    };
+    const load = async () => {
+      const plan = await invoke("name_plan", { paths: items.map((i) => i.path), scheme }).catch((e) => (fail(e), []));
+      rows = plan.map((p) => ({ item: items.find((i) => i.path === p.path), name: p.new, messy: p.messy, on: !!p.new && p.new !== p.old, edited: false }));
+      draw();
+    };
+    const chips = el("span", "p-choice");
+    const drawChips = () =>
+      chips.replaceChildren(
+        ...NAME_PRESETS.filter((id) => id !== "original").map((id) =>
+          chip("(" + t(NAME_PRESET_KEYS[id]) + ")", scheme === id, () => {
+            scheme = id;
+            drawChips();
+            load();
+          })
+        )
+      );
+    drawChips();
+    schemeRow.appendChild(chips);
+    sheet.append(head, sub, schemeRow, list, foot);
+    document.body.append(dim, sheet);
+    load();
+  }
+
+  // Namensvorschlag in der Info-Spalte (F11): aus Seitentitel, Motiv und Farbe,
+  // nichts wird ungefragt umbenannt
+  function nameSuggestion(item, box) {
+    invoke("name_plan", { paths: [item.path], scheme: "zone-content" })
+      .then((plan) => {
+        const p = plan[0];
+        if (!p || !p.suggestion || nameStem(item.filename) === p.suggestion) return;
+        const ext = (item.filename.match(/\.[^.]+$/) || [""])[0];
+        const draw = (value) => {
+          const bx = el("div", "lb-info-sugg");
+          bx.appendChild(el("div", "k", "✦ " + t("suggestTitle")));
+          const nm = el("div", "n", value + ext);
+          bx.appendChild(nm);
+          bx.appendChild(el("div", "why", t("suggestWhy")));
+          const row = el("div", "row");
+          row.appendChild(
+            button("ok", t("suggestApply"), async () => {
+              try {
+                const done = await invoke("rename_items", { items: [[item.path, value + ext]] });
+                if (done.length) {
+                  const wasOpen = state.lightbox;
+                  await refresh();
+                  state.selection = new Set([done[0][1]]);
+                  if (wasOpen) {
+                    const list = lbList(state.lightbox);
+                    const at = list.findIndex((i) => i.path === done[0][1]);
+                    if (at >= 0) state.lightbox.index = at;
+                    showLightboxItem();
+                  }
+                  toast(t("nameDone", { n: 1 }));
+                }
+              } catch (e) {
+                fail(e);
+              }
+            })
+          );
+          row.appendChild(
+            button("ed", t("suggestEdit"), () => {
+              const input = el("input", "nm-input wide");
+              input.value = value;
+              input.spellcheck = false;
+              nm.replaceChildren(input);
+              input.focus();
+              input.select();
+              let taken = false;
+              const take = () => {
+                if (taken) return;
+                taken = true;
+                const v = input.value.trim();
+                bx.replaceWith(draw(v || value));
+              };
+              input.addEventListener("keydown", (e) => {
+                e.stopPropagation();
+                if (e.key === "Enter") take();
+              });
+              input.addEventListener("blur", take);
+            })
+          );
+          bx.appendChild(row);
+          return bx;
+        };
+        box.replaceWith(draw(p.suggestion));
+      })
+      .catch(() => {});
+  }
+
+  // ---- Zuletzt gelöscht (0.27) ----
+  // Gelöschtes liegt 7 Tage unter .archiver/deleted in der Bibliothek, dann geht
+  // es in den Papierkorb des Macs. Hier lässt es sich zurückholen.
+
+  const DELETED_DAYS = 7;
+
+  async function openDeleted() {
+    state.deletedItems = await invoke("deleted_items").catch(() => []);
+    state.delSel = new Set();
+    setFocus(DELETED);
+  }
+
+  function daysLeft(item) {
+    return Math.max(1, Math.ceil(DELETED_DAYS - (Date.now() - item.deletedAt) / 86400000));
+  }
+
+  function renderDeleted() {
+    const list = state.deletedItems || [];
+    const sel = state.delSel || (state.delSel = new Set());
+    for (const k of [...sel]) if (!list.some((i) => i.abs === k)) sel.delete(k);
+    const wrap = el("div", "p-page p-gallery p-deleted");
+    wrap.appendChild(headline(t("deletedTitle"), list.length ? t("deletedText", { count: countText(list.length), days: DELETED_DAYS }) : t("deletedEmpty")));
+    const bar = el("div", "p-bar");
+    bar.appendChild(mono((sel.size ? t("ctxSelected", { n: sel.size }) : t("allLabel")) + " (" + (sel.size || list.length) + ")", "strong"));
+    bar.appendChild(el("span", "p-flex"));
+    const targets = () => (sel.size ? [...sel] : list.map((i) => i.abs));
+    if (list.length) {
+      bar.appendChild(chip("(" + t(sel.size ? "deletedRestore" : "deletedRestoreAll") + ")", false, () => restoreDeleted(targets())));
+      bar.appendChild(el("span", "p-filter-gap"));
+      const rm = chip("(" + t(sel.size ? "deletedRemove" : "deletedRemoveAll") + ")", false, () => askRemoveDeleted(targets()));
+      rm.classList.add("danger");
+      bar.appendChild(rm);
+    }
+    bar.appendChild(el("span", "p-filter-gap"));
+    bar.appendChild(sizeChips(Math.max(0, SIZES.indexOf(state.size)), SIZES.length, (step) => {
+      state.size = SIZES[step];
+      setPref("size", state.size);
+      renderToolbar();
+      renderZones();
+    }));
+    wrap.appendChild(bar);
+    // 0.28: dieselbe Karte und dasselbe Raster wie in jeder Zone; Badge zeigt Zone und Resttage
+    const section = el("section", "zone-card p-section");
+    const body = el("div", "zone-card-grid");
+    body.tabIndex = -1;
+    if (state.view === "list") body.appendChild(listHead(false));
+    const items = el("div", "zone-card-items");
+    for (const item of list) {
+      const card = el("div", "card del" + (sel.has(item.abs) ? " selected" : ""));
+      card.dataset.del = item.abs;
+      card.title = item.path;
+      const img = quoteOf(item) ? textSheet(item, "text-sheet") : previewImg(item);
+      if (img.tagName === "IMG") img.loading = "lazy";
+      card.classList.toggle("card-text", !!quoteOf(item));
+      card.appendChild(img);
+      card.appendChild(el("div", "card-badge", zoneLabel(item.zone) + " · " + t("deletedDays", { n: daysLeft(item) })));
+      const label = item.format ? mediaLabel({ ...item, duration: null, pages: null }) : "";
+      const media = el("div", "card-media", label);
+      media.hidden = !label;
+      card.appendChild(media);
+      // Liste: Name und Angaben wie in jeder Zone, als Quelle Zone und Resttage
+      const info = el("div", "card-info");
+      info.appendChild(el("span", "card-name", listName(item)));
+      const meta = el("span", "card-meta");
+      meta.append(
+        el("span", "card-m card-m-kind", (item.format || item.filename.split(".").pop() || "").toUpperCase()),
+        el("span", "card-m card-m-dims", item.width && item.height ? item.width + " × " + item.height : "–"),
+        el("span", "card-m card-m-bytes", item.bytes ? formatBytes(item.bytes) : "–"),
+        el("span", "card-m card-m-src", zoneLabel(item.zone) + " · " + t("deletedDays", { n: daysLeft(item) })),
+        el("span", "card-m card-m-date", shortDate(item.capturedAt || item.addedAt))
+      );
+      info.appendChild(meta);
+      card.appendChild(info);
+      card.addEventListener("click", (e) => {
+        if (!(e.metaKey || e.shiftKey)) sel.clear();
+        if (sel.has(item.abs) && (e.metaKey || e.shiftKey)) sel.delete(item.abs);
+        else sel.add(item.abs);
+        renderZones();
+      });
+      card.addEventListener("dblclick", () => openDeletedLightbox(item));
+      card.addEventListener("contextmenu", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (!sel.has(item.abs)) {
+          sel.clear();
+          sel.add(item.abs);
+          renderZones();
+        }
+        openDeletedMenu(e.clientX, e.clientY);
+      });
+      items.appendChild(card);
+    }
+    body.appendChild(items);
+    section.appendChild(body);
+    wrap.appendChild(section);
+    return wrap;
+  }
+
+  function openDeletedMenu(x, y) {
+    closeMenus();
+    closeMoreMenu();
+    const files = [...(state.delSel || [])];
+    const menu = el("div", "zone-menu p-ctx-menu");
+    menu.addEventListener("click", (e) => e.stopPropagation());
+    menu.addEventListener("contextmenu", (e) => e.preventDefault());
+    const entry = (text, fn, cls = "") =>
+      menu.appendChild(button("zone-menu-item" + cls, text, () => {
+        closeMenus();
+        fn();
+      }));
+    entry(t("deletedRestore"), () => restoreDeleted(files));
+    menu.appendChild(el("div", "p-more-rule"));
+    entry(t("deletedRemove"), () => askRemoveDeleted(files), " danger");
+    document.body.appendChild(menu);
+    const r = menu.getBoundingClientRect();
+    menu.style.left = Math.max(8, Math.min(x, window.innerWidth - r.width - 8)) + "px";
+    menu.style.top = Math.max(8, Math.min(y, window.innerHeight - r.height - 8)) + "px";
+  }
+
+  async function restoreDeleted(files) {
+    if (!files.length) return;
+    try {
+      const n = await invoke("restore_deleted", { files });
+      state.delSel = new Set();
+      await refresh();
+      lbSyncDeleted();
+      toast(t("deletedRestored", { n }));
+    } catch (e) {
+      fail(e);
+    }
+  }
+
+  // Lightbox in „Zuletzt gelöscht“ (0.29.1): Doppelklick, Leertaste oder Enter
+  function openDeletedLightbox(item) {
+    const list = state.deletedItems || [];
+    if (!item || !list.length) return;
+    state.lightbox = { zone: null, list, index: Math.max(0, list.indexOf(item)), deleted: true };
+    $("lightbox").hidden = false;
+    document.body.classList.add("lightbox-open");
+    lbView.fitted = true;
+    showLightboxItem();
+  }
+
+  // Nach Zurückholen oder Löschen: die Lightbox blättert in der neuen Liste weiter
+  function lbSyncDeleted() {
+    const lb = state.lightbox;
+    if (!lb || !lb.deleted) return;
+    lb.list = state.deletedItems || [];
+    if (!lb.list.length) return closeLightbox();
+    lb.index = Math.min(lb.index, lb.list.length - 1);
+    showLightboxItem();
+  }
+
+  // ⌫ und „Sofort löschen“ fragen nach: danach liegt es im Papierkorb des Macs
+  function askRemoveDeleted(files) {
+    if (!files.length) return;
+    const n = files.length;
+    const dialog = el("div", "dialog confirm");
+    dialog.appendChild(el("h3", null, n === 1 ? t("deletedAskOne") : t("deletedAskMany", { n })));
+    dialog.appendChild(el("p", null, t("deletedAskText")));
+    const foot = el("div", "confirm-foot");
+    const go = () => {
+      closeModal();
+      removeDeleted(files);
+    };
+    foot.appendChild(button("btn", t("cancel"), closeModal));
+    const ok = button("btn danger-fill", t("deletedRemove"), go);
+    foot.appendChild(ok);
+    dialog.appendChild(foot);
+    const modal = $("modal");
+    modal.replaceChildren(dialog);
+    modal.hidden = false;
+    modal.onEnter = go;
+    ok.focus();
+  }
+
+  async function removeDeleted(files) {
+    if (!files.length) return;
+    try {
+      const n = await invoke("remove_deleted", { files });
+      state.delSel = new Set();
+      await refresh();
+      lbSyncDeleted();
+      toast(t("deletedRemoved", { n }));
+    } catch (e) {
+      fail(e);
+    }
+  }
+
   // ---- Menü ⋯ in der Navigation ----
 
   function closeMoreMenu() {
@@ -5144,7 +7687,7 @@
   }
 
   // Beta: fertige Mail mit Version und drei Fragen.
-  const FEEDBACK_TO = "feedback@archiver-app.com";
+  const FEEDBACK_TO = "feedback@archery-visual.com";
   async function sendFeedback() {
     const version = TAURI.app && TAURI.app.getVersion ? await TAURI.app.getVersion().catch(() => "") : "";
     const body = t("feedbackBody").replace("{version}", version);
@@ -5173,14 +7716,15 @@
     item("+ " + t("newZone"), startNewZone, false, "⌘N");
     item(t("infoPanel"), toggleInfo, state.infoOpen, "⌘D");
     item(t("pdfExport"), exportPdf, false, "⌘P");
+    item(t("deletedTitle") + (state.deletedCount ? " · " + state.deletedCount : ""), openDeleted, state.focus === DELETED);
     menu.appendChild(el("div", "p-more-rule"));
     (state.libraries || []).forEach((slot, i) => {
       if (slot.path) item(libraryName(slot, i), () => switchLibrary(i), slot.active, "⌘" + (i + 1));
     });
     if ((state.libraries || []).some((l) => l.path)) menu.appendChild(el("div", "p-more-rule"));
     item(t("settings"), () => togglePage("settings"), state.page === "settings", "⌘,");
-    item(t("about"), () => togglePage("about"), state.page === "about");
-    item(t("tour"), () => startTour());
+    item(t("manual"), () => togglePage("manual"), state.page === "manual");
+    item(t("about"), () => togglePage("about"), state.page === "about", "⌘I");
     const note = el("div", "p-more-note");
     note.appendChild(el("div", null, state.root.replace(/^\/(Users|home)\/[^/]+/, "~")));
     menu.appendChild(note);
@@ -5191,7 +7735,6 @@
   // ---- Ereignisse ----
 
   function bindEvents() {
-    $("lockText").textContent = t("lockText");
     $("libTabBtn").addEventListener("click", (e) => {
       e.stopPropagation();
       openLibMenu();
@@ -5200,7 +7743,7 @@
 
     zones.addEventListener("mousedown", (e) => {
       if (e.button !== 0) return;
-      const card = e.target.closest(".card");
+      const card = e.target.closest(".card:not(.del)");
       suppressClick = false;
       if (!card) {
         const control = e.target.closest("button, input, select, a, .p-bar, .p-section-head, .p-head-title, .zone-menu, .zone-card-name, .p-card, .p-row");
@@ -5230,7 +7773,7 @@
         suppressClick = false;
         return;
       }
-      const card = e.target.closest(".card");
+      const card = e.target.closest(".card:not(.del)");
       if (card) clickCard(card.dataset.path, e);
     });
 
@@ -5240,20 +7783,34 @@
 
     zones.addEventListener("contextmenu", (e) => {
       const zoneEl = e.target.closest(".p-home [data-zone]");
-      if (zoneEl && !e.target.closest(".card")) {
+      if (zoneEl && !e.target.closest(".card:not(.del)")) {
         e.preventDefault();
         openZoneContext(zoneEl.dataset.zone, e.clientX, e.clientY);
         return;
       }
-      const card = e.target.closest(".card");
-      if (!card) return;
+      const card = e.target.closest(".card:not(.del)");
+      if (!card) {
+        if (state.focus === DELETED) return;
+        // In einer Zone: Rechtsklick in den Hintergrund legt einen Unterordner an
+        if (isZone(state.focus) && !state.query.trim() && canEdit(state.focus)) {
+          e.preventDefault();
+          openZoneBackgroundMenu(e.clientX, e.clientY);
+        }
+        return;
+      }
       e.preventDefault();
       openItemMenu(card.dataset.path, e.clientX, e.clientY);
     });
 
     zones.addEventListener("dblclick", (e) => {
-      const card = e.target.closest(".card");
+      const card = e.target.closest(".card:not(.del)");
       if (card) openLightbox(state.byPath.get(card.dataset.path));
+    });
+
+    // 0.27: Video beim Hover als kurze Vorschau aus wenigen Bildern
+    zones.addEventListener("pointerover", (e) => {
+      const card = e.target.closest(".card:not(.del)");
+      if (card && !card.contains(e.relatedTarget)) videoScrub(card);
     });
 
     $("search").placeholder = t("search");
@@ -5311,10 +7868,32 @@
       state.homeKbd = false;
       applyHomeCursor(false);
     });
+    // 0.29: ⌘V mit Text auf ein gewähltes Bild (oder in der Lightbox) setzt den Bildtext.
+    // 0.32: sonst kommt die Zwischenablage in die offene Zone (Dateien, Bild, Text).
+    document.addEventListener("paste", (e) => {
+      if (e.target.closest && e.target.closest("input, textarea, [contenteditable]")) return;
+      if (!$("modal").hidden) return;
+      const text = (e.clipboardData && e.clipboardData.getData("text/plain") || "").trim();
+      const files = e.clipboardData && e.clipboardData.files && e.clipboardData.files.length;
+      const items = state.lightbox ? [lightboxItem()].filter(Boolean) : selectedItems();
+      if (!text || files || items.length !== 1 || quoteOf(items[0])) {
+        if (state.lightbox || state.focus === DELETED) return;
+        e.preventDefault();
+        return pasteIntoZone();
+      }
+      e.preventDefault();
+      const item = items[0];
+      const had = !!item.caption;
+      item.caption = text.slice(0, 4000);
+      saveNote(item, { caption: item.caption });
+      toast(t(had ? "captionReplaced" : "captionSet"));
+      if (state.lightbox) lbRenderText();
+    });
+
     window.addEventListener(
       "resize",
       debounce(() => {
-        if (document.body.classList.contains("at-home") && state.home === "cards") renderZones();
+        if (document.body.classList.contains("at-home") && (state.home === "cards" || state.home === "overview")) renderZones();
         else layoutMasonry(false);
       }, 120)
     );
@@ -5333,6 +7912,12 @@
         e.preventDefault();
         $("modal").onEnter();
       }
+      return;
+    }
+
+    // Wolke (0.39.1) liegt über der Lightbox
+    if (window.ArchiverCloud && window.ArchiverCloud.isOpen()) {
+      if (window.ArchiverCloud.key(e, mod)) e.preventDefault();
       return;
     }
 
@@ -5366,6 +7951,22 @@
       return;
     }
 
+    // Zuletzt gelöscht: Leertaste/Enter groß ansehen, ⌫ fragt vor dem endgültigen Löschen
+    if (!mod && !e.altKey && !state.page && state.focus === DELETED && !state.query.trim()) {
+      const list = state.deletedItems || [];
+      const sel = [...(state.delSel || [])];
+      if (e.key === " " || e.key === "Enter") {
+        e.preventDefault();
+        openDeletedLightbox(list.find((i) => i.abs === sel[0]) || list[0]);
+        return;
+      }
+      if (e.key === "Backspace" || e.key === "Delete") {
+        e.preventDefault();
+        if (sel.length) askRemoveDeleted(sel);
+        return;
+      }
+    }
+
     if (!mod && !e.altKey && document.body.classList.contains("at-home") && !state.page && homeKey(e)) {
       e.preventDefault();
       return;
@@ -5391,18 +7992,22 @@
       return;
     }
 
-    if (mod && (e.key === "n" || e.key === "N") && !e.shiftKey) {
+    if (mod && (e.key === "n" || e.key === "N") && e.shiftKey) {
+      newNote();
+    } else if (mod && (e.key === "n" || e.key === "N") && !e.shiftKey) {
       startNewZone();
     } else if (mod && !e.shiftKey && (e.key === "r" || e.key === "R")) {
       e.preventDefault();
       reloadObjects();
     } else if (mod && (e.key === "d" || e.key === "D")) {
       toggleInfo();
+    } else if (mod && (e.key === "i" || e.key === "I")) {
+      togglePage("about"); // Information (0.38.1)
     } else if (mod && e.key === ",") {
       togglePage("settings");
     } else if (mod && (e.key === "z" || e.key === "Z") && !e.shiftKey) {
       undo();
-    } else if (mod && !e.shiftKey && !e.altKey && /^[1-3]$/.test(e.key)) {
+    } else if (mod && !e.shiftKey && !e.altKey && /^[1-4]$/.test(e.key)) {
       switchLibrary(Number(e.key) - 1);
     } else if (mod && (e.key === "p" || e.key === "P")) {
       exportPdf();
@@ -5436,6 +8041,10 @@
       }
     } else if (e.key === " " || e.key === "Enter") {
       openLightbox(selectedItems()[0] || allVisible()[0]);
+    } else if (e.altKey && !mod && /^Digit[0-5]$/.test(e.code) && state.selection.size) {
+      // ⌥1–5 gibt der Auswahl eine Farbmarke, ⌥0 nimmt sie weg
+      const n = Number(e.code.slice(5));
+      setMark(selectedItems(), n ? MARKS[n - 1] : "");
     } else if (/^[1-4]$/.test(e.key) && !mod) {
       const zone = state.zones[Number(e.key) - 1];
       if (zone) moveSelection(zone.path);
@@ -5510,12 +8119,13 @@
   // Fehler des Ordner-Schutzes (lib.rs: check_library) verständlich machen
   function libraryFail(e) {
     const msg = String(e && e.message ? e.message : e);
-    const key = { "library-system": "libSystem", "library-large": "libLarge", "library-slow": "libSlow", "library-active": "libActive", "library-missing": "libMissing" }[msg];
+    const key = { "library-system": "libSystem", "library-large": "libLarge", "library-slow": "libSlow", "library-active": "libActive", "library-missing": "libMissing", "library-file": "libFile" }[msg];
     if (key) toast(t(key), false, 5200);
     else fail(e);
   }
 
   function afterLibrarySwitch() {
+    undoStack.length = 0;
     state.focus = null;
     state.selection = new Set();
     cardCache.clear();
@@ -5546,7 +8156,7 @@
 
   function renderLibrarySlots() {
     const b = block(t("setLibraries"));
-    const slots = state.libraries && state.libraries.length ? state.libraries : [{}, {}, {}];
+    const slots = state.libraries && state.libraries.length ? state.libraries : [{}, {}, {}, {}];
     slots.forEach((slot, i) => {
       const name = el("div", "p-lib-name" + (slot.path ? "" : " empty"), libraryName(slot, i));
       name.title = t("libRename");
@@ -5587,6 +8197,27 @@
           renderPage(true);
         })
       );
+      // Leerer Platz: ganz neue Bibliothek, Ort und Name im Finder (0.36.0)
+      if (!slot.path) {
+        side.push(
+          button("p-link", t("libCreate"), async () => {
+            try {
+              const path = await invoke("create_library", { index: i, name: t("libNewName") });
+              if (!path) return;
+              document.body.classList.add("lib-loading");
+              await invoke("open_library", { path });
+              if (state.page) closePage();
+              await afterLibrarySwitch();
+              await loadLibraries();
+              toast(t("libCreated"));
+            } catch (e) {
+              libraryFail(e);
+            } finally {
+              document.body.classList.remove("lib-loading");
+            }
+          })
+        );
+      }
       if (slot.path && !slot.active) {
         side.push(
           button("p-link p-lib-clear", "✕", async () => {
@@ -5602,6 +8233,53 @@
       b.appendChild(row);
     });
     b.appendChild(el("p", "p-block-hint", t("libHint")));
+    return b;
+  }
+
+  // 0.30.1: Ordner außerhalb der Bibliothek als Zone. Nur hier anzulegen;
+  // im Raster, in Tray, Zonenleiste und Extension wie jede andere Zone.
+  function renderExternalZones() {
+    const b = block(t("extZones"));
+    const list = el("div");
+    b.appendChild(list);
+    const fill = (rows) => {
+      list.replaceChildren(
+        ...rows.map(({ zone, path, online }) =>
+          blockRow(
+            [el("div", "p-lib-name", online === false ? `${zone} · ${t("extZoneOffline")}` : zone), pathEl(path, "p-lib-path")],
+            [
+              button("p-link", t("reveal"), () => invoke("reveal_zone", { zone }).catch(fail)),
+              button("p-link p-lib-clear", "✕", async () => {
+                await invoke("unlink_folder", { zone }).catch(fail);
+                await refresh();
+                renderPage(true);
+              }),
+            ]
+          )
+        )
+      );
+    };
+    invoke("external_zones").then(fill, () => fill([]));
+    b.appendChild(
+      blockRow(
+        el("div", "p-block-text", t("extZonesHint")),
+        button("p-link", t("extZonesAdd"), async () => {
+          const path = await invoke("pick_folder");
+          if (!path) return;
+          try {
+            const zone = await invoke("link_folder", { path });
+            await refresh();
+            toast(t("extZonesAdded", { zone }));
+          } catch (e) {
+            const msg = String(e && e.message ? e.message : e);
+            const key = { "zone-system": "zoneSystem", "zone-large": "zoneLarge", "zone-slow": "zoneSlow", "zone-overlap": "zoneOverlap", "zone-missing": "zoneMissing" }[msg];
+            if (key) toast(t(key), false, 5200);
+            else fail(e);
+          }
+          renderPage(true);
+        })
+      )
+    );
     return b;
   }
 
@@ -5647,9 +8325,11 @@
     status.hidden = false;
     let timer = 0;
     const check = () =>
-      invoke("bridge_browsers")
-        .then((list) => {
-          const on = list.length > 0;
+      Promise.all([invoke("bridge_browsers"), extensionState()])
+        .then(([chromium, s]) => {
+          const list = s && s.safari && s.safariBridge ? [...chromium, "Safari"] : chromium;
+          // Verbunden heißt: Die Extension hat sich gemeldet (nicht nur die Brücke eingerichtet)
+          const on = list.length > 0 && !!s && s.kind !== "missing";
           status.textContent = on ? t("onbExtOn", { list: list.join(", ") }) : t("onbExtWaiting");
           status.classList.toggle("ok", on);
           $("welcomeCreate").textContent = t(on ? "onbNext" : "onbExtOpen");
@@ -5676,585 +8356,7 @@
   async function showFirstDropStep() {
     setPref("onboarded", true);
     await showApp();
-    startTour(showDropHint);
-  }
-
-  // ---- Getting Started (0.19): neun Kapitel, fünf zum Mitmachen ----
-  // Läuft im Vollbild, auf Wunsch in einer Demo-Bibliothek (~/Archiver Demo/,
-  // lib.rs: open_demo / close_demo). Mitmach-Schritte (live) lassen die
-  // Oberfläche bedienbar und gehen erst nach der Aktion weiter. Am Ende
-  // verlässt die App das Vollbild, dann öffnet Licht die Oberfläche (reveal.js).
-
-  const TOUR_PREF = "tour3Done";
-  // Mitgelieferte Grafiken für das Schema, wenn die Tour in der eigenen Bibliothek läuft
-  const TOUR_WEB = ["welle-plakat", "dreieck", "zitrone-etikett", "buchstabe-g", "raster-gelb", "abend-verlauf"];
-  // Eintrag im Chrome Web Store, sobald es ihn gibt; bis dahin der Weg über chrome://extensions
-  const EXT_STORE_URL = null;
-  const tourStats = { drops: 0, pdfs: 0, collected: 0 };
-  const tourDemo = { on: false, prevOrder: null, zones: [], web: [] };
-  const demoHot = () => tourDemo.zones.filter((z) => z !== "Unsorted").slice(0, HOT_ZONES);
-
-  const zoneByName = (name) => state.zones.find((z) => z.path === name);
-  const kbdHtml = (s) => s; // Texte stammen aus i18n.js und enthalten <kbd>
-
-  async function enterDemo() {
-    tourDemo.prevOrder = pref("zoneOrder", []);
-    setPref("demoPrevOrder", tourDemo.prevOrder);
-    const info = await invoke("open_demo");
-    tourDemo.zones = info.zones;
-    tourDemo.web = info.web;
-    setPref("zoneOrder", info.zones);
-    tourDemo.on = true;
-    document.body.classList.add("demo-lib");
-    if (state.focus != null || state.query) setFocus(null);
-    state.home = "overview";
-    await refresh();
-  }
-
-  async function leaveDemo(keep) {
-    if (!tourDemo.on) return 0;
-    tourDemo.on = false;
-    document.body.classList.remove("demo-lib");
-    const moved = await invoke("close_demo", { keep }).catch((e) => (fail(e), 0));
-    setPref("zoneOrder", tourDemo.prevOrder || []);
-    localStorage.removeItem("archiver.demoPrevOrder");
-    if (state.focus != null || state.query) setFocus(null);
-    state.home = "cards";
-    await refresh();
-    return moved;
-  }
-
-  // Ein Absturz mitten in der Demo: beim nächsten Start die eigene Reihenfolge zurückholen
-  function restoreAfterDemo() {
-    const prev = pref("demoPrevOrder", null);
-    if (prev == null) return;
-    setPref("zoneOrder", prev);
-    localStorage.removeItem("archiver.demoPrevOrder");
-  }
-  restoreAfterDemo();
-
-
-  function finderList() {
-    const list = el("div", "tour-finder");
-    const zones = (tourDemo.on ? demoHot().map(zoneByName) : state.zones.slice(0, HOT_ZONES)).filter(Boolean).slice(0, 3);
-    for (const z of zones) {
-      const row = el("div", "tour-finder-row");
-      row.innerHTML =
-        '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M1.5 3.5h5l1.5 1.5h6.5v8h-13z" fill="none" stroke="currentColor"/></svg>';
-      row.append(el("span", null, shortPath(state.root + "/" + z.path) + "/"), el("span", "tour-mono", countText(z.count)));
-      list.appendChild(row);
-    }
-    return list;
-  }
-
-  // Vorschläge aus dem, was die Bildanalyse in den Objekten gefunden hat:
-  // zwei häufige Farben und zwei häufige Bildinhalte, auf Deutsch, wo es geht.
-  function tourSearchWords() {
-    const de = new Map();
-    if (lang === "de") for (const [word, en] of Object.entries(SEARCH_DE)) if (!de.has(en)) de.set(en, word);
-    const colors = new Map();
-    const labels = new Map();
-    for (const item of state.items) {
-      const idx = searchIndex(item);
-      for (const [c, share] of idx.colors) if (share >= COLOR_SHARE && c !== "white" && c !== "black" && c !== "gray") colors.set(c, (colors.get(c) || 0) + 1);
-      for (const l of idx.labels.slice(0, 3)) labels.set(l, (labels.get(l) || 0) + 1);
-    }
-    const top = (m, n) => [...m].sort((a, b) => b[1] - a[1]).slice(0, n).map(([k]) => de.get(k) || k);
-    const words = [...top(colors, 2), ...top(labels, 2)];
-    return words.length >= 2 ? words : t("tourSearchTry").split(", ");
-  }
-
-  function keyList() {
-    const list = el("div", "tour-keys");
-    for (const [k, label] of [["1–4", "tourKeyFile"], [t("tourSpace"), "tourKeyView"], ["⌘F", "tourKeySearch"], ["+ −", "tourKeySize"], ["⌫", "tourKeyTrash"]])
-      list.append(el("kbd", null, k), el("span", null, t(label)));
-    return list;
-  }
-
-  // Schema-Browser wie auf der Website: die Geste spielt dreimal von selbst,
-  // dann zieht man selbst. Ein Drop legt das Bild wirklich in die Demo-Zone.
-  function browserSchema(ctx) {
-    const s = el("div", "tour-schema");
-    const tag = el("span", "tour-schema-tag", "(" + t("tourSchemaAuto") + ")");
-    const bar = el("div", "tour-schema-bar");
-    bar.append(el("span", "tour-schema-dots"), el("span", "tour-schema-url", t("tourSchemaUrl")));
-    const grid = el("div", "tour-schema-grid");
-    const drop = el("div", "tour-schema-drop");
-    const zones = (tourDemo.on ? demoHot() : state.zones.slice(0, HOT_ZONES).map((z) => z.path)).slice(0, HOT_ZONES);
-    zones.forEach((z, i) => {
-      const d = el("div", "tour-schema-zone");
-      d.dataset.zone = z;
-      d.append(el("span", "tour-mono", String(i + 1).padStart(2, "0")), el("span", null, zoneLabel(z)));
-      drop.appendChild(d);
-    });
-    const cursor = el("div", "tour-schema-cursor");
-    cursor.innerHTML =
-      '<svg viewBox="0 0 22 22" width="22" height="22"><path d="M4 2l13 9.5-6.2.9 3.6 7-2.6 1.3-3.6-7L4 18z" fill="#fff" stroke="#111" stroke-width="1.2" stroke-linejoin="round"/></svg>';
-    s.append(tag, bar, grid, drop, cursor);
-    ctx.user = false;
-
-    const saved = (node, zone, zoneEl, byUser) => {
-      node.classList.add("taken");
-      zoneEl.classList.remove("flash");
-      void zoneEl.offsetWidth;
-      zoneEl.classList.add("flash");
-      if (tourDemo.on && node.dataset.file) invoke("demo_collect", { file: node.dataset.file, zone }).catch(() => {});
-      if (byUser) {
-        tourStats.collected++;
-        toast(t("tourSchemaSaved", { zone: zoneLabel(zone) }));
-      }
-    };
-
-    const web = tourDemo.on && tourDemo.web.length ? tourDemo.web : TOUR_WEB.map((n) => ({ file: "", show: "tour/" + n + ".jpg" }));
-    for (const w of web) {
-      const item = el("div", "tour-schema-item");
-      item.dataset.file = w.file;
-      const img = el("img");
-      img.src = w.show.startsWith("/") ? fileSrc(w.show) : w.show;
-      img.alt = "";
-      img.draggable = false;
-      item.appendChild(img);
-      item.addEventListener("pointerdown", (e) => {
-        if (e.button || item.classList.contains("taken")) return;
-        ctx.user = true;
-        tag.textContent = "(" + t("tourSchemaYou") + ")";
-        const sx = e.clientX;
-        const sy = e.clientY;
-        let ghost = null;
-        let over = null;
-        const move = (ev) => {
-          if (!ghost) {
-            if (Math.hypot(ev.clientX - sx, ev.clientY - sy) < 6) return;
-            ghost = el("div", "tour-schema-ghost");
-            ghost.appendChild(img.cloneNode());
-            document.body.appendChild(ghost);
-            item.classList.add("lifted");
-            s.classList.add("dragging");
-          }
-          ghost.style.left = ev.clientX + "px";
-          ghost.style.top = ev.clientY + "px";
-          const hit = document.elementFromPoint(ev.clientX, ev.clientY);
-          const z = hit && hit.closest(".tour-schema-zone");
-          const ok = z && drop.contains(z) ? z : null;
-          if (ok !== over) {
-            if (over) over.classList.remove("over");
-            if (ok) ok.classList.add("over");
-            over = ok;
-          }
-        };
-        const up = () => {
-          removeEventListener("pointermove", move);
-          removeEventListener("pointerup", up);
-          if (!ghost) return;
-          ghost.remove();
-          item.classList.remove("lifted");
-          s.classList.remove("dragging");
-          if (over) {
-            over.classList.remove("over");
-            saved(item, over.dataset.zone, over, true);
-          }
-        };
-        addEventListener("pointermove", move);
-        addEventListener("pointerup", up);
-      });
-      grid.appendChild(item);
-    }
-
-    // Selbstlauf
-    const still = matchMedia("(prefers-reduced-motion: reduce)").matches;
-    const wait = (ms) => new Promise((r) => setTimeout(r, ms));
-    const rel = (n) => {
-      const a = n.getBoundingClientRect();
-      const b = s.getBoundingClientRect();
-      return { x: a.left - b.left + a.width / 2, y: a.top - b.top + a.height / 2 };
-    };
-    const glide = (n, a, b, ms) =>
-      n.animate([{ left: a.x + "px", top: a.y + "px" }, { left: b.x + "px", top: b.y + "px" }], {
-        duration: ms,
-        easing: "cubic-bezier(.55,.05,.25,1)",
-        fill: "forwards",
-      }).finished;
-    (async () => {
-      await wait(800);
-      for (let k = 0; k < 3; k++) {
-        if (ctx.user || !s.isConnected || still) break;
-        const free = [...grid.children].filter((n) => !n.classList.contains("taken"));
-        if (!free.length) break;
-        const card = free[k % free.length];
-        const zoneEl = drop.children[[1, 0, 2][k] % drop.children.length];
-        if (!zoneEl) break;
-        const start = { x: s.clientWidth * 0.5, y: s.clientHeight * 0.55 };
-        const a = rel(card);
-        cursor.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 200, fill: "forwards" });
-        await glide(cursor, start, a, 650);
-        if (ctx.user) break;
-        await wait(140);
-        const ghost = el("div", "tour-schema-ghost local");
-        ghost.appendChild(card.firstChild.cloneNode());
-        s.appendChild(ghost);
-        ghost.style.left = a.x + "px";
-        ghost.style.top = a.y + "px";
-        card.classList.add("lifted");
-        s.classList.add("dragging");
-        await wait(260);
-        const z = rel(zoneEl);
-        setTimeout(() => zoneEl.classList.add("over"), 600);
-        await Promise.all([glide(cursor, a, z, 850), glide(ghost, a, z, 850)]);
-        await wait(220);
-        zoneEl.classList.remove("over");
-        ghost.remove();
-        card.classList.remove("lifted");
-        s.classList.remove("dragging");
-        saved(card, zoneEl.dataset.zone, zoneEl, false);
-        await cursor.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 260, delay: 200, fill: "forwards" }).finished;
-        await wait(700);
-      }
-      if (s.isConnected) tag.textContent = "(" + t("tourSchemaYou") + ")";
-    })();
-    return s;
-  }
-
-  const TOUR = [
-    {
-      key: "Start",
-      center: true,
-      buttons: (api) => [
-        [t("tourOwn"), () => api.next()],
-        [
-          t("tourDemo"),
-          async () => {
-            try {
-              await enterDemo();
-            } catch (e) {
-              fail(e);
-            }
-            api.next();
-          },
-          true,
-        ],
-      ],
-    },
-    {
-      key: "Folders",
-      setup: () => {
-        if (state.focus != null || state.query) setFocus(null);
-        if (state.home !== "overview") {
-          state.home = "overview";
-          renderZones();
-        }
-      },
-      target: () => document.querySelector(".p-hotrow"),
-      extra: finderList,
-    },
-    {
-      key: "Active",
-      setup: (ctx) => {
-        if (state.focus != null || state.query) setFocus(null);
-        if (state.home !== "overview") {
-          state.home = "overview";
-          renderZones();
-        }
-        // Die Leiste fährt ein und bleibt stehen, solange der Schritt offen ist
-        ctx.peek = setTimeout(() => {
-          showDropbar();
-          document.body.classList.remove("dragging");
-          $("dropbar").classList.add("preview");
-        }, 500);
-      },
-      teardown: (ctx) => {
-        clearTimeout(ctx.peek);
-        $("dropbar").classList.remove("preview");
-        hideDropbar();
-      },
-      target: () => document.querySelector(".p-hotrow"),
-    },
-    {
-      key: "Browser",
-      center: true,
-      wide: true,
-      setup: (ctx) => {
-        ctx.n = tourStats.collected;
-        const check = () =>
-          invoke("bridge_browsers")
-            .then((list) => (ctx.browsers = list))
-            .catch(() => (ctx.browsers = []));
-        check();
-        ctx.timer = setInterval(check, 2000);
-      },
-      teardown: (ctx) => clearInterval(ctx.timer),
-      extra: (ctx) => ctx.schema || (ctx.schema = browserSchema(ctx)),
-      done: (ctx) => tourStats.collected > ctx.n,
-      status: (ctx) =>
-        ctx.browsers && ctx.browsers.length
-          ? { ok: true, text: t("onbExtOn", { list: ctx.browsers.join(", ") }) }
-          : { ok: false, text: t("onbExtWaiting") },
-      third: (ctx) =>
-        ctx.browsers && ctx.browsers.length
-          ? null
-          : EXT_STORE_URL
-            ? [t("tourStore"), () => invoke("open_url", { url: EXT_STORE_URL }).catch(fail)]
-            : [
-                t("onbExtOpen"),
-                () =>
-                  navigator.clipboard
-                    .writeText("chrome://extensions")
-                    .then(() => toast(t("onbExtCopied")))
-                    .catch(fail),
-              ],
-    },
-    {
-      key: "File",
-      live: true,
-      corner: true,
-      setup: (ctx) => {
-        ctx.n = tourStats.drops;
-        const inbox = zoneByName("Unsorted");
-        if (tourDemo.on && inbox) setFocus(inbox.path);
-        else if (state.items.length) setFocus(ALL);
-      },
-      text: () => (tourDemo.on || state.items.length ? "tourFileText" : "tourFileEmpty"),
-      done: (ctx) => tourStats.drops > ctx.n || dropCount > (ctx.d ?? (ctx.d = dropCount)),
-    },
-    {
-      key: "View",
-      live: true,
-      corner: true,
-      setup: (ctx) => {
-        ctx.seen = false;
-        const zone = tourDemo.on && zoneByName(demoHot()[0]);
-        if (zone) setFocus(zone.path);
-        else if (state.items.length && state.focus == null) setFocus(ALL);
-      },
-      done: (ctx) => ctx.seen || (ctx.seen = !!state.lightbox),
-    },
-    {
-      key: "Search",
-      live: true,
-      corner: true,
-      setup: () => {
-        if (state.lightbox) closeLightbox();
-        setFocus(null);
-        openSearch();
-      },
-      extra: () => {
-        const chips = el("div", "tour-chips");
-        for (const w of tourSearchWords()) {
-          chips.appendChild(
-            chip("„" + w + "“", false, () => {
-              const input = $("search");
-              input.value = w;
-              input.dispatchEvent(new Event("input", { bubbles: true }));
-              input.focus();
-            })
-          );
-        }
-        return chips;
-      },
-      target: () => $("navSearch"),
-      done: () => !!state.query.trim() && !!state.found && state.found.length > 0,
-    },
-    {
-      key: "Poster",
-      live: true,
-      corner: true,
-      setup: (ctx) => {
-        ctx.n = tourStats.pdfs;
-        $("search").value = "";
-        $("search").blur();
-        const zone = tourDemo.on && zoneByName(demoHot()[1] || demoHot()[0]);
-        if (zone) setFocus(zone.path);
-        else if (state.focus == null && state.items.length) setFocus(ALL);
-      },
-      buttons: (api, ctx) =>
-        ctx.finished
-          ? null
-          : [
-              [
-                t("tourPosterDo"),
-                () => {
-                  const items = allVisible();
-                  if (!items.length) return toast(t("pdfNothing"));
-                  const title = isZone(state.focus) ? zoneLabel(state.focus) : t("pdfSelection");
-                  openPdfMaker(items.slice(), title, { poster: true });
-                },
-                true,
-              ],
-            ],
-      done: (ctx) => tourStats.pdfs > ctx.n,
-    },
-    {
-      key: "End",
-      center: true,
-      extra: keyList,
-      buttons: (api) =>
-        tourDemo.on
-          ? [
-              [t("tourKeepDemo"), () => api.end("keep")],
-              [t("tourToOwn"), () => api.end("own"), true],
-            ]
-          : [[t("tourDone"), () => api.end("own"), true]],
-    },
-  ];
-
-  function startTour(done) {
-    if (document.querySelector(".tour") || !isUnlocked()) return;
-    closeMenus();
-    closeMoreMenu();
-    if (state.page) closePage();
-    let step = 0;
-    let ctx = {};
-    let poll = 0;
-    let ending = false;
-    const layer = el("div", "tour");
-    const ring = el("div", "tour-ring");
-    const card = el("div", "tour-card");
-    layer.append(ring, card);
-    document.body.appendChild(layer);
-
-    const leave = () => {
-      clearInterval(poll);
-      const s = TOUR[step];
-      if (s && s.teardown) s.teardown(ctx);
-    };
-    const end = async (mode) => {
-      if (ending) return;
-      ending = true;
-      leave();
-      setPref(TOUR_PREF, true);
-      document.removeEventListener("keydown", onKey, true);
-      window.removeEventListener("resize", render);
-      await layer.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 260, fill: "forwards" }).finished;
-      layer.remove();
-      await finale(mode !== "keep");
-      if (done) done();
-    };
-    const go = (to) => {
-      leave();
-      step = Math.max(0, to);
-      if (step >= TOUR.length) return end("own");
-      enter();
-    };
-    const api = { next: () => go(step + 1), end };
-    const onKey = (e) => {
-      // Tippen und offene Ansichten (Vorschau, PDF-Ersteller) gehören nicht der Tour
-      if (e.target.closest && e.target.closest("input, textarea, [contenteditable]")) return;
-      if (state.lightbox || document.querySelector(".pdf-maker")) return;
-      const s = TOUR[step];
-      if (e.key === "Escape") end("own");
-      else if (e.key === "Enter" && !e.target.closest("button") && !s.buttons && !(s.done && !ctx.finished)) api.next();
-      else if (e.key === "ArrowRight" && !s.live && !s.buttons && !(s.done && !ctx.finished)) api.next();
-      else if (e.key === "ArrowLeft" && !s.live && step > 0) go(step - 1);
-      else return;
-      e.preventDefault();
-      e.stopPropagation();
-    };
-
-    function enter() {
-      const s = TOUR[step];
-      ctx = { finished: false };
-      card.replaceChildren();
-      if (s.setup) s.setup(ctx);
-      render();
-      if (s.done || s.status)
-        poll = setInterval(() => {
-          layer.classList.toggle("away", !!document.querySelector(".pdf-maker"));
-          if (s.done && !ctx.finished && s.done(ctx)) {
-            ctx.finished = true;
-            render();
-          } else if (s.status) renderStatus();
-        }, 400);
-    }
-
-    function renderStatus() {
-      const s = TOUR[step];
-      const node = card.querySelector(".tour-status");
-      if (!s.status || !node) return;
-      const st = s.status(ctx);
-      node.className = "tour-status" + (st.ok ? " ok" : "");
-      node.textContent = st.text;
-      const acts = card.querySelector(".tour-actions");
-      if (acts) acts.replaceWith(actions());
-    }
-
-    function actions() {
-      const s = TOUR[step];
-      const row = el("div", "tour-actions");
-      const left = el("div", "tour-actions-group");
-      const right = el("div", "tour-actions-group");
-      if (step < TOUR.length - 1) left.appendChild(button("p-chip", "(" + t("tourSkip") + ")", () => end("own")));
-      if (step > 0) left.appendChild(button("p-chip", "(" + t("tourBack") + ")", () => go(step - 1)));
-      const third = s.third && !ctx.finished ? s.third(ctx) : null;
-      if (third) right.appendChild(button("p-chip", "(" + third[0] + ")", third[1]));
-      const custom = s.buttons ? s.buttons(api, ctx) : null;
-      if (custom) for (const [label, fn, primary] of custom) right.appendChild(button("p-chip" + (primary ? " active" : ""), "(" + label + ")", fn));
-      if (!custom || (s.key === "Poster" && ctx.finished)) {
-        const waiting = s.done && !ctx.finished;
-        right.appendChild(button("p-chip" + (waiting ? "" : " active"), "(" + t(waiting ? "tourLater" : "tourNext") + ")", api.next));
-      }
-      row.append(left, right);
-      return row;
-    }
-
-    function render() {
-      const s = TOUR[step];
-      const keepSchema = s.key === "Browser" && ctx.schema && card.contains(ctx.schema);
-      const title = t("tour" + s.key + (ctx.finished ? "Done" : "Title"));
-      const textKey = ctx.finished ? "tour" + s.key + "DoneText" : s.text ? s.text() : "tour" + s.key + "Text";
-      if (keepSchema) {
-        card.querySelector(".tour-title").textContent = title;
-        card.querySelector(".tour-text").innerHTML = kbdHtml(t(textKey));
-        renderStatus();
-        card.querySelector(".tour-actions").replaceWith(actions());
-      } else {
-        const count = el("div", "tour-progress");
-        TOUR.forEach((_, i) => count.appendChild(el("i", i <= step ? "on" : null)));
-        const text = el("div", "tour-text");
-        text.innerHTML = kbdHtml(t(textKey));
-        card.replaceChildren(count, el("div", "tour-title", title), text);
-        if (s.extra) {
-          const extra = el("div", "tour-extra");
-          extra.appendChild(s.extra(ctx));
-          card.appendChild(extra);
-        }
-        if (s.status) card.appendChild(el("div", "tour-status"));
-        card.appendChild(actions());
-        renderStatus();
-      }
-      layer.classList.toggle("live", !!s.live);
-      card.className = "tour-card" + (s.wide ? " wide" : "") + (s.corner ? " corner" : "") + (s.center ? " center" : "");
-      card.style.cssText = "";
-      const target = s.target && s.target();
-      const r = target ? target.getBoundingClientRect() : null;
-      ring.hidden = !r || !r.width;
-      if (ring.hidden) return;
-      const pad = 6;
-      ring.style.cssText = `left:${r.left - pad}px;top:${r.top - pad}px;width:${r.width + pad * 2}px;height:${Math.min(r.height, innerHeight - r.top - 12) + pad * 2}px`;
-      if (s.corner || s.center) return;
-      const w = Math.min(380, innerWidth - 32);
-      const left = Math.max(16, Math.min(innerWidth - w - 16, r.left + r.width / 2 - w / 2));
-      if (r.bottom < innerHeight * 0.55) card.style.cssText = `left:${left}px;top:${Math.min(r.bottom + 18, innerHeight - card.offsetHeight - 16)}px`;
-      else card.style.cssText = `left:${left}px;bottom:${innerHeight - r.top + 18}px`;
-    }
-
-    document.addEventListener("keydown", onKey, true);
-    window.addEventListener("resize", render);
-    enter();
-  }
-
-  // Abschluss: zurück zur eigenen Bibliothek, Licht-Öffnung
-  async function finale(own) {
-    const cover = el("div", "reveal-cover");
-    document.body.appendChild(cover);
-    await cover.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 420, easing: "ease-in-out", fill: "forwards" }).finished;
-    const demo = tourDemo.on;
-    const moved = demo ? await leaveDemo(!own) : 0;
-    if (!demo) {
-      if (state.focus != null || state.query) setFocus(null);
-      state.home = "cards";
-      renderZones();
-    }
-    await playReveal(cover);
-    if (demo) toast(moved ? t("tourBackOwnMoved", { n: moved }) : t("tourBackOwn"));
+    showDropHint();
   }
 
   function revealTargets() {
@@ -6305,12 +8407,18 @@
     }, 600);
   }
 
+  // Ecken und Glas an die Bibliothek melden: Die Extension zeigt dieselben Werte
+  function lookToLibrary() {
+    const I = window.ArchiverI18n;
+    invoke("set_look", { radius: pref("radius", "soft"), alpha: I.zoneGlass() }).catch(() => {});
+  }
+
   function showApp() {
     $("welcome").hidden = true;
     $("app").hidden = false;
     applyLock();
-    applyDragAlpha();
     loadLibraries();
+    loadNaming();
     return refresh().then(() => {
       // Nach dem Sprachwechsel wieder in den Einstellungen landen
       const reopen = sessionStorage.getItem("archiver.reopen") || "";
@@ -6319,12 +8427,13 @@
         togglePage("settings");
         if (reopen.includes(":")) openSettingsSection(reopen.split(":")[1]);
       }
-      invoke("get_drag_alpha")
-        .then((a) => {
-          if (typeof a === "number") setPref("zoneAlpha", a);
-          applyDragAlpha();
-        })
-        .catch(() => {});
+      // Ecken an die Bibliothek melden, die Extension zeigt dieselbe Stufe
+      lookToLibrary();
+      // 0.30: „Unterordner als Zonen“ gibt es nicht mehr, Unterordner sind Ordner in der Zone
+      if (state.structure && state.structure.subzones)
+        invoke("set_structure", { structure: { ...state.structure, subzones: false } })
+          .then(refresh)
+          .catch(() => {});
     });
   }
 
@@ -6387,10 +8496,13 @@
   }
 
   // ---- Updates (lib.rs: update_check / update_install) ----
-  async function checkUpdate() {
-    if (document.querySelector(".p-update")) return;
+  async function checkUpdate(manual) {
+    if (document.querySelector(".p-update:not(.p-ext)")) return;
     const info = await invoke("update_check").catch(() => null);
-    if (!info || document.querySelector(".p-update")) return;
+    if (!info && manual === true) return toast(t("updUpToDate"));
+    if (!info || document.querySelector(".p-update:not(.p-ext)")) return;
+    // Das App-Update geht vor; die neue App bringt meist auch die Extension mit
+    document.querySelectorAll(".p-ext").forEach((n) => n.remove());
     const bar = el("div", "p-update");
     bar.appendChild(el("span", null, t("updateAvailable", { version: info.version })));
     const go = button("p-update-btn", "(" + t("updateInstall") + ")", () => {
@@ -6407,12 +8519,105 @@
     document.body.appendChild(bar);
   }
 
+  // ---- Extension fehlt oder ist veraltet (bridge.rs: extension_status) ----
+  // Der Host notiert bei jedem Kontakt die Version der Extension. Gleiche Leiste
+  // wie der Update-Hinweis; × blendet ihn aus, bis sich der Zustand ändert.
+
+  const EXTENSION_DOWNLOAD = "https://archiver-app.com/download/";
+  const EXT_MISSING_GRACE = 2 * 24 * 60 * 60 * 1000;
+
+  function openExtensionDownload() {
+    invoke("open_url", { url: EXTENSION_DOWNLOAD }).catch(fail);
+  }
+
+  function versionLess(a, b) {
+    const pa = String(a).split(".").map(Number);
+    const pb = String(b).split(".").map(Number);
+    for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+      const x = pa[i] || 0;
+      const y = pb[i] || 0;
+      if (x !== y) return x < y;
+    }
+    return false;
+  }
+
+  // { kind: "ok" | "old" | "missing", version, min } oder null
+  async function extensionState() {
+    const s = await invoke("extension_status").catch(() => null);
+    if (!s) return null;
+    const kind = !s.seen ? "missing" : !s.version || versionLess(s.version, s.min) ? "old" : "ok";
+    return { kind, version: s.version, min: s.min, safari: s.safari || null, safariBridge: !!s.safariBridge };
+  }
+
+  async function checkExtension() {
+    if (document.querySelector(".p-update") || $("app").hidden || !$("lock").hidden) return;
+    const s = await extensionState();
+    if (!s) return;
+    if (s.kind === "ok") {
+      setPref("extMissingSince", null);
+      return;
+    }
+    // Fehlt sie, erst nach zwei Tagen melden: Nach einem App-Update meldet sich
+    // eine vorhandene Extension erst, wenn sie das nächste Mal etwas tut.
+    if (s.kind === "missing") {
+      const since = pref("extMissingSince", null);
+      if (!since) return setPref("extMissingSince", Date.now());
+      if (Date.now() - since < EXT_MISSING_GRACE) return;
+    }
+    const key = s.kind + ":" + s.min;
+    if (pref("extHintClosed", null) === key || document.querySelector(".p-update")) return;
+    const bar = el("div", "p-update p-ext");
+    bar.appendChild(el("span", null, s.kind === "old" ? t("extOld", { min: s.min }) : t("extMissing")));
+    bar.appendChild(button("p-update-btn", "(" + t("extGet") + ")", openExtensionDownload));
+    bar.appendChild(
+      button("p-update-close", "×", () => {
+        setPref("extHintClosed", key);
+        bar.remove();
+      })
+    );
+    document.body.appendChild(bar);
+  }
+
+  function openModal(dialog, onEnter) {
+    const modal = $("modal");
+    modal.replaceChildren(dialog);
+    modal.hidden = false;
+    modal.onEnter = onEnter || null;
+  }
+
+  if (window.ArchiverCloud) window.ArchiverCloud.init({
+      el,
+      button,
+      thumbSrc,
+      kindOf,
+      toast,
+      invoke,
+      tones: QUOTE_TONES,
+      fullSrc: (i) => (kindOf(i) === "image" ? fileSrc(i.abs) : thumbSrc(i)),
+      imagePath: (i) => (kindOf(i) === "image" ? i.abs : null),
+      showInZone: showItemInZone,
+      items: () => state.items,
+      zones: () => state.zones,
+    });
+
   async function boot() {
     bindEvents();
     TAURI.event.listen("library-changed", debounce(refresh, 120));
+    // Fehler im Hintergrund (Einlesen, Ordner nicht lesbar) und vergessene
+    // Promise-Fehler nicht mehr still schlucken (0.31.0)
+    TAURI.event.listen("library-error", (e) => toast(t("error", { msg: String(e.payload) }), false, 5000));
+    window.addEventListener("unhandledrejection", (e) => {
+      e.preventDefault();
+      fail(e.reason);
+    });
     TAURI.event.listen("thumbs-ready", (e) => applyThumbs(e.payload));
     TAURI.event.listen("analysis-ready", (e) => applyAnalysis(e.payload));
     TAURI.event.listen("reveal-in-app", (e) => revealFromViewer(e.payload));
+    // Bibliothek anderswo gewechselt (Palette, ⌘1–3): nachziehen
+    TAURI.event.listen("library-switched", (e) => {
+      if (!e || e.payload === state.root || $("app").hidden) return;
+      afterLibrarySwitch();
+    });
     const info = await invoke("start_info");
     // Die Bibliothek wird erst hier geöffnet (im Hintergrund, mit Ordner-Schutz),
     // damit das Fenster nie hängt.
@@ -6426,11 +8631,12 @@
     }
     if (info.library) {
       await showApp();
-      // Einmal für alle, die vor der Tour schon eingerichtet waren
-      if (!pref(TOUR_PREF, false)) setTimeout(() => startTour(), 2800);
     } else showWelcome(info);
     hideSplash();
+    checkAccount();
+    setInterval(checkAccount, 60 * 60 * 1000);
     setTimeout(checkUpdate, 3000);
+    setTimeout(checkExtension, 6000);
     // Auch im laufenden Betrieb: alle 30 Minuten und wenn das Fenster wieder nach vorne kommt
     setInterval(checkUpdate, 30 * 60 * 1000);
     let lastFocusCheck = Date.now();
@@ -6438,6 +8644,7 @@
       if (Date.now() - lastFocusCheck < 5 * 60 * 1000) return;
       lastFocusCheck = Date.now();
       checkUpdate();
+      checkExtension();
     });
   }
 

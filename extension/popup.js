@@ -40,24 +40,3 @@ mainBtn.addEventListener("click", () => {
   window.close();
 });
 
-// Auf einem Pinterest-Board: alle Pins in eine Zone mit dem Board-Namen holen
-chrome.tabs.query({ active: true, currentWindow: true }, ([tab]) => {
-  const m = tab && tab.url && tab.url.match(/^https:\/\/([a-z]+\.)?pinterest\.[a-z.]+\/([^/]+)\/([^/?#]+)\/?(\?|#|$)/);
-  if (!m || ["pin", "search", "ideas", "today", "_saved", "_created"].includes(m[2]) || m[3].startsWith("_")) return;
-  const name = decodeURIComponent(m[3]).replace(/-/g, " ");
-  const block = UI.block("Pinterest");
-  const row = document.createElement("div");
-  row.className = "block-row popup-board";
-  row.appendChild(document.createElement("span")).textContent = name;
-  const btn = document.createElement("button");
-  btn.type = "button";
-  btn.className = "mini-action";
-  btn.textContent = chrome.i18n.getMessage("importBoard") || "Board importieren";
-  btn.addEventListener("click", () => {
-    chrome.runtime.sendMessage({ type: "pinterest-import", tabId: tab.id });
-    window.close();
-  });
-  row.appendChild(btn);
-  block.appendChild(row);
-  settingsTab.prepend(block);
-});

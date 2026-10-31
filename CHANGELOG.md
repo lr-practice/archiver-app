@@ -1,5 +1,1050 @@
 # Changelog
 
+## App 0.43.3 · Extension 3.31.2
+
+- Konto: Texte aufs Lizenzmodell (9,99 € einmalig, zwei Macs, alle 1.x-Updates;
+  Beta-Bonus: Lizenz für 4,99 € bis 31.01.; Studio eigenes Abo).
+- Sichtbare Ordner heißen Archery: `~/Archery Demo`, `~/Library/Logs/Archery/archery.log`,
+  `Downloads/Archery-Transfer`. Demo und Protokoll werden beim ersten Zugriff
+  übernommen. Die App nimmt weiter auch `Archiver-Transfer` an, damit ältere
+  Extensions funktionieren.
+- Einstieg: Extension-Hinweis für alle Chromium-Browser (Chrome, Brave, Edge, Arc, Vivaldi).
+- Texte aus dem Copy-Deck: Anmelden „Deine Bibliothek.“, neuer Claim unter Information, Einstieg „Browser-Extension verbinden.“, neue Extension-Beschreibung (zugleich Store-Kurztext).
+
+## App 0.43.2 · Extension 3.31.1
+
+- Einstellungen › Labor ist weg. Zonenkarten laufen unten nicht mehr aus, die
+  Video-Vorschau ist fest „Skim“. Drop-Feedback steht jetzt unter Darstellung.
+- Konto abgeriegelt: Der Umschalter Beta / Abonnent / Lese-Modus / Anmelden
+  ist entfernt. Beim Start und stündlich prüft die App die Anmeldung beim
+  Server; ein gesperrtes oder gelöschtes Konto ist danach abgemeldet.
+- Benutzername im Konto, gespeichert im Konto selbst (gleich auf jedem Mac).
+- Studio ist ein eigenes Abo und steht abgesetzt unten in den Einstellungen.
+  Ohne Freigabe sind Rechte, Paket und geteilte Bibliothek aus; eine geteilte
+  Bibliothek öffnet sich dann nicht. Das Feld „Dein Name“ heißt dort „Kürzel“,
+  ohne eigenes gelten die Initialen des Benutzernamens.
+- Das Testfeld „Name“ unter Information ist entfernt.
+- Schriftzug „Archery“: das y steht 35/1000 em weiter weg.
+- Extension: Ohne App gelten die Ecken „Weich“ wie ab Werk in der App (vorher „Rund“).
+
+## App 0.43.1
+
+- rustls und webpki aktualisiert (bekannte Lücken geschlossen).
+- Sicherheit (Prüfung 30.10.): Die HTTP-Brücke für Safari ist aus, bis die
+  Safari-Extension gekoppelt werden kann; ohne Geheimnis hätte jedes Programm
+  auf dem Mac sie ansprechen können. Der Safari-Hinweis in den Einstellungen
+  ist so lange ausgeblendet.
+- Feedback geht an feedback@archery-visual.com.
+- Die alten Beta-Freischalt-Codes gelten nicht mehr. Wer nur damit
+  freigeschaltet war, meldet sich einmal mit seiner E-Mail an.
+
+## App 0.43.0 · Extension 3.31.0
+
+- Archiver heißt jetzt Archery: Schriftzug, Fenstertitel, Menü, alle Texte
+  (Deutsch und Englisch), Handbuch, PDF-Fußzeile, DMG und Update-Pakete.
+- Was intern bleibt, damit bestehende Libraries, Einstellungen und die
+  Verbindung zur Extension beim Update erhalten bleiben: Bundle-ID
+  `app.archiver.desktop`, Brücke `app.archiver.bridge`, der verborgene Ordner
+  `.archiver` in jeder Library, `Downloads/Archiver-Transfer`, die Protokolle
+  unter `~/Library/Logs/Archiver` und das Update-Repository Archiver-Releases.
+- Ein per Auto-Update aktualisiertes Programm behält den Dateinamen
+  `Archiver.app`, zeigt aber überall Archery. Wer neu aus dem DMG installiert,
+  bekommt `Archery.app` und löscht das alte `Archiver.app`.
+
+## Extension 3.30.0
+
+- Markierter Text landet bei laufender App als Note (.md) statt als .txt in
+  der Zone, mit Seite und Seitentitel als Herkunft. Dort ist er bearbeitbar und
+  verknüpfbar. Ohne App bleibt es das Bild.
+
+## App 0.42.8
+
+- Notes und Textkarten zeigen in den Karten wieder ihren Text statt einer
+  leeren Fläche.
+- Labor › Ausblenden greift nur noch, wenn die Bilder einer Karte unten
+  abgeschnitten sind. Karten mit wenigen Bildern bleiben ruhig, ohne Kante
+  und Farbschein. Der Glas-Blur hat am unteren Rand keine Kante mehr.
+
+## App 0.42.7
+
+- Karten zeigen kleine Bilder wie die Index-Zeilen, als Raster über die volle
+  Kartenbreite. Rechtsklick auf ein Bild › „Als Titelbild der Zone“: das Bild
+  steht groß oben, darunter eine Reihe der ersten Bilder.
+- Der Index besteht nur noch aus Zeilenkarten über die volle Breite, die
+  Active Zones zuerst.
+- Labor: Die alten Kartenvarianten sind weg. Neu ist „Ausblenden“: Die
+  späteren Bilder einer Karte laufen unten per Farbverlauf oder Glas-Blur aus.
+- Auch die Bilder der Index-Zeilen reichen bündig bis zum rechten Rand.
+
+## App 0.42.6 (Vorabversion)
+
+- Textkarte und Notiz sind eins: „Note“. Eingefügter Text (⌘V in einer Zone)
+  wird eine Note (.md) statt .txt.
+- Verknüpfte Bilder stehen in voller Höhe direkt neben der Note, wie die
+  Doppelseite beim Bildtext; „+“ am Ende verknüpft weitere.
+- Rechtsklick auf ein oder mehrere Bilder › „Note zu diesem Bild“ bzw. „Note zu
+  n Objekten“ legt eine Note daneben an, gleich verknüpft.
+- Ein Bild mit Note zeigt sie in der Lightbox an der Stelle des Bildtexts
+  (Knopf „Note“, Taste T); Klick auf das Blatt öffnet die Note.
+- Im Raster trägt ein Bild mit Note den Punkt in der Farbe der Note. Der Punkt
+  ist größer (14 statt 10 px).
+- Zitat behält Herkunft: Die Quelle steht im Fuß der Note und führt zur Stelle
+  auf der Seite. Sie bleibt jetzt auch nach dem Bearbeiten erhalten.
+- Suche findet Bilder auch über den Text ihrer Note.
+- Karten zeigen ab Werk kleine Bilder wie die Index-Zeilen, eigenes Titelbild
+  per Rechtsklick. Die Ansicht „Übersicht“ heißt jetzt „Mix“.
+
+## App 0.42.5 (Vorabversion)
+
+- Farben aus der Figma-Datei: Fenster Dunkel #1a1a1a, Hell #fafafa. Karten
+  Dunkel neutral grau statt weiß getönt, Hell #f2f2f2. Navigation Hell #ebebeb
+  deckend. Tertiärtext Dunkel #666664, Hell #b2b2b2.
+- Etiketten, Chips, Anzahl und Datum unter Karten, Quelle auf Text-Karten und
+  die Notiz-Kennung wieder in Geist Mono 11 px, Versalien.
+
+## App 0.42.4
+
+- Hell kühler und sauberer: Grund #f4f5f7, Karten und Flächen #e9ebee, Grau
+  leicht bläulich statt gelbgrün. Das Seitenblatt hat auf dem Mac denselben Ton.
+
+## Extension 3.29.8
+
+- Ablegen wie in der App: Das Bild fliegt als Miniatur vom Zeiger in die
+  obere rechte Ecke der Zielkarte, die Leiste steht kurz und blendet dann
+  ruhig aus. Die aufgehellte Zielkarte blendet jetzt mit den anderen aus,
+  statt hell stehen zu bleiben und dann wegzuspringen.
+
+## App 0.42.3 (Vorabversion)
+
+- Einstellungen wieder als Seitenblatt rechts.
+- Labor › Kopf ist aufgelöst: Kopf und Schrift stehen fest auf „A Leise“
+  (Melange Semi-Light), ohne Varianten, Größe, Farben oder Schriftwahl.
+
+## App 0.42.2 (Vorabversion)
+
+- Neue Typografie „A Leise“: Melange Semi-Light für Köpfe, Namen, Text-Karten
+  und Notizen, Etiketten in Melange Medium statt Geist Mono. Köpfe ruhiger
+  (30 px), die Ordnung entsteht über Grau statt über Größe.
+- Hell neu: warmes Hellgrau (#f3f4f1), Karten und Flächen eine Stufe dunkler
+  statt weiß, Schrift fast schwarz, Grau mit mehr Kontrast.
+- Dunkel: Grau etwas heller, damit der dünne Schnitt trägt.
+- Einstellungen als Vollbild: links Kopf und Rückweg, rechts die Bereiche als
+  ruhige Liste mit Haarlinien.
+- Weniger Abstand zwischen Kopf und Zonen auf allen Seiten.
+- Geist lässt sich unter Labor › Kopf › Schrift zurückholen.
+
+## App 0.42.1 (Vorabversion)
+
+- Der Atlas heißt jetzt Collection.
+- Groß ansehen: hohe Bilder liefen unten aus dem Fenster. Jetzt passt jedes
+  Bild ganz hinein.
+- Zwei Leisten: oben die neun Ansichten und Mischen, unten die Werkzeuge.
+- Abstand ist raus, es gilt fest Mittel (26 px).
+- Gruppen sind raus.
+- „+ Referenz“ heißt „+ Objekte“. „Zonen ▾“ klappt das Glas auf und zeigt die
+  Zonen als Karten wie im Tray; ein Klick öffnet eine Zone.
+- Ziehen auf ein anderes Bild tauscht die Plätze, die Ansicht bleibt. Nur in
+  Frei bleibt liegen, was man zieht.
+- Größer und kleiner direkt am Bild beim Überfahren (− +), nicht mehr im Menü
+  oder in der Leiste.
+- Fassungen haben einen eigenen Knopf „Fassungen ▾“.
+- Neu: Linien. Der Knopf lässt von jedem Bild eine Linie zu seinem farblich
+  ähnlichsten stehen. Sie kommen mit „Als Bild“ ins PNG, auch der Faden im
+  Strang.
+- Als Bild sichert unter einem festen Schema:
+  `collection_<zone>_<jjjj-mm-tt>_<hhmm>.png`.
+- Beim Überfahren steht kein „Farbe 62 %“ mehr unter den Bildern.
+
+## App 0.42.0 (Vorabversion)
+
+- Die Wolke heißt jetzt Atlas, nach Warburgs Bildatlas.
+- Eine Leiste statt zwei: „Ansicht ▾“ öffnet ein Feld mit den neun Ansichten,
+  Abstand, Mischen und den Fassungen, das Quadrat daneben die Flächen. Dazu
+  + Referenz, Autoplay, Als Bild, Ausblenden und Schließen. „+5 ähnliche“
+  steht jetzt im Glas von + Referenz neben der Suche.
+- Rechtsklick auf ein Bild: Groß ansehen, In die Mitte oder Vergleichen,
+  Gruppe bilden oder lösen, Größe S M L XL, Eigener Atlas, In der Zone zeigen,
+  Aus dem Atlas nehmen.
+- In einer Zone mehrere Bilder wählen, Rechtsklick › Im Atlas öffnen: das
+  erste ist die Mitte, die anderen liegen gleich daneben.
+- Autoplay (P): Im Fokus wechselt die Mitte alle 3,2 Sekunden, mit Auswahl nur
+  durch die Auswahl. Ein Klick auf die Fläche hält an.
+- Leiste ausblenden mit H, zurück mit H oder Esc.
+- Als Bild: die ganze Anordnung als PNG, lange Seite bis 4000 px, mit
+  Sichern-Dialog.
+- Fassungen: beliebig viele benannte Stände je Atlas sichern und wieder
+  auslegen. Rechtsklick auf eine Fassung löscht sie.
+- Die Linien beim Überfahren bleiben und sagen jetzt, was sie verbinden:
+  unter den drei verbundenen Bildern steht „Farbe 94 %“, der Anteil gleicher
+  Farben.
+
+## App 0.41.1 (Vorabversion)
+
+- Wolke, Gruppen: Ein Klick auf ein Bild einer Gruppe wählt die ganze Gruppe,
+  ⌥-Klick nur das eine. Ziehen bewegt die Gruppe gemeinsam. Im Raster beginnt
+  jede Gruppe eine eigene Zeile, in Spalten stehen ihre Bilder hintereinander,
+  in Stapel ist jede Gruppe ein eigener Stapel. Die Kennung „G1“ steht jetzt
+  auch in Raster, Spalten, Spektrum und Strang.
+
+## App 0.41.0 (Vorabversion)
+
+- Farbmarken: Objekte in einer Zone bekommen eine von fünf Farben (Rot, Grün,
+  Violett, Cyan, Gelb), über Rechtsklick › Farbmarke oder ⌥1–5, ⌥0 nimmt sie
+  weg. Markierte Objekte tragen einen 4 px Innenrand in ihrer Farbe. Im Kopf
+  der Zone steht je Farbe ein Quadrat mit Anzahl, ein Klick zeigt nur diese.
+  Die Marke liegt in der Bibliothek (metadata.json) und geht mit auf andere Macs.
+- Wolke neu gedacht: neun Ansichten (Wolke, Fokus, Raster, Spalten, Spektrum,
+  Strang, Stapel, Vergleich, Frei), die Objekte gleiten beim Wechsel an ihren
+  Platz. Mehrere wählen mit ⇧ oder ⌘, Lasso auf freier Fläche, ⌘A. Die Leiste
+  unten zeigt dann Größe, Groß, Gruppe, Vergleichen, In die Mitte und Entfernen.
+  Leertaste oder Doppelklick zeigt groß, ← → blättert. G bildet eine Gruppe,
+  die zusammenhält. Beim Überfahren zeigen Fäden die drei ähnlichsten. Ziehen
+  legt frei ab. Die Fläche gibt es in Lightbox, Schwarz, Weiß, den fünf Farben
+  und „Auto“ aus dem offenen Bild. Orbit, Farbe und Konstellation gehen in
+  Fokus, Spektrum und Strang auf. Doppelklick macht ein Bild nicht mehr zur
+  Mitte einer neuen Wolke, dafür bleibt Enter.
+
+## App 0.40.25 (Vorabversion)
+
+- Zonenleiste, Observer und Tray holen nicht mehr das ganze Archiver-Fenster
+  nach vorne. War Archiver mit ⌘H ausgeblendet, kommt nur die Leiste. Öffnet
+  der Observer ein Bild aus dem Finder, bleibt das Hauptfenster weg, statt
+  hinten mit aufzugehen; schließt der Observer, liegt es wieder dort, wo es
+  war. Ein „Reopen“ von macOS direkt beim Öffnen holt es auch nicht mehr.
+
+## App 0.40.24 (Vorabversion)
+
+- Zonenleiste am ganzen Mac mit echtem Glas: Hinter jeder Karte liegt jetzt
+  die macOS-Unschärfe, so wie in der App. Vorher wirkten die Karten wie graue
+  Folie.
+- Einstellungen › Mac & Browser: Die Zonen kommen „Mit ⌥“ (Standard),
+  „Immer“ (sobald Dateien gezogen werden) oder gar nicht.
+- Nach dem Ablegen bleibt die Leiste 0.7 s stehen und blendet in 0.28 s aus,
+  in der App und am ganzen Mac. Die Miniatur bleibt Standard, die Wahl
+  „Danach“ im Labor ist weg.
+
+## App 0.40.23 (Vorabversion)
+
+- Zonenleiste am ganzen Mac: Ein Drop landet wieder in der Zone unter dem
+  Zeiger. Seit 0.26 wurde die Position auf Retina-Bildschirmen halbiert, der
+  Drop traf deshalb oft die Karte links daneben (vermutlich der alte Fehler
+  „sortiert falsch ein“). Auch die Miniatur kam von der falschen Stelle.
+- Die Varianten aus Labor › Ablegen gelten jetzt auch für die Leiste in der
+  App (Ziehen aus der App heraus oder von außen hinein). In der App steht
+  dabei „Abgelegt“.
+- Labor › Ablegen: Die sieben Varianten stehen in zwei Reihen, statt aus dem
+  Blatt zu laufen. Die Überschrift heißt auf Englisch „Drop feedback“.
+
+## App 0.40.22 (Vorabversion)
+
+- Zonenleiste am ganzen Mac: Die Karten haben jetzt das Format 2:1 wie die
+  Zonenkarten in der App. Die Leiste ist dadurch flacher (auf einem 13-Zoll-Mac
+  192 statt 280 px).
+- Ablegen ohne blaues Glühen: Das abgelegte Bild fliegt als Miniatur in die
+  obere rechte Ecke der Karte, bei mehreren Dateien mit „+N“. Danach geht die
+  Leiste schnell (0.35 s stehen, 0.18 s ausblenden). Lässt man ohne Drop los,
+  ist sie sofort weg.
+- Neu im Labor › Ablegen: Miniatur, Haken, Ring, Zähler, Dateiname, Nachbild
+  und das alte Glühen zum Vergleichen. Dazu „Danach“: schnell weg oder kurz
+  stehen.
+
+## App 0.40.21 (Vorabversion)
+
+- Zonenleiste am ganzen Mac ist zurück: Dateien irgendwo ziehen (Finder,
+  Schreibtisch, Mail …) und ⌥ halten, dann stehen unten die vier Active Zones
+  in voller Höhe. Ohne ⌥ kommt nichts. Ab Werk an, auch wenn die alte Leiste
+  aus war; ausschalten unter Einstellungen › Mac & Browser.
+- Schneller und verlässlicher: Die Karten liegen schon bereit, bevor gezogen
+  wird, statt erst beim Einblenden zu laden. Kein Streifen mehr und keine
+  Fenster-Animation beim Hochfahren. Ein Drop in einer Lücke zwischen zwei
+  Karten landet in der Zone darunter, statt verloren zu gehen.
+
+## App 0.40.20 (Vorabversion, Safari-Extension)
+
+- Die Extension läuft auch in Safari am Mac, aus demselben Code wie in
+  Chrome. Sie steckt als App-Erweiterung in Archiver.app und wird unter
+  Safari › Einstellungen › Erweiterungen eingeschaltet (ohne Apple-Signatur
+  vorher Entwickler › „Unsignierte Erweiterungen erlauben“).
+- Safari spricht mit der laufenden App über HTTP auf 127.0.0.1 (Port 47613,
+  sonst 47614/47615). Die App nimmt dort nur Anfragen von Safari-Extensions an
+  (Origin, Host und Kopf „X-Archiver“ werden geprüft). Bilder kommen als Bytes
+  („save_data“) statt über Downloads/Archiver-Transfer.
+- Läuft Archiver nicht, startet die Extension die App und legt danach ab.
+  Klappt das nicht, sagt ein Hinweis Bescheid; in Downloads wird in Safari
+  nichts gesichert. Linkkarten haben in Safari kein Seitenarchiv.
+- Einstellungen › Mac & Browser zeigt, ob Safari verbunden ist, oder wie man
+  die Extension einschaltet.
+- Build: `safari/build.sh` erzeugt die Erweiterung mit
+  `safari-web-extension-converter`; der Mac-Workflow baut sie vor der App und
+  legt sie nach `Contents/PlugIns`.
+
+## Extension 3.29.7
+
+- Die Zonenleiste beim Ziehen im Browser steht gleich in voller Höhe. Die
+  Karten ragen nicht mehr erst als 90-px-Streifen herein.
+
+## App 0.40.19 (Vorabversion)
+
+- Seitenkopf ab Werk Variante 05 (Satz im Fluss) in Größe M, Titel voll, Satz
+  hell. Wer im Labor schon etwas gewählt hat, behält seine Wahl.
+
+## App 0.40.18 (Vorabversion)
+
+- Grundschrift wieder Geist. Melange lässt sich unter Einstellungen › Labor
+  zurückholen.
+- Labor › Kopf: vierzehn Mechaniken für den Seitenkopf (01 Geist-Original bis
+  14 Hochkant), dazu Größe S–XL und die Farbe von Titel und Satz (Voll, Grau,
+  Hell, Blau). Ab Werk 01.
+
+## App 0.40.17 (Vorabversion)
+
+- Liegt die Bibliothek in einem geteilten iCloud-Ordner, fragte macOS bei
+  jedem Start „Möchtest du diesen geteilten Ordner wirklich bewegen?“, sobald
+  „Zuletzt gelöscht“ Einträge älter als 7 Tage in den Papierkorb legte. Der
+  Papierkorb wird jetzt direkt über das System angesprochen statt über den
+  Finder; die Abfrage entfällt.
+
+## App 0.40.16 (Vorabversion)
+
+- KMR Melange Grotesk läuft überall mit Standard-Laufweite (0): Seitenköpfe,
+  Sätze, Kartentitel, Navigation, Tray, Zonenleiste und Observer. Vorher
+  lagen die Werte zwischen −0.025em und +0.01em.
+
+## App 0.40.15 (Vorabversion)
+
+- Boards und Projekte als Funktion gestrichen. Archiver ist eine visuelle
+  Bibliothek zum Sammeln von Referenzen; Präsentationen und
+  Projektmanagement gehören nicht mehr dazu. Weg sind die beiden Bereiche in
+  der Leiste, ihre Schalter unter Einstellungen › Studio, „Aufs Board …“ im
+  Rechtsklick und die Einträge im Handbuch.
+- Auf der Platte bleibt alles, wie es ist: ein Ordner `Boards` mit
+  `.board`-Dateien und der Projekte-Ordner werden nicht angefasst und nicht
+  gelöscht. Der Ordner `Boards` gilt jetzt wie jeder andere Ordner.
+- Jeder Ordner kann jetzt Bibliothek sein; die Sperre gegen Ordner, die nach
+  Projekten aussehen, entfällt.
+
+## App 0.40.14 (Vorabversion)
+
+- Seitenköpfe fest in Regular und leicht gesperrt: die Übersicht in L
+  (34 bis 56 px), alle anderen Seiten in M (28 bis 42 px). Der Schrift-Schalter
+  im Labor ist damit entschieden und wieder weg.
+
+## App 0.40.13 (Vorabversion)
+
+- Labor › Schrift: Kopfgröße der Seiten in vier Stufen (S, M, L, XL) und
+  Schnitt Medium oder Regular, für Seitenköpfe und die Sätze in Konto und
+  Anmelden.
+
+## App 0.40.12 (Vorabversion)
+
+- Neuer Bereich Einstellungen › Labor zum Ausprobieren. Dort lässt sich
+  umschalten, wie die Active-Zone-Karten ihren Inhalt zeigen (A bis H: Heute,
+  Skim, Streifen, Kontaktbogen, Stapel, Aufklappen, Lauf, Blättern) und wie
+  Videos beim Darüberfahren vorschauen (Daumenkino, Skim, Abspielen, Aus).
+- Übersicht: jede Index-Zeile ist jetzt eine Karte mit eigener Fläche und ein
+  einziges Klickziel. Die Bilder beginnen auf der Kante der zweiten Active Zone.
+
+## App 0.40.11 (Vorabversion)
+
+- Übersicht: oben wieder immer die vier Active Zones als Karten, darunter die
+  übrigen Zonen als Kontaktbogen.
+- Die Ansicht „Vorschau“ auf der Startseite ist entfernt. Es bleiben Übersicht,
+  Karten und Index.
+- Seitenköpfe etwas kleiner (28 bis 42 px) und nicht mehr so eng gesetzt.
+
+## App 0.40.10 (Vorabversion)
+
+- Übersicht als Kontaktbogen: je Zone eine Zeile, links Name und Anzahl,
+  rechts die Bilder klein und dicht. Ab 24 Bildern „+N“, das die Zone öffnet.
+- Ein Kopf für alle Seiten: Übersicht, Zone, Alle Objekte, Suche und Zuletzt
+  gelöscht zeigen den Titel groß, darunter den Satz gedimmt, mit gleichem
+  Abstand oben und unten.
+
+## App 0.40.9 (Vorabversion)
+
+- Anmelden neu: ein Satz, darunter ein einziges Feld in Satzgröße auf einer
+  Linie, rechts ein runder Pfeil. Die Zeilen „Weg“ und „Beta“ sind weg. Beim
+  Code nennt der Satz die Adresse, darunter „(Neuer Code)“ und „(Andere E-Mail)“.
+- Übersicht mit Plakat-Kopf: „Übersicht“ groß in voller Farbe, darunter die
+  Zahlen gedimmt. Viel Raum darunter, die vier Active Zones stehen am unteren
+  Fensterrand, der Rest kommt beim Scrollen. „seit …“ ist weg.
+- Active Zones schon ab mittlerer Fensterbreite vierspaltig.
+
+## App 0.40.8 (Vorabversion)
+
+- Einstellungen aufgeräumt: oben das Konto, darunter fünf statt zehn Bereiche.
+  Bibliothek (mit Dateinamen), Darstellung (Ansicht, Aussehen, Glas, Start und
+  Ton), Mac & Browser (Extension, Tray, Zonenleiste, Vorschau-Formate), Studio
+  und App.
+- Version und Updates stehen jetzt unter Einstellungen › App, mit „Nach Updates
+  suchen“. Information (⌘I) zeigt nur noch die App und deine Sammlung.
+- Der alte Beta-Code lässt sich nicht mehr eingeben. Wer schon freigeschaltet
+  ist, bleibt es, bis er sich mit E-Mail anmeldet oder abmeldet.
+- Anmelden nimmt Codes mit 6 bis 8 Ziffern und nennt bei Fehlern den Grund.
+
+## App 0.40.7 (Vorabversion)
+
+- Anmelden mit Konto: E-Mail eingeben, den 6-stelligen Code aus der Mail
+  eintippen, fertig. Dasselbe Konto wie auf archiver-app.com. Ein Passwort gibt
+  es nicht.
+- Der Beta-Code funktioniert weiter, über „(Beta-Code)“ im Anmelde-Fenster.
+- Einstellungen › Konto zeigt die angemeldete E-Mail. Abmelden meldet das Konto
+  auf diesem Mac ab.
+
+## App 0.40.6 (Vorabversion)
+
+- Anmelde-Fenster, Konto und Lese-Modus sind jetzt ruhig wie die
+  Einstellungen: ein Satz als Überschrift, darunter gruppierte Zeilen. Keine
+  farbigen Markierungen mehr.
+- Im Anmelde-Fenster ist der Code eine Zeile der Liste, „Freischalten“ steht
+  darunter.
+- Überschriften in der Übersicht, in Zonen, Alle Objekte und Zuletzt gelöscht
+  sind größer (34 px statt 24 px).
+- Verknüpfte Ordner von außerhalb der Bibliothek heißen beim Entfernen jetzt
+  „Entkoppeln“. Der Ordner auf dem Mac bleibt, gelöscht wird nichts.
+
+## App 0.40.5 (Vorabversion)
+
+- Einstellungen › Konto › Ansicht: Vorschau als Beta, als Abonnent (Jahresabo
+  aktiv, mit Abo, Geräten und Zahlung), im Lese-Modus oder als Anmelde-Fenster. Es wird nichts
+  gebucht oder gesperrt.
+- Einstellungen › Konto › Abmelden vergisst den Freischalt-Code auf diesem Mac.
+  Danach steht das Anmelde-Fenster wie beim ersten Start da.
+
+## App 0.40.4 (Vorabversion)
+
+- Die Sperre ist jetzt ein Titelblatt: „Dein Archiv.“ groß und farbig markiert,
+  darunter der Beta-Hinweis und das Feld für den Code.
+- Oben in den Einstellungen steht eine Konto-Karte mit dem Beta-Bonus. Sie
+  öffnet Einstellungen › Konto mit dem Plan für 1.0 und einer Vorschau des
+  Lese-Modus (nur zum Ansehen, es wird nichts pausiert).
+- Ecken sind ab Werk „Weich“ (4 px) statt „Rund“. Wer selbst gewählt hat,
+  behält seine Wahl.
+
+## App 0.40.3 (Extension 3.29.6, Vorabversion)
+
+- Grundschrift ist jetzt KMR Melange Grotesk in App, Tray, Observer,
+  Zonenleiste, Viewer, Palette und Extension (Popup, Dashboard, Galerie,
+  Overlay). Geist Mono bleibt für Etiketten. Die Schrift ist eingebettet und
+  muss nicht installiert sein.
+
+## Extension 3.29.5
+
+- Regler und Knöpfe über Videos (etwa die Lautstärke) lassen sich wieder
+  bedienen, statt als Bild gezogen zu werden.
+- Links und Knöpfe über Bildern (etwa in Mediatheken) bekommen den Klick wieder.
+- Bilder und Dateien, die von außen in den Browser gezogen werden, blenden
+  keine Zonen mehr ein; die Seite bekommt sie selbst (Upload-Felder).
+
+## Extension 3.29.4
+
+- Zonenleiste beim Ziehen: Rand 10 px statt 14 px, 8 px statt 10 px zwischen den
+  Zonen, gleich wie in der App 0.40.2.
+
+## App 0.40.2 (Extension 3.29.3, Vorabversion)
+
+- Rückfragen (Löschen, Installieren, Neues Board, Umbenennen, Neues Projekt)
+  folgen jetzt der Rundung aus Einstellungen › Aussehen, statt fest rund mit
+  Pillen-Knöpfen.
+- Das ≡-Menü ist so breit wie sein Inhalt und nicht mehr so breit wie die
+  Navigation.
+- Board-Editor: In der Leiste unten heißt „Bilder“ jetzt „Objekte“.
+- Alle Knöpfe, Importieren, die Willkommen-Schritte, Schritt 3, Tour, Sperrbild
+  und die Felder im PDF-Ersteller folgen ebenfalls der Rundung; die alten
+  gestrichelten Rahmen sind weg.
+- „1 Objekt umbenennen“ statt „1 Objekte umbenennen“.
+- Zonenleiste beim Ziehen (App, am ganzen Mac, Extension): etwas weniger
+  Abstand zum Rand und zwischen den Zonen.
+
+## App 0.40.1 (Extension 3.29.3, Vorabversion)
+
+- Die Ansicht „(Form)“ (Ring, Sonnenblume, Karussell, Fächer) ist wieder
+  entfernt. Wer sie gewählt hatte, landet im Raster.
+
+## App 0.40.0 (Extension 3.29.3, Vorabversion)
+
+- Neu: Projekte ersetzt Works. Ein eigener Ordner „Projekte“, jedes Projekt
+  mit der Vorlage 01_Briefing bis 08_Admin. Übersicht mit Phase und nächster
+  Frist, im Projekt links die Ordner, in der Mitte der Inhalt, rechts das
+  Projektblatt mit Kunde, Kürzel, Start, Frist, Abgabe, offenen Punkten und
+  Notiz. „Abschließen“ verschiebt das Projekt nach Archiv/Jahr, „Wieder
+  öffnen“ holt es zurück. Dateien von außen hineinziehen kopiert sie in den
+  Ordner. Einschalten unter Einstellungen › Studio.
+- Works ist entfernt. Bestehende Works-Ordner bleiben unberührt.
+- Neu: Ansicht „(Form)“ neben Raster, Original und Liste. Die Objekte einer
+  Zone (oder einer Suche) bilden eine Figur: Ring mit dem Namen in der Mitte,
+  Sonnenblume, Karussell (dreht langsam) oder Fächer. Klick öffnet die
+  Lightbox.
+
+## App 0.39.1 (Extension 3.29.3, Vorabversion)
+
+- Neu zum Ausprobieren: die Wolke. In der Lightbox „Wolke“ oder W. Am
+  offenen Objekt lassen sich weitere Referenzen andocken („+ Referenz“ mit
+  Suche, „+5 ähnliche“), die sich per Physik anziehen und Abstand halten.
+  Sechs Modi: Wolke, Orbit, Strang, Farbe, Konstellation, Raster. Abstand
+  Eng, Mittel, Weit. Jedes Objekt in vier Größen (S M L XL, 1–4, − +).
+  Ziehen wirft, ⌫ entfernt, Doppelklick öffnet die Wolke der Referenz.
+  Die Wolke merkt sich ihre Mitglieder je Objekt.
+- Verknüpfte Ordner außerhalb der Bibliothek lassen sich nur noch trennen.
+  Ordner und Unterzonen darin bieten kein Löschen mehr, und Archiver löscht
+  dort nichts.
+- Neue-Zone-Karte: ein großes Plus in der Mitte statt „+ Neue Zone“.
+- Alle Objekte: Art, Farbe und Zeit stehen in einer Zeile, „(Mehr)“ öffnet
+  Form, Format, Doppelt, Motive und Quellen als Tabelle. Gesetzte Filter
+  daraus stehen als Pille in der ersten Zeile, solange „Mehr“ zu ist.
+- Zonen mit Unterordnern: Statt „(Mosaik) (Abschnitte)“ gibt es einen Chip
+  „(Segmente)“ zum An- und Ausklicken.
+
+## App 0.39.0 (Extension 3.29.3, Vorabversion)
+
+- Neu: Boards, ein eigener Bereich für Präsentationen aus Bildern der
+  Bibliothek, in der Navigation nach Works. Einstellungen › Studio › Boards,
+  ab Werk aus und nur in Vorabversionen schaltbar.
+- Ein Board ist eine lesbare Datei `Boards/Name.board` in der Bibliothek,
+  sichtbar im Finder. Bilder darin sind Verweise (Hash und Pfad), keine
+  Kopien. Der Ordner `Boards` erscheint nicht als Zone.
+- Übersicht mit allen Boards als Karten (erste Folie als Vorschau), „Neues
+  Board“, Rechtsklick für Umbenennen, Im Finder zeigen und Löschen
+  (Papierkorb).
+- Aus einer Zone: Auswahl, Rechtsklick › „Aufs Board …“ legt die Bilder als
+  neue Folie auf ein bestehendes oder neues Board.
+- Editor: nur die Folie und unten eine Leiste. Folien (F), Bilder (B) und
+  Gestalten (E) öffnen sich als Glas, Esc schließt sie. Zwölf Vorlagen
+  (Index, Paar, Aussage, Raster, Einzel, Farbe, Titel, Streifen,
+  Kontaktbogen, Diptychon, Zitat, Index-Liste), Raster mit Spalten, Rand und
+  Abstand, Schrift, Farbe je Folie, Palette aus den Bildern, Kopfzeile wie
+  Sort Office, Text direkt auf der Folie (T), Farbfelder. Ziehen und
+  Skalieren mit Smart Guides, ⌥ hält sie an. ⌘Z, ⌘⇧Z, ⌘D, ⌫, Pfeiltasten.
+- Präsentieren (P): Folien im Vollbild, ← → blättern, esc zurück.
+- Noch nicht drin: Ausgabe als PDF oder Bild, Ziehen aus dem Finder oder
+  Browser direkt aufs Board, Ausschnitt.
+
+## App 0.38.2 (Extension 3.29.3, Vorabversion)
+
+- Bibliothek und Works lassen sich nicht mehr verwechseln: Ein Works-Ordner
+  (oder einer, in dem Projekte mit `brief.md` liegen) öffnet sich nicht als
+  Bibliothek, eine Bibliothek nicht als Works-Ordner, auch keine der anderen
+  Bibliotheksplätze. Vorher landete ein Works-Ordner als Bibliothek auf dem
+  aktiven Platz und verdrängte die eigentliche Bibliothek aus der Liste.
+- Works: Ein Sonderzeichen kurz vor dem Ende eines Dateinamens (etwa „–“ in
+  „Angebot – Auftrag.eml“) brachte den Scan zum Absturz, die Projektliste
+  blieb leer.
+
+## App 0.38.1 (Extension 3.29.3, Vorabversion)
+
+- ⌘I öffnet Information, auch in Works; im Menü ≡ steht das Kürzel dahinter.
+- Information › Updates: Kanal Beta oder Vorab als Schalter (bisher nur per
+  ⌥-Klick auf die Versionsnummer) und „Version wählen“: lädt die Liste aus
+  Archiver-Releases und installiert jede Freigabe, auch eine ältere. Vorher
+  fragt ein Dialog. Sichtbar mit Vorab-Kanal oder nach ⌥-Klick auf die Version.
+- Build: Jede Vorabversion bleibt zusätzlich unter `vorab-X.Y.Z` liegen, damit
+  sie später wählbar ist, ab 0.38.0.
+- Works heißt jetzt „Works“ statt „WORKS“.
+
+## App 0.38.0 (Extension 3.29.3, Vorabversion)
+
+- Neu: Works, ein eigener Bereich für laufende Kundenprojekte, gleich nach
+  „Archiver“ in der Navigation. Einstellungen › Studio › Works, ab Werk aus
+  und nur in Vorabversionen schaltbar. Die Bibliothek bleibt unberührt.
+- Works liest einen eigenen Ordner: Kunde, Projekt, darin 00 Post, 01 Brief,
+  02 Recherche, 03 Layout, 04 Reinzeichnung, 05 Übergabe, beim Kunden
+  `_Assets`. Eigene Ordnernamen werden am Wort erkannt („Entwurf“, „Druckdaten“).
+- Projektliste mit Phase, Termin und offenen Rechnungen, nach dem nächsten
+  Termin sortiert, laufend oder abgeschlossen (`status` in `brief.md`).
+- Projekt: Übersicht mit neuesten Ständen, Recherche, Brief, Post und
+  Verlauf. Die Phase ist der höchste Phasenordner mit Inhalt; Archiver
+  verschiebt dafür nie eine Datei.
+- Stände: Fassungen einer Datei (V1, V2, KORR, RZ) in einer Reihe, Vergleich
+  mit Linie (V), „Neuer Stand“ kopiert mit der nächsten Nummer in denselben
+  Ordner (N), Vorschau für INDD, AI, PSD und PDF über Quick Look.
+- Post: Mails (.eml, .emlx) mit Betreff, Absender und Datum, Angebote und
+  Rechnungen mit Nummer und Betrag aus dem Dateinamen, „offen seit“, Summen,
+  „bezahlt“ per Klick (gemerkt in `Works/.archiver/works.json`).
+- Brief: `brief.md` lesen und in Works bearbeiten (Termin, Status, nächster
+  Schritt, Ansprechpartner). Neues Projekt legt alle Ordner und den Brief an.
+- Ablegen aus Finder oder Tray kopiert in die Phase des Reiters unter dem
+  Zeiger, ziehen aus Works nach Mail oder InDesign geht wie in Archiver.
+
+## App 0.37.3 (Extension 3.29.3)
+
+- Information › App: Feld „Name (Test)“. Ersetzt den Schriftzug „Archiver“
+  in der Navigation, auf Start- und Sperrbild, oben in Information und im
+  Fenstertitel, nur auf diesem Mac. Leer stellt „Archiver“ zurück.
+
+## Extension 3.29.3 (App 0.37.2)
+
+- ⌥-Klick auf ein Bild oder Objekt mit Link führt nicht mehr auf die nächste
+  Seite: Der Link wird ignoriert, das Bild kommt in die Markierung. Gilt auch
+  für Seiten, die schon beim Drücken weiterspringen.
+
+## Extension 3.29.2 (App 0.37.2)
+
+- Neues Icon: „Ar“ weiß auf Schwarz, abgerundet, wie das App-Icon. Vorher
+  ein Pfeil im blauen Kreis.
+
+## Extension 3.29.1 (App 0.37.2, 15.10.2026)
+
+- Mehrere Stellen markieren geht jetzt mit ⌥ statt ⌘: ⌥ + Markieren nimmt
+  Text dazu, ⌥-Klick ein Bild. ⌘-Klick gehört wieder ganz dem Browser und
+  öffnet Links im neuen Tab, auch auf Bildern.
+
+## App 0.37.2 (Extension 3.29.0)
+
+- PDF, Plakat: zwei neue Anordnungen neben dem Raster. Index setzt die
+  Bilder ungeschnitten in wechselnden Reihen, Paar zwei pro Reihe. Dazu
+  eine Kopfzeile mit Titel, Anzahl, Datum und Seite und ein Feld
+  „Beschreibung“ für die erste Seite.
+- PDF-Ersteller: „PDF sichern“ steht unten links über die ganze Breite mit
+  ⌘↩, „Abbrechen“ klein darunter.
+- Tray: mehrere Objekte wählen mit ⌘-Klick, ⇧-Klick oder ⇧ + Pfeilen.
+  Ziehen und ⌘C nehmen alle mit.
+- Tray beim Herausziehen: Statt fast unsichtbar zu werden, klappt er nach
+  oben auf eine Leiste zusammen. Sie zeigt, was du ziehst, der Rest des
+  Bildschirms bleibt frei. Nach dem Ablegen klappt er wieder auf.
+- Tray und Observer holen das Hauptfenster nicht mehr nach vorn, wenn
+  Archiver ausgeblendet war.
+
+## App 0.37.1 · Extension 3.29.0
+
+- Lightbox: Die Leiste unten ist 960 statt 600 px breit, lange Dateinamen
+  passen ganz hinein. Ist ein Name noch länger, wird er in der Mitte gekürzt,
+  Anfang und Endung bleiben sichtbar.
+
+## Extension 3.29.0 (App 0.37.0)
+
+- Bibliothek beim Ziehen wechseln: Gibt es mehrere Bibliotheken, steht beim
+  Ziehen eine Leiste mit ihren Namen über den Zonen. Namen anfahren, kurz
+  verweilen, und die Zonen zeigen die Ordner dieser Bibliothek. Gilt für
+  Bilder, Text und Instagram. ⇧ springt weiter zur nächsten.
+
+## Extension 3.28.4 (App 0.37.0)
+
+- Pinterest: Ziehen aus der Übersicht zieht jetzt das Bild statt des Pin-Links,
+  und Pinterest öffnet dabei nicht mehr „Bild zur Suche hochladen“. Dateien aus
+  dem Finder kann man weiter auf Pinterest ziehen.
+
+## App 0.37.0 · Extension 3.28.3
+
+- ⌘Z wirkt nur noch in der Bibliothek, in der der Schritt passiert ist. Nach
+  einem Wechsel (⌘1–4, Palette) konnte ein altes „Verschieben“ sonst Dateien
+  mit gleichem Pfad in der anderen Bibliothek treffen.
+- Zone löschen: Dateien ohne Vorschau (PSD, AI, INDD, ZIP …) wandern sichtbar
+  mit. Die Rückfrage nennt sie, „Zuletzt gelöscht“ zeigt sie als Karte und holt
+  sie zurück. Bisher waren sie dort unsichtbar.
+- Eine gewachsene Bibliothek öffnet sich auch über 20.000 Dateien weiter. Die
+  Größenprüfung gilt nur noch für Ordner, die neu zur Bibliothek werden.
+- Unsorted: Wer das Leeren nach 7 Tagen aus- und wieder einschaltet, bekommt
+  neue Fristen. Vorher wanderte alles länger Liegende sofort nach „Zuletzt
+  gelöscht“.
+- Vorabversionen: eigener Update-Kanal nur für Lukas' Tests (⌥-Klick auf die
+  Version unter ☰ › Information). Beta-Tester bekommen nur, was danach mit
+  „freigeben“ unverändert an alle geht.
+- Extension 3.28.3: „Board importieren“ auf Pinterest ist entfernt (keine
+  Massen-Downloads).
+- Beta-Anleitung nennt den Freischalt-Code und den richtigen Weg zum Feedback.
+
+## App 0.36.4 · Extension 3.28.2
+
+- Nichts wird mehr beim Sichern oder Importieren umbenannt. „Beim Ablegen
+  umbenennen“ ist entfallen, auch für die Extension. Umbenannt wird nur, wenn du
+  es im Umbenennen-Blatt bestätigst.
+- „Umbenennen …“ und der Namensvorschlag gibt es jetzt auch in geteilten
+  Libraries.
+- Die Lightbox hat ein Rechtsklick-Menü: Umbenennen …, Öffnen, Quelle, Im Finder
+  zeigen, Kopieren.
+
+## App 0.36.3 · Extension 3.28.2
+
+- Namensvorschlag inhaltlicher, alles lokal: Absender und Titel der Seite,
+  Wörter aus Bild- und Seitenadresse, bis zu drei Wörter und die Jahreszahl aus
+  dem Bild, bis zu drei Motive, Besonderes (Gruppe, Tier, Schwarzweiß,
+  Screenshot) und bis zu zwei Farben, höchstens 80 Zeichen.
+- Bildanalyse (Apple Vision) liest das Original statt der Vorschau, erkennt
+  zusätzlich Tiere und Gruppen und liest Bildtext auch auf Französisch,
+  Italienisch und Spanisch. Alle Bilder laufen einmal neu durch die Analyse (im
+  Hintergrund).
+
+## App 0.36.2 · Extension 3.28.2
+
+- Namensvorschlag gründlicher: Absender und Titel der Seite (Instagram: Name
+  und erste Wörter der Unterschrift), die größten Wörter im Bild, bis zu zwei
+  Motive statt einem, Hauptfarbe. Zu Allgemeines (Struktur, Material, Text)
+  fällt weg, höchstens 64 Zeichen. Neu analysierte Bilder liefern den Text mit
+  den größten Zeilen zuerst.
+- ⌘C mit mehreren Objekten legt auch die Dateien in die Zwischenablage, ⌘V fügt
+  alle ein (vorher nur das erste Bild). Vorhandenes wird nicht neu kopiert.
+
+## App 0.36.1 · Extension 3.28.2
+
+- Geteilte Bibliotheken: Einstellungen › Bibliothek zeigt „Unsorted nach 7 Tagen
+  gelöscht“ jetzt auch dort. Ab Werk aus; bei „An“ gelten Hinweise und
+  Aufräumen wie in einer eigenen Bibliothek.
+
+## App 0.36.0 · Extension 3.28.2
+
+- Einstellungen › Dateinamen: ein Schema für einheitliche Namen. Fünf fertige
+  Vorlagen (Datum_Zone_Nr, Zone_Nr, Datum_Quelle_Nr, Zone_Inhalt) und ein
+  eigenes Schema aus Bausteinen mit Trenner, Datumsformat, Kleinschreibung und
+  Präfix. Ab Werk bleibt jeder Name, wie er ist.
+- „Beim Ablegen umbenennen“: neue Objekte bekommen das Schema gleich, auch
+  über die Extension.
+- Aufräumen: Auswahl › Rechtsklick › „Umbenennen …“ zeigt die Liste alt → neu.
+  Uneinheitliche Namen (IMG_…, Bild (3), Screenshot …) sind markiert, einzelne
+  Namen lassen sich ändern, Häkchen nehmen Objekte heraus.
+- Namensvorschlag aus dem Inhalt (Seitentitel, erkanntes Motiv, Farbe) in der
+  Info-Spalte. Er gilt erst, wenn du „Übernehmen“ drückst. Alles läuft lokal.
+- Rechtsklick › „Ablegen in …“ der Extension sichert wieder (3.28.2).
+- Unsorted leert sich nach 7 Tagen in jedem Ordner namens Unsorted.
+- Vier statt drei Bibliotheken (⌘4), dazu „Neue Bibliothek…“ im Finder-Dialog.
+
+## Vorabstand 0.35.1 (nicht veröffentlicht, in 0.36.0 aufgegangen)
+
+- Extension: Rechtsklick › „Ablegen in …“ sichert wieder. Chrome beendet die
+  Extension im Hintergrund nach kurzer Ruhe, danach fand der Klick sein Ziel
+  nicht mehr. Das Ziel steht jetzt im Menüeintrag selbst.
+- Unsorted leert sich nach 7 Tagen in jedem Ordner namens Unsorted, auch wenn
+  er selbst angelegt, klein geschrieben, nummeriert (00_Unsorted) oder eine
+  Unterzone ist. Bisher zählte nur die genaue Schreibweise „Unsorted“.
+- Vier statt drei Bibliotheken, ⌘4 schaltet auf die vierte.
+- Einstellungen › Bibliothek › „Neue Bibliothek…“: Ort und Name im Finder
+  wählen, Archiver legt den Ordner an und öffnet ihn.
+
+## Extension 3.28.1 (14.10.2026)
+
+- Mehrfachmarkierung: Wer nach dem Markieren mit ⌘ die zuletzt markierte
+  Stelle zieht, bekommt jetzt alle Stellen auf die Textkarte. Bisher hob der
+  Griff auf die laufende Markierung die früheren Stücke auf.
+
+## App 0.35.0 (14.10.2026)
+
+- Abschnitte: Objekte lassen sich jetzt von einem Abschnitt in einen anderen
+  ziehen, auch in einem Unterordner. Der Abschnitt der losen Objekte legt
+  direkt in den offenen Ordner.
+- Einstellungen › Ansicht › „Active Zones beim Ziehen“: wahlweise
+  „Angeschnitten“ wie in der Extension. Die Karten ragen erst unten herein und
+  fahren hoch, wenn der Zeiger hineinkommt. Ab Werk bleibt es „Ganz“.
+- Unsorted ist immer die Zone, die nach 7 Tagen unter „Zuletzt gelöscht“
+  wandert. Eine andere Zone lässt sich dafür nicht mehr wählen, nur an oder
+  aus. Unsorted lässt sich nicht umbenennen.
+
+## Extension 3.28.0 (14.10.2026)
+
+- Beim Ziehen hängt das Bild oder Video im eigenen Format am Zeiger, eckig
+  statt als abgerundetes Quadrat. Videos zeigen ihr Vorschaubild statt eines
+  grauen Kastens.
+
+## Extension 3.27.1 (14.10.2026)
+
+- Instagram-Feed: Beim Ziehen eines Videos hängt sofort das Video am Zeiger,
+  nicht mehr der Link „Ton stummgeschaltet“. Gesichert wird die MP4 mit
+  Beitrag und Account als Quelle.
+- Instagram: Beitragsdaten, die beim Laden der Seite schon da sind, gehen
+  nicht mehr verloren, wenn die Extension etwas später startet.
+
+## Extension 3.27.0 (14.10.2026)
+
+- Mehrere Stellen markieren: Mit gedrückter ⌘-Taste weiteren Text markieren
+  oder Bilder anklicken (nochmal anklicken nimmt sie raus). Ein Zug in eine
+  Zone sichert alles: nur Text wird eine Textkarte, Text und Bild wird Bild
+  mit Bildtext, nur Bilder werden einzeln gesichert. Klick daneben oder Esc
+  hebt die Markierung auf. ⌘-Klick auf ein Bild in einem Link öffnet dabei
+  keinen neuen Tab.
+- Instagram-Feed: Videos lassen sich jetzt auch dort ziehen. Bisher lag ein
+  großer Knopf („Ton stummschalten“) über dem Video und es entstand eine
+  Textkarte mit diesem Text.
+
+## Extension 3.26.0 (14.10.2026)
+
+Instagram ohne eigene Anfragen an Instagram (zum Testen).
+
+- Archiver fragt Instagrams interne Schnittstelle nicht mehr ab. Stattdessen
+  liest die Extension passiv mit, was Instagram selbst an Beitragsdaten in den
+  Browser lädt (Feed, Beitrag, Reels, Stories), und nimmt daraus Bild oder
+  Video in Originalgröße, Videos als MP4 mit Ton.
+- Fehlen die Daten für einen Beitrag, wird das angezeigte Bild in der größten
+  Variante der Seite gesichert, bei Videos wie bisher ein Standbild.
+- Kontoname für die Quelle notfalls aus dem Kopf des Beitrags.
+- Nur Adressen von Instagrams Bildservern werden übernommen.
+
+## App 0.34.2 (14.10.2026)
+
+- Liste: Text- und Notizkarten stehen klein links wie die Bilder, nicht mehr
+  über die ganze Breite. Im Namen steht der Anfang des Texts.
+- Liste: Klick auf Name, Format, Maße, Größe, Quelle oder Gesichert sortiert
+  danach, nochmal umgekehrt, ein drittes Mal wieder wie in der Zone.
+
+## App 0.34.1 (14.10.2026)
+
+- „(Stände)“ ist wieder raus: kein Bündeln, keine Stapel, keine Stände-Leiste
+  und kein Vergleich in der Lightbox. Raster, Original und Lightbox sind wie
+  in 0.33.2.
+- Die Ansicht „(Liste)“ bleibt, jetzt auch in „Zuletzt gelöscht“ mit Namen
+  und Angaben.
+
+## App 0.34.0 (14.10.2026)
+
+- Neue Ansicht „(Liste)“ neben Raster und Original: Zeilen mit Bild,
+  Dateiname, Format, Maße, Größe, Quelle und Datum. Die Größenstufen setzen
+  die Bildhöhe.
+- Neuer Schalter „(Stände)“ in Raster und Liste: Versionen einer Datei werden
+  am Dateinamen erkannt (v2, final, korr, entwurf, Datum, Kopie …) und
+  gebündelt. Nur in der Ansicht, keine Datei wird umbenannt.
+  - Raster: Stapel mit dem neuesten Stand oben, die Zahl klappt alle Stände
+    alt → neu in einem Band auf.
+  - Liste: neuester Stand vorne, „(n ältere)“ klappt die älteren darunter auf.
+  - Lightbox: Leiste mit allen Ständen, „Vergleichen“ (V) legt zwei Stände
+    übereinander, eine Linie zum Ziehen (oder ←/→).
+
+## App 0.33.2 (14.10.2026)
+
+- Unsorted steht auch in Bibliotheken mit eigener Reihenfolge vorn als erste
+  Active Zone, wenn es neu dazukommt. Wer es danach verschiebt, behält seinen
+  Platz.
+
+## App 0.33.1 (14.10.2026)
+
+- Unsorted: kurz „Nach 7 Tagen gelöscht“, in der Kopfzeile, im Index und
+  jetzt auch auf der Zonenkarte in der Übersicht.
+- Einstellungen › Bibliothek: wählbar, welche Zone sich nach 7 Tagen leert
+  (ab Werk Unsorted, oder „Aus“).
+- Unsorted entsteht mit jeder Bibliothek, auch in einem bestehenden
+  Ordnersystem, und steht als erste Zone vorn.
+- Bild mit Text: farbiger Punkt unten rechts statt Eselsohr.
+
+## App 0.33.0 (14.10.2026)
+
+Unsorted zeigt seine Frist, Bildtext ruhiger im Raster.
+
+- Unsorted: Die Kopfzeile sagt nur noch, dass hier nach 7 Tagen aufgeräumt
+  wird. Im Index steht „Leert sich nach 7 Tagen“ hinter dem Namen. Die letzten
+  zwei Tage zeigt jedes Objekt oben links „noch n T.“ in Rot.
+- Bild mit Text: kein Textauszug mehr unter dem Bild, stattdessen ein
+  Eselsohr unten rechts in der Farbe der Textkarte. Der Chip „(+ Text)“
+  entfällt.
+- ⌘D: Unter „Bildtext“ lässt sich die Farbe der Textkarte wählen, wie bei
+  Textkarten und Notizen.
+
+## App 0.32.1 · Extension 3.25.3 (14.10.2026)
+
+Leiste wie in der App, Ziehen überall.
+
+- Zonenleiste am ganzen Mac ist ab Werk aus; einschalten unter
+  Einstellungen › Tray. Auch bei bisherigen Installationen aus, bis man sie
+  selbst wieder einschaltet.
+- Extension 3.25.1: Die Seite scrollt beim Ziehen an den unteren Rand nicht
+  mehr unter der Leiste weg, und Ablagen der Seite darunter greifen nicht mehr
+  mit. Auch beim Ziehen von Text und auf Instagram fährt die Leiste jetzt aus
+  dem Streifen hoch.
+- Extension 3.25.2: Zonenkarten genau wie in der Leiste der App (gestrichelter
+  Ring statt Outline, „Downloads“ in derselben Schrift). Streifen 90 statt
+  30 px, in App und Extension: dieselbe Karte, die unten hereinragt. Die
+  Leiste steht beim ersten Ziehen sofort (lädt nicht erst nach) und kommt
+  früher auf langsamen Seiten. Nach einem Update zeigt ein noch offener Tab
+  keine alte Leiste mehr.
+- Extension 3.25.3: Ziehen klappt auch auf Seiten, die Maus- und
+  Ziehen-Ereignisse selbst abfangen (Archiver hört jetzt als Erstes zu, am
+  Fenster statt am Dokument). Instagram-Stories: gesichert wird die
+  Originaldatei (Foto oder Video) aus den Mediendaten statt eines Standbilds.
+
+## App 0.32.0 · Extension 3.25.0 (14.10.2026)
+
+Ablegen, ohne dass etwas im Weg ist.
+
+- Zonenleiste beim Ziehen, am Mac und in der Extension im Browser: Sie erscheint erst als 30 px schmaler Streifen am unteren Rand, Nummer und Name in einer Zeile. Darüber bleibt alles frei, etwa das Eingabefeld eines Chats. Fährt der Zeiger in den Streifen, kommt die volle Leiste; weiter oben wird sie wieder Streifen.
+- ⌘V legt die Zwischenablage in die offene Zone oder ihren Ordner: Dateien aus dem Finder, kopierte Bilder und Screenshots, Text als Textkarte (benannt nach seinen ersten Wörtern). Auf der Startseite landet es in Unsorted. Im Tray mit ⌘V in der offenen Zone, ⌘C kopiert dort das gewählte Objekt.
+- Unsorted räumt sich selbst auf: Was 7 Tage dort liegt, kommt unter „Zuletzt gelöscht“ und lässt sich von dort noch 7 Tage wiederherstellen. Die Frist zählt ab dem Tag, an dem es in Unsorted auftaucht, für alles Vorhandene also ab dem ersten Start mit 0.32. Geteilte Bibliotheken bleiben unberührt. Der Kopf von Unsorted sagt es dazu.
+- Tray: Unterordner einer Zone stehen als Karten über den Objekten, ↵ oder Klick öffnet, ⌫ geht eine Ebene hoch. Der gestrichelte Ring der ersten Reihe wird oben nicht mehr abgeschnitten. Active Zones sind so hoch wie die Karten im Index.
+- Neue Unterzeile: „A Visual Library for Creative Research“ im Startbild, „A visual library for creative research“ bzw. „Eine visuelle Bibliothek für kreative Recherche“ im Info-Text von App und Extension.
+
+## App 0.31.2 (14.10.2026)
+
+Menschen finden.
+
+- Gesichter und Personen erkennt die App jetzt mit einer eigenen Erkennung. Bisher kamen sie nur aus der allgemeinen Bilderkennung, die Menschen auf Plakaten, in Grafiken und Ausschnitten oft gar nicht meldet. Ein großes Gesicht gilt zusätzlich als Porträt.
+- „Frau“, „Mann“ und „Kind“ finden Bilder mit Personen. Ein Geschlecht erkennt macOS nicht, daher findet „Frau“ alle Personen. „Kopf“ und „Gesicht“ finden Gesichter.
+- Alle Bilder laufen dafür einmal neu durch die Erkennung. Bis sie durch ist, steht in der Filterzeile „Bilderkennung: noch n von m“.
+
+## App 0.31.1 (14.10.2026)
+
+Genauere Suche. App und Tray suchen jetzt gleich.
+
+- Gesucht wird nach ganzen Wörtern und ihren Formen: „Kreise“, „Kreisen“ und „Kreis“ finden dasselbe, „rote“ findet Rot. Umlaute gehen auch als ae/oe/ue, ß als ss.
+- Keine Treffer mehr mitten im Wort: „rot“ findet weder „Brot“ noch „Protokoll“. Wortanfänge zählen nur beim Wort, das du gerade tippst.
+- Wortteile nur in Namen, etwa „Entwurf“ in „Plakatentwurf“. Dateinamen werden an Großbuchstaben und Ziffern getrennt („KonzertPlakat2024“).
+- Erkannte Motive zählen erst ab 50 % Sicherheit, in Suche und Motiv-Filter. Bisher reichten 30 %, daher viele falsche Treffer bei „Mensch“, „Pflanze“ und Ähnlichem. Bilder mit älterer Analyse werden dafür einmal im Hintergrund neu erkannt.
+- Text im Bild zählt nur als ganzes Wort, Füllwörter wie „mit“ oder „und“ werden übersprungen.
+- Treffer im Namen stehen vor Treffern im Bildinhalt, die ganze Suche im Namen ganz vorn. Der Tray sortiert jetzt auch nach Relevanz.
+
+## App 0.31.0 · Extension 3.24.0 (13.10.2026)
+
+Stabilitäts-Release nach dem Prüfbericht zu 0.30.1. Keine neuen Funktionen, dafür weniger Datenverlust, weniger stille Fehler und mehr Tempo bei großen Bibliotheken.
+
+Sicherheit:
+- Die Extension reagiert nur noch auf echte Eingaben. Eine Webseite kann kein Overlay öffnen, keine Zonenleiste einblenden und nichts in deine Bibliothek sichern. Das Overlay ist für die Seite unsichtbar (geschlossenes Shadow DOM).
+- Die Brücke übernimmt nur Dateien aus Downloads/Archiver-Transfer, nie einen beliebigen Pfad auf dem Mac. Zonennamen mit „..“ werden abgelehnt.
+- Rechte wie Zonen anlegen oder Galerie lesen hat nur noch die Seite selbst, nicht eingebettete Frames.
+
+Externe Zonen:
+- Ein abgezogenes Laufwerk oder ein umbenannter Projektordner zeigt die Zone als „offline“, statt ihre Objekte samt Bildtexten aus der Bibliothek zu löschen. Dasselbe gilt für Ordner, die gerade nicht lesbar sind.
+- Bilder aus externen Zonen erscheinen wieder in App und Observer.
+- Systemordner, ganze Laufwerke und ineinanderliegende Zonen werden abgelehnt, mit Hinweis.
+
+Dateien:
+- Verschieben auf ein anderes Laufwerk kopiert erst vollständig und löscht dann das Original. Bricht es ab, bleibt das Original unangetastet.
+- metadata.json, zones.json und die Einstellungen werden atomar geschrieben, ein Absturz hinterlässt keine halbe Datei.
+- Zitat-Text, Löschen mehrerer Objekte und Umbenennen einer Zone nur in Groß/Kleinschreibung funktionieren zuverlässig. Eigene Reihenfolge, Standard-Zone und Hot Zones ziehen beim Umbenennen mit.
+- „Zuletzt gelöscht“ greift nur noch auf Dateien im eigenen Papierkorb zu.
+- Jede Bibliothek merkt sich ihre eigene Zonen-Reihenfolge. Bisher übernahm eine Bibliothek beim Wechsel die Reihenfolge der vorigen.
+
+Fehler sichtbar:
+- Protokoll unter ~/Library/Logs/Archiver/archiver.log.
+- Fehler beim Einlesen erscheinen als Hinweis, statt still zu verschwinden.
+- Die Zonenleiste am Mac sagt „Gesichert“ erst, wenn es gesichert ist, sonst „Nicht gesichert“ mit Grund.
+- Notizen zeigen „Nicht gesichert“ und versuchen es erneut.
+- Eine beschädigte Datenbank wird beiseitegelegt und neu aufgebaut. Kaputte Einstellungen werden als settings.json.broken aufgehoben.
+- Ein Bild, an dem die Vorschau abstürzt, legt den Vorschau-Dienst nicht mehr lahm.
+
+Tempo:
+- Die Extension fragt Zonen und Galerie seltener ab, die App liest dafür nicht mehr jedes Mal den ganzen Ordner ein. Galerie-Vorschauen laden erst, wenn sie sichtbar werden.
+- Die Startseite rechnet „zuletzt gesichert“ einmal statt pro Zeile. Lange PDFs geben Speicher frei. Verschieben und Löschen blockieren die Oberfläche nicht mehr.
+
+Extension 3.24.0:
+- Antwortet die App nicht, obwohl sie schon verbunden war, sagt die Extension, dass das Bild in Downloads liegt, statt es still dort abzulegen.
+- Nicht übernommene Übergaben werden aus Archiver-Transfer geräumt.
+- Nach einem Extension-Update sagt die Seite „Bitte neu laden“, statt nichts zu tun.
+- Das Rechtsklickmenü zeigt auch leere Ordner.
+
+Veröffentlichen:
+- Das Auto-Update an alle Tester geht nur noch raus, wenn beim Start des Workflows „publish“ angehakt ist. Alle Actions sind auf feste Commits gepinnt.
+
+## App 0.30.1 · Extension 3.23.0 (13.10.2026)
+
+Bildtext in der Lightbox:
+- Der Bildtext steht auf einer farbigen Karte wie die Textkarten. Einstellungen › Aussehen wählt die Form: Rückseite (Standard, das Bild wird mit T, „Text“ oder dem Eselsohr unten rechts gewendet) oder Doppelseite (Karte links neben dem Bild).
+- Bildtext und Textkarten lassen sich in der Lightbox direkt editieren.
+- Der Hintergrund der Lightbox verschwimmt, kein Text aus dem Raster scheint mehr durch.
+
+Sichern:
+- Ein Bild, das schon in der Bibliothek liegt, wandert beim erneuten Sichern in die gewählte Zone und übernimmt den markierten Text. Bisher blieb es still in seiner alten Zone.
+- Die Adresse der offenen Seite in eine Zone gezogen: Linkkarte, dahinter die ganze Seite offline (MHTML). „Gesichert“ in der Lightbox öffnet sie in Chrome.
+
+Externe Zonen:
+- Einstellungen › Bibliothek › „Ordner außerhalb der Bibliothek“: ein Projektordner wird zur Zone, die Dateien bleiben, wo sie sind. ✕ löst nur die Zone, nie den Ordner.
+
+## App 0.30.0 · Extension 3.22.0 (13.10.2026)
+
+Handbuch:
+- ≡ › Handbuch zeigt alle Funktionen von App, Extension, Observer und Tray samt Tastenkürzeln, auf Deutsch und Englisch. Dasselbe steht unter archiver-app.com/manual.
+
+Extension-Hinweis:
+- Ist die Extension veraltet, steht oben rechts „Extension 3.22.0 ist da (Laden)“. Hat sich nach zwei Tagen noch keine gemeldet, steht dort „Keine Extension verbunden“.
+- Einstellungen › Extension zeigt die verbundene Version. Der erste Start wartet, bis sich die Extension wirklich meldet.
+
+Verdichtet:
+- Die Navigation steht fest oben links. Ordner in einer Zone erscheinen nur noch als Karten, ⌘R lädt sofort neu.
+- Der Startton ist standardmäßig aus.
+- Video und Audio beim Öffnen abspielen hat einen gemeinsamen Schalter.
+- „Unterordner als Zonen“ entfällt, Unterordner erscheinen als Ordner in der Zone.
+- Das Feld „Notiz“ in den Details ist im Bildtext aufgegangen. Vorhandene Notizen werden an den Bildtext angehängt. Suche, PDF („Mit Bildtext“) und Paket lesen den Bildtext.
+- Textkarten und Notizen haben eine gemeinsame Farbreihe: Rot, Grün, Violett, Cyan, Gelb, Weiß und Schwarz.
+
+Aussehen:
+- Regler „Glas“ für die Fenster von App, Tray und Observer. Der Observer ist jetzt ebenfalls ein Glasfenster.
+- Regler „Zonen beim Ziehen“ für die Karten in App, Zonenleiste und Extension. Alle Regler laufen in 5-%-Schritten.
+- Die Ecken aus Einstellungen › Aussehen gelten auch in der Zonenleiste und in der Extension.
+
+Extension 3.22.0:
+- Meldet der App ihre Version.
+- Hell mit den Werten der App, Ecken und Zonen-Deckkraft wie in der App.
+- Enthält 3.21.1: Bilder mit Kommas in der Adresse (Substack, Cloudinary) laden in voller Größe.
+
+## Extension 3.21.1 (13.10.2026, lokal, erscheint mit der nächsten App)
+
+- Bilder mit Kommas in der Adresse (Substack, Cloudinary) laden wieder in voller Größe. Bisher brach die Bildadresse am Komma ab und der Download schlug fehl, etwa beim Sichern von Bild und markiertem Text.
+
+## App 0.29.1 · Extension 3.21.0 (13.10.2026)
+
+Zuletzt gelöscht:
+- Doppelklick, Leertaste oder Enter öffnen die Lightbox. Dort gibt es „Wiederherstellen“ und „Sofort löschen“.
+- ⌫ fragt nach, bevor etwas endgültig in den Papierkorb des Macs geht. Das gilt auch für den Chip und das Menü.
+
+Notizen:
+- „+“ bei den Verknüpfungen zeigt zuerst alle Zonen als kleine Karten wie im Tray. Klick öffnet die Zone, „‹ Zonen“ führt zurück.
+
+Extension:
+
+- Bild und Text zusammen markiert und gesichert (Ziehen oder Rechtsklick): Gesichert wird das Bild, der markierte Text wird sein Bildtext. Bisher entstand nur eine Textkarte.
+
+## App 0.29.0 (13.10.2026)
+
+Bildtext:
+- Text, den man beim Sichern auf der Seite markiert, wird zum Bildtext des Bildes (Extension).
+- In der Info gibt es das Feld „Bildtext“. ⌘V mit Text auf ein gewähltes Bild setzt ihn ebenfalls.
+- In der Ansicht „Original“ zeigt „(+ Text)“ Kennung, Bildtext und Notiz unter den Bildern.
+- In der Lightbox steht der Bildtext links neben dem Bild, unten bündig. „Text“ oder T blendet ihn aus.
+
+Notizen:
+- Neue Notiz per Rechtsklick in eine Zone oder ⌘⇧N. Sie liegt als .md-Datei in der Zone.
+- Im Raster ein Blatt mit Titel und Text, in der Lightbox schreibt man direkt darauf. Gesichert wird von selbst, der Titel wird beim Verlassen zum Dateinamen.
+- Farbe über die Punkte in der Leiste: Papier, Gelb, Rot, Cyan, Schwarz.
+- Links neben dem Blatt stehen die verknüpften Objekte. „+“ sucht in der ganzen Bibliothek, Klick öffnet das Objekt.
+- Finden hat den Filter „(Notizen)“. .md-Dateien, die schon in Zonen liegen, erscheinen jetzt ebenfalls als Notiz.
+
+## App 0.28.0 (13.10.2026)
+
+Tray (bisher „Palette“):
+- Heißt jetzt Tray. Unten links steht „Tray“, die Tasten stehen rechts.
+- Hell/Dunkel und die Ecken aus Einstellungen › Aussehen gelten auch im Tray, samt Fensterecke.
+- Öffnen holt das Archiver-Fenster nicht mehr nach vorne, auch wenn es nur hinten lag. Nach dem Schließen liegt es wieder hinten.
+
+Aussehen:
+- Glas und Grundfarbe des Trays sind jetzt der Standard fürs ganze Fenster (Dunkel 72 %, Hell 78 %). Der Regler in Aussehen startet auf diesem Wert.
+- Die Leiste in der Lightbox hat die Maße der Navigation oben.
+- Im schmalen Fenster stehen die Active Zones 2 × 2, wie der Index.
+
+Zonen und Ordner:
+- Zuletzt gelöscht zeigt dasselbe Raster wie jede Zone, mit Größenstufen. Zone und Resttage stehen im Badge.
+- Unterordner haben ⋯ und Rechtsklick: Umbenennen, Im Finder zeigen, Löschen.
+- Ordnerkarten lassen sich auf andere Ordnerkarten ziehen und liegen dann darin.
+- Lightbox: Klick neben das Objekt schließt sie.
+
+Einstellungen:
+- Tray, Observer und Extension haben je einen eigenen Bereich.
+
+## App 0.27.0 (12.10.2026)
+
+Entfernt:
+- Getting Started (Tour) und das Farbschema Salbei. Wer Salbei hatte, sieht wieder das Standard-Schema.
+
+Zonen und Ordner:
+- Zuletzt gelöscht: Gelöschte Objekte und Zonen liegen 7 Tage in der Bibliothek und lassen sich zurückholen (Doppelklick, Rechtsklick oder „Wiederherstellen“). Danach gehen sie in den Papierkorb des Macs. Zu finden als letzte Zeile im Index und im ≡-Menü.
+- Der Titel einer Zone steht oben fest und springt nicht mehr, wenn man in einen Unterordner geht.
+- Die Ordner-Chips links oben filtern nur noch, Titel und Ordnerkarten bleiben stehen. Die Karten rechts führen weiter in den Ordner.
+- Rechtsklick in eine Zone: „Neuer Unterordner“, auf Objekte: „Neuer Unterordner mit Auswahl“. Der Ordner heißt erst „Neuer Ordner“ und lässt sich gleich umbenennen. Leere Ordner haben jetzt auch eine Karte.
+- Objekte lassen sich auf die kleinen Ordnerkarten ziehen und landen im Unterordner. ⌘Z holt sie genau zurück.
+- Ganze Ordner aus dem Finder in die App ziehen: in der Übersicht wird daraus eine Zone, in einer Zone oder auf einer Karte ein Unterordner, jeweils mit allen Unterordnern.
+- Videos zeigen beim Hover eine kurze Vorschau aus acht Bildern.
+- Fehler behoben: In der Übersicht „Karten“ lässt sich eine Zone aus dem Index wieder auf eine Active Zone ziehen (und umgekehrt).
+
+Palette:
+- Textkarten erscheinen in ihrer Farbe statt als leere Fläche.
+- ⌘1–3 wechselt die Bibliothek, wie in der App.
+- Leertaste zeigt das gewählte Objekt groß, innerhalb der Palette. ←→ blättern, Leertaste oder esc schließen.
+
+## App 0.26.1 (12.10.2026)
+
+- Palette aus InDesign: Rahmen markieren, ⌥ Space, Doppelklick oder ↵ auf ein Bild – es landet verknüpft im Rahmen, proportional gefüllt und zentriert. Ohne markierten Rahmen liegt es im Platzieren-Cursor. Beim ersten Mal fragt macOS, ob Archiver InDesign steuern darf.
+- esc schließt die Palette und holt das Programm von vorher zurück, nicht mehr das Archiver-Fenster.
+- Bild aus dem Finder öffnen: nur der Observer erscheint, das Archiver-Fenster bleibt zu bzw. hinten.
+
+## App 0.26.0 (12.10.2026)
+
+Archiver am ganzen Mac, auch wenn das Fenster zu ist:
+- Palette per ⌥ Space in jedem Programm: Active Zones als Karten wie in der App, Suche über Zonen und Objekte, Zone mit 1–4 wechseln. Objekte zieht man direkt heraus, etwa in einen InDesign-Rahmen; dabei wird die Palette fast unsichtbar und lässt Klicks durch. ↵ kopiert, ⌘↵ zeigt im Finder, esc schließt.
+- Zonenleiste beim Ziehen: Wer irgendwo Dateien zieht (Finder, Schreibtisch, Mail …), sieht unten die Active Zones 01–04. Loslassen sichert die Dateien in der Zone.
+- Einstellungen › Extension & Observer › Am ganzen Mac: Kürzel wählen (⌥ Space, ⌃⌥ Space, ⇧⌥ Space oder aus) und die Leiste an- oder ausschalten.
+- Das Fenster schließen beendet Archiver nicht mehr, es läuft für Palette und Leiste weiter. ⌘Q beendet.
+
 ## App 0.25.0 (12.10.2026)
 
 - Neues Hell: neutrales Hellgrau (#F4F4F4) ohne Farbstich, alle Grautöne ohne Sättigung. Weiße Bilder behalten ihre Kante.

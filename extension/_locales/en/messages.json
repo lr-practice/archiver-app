@@ -1,18 +1,18 @@
 {
   "extName": {
-    "message": "Archiver"
+    "message": "Archery"
   },
   "extDescription": {
-    "message": "Save images by dragging them into drop zones at the bottom of the screen. Sort, browse and find them again."
+    "message": "Find it anywhere, keep it in one place: drag an image onto a zone, and it lands as a file on your Mac, with its source."
   },
   "actionTitle": {
-    "message": "Archiver"
+    "message": "Archery"
   },
   "commandToggle": {
     "message": "Show or hide the overlay"
   },
   "dashboardTitle": {
-    "message": "Archiver — Overview"
+    "message": "Archery — Overview"
   },
   "fullView": {
     "message": "Full view"
@@ -80,7 +80,7 @@
     "message": "Top to bottom = left to right along the screen edge. Paths like <code>Clients/Project-A</code> work too. A zone named <code>Downloads</code> saves without a subfolder (<a>change downloads folder</a>)."
   },
   "shortcutHintHtml": {
-    "message": "Shows the overlay on the current page. Chrome's own Archiver shortcut works as well, you can change it under <a>Extensions › Keyboard shortcuts</a>."
+    "message": "Shows the overlay on the current page. Chrome's own Archery shortcut works as well, you can change it under <a>Extensions › Keyboard shortcuts</a>."
   },
   "noImagesYet": {
     "message": "No images yet."
@@ -149,10 +149,10 @@
     "message": "Export failed"
   },
   "exportHint": {
-    "message": "Saves archiver-export.json to your Downloads. The Archiver app uses it to import every image with its source into its library."
+    "message": "Saves archiver-export.json to your Downloads. The Archery app uses it to import every image with its source into its library."
   },
   "appConnected": {
-    "message": "Connected to the Archiver app · $LIB$",
+    "message": "Connected to the Archery app · $LIB$",
     "placeholders": {
       "lib": {
         "content": "$1"
@@ -164,6 +164,26 @@
   },
   "appSaveFailed": {
     "message": "Could not hand the image to the app"
+  },
+  "appOfflineSaved": {
+    "message": "Archery is not responding. Saved in $FOLDER$ instead of the library",
+    "placeholders": {
+      "folder": {
+        "content": "$1"
+      }
+    }
+  },
+  "appNotRunning": {
+    "message": "Archery is not running. Open the app and drop again"
+  },
+  "appNoLibrary": {
+    "message": "Archery has no library set up yet"
+  },
+  "safariNoDownloads": {
+    "message": "In Safari everything goes to the library, not to Downloads"
+  },
+  "extensionReloaded": {
+    "message": "Archery was updated. Please reload the page."
   },
   "appZoneFailed": {
     "message": "Could not create the zone"
@@ -186,7 +206,7 @@
     "message": "1 image"
   },
   "aboutClaim": {
-    "message": "A visual library for creatives. Collect, sort and look at your references, in zones instead of folders."
+    "message": "A visual library for creative research. Collect, sort and look at your references, in zones instead of folders."
   },
   "settingsLead": {
     "message": "Zones, keyboard shortcut and the connection to the app."
@@ -198,13 +218,13 @@
     "message": "Save"
   },
   "infoSaveText": {
-    "message": "Drag an image on any web page and drop it on a zone. Archiver fetches the largest available version."
+    "message": "Drag an image on any web page and drop it on a zone. Archery fetches the largest available version."
   },
   "infoStoreTitle": {
     "message": "Store"
   },
   "infoStoreText": {
-    "message": "With the Archiver app the image goes into your library, otherwise into a folder in your Downloads."
+    "message": "With the Archery app the image goes into your library, otherwise into a folder in your Downloads."
   },
   "infoViewTitle": {
     "message": "View"
@@ -235,9 +255,6 @@
   },
   "infoKeyBack": {
     "message": "Back and close"
-  },
-  "importBoard": {
-    "message": "Import board"
   },
   "more": {
     "message": "More"
@@ -302,7 +319,7 @@
     "message": "Active zones"
   },
   "openApp": {
-    "message": "Open Archiver"
+    "message": "Open Archery"
   },
   "openAppTitle": {
     "message": "Everything else lives in the app: zones, sorting, search"

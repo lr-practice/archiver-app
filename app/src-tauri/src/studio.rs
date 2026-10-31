@@ -8,9 +8,9 @@
 //! damit nichts an der Datenbank hängt.
 
 use crate::library::{err, now_ms, Item, Library, Source, META_DIR};
-use rusqlite::params;
+use rusqlite::{params, OptionalExtension};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -37,6 +37,15 @@ pub struct Note {
     /// Farbe einer Textkarte (red, green, violet, cyan, yellow, white)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tone: Option<String>,
+    /// Bildtext (0.29): Credits oder Unterschrift, wie unter einem Bild in einem Magazin
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub caption: Option<String>,
+    /// Notiz-Objekt (0.29): verknüpfte Objekte als Hashes
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub links: Option<Vec<String>>,
+    /// Farbmarke in der Übersicht (0.41.0): gehört zu einer Auswahl in dieser Farbe
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mark: Option<String>,
     #[serde(default)]
     pub updated_at: i64,
 }
@@ -50,13 +59,33 @@ pub struct NotePatch {
     pub license: Option<String>,
     pub internal: Option<bool>,
     pub tone: Option<String>,
+    pub caption: Option<String>,
+    pub links: Option<Vec<String>>,
+    /// Farbmarke, leer heißt keine
+    pub mark: Option<String>,
 }
 
 /// Erlaubte Farben einer Textkarte; alles andere heißt „keine eigene Farbe“.
-pub const TONES: [&str; 6] = ["red", "green", "violet", "cyan", "yellow", "white"];
+pub const TONES: [&str; 7] = ["red", "green", "violet", "cyan", "yellow", "white", "black"];
+
+/// Verknüpfungen einer Notiz: als JSON-Liste in der Datenbank, leer heißt keine
+pub(crate) fn links_json(links: &Option<Vec<String>>) -> Option<String> {
+    links.as_ref().filter(|l| !l.is_empty()).and_then(|l| serde_json::to_string(l).ok())
+}
+
+pub(crate) fn links_of(json: Option<String>) -> Option<Vec<String>> {
+    json.and_then(|j| serde_json::from_str::<Vec<String>>(&j).ok()).filter(|l| !l.is_empty())
+}
 
 pub fn clean_tone(t: Option<&str>) -> Option<String> {
     t.filter(|t| TONES.contains(t)).map(String::from)
+}
+
+/// Farbmarken: die fünf Farben der Textkarten ohne Weiß und Schwarz
+pub const MARKS: [&str; 5] = ["red", "green", "violet", "cyan", "yellow"];
+
+pub fn clean_mark(t: Option<&str>) -> Option<String> {
+    t.filter(|t| MARKS.contains(t)).map(String::from)
 }
 
 /// Inhalt von metadata.json und den Personen-Dateien.
@@ -179,12 +208,12 @@ impl Library {
         for (hash, n) in notes {
             let rows = conn
                 .execute(
-                    "INSERT INTO note (hash, note, credit, license, internal, added_by, updated_at, tone)
-                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
+                    "INSERT INTO note (hash, note, credit, license, internal, added_by, updated_at, tone, caption, links, mark)
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
                      ON CONFLICT(hash) DO UPDATE SET note=?2, credit=?3, license=?4,
-                       internal=?5, added_by=COALESCE(?6, note.added_by), updated_at=?7, tone=?8
+                       internal=?5, added_by=COALESCE(?6, note.added_by), updated_at=?7, tone=?8, caption=?9, links=?10, mark=?11
                      WHERE ?7 > note.updated_at",
-                    params![hash, n.note, n.credit, n.license, n.internal as i64, n.added_by, n.updated_at, n.tone],
+                    params![hash, n.note, n.credit, n.license, n.internal as i64, n.added_by, n.updated_at, n.tone, n.caption, links_json(&n.links), clean_mark(n.mark.as_deref())],
                 )
                 .map_err(err)?;
             changed |= rows > 0;
@@ -195,7 +224,7 @@ impl Library {
     pub(crate) fn all_notes(&self) -> Result<serde_json::Map<String, serde_json::Value>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn
-            .prepare("SELECT hash, note, credit, license, internal, added_by, updated_at, tone FROM note ORDER BY hash")
+            .prepare("SELECT hash, note, credit, license, internal, added_by, updated_at, tone, caption, links, mark FROM note ORDER BY hash")
             .map_err(err)?;
         let rows = stmt
             .query_map([], |r| {
@@ -209,6 +238,9 @@ impl Library {
                         added_by: r.get(5)?,
                         updated_at: r.get(6)?,
                         tone: r.get(7)?,
+                        caption: r.get(8)?,
+                        links: links_of(r.get(9)?),
+                        mark: r.get(10)?,
                     },
                 ))
             })
@@ -225,7 +257,7 @@ impl Library {
         let conn = self.conn.lock().unwrap();
         let n = conn
             .query_row(
-                "SELECT note, credit, license, internal, added_by, updated_at, tone FROM note WHERE hash = ?1",
+                "SELECT note, credit, license, internal, added_by, updated_at, tone, caption, links, mark FROM note WHERE hash = ?1",
                 params![hash],
                 |r| {
                     Ok(Note {
@@ -236,10 +268,16 @@ impl Library {
                         added_by: r.get(4)?,
                         updated_at: r.get(5)?,
                         tone: r.get(6)?,
+                        caption: r.get(7)?,
+                        links: links_of(r.get(8)?),
+                        mark: r.get(9)?,
                     })
                 },
             )
-            .ok();
+            .optional()
+            .map_err(err)?;
+        // Nur „keine Zeile“ heißt leere Notiz. Ein DB-Fehler (z. B. gesperrt) darf
+        // nicht als leer gelten, sonst überschriebe set_note alle Angaben (0.31.0).
         Ok(n.unwrap_or_default())
     }
 
@@ -262,6 +300,17 @@ impl Library {
             }
             if let Some(v) = &patch.tone {
                 n.tone = clean_tone(Some(v));
+            }
+            if let Some(v) = &patch.caption {
+                n.caption = clean(Some(v.chars().take(4000).collect()));
+            }
+            if let Some(v) = &patch.mark {
+                n.mark = clean_mark(Some(v));
+            }
+            if let Some(v) = &patch.links {
+                let mut seen = HashSet::new();
+                let list: Vec<String> = v.iter().filter(|h| *h != hash && seen.insert(h.to_string())).cloned().collect();
+                n.links = Some(list).filter(|l| !l.is_empty());
             }
             // Immer neuer als alles Bisherige, auch bei schiefer Uhr eines anderen Macs
             n.updated_at = now.max(n.updated_at + 1);
@@ -311,22 +360,61 @@ impl Library {
         self.write_zone_file(&v)
     }
 
-    /// Nach Umbenennen einer Zone: Reihenfolge wandert mit.
-    pub(crate) fn rename_item_order(&self, old: &str, new: &str) -> Result<()> {
+    /// Neuer Hash eines Objekts (Notiz bearbeitet): Platz in der Reihenfolge bleibt.
+    pub(crate) fn replace_in_order(&self, old: &str, new: &str) -> Result<()> {
         let mut v = self.zone_file();
         let Some(sort) = v.get_mut("sort").and_then(|s| s.as_object_mut()) else { return Ok(()) };
-        let moves: Vec<(String, String)> = sort
-            .keys()
-            .filter(|k| k.as_str() == old || k.starts_with(&format!("{old}/")))
-            .map(|k| (k.clone(), format!("{new}{}", &k[old.len()..])))
-            .collect();
-        if moves.is_empty() {
-            return Ok(());
-        }
-        for (from, to) in moves {
-            if let Some(list) = sort.remove(&from) {
-                sort.insert(to, list);
+        let mut hit = false;
+        for list in sort.values_mut() {
+            if let Some(arr) = list.as_array_mut() {
+                for h in arr.iter_mut() {
+                    if h.as_str() == Some(old) {
+                        *h = serde_json::json!(new);
+                        hit = true;
+                    }
+                }
             }
+        }
+        if hit { self.write_zone_file(&v) } else { Ok(()) }
+    }
+
+    /// Nach Umbenennen einer Zone: Reihenfolge wandert mit.
+    /// Zone oder Ordner umbenannt/verschoben: Sortierung, Standard-Zone,
+    /// Reihenfolge und Hot Zones in zones.json mitziehen (Standard seit 0.31.0,
+    /// sonst fiel die Standard-Zone still auf „Unsorted“ zurück).
+    pub(crate) fn rename_item_order(&self, old: &str, new: &str) -> Result<()> {
+        let mut v = self.zone_file();
+        let renamed = |k: &str| -> Option<String> {
+            (k == old || k.starts_with(&format!("{old}/"))).then(|| format!("{new}{}", &k[old.len()..]))
+        };
+        let mut changed = false;
+        if let Some(sort) = v.get_mut("sort").and_then(|s| s.as_object_mut()) {
+            let moves: Vec<(String, String)> = sort.keys().filter_map(|k| renamed(k).map(|to| (k.clone(), to))).collect();
+            for (from, to) in moves {
+                if let Some(list) = sort.remove(&from) {
+                    sort.insert(to, list);
+                    changed = true;
+                }
+            }
+        }
+        for key in ["default", "expire"] {
+            if let Some(to) = v.get(key).and_then(|d| d.as_str()).and_then(renamed) {
+                v[key] = serde_json::json!(to);
+                changed = true;
+            }
+        }
+        for key in ["order", "hot"] {
+            if let Some(list) = v.get_mut(key).and_then(|a| a.as_array_mut()) {
+                for z in list.iter_mut() {
+                    if let Some(to) = z.as_str().and_then(renamed) {
+                        *z = serde_json::json!(to);
+                        changed = true;
+                    }
+                }
+            }
+        }
+        if !changed {
+            return Ok(());
         }
         self.write_zone_file(&v)
     }
@@ -345,8 +433,8 @@ impl Library {
             return Err("Nichts ausgewählt".into());
         }
         let name = crate::library::clean_segment(title);
-        let name = if name.is_empty() { "Archiver".to_string() } else { name };
-        let dir = crate::library::unique_path(dest, &format!("{name} (Archiver)"));
+        let name = if name.is_empty() { "Archery".to_string() } else { name };
+        let dir = crate::library::unique_path(dest, &format!("{name} (Archery)"));
         fs::create_dir_all(&dir).map_err(err)?;
 
         let mut files = Vec::new();
@@ -368,7 +456,7 @@ impl Library {
                     source: i.page_url.as_deref().map(domain).filter(|d| !d.is_empty()),
                     quote: i.quote.clone(),
                     label: i.format.to_uppercase(),
-                    note: i.note.clone(),
+                    note: i.caption.clone().or_else(|| i.note.clone()),
                 })
                 .collect();
             let layout = crate::pdf::Layout::auto(sheet_items.len());
@@ -419,7 +507,7 @@ fn csv_cell(s: &str) -> String {
 
 pub fn sources_csv(items: &[Item], files: &[String]) -> String {
     let mut out = String::from(
-        "Datei,Seitentitel,Seite,Bild-URL,Gesichert,Urheber,Lizenz,Nur intern,Notiz,Abgelegt von\n",
+        "Datei,Seitentitel,Seite,Bild-URL,Gesichert,Urheber,Lizenz,Nur intern,Bildtext,Abgelegt von\n",
     );
     for (i, f) in items.iter().zip(files) {
         let row = [
@@ -431,7 +519,7 @@ pub fn sources_csv(items: &[Item], files: &[String]) -> String {
             i.credit.clone().unwrap_or_default(),
             i.license.clone().unwrap_or_default(),
             if i.internal { "ja".into() } else { String::new() },
-            i.note.clone().unwrap_or_default(),
+            i.caption.clone().or_else(|| i.note.clone()).unwrap_or_default(),
             i.added_by.clone().unwrap_or_default(),
         ];
         out.push_str(&row.iter().map(|c| csv_cell(c)).collect::<Vec<_>>().join(","));
@@ -462,7 +550,8 @@ pub fn sources_md(title: &str, meta: &str, items: &[Item], files: &[String]) -> 
         line("Lizenz", i.license.clone());
         line("Nur intern", i.internal.then(|| "ja".to_string()));
         line("Abgelegt von", i.added_by.clone());
-        if let Some(n) = i.note.as_ref().filter(|n| !n.is_empty()) {
+        // 0.30: Bildtext (das frühere Feld „Notiz“ ist darin aufgegangen)
+        if let Some(n) = i.caption.as_ref().or(i.note.as_ref()).filter(|n| !n.is_empty()) {
             out.push_str(&format!("\n> {}\n", n.replace('\n', "\n> ")));
         }
         out.push('\n');
@@ -504,6 +593,7 @@ mod tests {
             note: Some("Kontrast  ".into()),
             credit: Some("Studio X".into()),
             internal: Some(true),
+            caption: Some("Pause II at Ormside Projects, 2025".into()),
             ..Default::default()
         };
         lib.set_note(&[item.hash.clone()], &patch).unwrap();
@@ -521,10 +611,23 @@ mod tests {
         let item = lib.items().unwrap().remove(0);
         assert_eq!(item.note.as_deref(), Some("Kontrast"));
         assert_eq!(item.added_by.as_deref(), Some("Lukas"));
+        assert_eq!(item.caption.as_deref(), Some("Pause II at Ormside Projects, 2025"), "Bildtext übersteht den Verlust der Datenbank");
 
         // Leere Notiz löscht
         lib.set_note(&[item.hash.clone()], &NotePatch { note: Some(" ".into()), ..Default::default() }).unwrap();
         assert_eq!(lib.items().unwrap()[0].note, None);
+
+        // Farbmarke: nur die fünf Farben, leer löscht, übersteht den Verlust der Datenbank
+        lib.set_note(&[item.hash.clone()], &NotePatch { mark: Some("white".into()), ..Default::default() }).unwrap();
+        assert_eq!(lib.items().unwrap()[0].mark, None);
+        lib.set_note(&[item.hash.clone()], &NotePatch { mark: Some("cyan".into()), ..Default::default() }).unwrap();
+        drop(lib);
+        fs::remove_file(root.join(".archiver/library.db")).unwrap();
+        let lib = Library::open(&root).unwrap();
+        lib.scan().unwrap();
+        assert_eq!(lib.items().unwrap()[0].mark.as_deref(), Some("cyan"));
+        lib.set_note(&[item.hash.clone()], &NotePatch { mark: Some(String::new()), ..Default::default() }).unwrap();
+        assert_eq!(lib.items().unwrap()[0].mark, None);
     }
 
     #[test]
@@ -588,8 +691,46 @@ mod tests {
         assert!(lib.item_order().get(&zone).is_none());
         lib.set_item_order(&new, &[]).unwrap();
         assert!(lib.item_order().is_empty());
-        // Reihenfolge der Zonen bleibt dabei erhalten
-        assert_eq!(lib.zone_order().0, vec![zone]);
+        // Reihenfolge der Zonen und Standard-Zone ziehen mit (0.31.0)
+        assert_eq!(lib.zone_order().0, vec![new.clone()]);
+        lib.set_default_zone(&new).unwrap();
+        let renamed = lib.rename_zone(&new, "Schriften").unwrap();
+        assert_eq!(lib.default_zone(), renamed);
+        // Nur Groß-/Kleinschreibung: kein „schriften 2“
+        assert_eq!(lib.rename_zone(&renamed, "schriften").unwrap(), "schriften");
+    }
+
+    #[test]
+    fn note_keeps_tone_links_and_place_when_edited() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path().join("Bib");
+        let lib = Library::open(&root).unwrap();
+        write_png(&root.join("Typo/a.png"), [0, 0, 250]);
+        lib.scan().unwrap();
+        let img = lib.items().unwrap()[0].hash.clone();
+        let rel = lib.create_note("Typo", "Neue Notiz").unwrap();
+        assert_eq!(rel, "Typo/Neue Notiz.md");
+        let note = lib.items().unwrap().into_iter().find(|i| i.path == rel).unwrap();
+        assert_eq!(note.quote.as_deref(), Some("# Neue Notiz"));
+        lib.set_note(&[note.hash.clone()], &NotePatch { tone: Some("black".into()), links: Some(vec![img.clone(), img.clone(), note.hash.clone()]), ..Default::default() })
+            .unwrap();
+        lib.set_item_order("Typo", &[note.hash.clone(), img.clone()]).unwrap();
+        // Schreiben ohne Umbenennen: gleicher Pfad, neuer Hash, Angaben wandern mit
+        let (p, h) = lib.write_note(&rel, "# Pause II\n\nRot über Foto", false).unwrap();
+        assert_eq!(p, rel);
+        assert_ne!(h, note.hash);
+        assert!(!lib.scan().unwrap(), "Scan sieht nichts Neues");
+        let after = lib.items().unwrap().into_iter().find(|i| i.path == rel).unwrap();
+        assert_eq!(after.tone.as_deref(), Some("black"));
+        assert_eq!(after.links, Some(vec![img.clone()]));
+        assert_eq!(after.added_at, note.added_at);
+        assert_eq!(lib.item_order().get("Typo").unwrap(), &vec![h.clone(), img.clone()]);
+        // Beim Verlassen: Titel wird Dateiname
+        let (p, _) = lib.write_note(&rel, "# Pause II\n\nRot über Foto", true).unwrap();
+        assert_eq!(p, "Typo/Pause II.md");
+        assert!(!root.join(&rel).exists());
+        assert_eq!(lib.read_note(&p).unwrap(), "# Pause II\n\nRot über Foto\n");
+        assert_eq!(lib.items().unwrap().iter().filter(|i| i.format == "md").count(), 1);
     }
 
     #[test]
@@ -609,7 +750,7 @@ mod tests {
         let rep = lib.export_package(&paths, "Plakate", "2 Objekte", &out, true).unwrap();
         assert_eq!((rep.count, rep.internal), (2, 1));
         let dir = PathBuf::from(&rep.path);
-        assert!(dir.ends_with("Plakate (Archiver)"));
+        assert!(dir.ends_with("Plakate (Archery)"));
         for f in ["a.png", "b.png", "Quellen.csv", "Quellen.md", "Kontaktbogen.pdf"] {
             assert!(dir.join(f).is_file(), "{f} fehlt");
         }

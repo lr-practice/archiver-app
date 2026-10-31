@@ -1,0 +1,557 @@
+/* cloud.css — Atlas (0.39.1 als Wolke, neu 0.41.0 und 0.42.0): Referenzen um
+   das offene Objekt, neun Ansichten, Fläche in sieben Farben, eine Leiste.
+   Baut auf app.css auf: Lightbox-Grund und -Leiste (4.11), Ring (4.1),
+   Glas (2.4), Chips (4.7). Siehe DESIGN.md 4.25. */
+
+.cloud {
+  position: fixed;
+  inset: 0;
+  z-index: 25;
+  background: var(--cl-bg, var(--lightbox-bg));
+  color: var(--cl-fg, var(--p-text));
+  transition: background-color 0.28s ease;
+  -webkit-backdrop-filter: blur(24px);
+  backdrop-filter: blur(24px);
+  animation: cl-in 0.18s ease;
+}
+
+@keyframes cl-in {
+  from {
+    opacity: 0;
+  }
+}
+
+.cl-stage {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.cl-links {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.cl-links line,
+.cl-links path {
+  fill: none;
+  stroke: var(--cl-fg, var(--p-text));
+  stroke-opacity: 0.45;
+  stroke-width: 1;
+  stroke-dasharray: 4 4;
+}
+
+/* Objekte bleiben rechteckig wie das Original (2.3) */
+.cl-ref {
+  position: absolute;
+  left: 0;
+  top: 0;
+  background: var(--thumb-bg);
+  cursor: grab;
+  will-change: transform;
+  /* Ansichten wechseln: jedes Objekt gleitet an seinen neuen Platz (2.5) */
+  transition: transform 0.45s cubic-bezier(0.2, 0.7, 0.2, 1), width 0.45s cubic-bezier(0.2, 0.7, 0.2, 1),
+    height 0.45s cubic-bezier(0.2, 0.7, 0.2, 1), opacity 0.28s ease;
+}
+
+.cl-ref.still,
+.cloud.dragging .cl-ref.selected {
+  transition: none;
+}
+
+.cl-ref:active {
+  cursor: grabbing;
+}
+
+.cl-ref img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  pointer-events: none;
+}
+
+/* Auswahl: Ring (4.1), eckig, 4 px Abstand; auf farbiger Fläche in deren Schriftfarbe.
+   Die drei ähnlichsten beim Überfahren tragen denselben Ring, halb so stark. */
+.cl-ref.selected::after,
+.cl-ref.near::after,
+.cl-ref.swap::after {
+  content: "";
+  position: absolute;
+  inset: -4px;
+  pointer-events: none;
+  background: var(--cl-fg, var(--p-text));
+  -webkit-mask: var(--ring-0) 0 0 / 100% 100% no-repeat;
+  mask: var(--ring-0) 0 0 / 100% 100% no-repeat;
+}
+
+.cl-ref.near:not(.selected)::after {
+  opacity: 0.45;
+}
+
+/* Größer und kleiner beim Überfahren, unten rechts im Bild (0.42.1). Nur wo die
+   Größe zählt: Wolke, Spektrum, Strang, Frei */
+.cl-size {
+  position: absolute;
+  right: 6px;
+  bottom: 6px;
+  z-index: 1;
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  border-radius: var(--r-sm);
+  background: var(--menu-bg);
+  box-shadow: var(--menu-shadow);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.12s ease;
+}
+
+.cl-ref:hover .cl-size {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.cloud.dragging .cl-size,
+.cloud:is([data-view="grid"], [data-view="masonry"], [data-view="focus"], [data-view="piles"], [data-view="compare"]) .cl-size {
+  display: none;
+}
+
+.cl-size-btn {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--p-text);
+  font-size: 14px;
+  line-height: 1;
+  cursor: default;
+}
+
+.cl-size-btn:hover {
+  background: rgba(var(--ink-rgb), 0.1);
+}
+
+/* Stapel: Label wie 4.7 */
+.cl-pile-label {
+  position: absolute;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--cl-fg, var(--p-text));
+  opacity: 0.7;
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+.cl-labels {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.cl-pile-label {
+  left: 0;
+  top: 0;
+}
+
+.cl-lasso {
+  position: absolute;
+  pointer-events: none;
+  border: 1px dashed var(--cl-fg, var(--p-text));
+  background: color-mix(in srgb, var(--cl-fg, var(--p-text)) 6%, transparent);
+}
+
+/* ---- Groß ansehen (Leertaste) ---- */
+
+.cl-look {
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  display: grid;
+  /* Feste Zelle in Fenstergröße, sonst greift max-height in % nicht und
+     große Bilder laufen unten aus dem Fenster (0.42.1) */
+  grid-template: minmax(0, 1fr) / minmax(0, 1fr);
+  place-items: center;
+  background: color-mix(in srgb, var(--cl-bg, var(--lightbox-bg)) 94%, transparent);
+  -webkit-backdrop-filter: blur(24px);
+  backdrop-filter: blur(24px);
+  animation: cl-in 0.18s ease;
+}
+
+.cl-look img {
+  max-width: calc(100% - 160px);
+  max-height: calc(100% - 140px);
+  object-fit: contain;
+}
+
+.cl-look-nav {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  padding: 20px;
+  border: 0;
+  background: none;
+  color: var(--cl-fg, var(--p-text));
+  font-size: 22px;
+  opacity: 0.6;
+  cursor: default;
+}
+
+.cl-look-nav:hover {
+  opacity: 1;
+}
+
+.cl-look-nav.prev {
+  left: 12px;
+}
+
+.cl-look-nav.next {
+  right: 12px;
+}
+
+.cl-look-cap {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 28px;
+  text-align: center;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--cl-fg, var(--p-text));
+  opacity: 0.7;
+}
+
+/* ---- Fläche: Quadrate in der Leiste, eckig wie die Objekte ---- */
+
+.cl-tones {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 8px;
+}
+
+.cl-tone {
+  width: 13px;
+  height: 13px;
+  padding: 0;
+  border: 0;
+  background: var(--sw, var(--lightbox-bg));
+  box-shadow: inset 0 0 0 1px rgba(var(--ink-rgb), 0.25);
+  cursor: default;
+}
+
+/* Lightbox: halb dunkel; Auto: Verlauf als Zeichen für „aus dem Bild“ */
+.cl-tone[data-tone="lightbox"] {
+  background: linear-gradient(135deg, var(--lightbox-bg) 50%, transparent 50%);
+}
+
+.cl-tone[data-tone="auto"] {
+  background: linear-gradient(90deg, #ff0000, #ffff00, #00b050, #00b0f0, #7030a0);
+}
+
+.cl-tone.active {
+  outline: 1px dashed var(--p-text);
+  outline-offset: 3px;
+}
+
+/* ---- Leisten: wie die Lightbox-Leiste ---- */
+
+/* Auf farbiger Fläche decken die Leisten wie ein Menü, damit sie lesbar bleiben */
+.cloud:not([data-tone="lightbox"]) .lb-bar,
+.cloud:not([data-tone="lightbox"]) .cl-picker {
+  background: var(--menu-bg);
+}
+
+/* 0.42.1: zwei Leisten. Unten die Werkzeuge im Maß der Lightbox-Leiste,
+   oben die Ansichten, so breit wie nötig, frei von den Fensterknöpfen */
+.cl-nav {
+  bottom: 22px;
+  width: min(960px, calc(100% - 32px));
+  flex-wrap: wrap;
+  row-gap: 2px;
+}
+
+.cl-top {
+  top: 10px;
+  width: max-content;
+  flex-wrap: wrap;
+  justify-content: center;
+  row-gap: 2px;
+  max-width: calc(100% - 200px);
+}
+
+.cl-nav .lb-btn,
+.cl-top .lb-btn {
+  padding: 0 10px;
+}
+
+.cl-label,
+.cl-count {
+  padding: 0 6px 0 8px;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--p-faint);
+  white-space: nowrap;
+}
+
+.cl-count {
+  color: var(--p-dim);
+}
+
+.cl-flex {
+  flex: 1;
+}
+
+/* ---- Feld über der Leiste: Fassungen ▾ und Fläche ---- */
+
+.cl-pop {
+  position: absolute;
+  z-index: 4;
+  display: grid;
+  gap: 6px;
+  max-width: min(560px, calc(100% - 32px));
+  padding: 10px;
+  border-radius: var(--r-lg);
+  background: var(--menu-bg);
+  color: var(--p-text);
+  box-shadow: var(--menu-shadow);
+  -webkit-backdrop-filter: blur(24px) saturate(1.4);
+  backdrop-filter: blur(24px) saturate(1.4);
+  animation: cl-in 0.18s ease;
+}
+
+.cl-pop .cl-label {
+  padding-top: 4px;
+}
+
+.cl-pop-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px;
+}
+
+.cl-pop-row.cl-tones {
+  gap: 10px;
+  padding: 4px 8px;
+}
+
+.cl-tone.big {
+  width: 20px;
+  height: 20px;
+}
+
+/* ---- Rechtsklick auf ein Bild: Menü wie in den Zonen (p-ctx-menu) ---- */
+
+.cl-ctx {
+  color: var(--p-text);
+}
+
+/* ---- Referenz hinzufügen: Glas über der Leiste ---- */
+
+.cl-picker {
+  position: absolute;
+  left: 50%;
+  bottom: 82px;
+  transform: translateX(-50%);
+  z-index: 3;
+  width: min(960px, calc(100% - 32px));
+  display: grid;
+  gap: 10px;
+  padding: 10px;
+  border-radius: var(--r-lg);
+  background: var(--menu-bg);
+  box-shadow: var(--menu-shadow);
+  -webkit-backdrop-filter: blur(24px) saturate(1.4);
+  backdrop-filter: blur(24px) saturate(1.4);
+  animation: cl-in 0.18s ease;
+}
+
+.cl-picker-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.cl-search {
+  flex: 1;
+  height: 30px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: rgba(var(--ink-rgb), 0.055);
+  color: var(--p-text);
+  font: inherit;
+  font-size: 13px;
+  outline: none;
+}
+
+.cl-strip {
+  display: flex;
+  gap: 6px;
+  height: 88px;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.cl-thumb {
+  flex: 0 0 auto;
+  height: 88px;
+  padding: 0;
+  border: 0;
+  background: var(--thumb-bg);
+  cursor: pointer;
+  opacity: 0.85;
+  transition: opacity 0.12s ease;
+}
+
+.cl-thumb:hover {
+  opacity: 1;
+}
+
+.cl-thumb img {
+  display: block;
+  height: 100%;
+  width: auto;
+  max-width: 180px;
+  object-fit: cover;
+  pointer-events: none;
+}
+
+/* Aufgeklappt (0.42.1): Zonen als Karten wie im Tray (pal-card), Klick öffnet
+   die Zone, ihre Bilder umbrechen statt seitlich zu laufen */
+.cl-picker.open .cl-strip {
+  height: auto;
+  max-height: min(52vh, 460px);
+  flex-wrap: wrap;
+  align-content: flex-start;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.cl-crumb {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.cl-crumb-sep {
+  color: var(--p-faint);
+}
+
+.cl-crumb-here {
+  padding: 0 8px;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.cl-zone {
+  flex: 0 0 calc((100% - 18px) / 4);
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0 8px;
+  padding: 0 0 8px;
+  border: 0;
+  border-radius: var(--r-lg);
+  background: rgba(var(--ink-rgb), 0.055);
+  color: var(--p-text);
+  text-align: left;
+  cursor: default;
+  overflow: hidden;
+}
+
+.cl-zone:hover {
+  background: rgba(var(--ink-rgb), 0.1);
+}
+
+.cl-zone-cover {
+  grid-column: 1 / -1;
+  aspect-ratio: 8 / 3;
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  gap: 2px;
+  margin-bottom: 8px;
+  background: rgba(var(--ink-rgb), 0.04);
+}
+
+.cl-zone-cover img {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  display: block;
+  object-fit: cover;
+  background: var(--thumb-bg);
+}
+
+.cl-zone-name {
+  padding-left: 12px;
+  font-size: 14px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cl-zone-count {
+  padding-right: 12px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--p-dim);
+}
+
+@media (max-width: 700px) {
+  .cl-zone {
+    flex-basis: calc((100% - 6px) / 2);
+  }
+}
+
+.cl-empty {
+  align-self: center;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--p-faint);
+}
+
+body.cloud-open .lb-nav,
+body.cloud-open .lb-zones {
+  visibility: hidden;
+}
+
+/* Aus der Zone geöffnet (0.42.0): Kopf und Leisten der App treten weg wie bei der Lightbox */
+body.cloud-open .p-nav,
+body.cloud-open .p-dropbar,
+body.cloud-open .p-top,
+body.cloud-open .p-lib-tab {
+  display: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cloud,
+  .cl-picker,
+  .cl-pop,
+  .cl-look {
+    animation: none;
+  }
+  .cl-ref,
+  .cl-thumb,
+  .cl-size {
+    transition: none;
+  }
+}
