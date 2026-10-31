@@ -1,0 +1,52 @@
+# Einmalig, 31.10.2026 nach Go von Lukas: alte Branches als Tag archiv/<name>
+# sichern und danach löschen. Läuft genau dann, wenn diese Datei auf main ankommt.
+# Zurückholen eines Branches: git push origin archiv/<name>:refs/heads/<name>
+name: Branches archivieren
+
+on:
+  push:
+    branches: [main]
+    paths: [".github/workflows/branches-archivieren.yml"]
+
+permissions:
+  contents: write
+
+jobs:
+  archivieren:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Tags setzen, prüfen, Branches löschen
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          BRANCHES: >-
+            claude/demo-melange
+            claude/project-thread-47qm6a
+            claude/project-thread-6aeyrn
+            claude/project-thread-6edu5e
+            claude/project-thread-85f33d
+            claude/project-thread-9pnbi5
+            claude/project-thread-dbz9ra
+            claude/project-thread-ebbmcg
+            claude/project-thread-ep7rda
+            claude/project-thread-ji5u83
+            claude/project-thread-jxca1u
+            claude/project-thread-lrmlgx
+            claude/project-thread-paiv8d
+            claude/project-thread-ssf00q
+            claude/project-thread-sv1ha3
+            claude/project-thread-tkzrzx
+            claude/project-thread-u0jttm
+            claude/project-thread-uh4al4
+            claude/project-thread-zqppr1
+        run: |
+          set -euo pipefail
+          for b in $BRANCHES; do
+            sha=$(gh api "repos/$REPO/git/ref/heads/$b" --jq .object.sha 2>/dev/null || true)
+            if [ -z "$sha" ]; then echo "schon weg: $b"; continue; fi
+            gh api "repos/$REPO/git/refs" -f ref="refs/tags/archiv/$b" -f sha="$sha" >/dev/null 2>&1 || true
+            tag=$(gh api "repos/$REPO/git/ref/tags/archiv/$b" --jq .object.sha)
+            if [ "$tag" != "$sha" ]; then echo "::error::Tag archiv/$b passt nicht zu $b"; exit 1; fi
+            gh api -X DELETE "repos/$REPO/git/refs/heads/$b"
+            echo "archiviert: $b -> archiv/$b ($sha)"
+          done
