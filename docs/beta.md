@@ -17,4 +17,4 @@ Archery sammelt Bilder aus dem Browser in Ordnern auf deinem Mac. Keine Cloud, k
 4. Die App erkennt die Erweiterung von selbst. Die Einrichtung in der App führt dich durch den Rest.
 
 ### Feedback
-In der App unter **Einstellungen › Allgemein › Feedback senden** (öffnet eine Mail mit deiner Version), oder direkt an feedback@archery-visual.com. Alles hilft: Fehler, Verwirrung, Wünsche. Bei Fehlern hilft das Protokoll aus `~/Library/Logs/Archiver/archiver.log`.
+In der App unter **Einstellungen › Allgemein › Feedback senden** (öffnet eine Mail mit deiner Version), oder direkt an feedback@archery-visual.com. Alles hilft: Fehler, Verwirrung, Wünsche. Bei Fehlern hilft das Protokoll aus `~/Library/Logs/Archery/archery.log`.

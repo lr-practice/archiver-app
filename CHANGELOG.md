@@ -1,5 +1,16 @@
 # Changelog
 
+## App 0.43.3 · Extension 3.31.2
+
+- Konto: Texte aufs Lizenzmodell (9,99 € einmalig, zwei Macs, alle 1.x-Updates;
+  Beta-Bonus: Lizenz für 4,99 € bis 31.01.; Studio eigenes Abo).
+- Sichtbare Ordner heißen Archery: `~/Archery Demo`, `~/Library/Logs/Archery/archery.log`,
+  `Downloads/Archery-Transfer`. Demo und Protokoll werden beim ersten Zugriff
+  übernommen. Die App nimmt weiter auch `Archiver-Transfer` an, damit ältere
+  Extensions funktionieren.
+- Einstieg: Extension-Hinweis für alle Chromium-Browser (Chrome, Brave, Edge, Arc, Vivaldi).
+- Extension: Beschreibung nennt Active Zones.
+
 ## App 0.43.2 · Extension 3.31.1
 
 - Einstellungen › Labor ist weg. Zonenkarten laufen unten nicht mehr aus, die

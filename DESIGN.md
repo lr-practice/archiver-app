@@ -1,6 +1,6 @@
 # Archery – Design-System
 
-Stand: App 0.43.2 · Extension 3.31.1
+Stand: App 0.43.3 · Extension 3.31.2
 
 Diese Datei hält fest, wie Archery aussieht und warum. Sie gilt für die Mac-App
 (`app/src`) und die Extension (`extension/`, in Chrome und in Safari). Wer an der Oberfläche

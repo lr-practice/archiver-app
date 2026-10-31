@@ -627,7 +627,7 @@ async fn create_library(app: AppHandle, index: usize, name: String) -> Result<Op
 }
 
 // ---- Demo-Bibliothek für die Einstiegstour ----
-// Eigener Ordner ~/Archiver Demo/. Gefüllt mit Kopien aus der eigenen Bibliothek
+// Eigener Ordner ~/Archery Demo/ (bis 0.43.2 ~/Archiver Demo, wird übernommen). Gefüllt mit Kopien aus der eigenen Bibliothek
 // (vier Active Zones, Inbox, dazu Bilder für das Browser-Schema in .web/);
 // ist die eigene Bibliothek noch zu leer, mit den mitgelieferten Grafiken
 // (src-tauri/demo). Geöffnet wird sie, ohne die eigene Bibliothek in den
@@ -645,7 +645,12 @@ const DEMO_INBOX: usize = 6;
 const DEMO_WEB: usize = 6;
 
 fn demo_root() -> PathBuf {
-    dirs::home_dir().unwrap_or_default().join("Archiver Demo")
+    let home = dirs::home_dir().unwrap_or_default();
+    let (old, root) = (home.join("Archiver Demo"), home.join("Archery Demo"));
+    if !root.exists() && old.is_dir() {
+        let _ = std::fs::rename(&old, &root);
+    }
+    root
 }
 
 #[derive(Serialize)]
@@ -1386,7 +1391,7 @@ struct UpdateInfo {
 
 // ---- Am ganzen Mac: Palette und Zonenleiste (system.rs) ----
 
-/// Fehler aus der Oberfläche ins Protokoll (~/Library/Logs/Archiver), 0.31.0
+/// Fehler aus der Oberfläche ins Protokoll (~/Library/Logs/Archery), 0.31.0
 #[tauri::command]
 fn log_error(area: String, msg: String) {
     let area: String = area.chars().filter(|c| c.is_ascii_alphanumeric() || *c == '-').take(24).collect();

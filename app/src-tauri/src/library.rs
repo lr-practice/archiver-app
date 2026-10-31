@@ -22,7 +22,13 @@ pub const INBOX: &str = "Unsorted";
 /// Frühere Standard-Zone (bis 0.23); wird beim Öffnen zu „Unsorted“ umbenannt.
 pub const LEGACY_INBOX: &str = "Inbox";
 /// Zwischenordner der Extension in den Downloads (wird nach der Übernahme geleert).
-pub const TRANSFER_DIR: &str = "Archiver-Transfer";
+pub const TRANSFER_DIR: &str = "Archery-Transfer";
+/// Name bis Extension 3.31.1; ältere Extensions legen noch dort ab.
+pub const TRANSFER_DIR_OLD: &str = "Archiver-Transfer";
+
+pub fn is_transfer_dir(name: Option<&str>) -> bool {
+    matches!(name, Some(TRANSFER_DIR) | Some(TRANSFER_DIR_OLD))
+}
 const THUMB_SIZE: u32 = 720;
 const DRAG_ICON_SIZE: u32 = 96;
 const SMALL_THUMB_SIZE: u32 = 400; // Galerie der Extension

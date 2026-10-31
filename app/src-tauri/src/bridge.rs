@@ -531,7 +531,7 @@ fn fit_reply(items: Vec<Value>, offset: usize, total: usize) -> (Vec<Value>, Opt
 }
 
 /// Bild (oder Text-/Linkkarte) aus dem Zwischenordner übernehmen. `file` ist
-/// schon geprüft: aus Downloads/Archiver-Transfer (Chrome) oder aus dem
+/// schon geprüft: aus Downloads/Archery-Transfer (Chrome) oder aus dem
 /// Zwischenordner der HTTP-Brücke (Safari).
 pub(crate) fn save(lib: &Library, msg: &Value, file: &Path, archive: Option<&PathBuf>) -> Result<Value, String> {
     let fallback = lib.default_zone();
@@ -594,7 +594,7 @@ fn warn(out: &mut Value, what: &str, error: &str) {
     out["warnings"].as_array_mut().unwrap().push(json!({ "what": what, "error": error }));
 }
 
-/// Datei aus dem Zwischenordner der Extension (Downloads/Archiver-Transfer).
+/// Datei aus dem Zwischenordner der Extension (Downloads/Archery-Transfer, früher Archiver-Transfer).
 /// Die Brücke übernimmt (und löscht) nur, was Chrome dort für uns abgelegt hat,
 /// nie einen beliebigen Pfad auf dem Mac.
 fn transfer_file(path: &str, ext: Option<&str>) -> Result<PathBuf, String> {
@@ -606,7 +606,7 @@ fn transfer_file(path: &str, ext: Option<&str>) -> Result<PathBuf, String> {
     let real = given.canonicalize().map_err(|e| e.to_string())?;
     let in_transfer = real
         .parent()
-        .map(|p| p.ancestors().any(|a| a.file_name().and_then(|n| n.to_str()) == Some(crate::library::TRANSFER_DIR)))
+        .map(|p| p.ancestors().any(|a| crate::library::is_transfer_dir(a.file_name().and_then(|n| n.to_str()))))
         .unwrap_or(false);
     if !in_transfer {
         return Err(format!("Datei liegt nicht in {}: {}", crate::library::TRANSFER_DIR, given.display()));
@@ -622,7 +622,7 @@ fn transfer_file(path: &str, ext: Option<&str>) -> Result<PathBuf, String> {
 /// Den Zwischenordner der Extension in den Downloads wieder entfernen, wenn er leer ist.
 fn remove_if_empty(dir: Option<&Path>) {
     if let Some(dir) = dir {
-        if dir.file_name().and_then(|n| n.to_str()) == Some(crate::library::TRANSFER_DIR) {
+        if crate::library::is_transfer_dir(dir.file_name().and_then(|n| n.to_str())) {
             let _ = std::fs::remove_dir(dir); // schlägt fehl, solange noch etwas drin liegt
         }
     }
@@ -726,6 +726,11 @@ mod tests {
             assert!(transfer_file(link.to_str().unwrap(), None).is_err());
         }
         assert!(transfer_file(transfer.to_str().unwrap(), None).is_err());
+        // Ältere Extensions (bis 3.31.1) legen noch unter Archiver-Transfer ab
+        let old = tmp.path().join("Downloads").join(crate::library::TRANSFER_DIR_OLD);
+        std::fs::create_dir_all(&old).unwrap();
+        std::fs::write(old.join("alt.jpg"), b"x").unwrap();
+        assert!(transfer_file(old.join("alt.jpg").to_str().unwrap(), None).is_ok());
     }
 
     #[test]

@@ -163,11 +163,11 @@ function removeEntry(index, folderKey, id) {
 // ---- Brücke zur Desktop-App (Chrome Native Messaging) ----
 // Die App meldet sich bei Chrome als Host "app.archiver.bridge" an. Eine
 // Verbindung bleibt offen, solange Anfragen laufen, und schließt nach 30 s Ruhe.
-// Speichern: Chrome lädt das Bild wie gewohnt, aber in Downloads/Archiver-Transfer;
+// Speichern: Chrome lädt das Bild wie gewohnt, aber in Downloads/Archery-Transfer;
 // die App verschiebt es von dort in die Zone und merkt sich die Quelle.
 
 const HOST_NAME = "app.archiver.bridge";
-const TRANSFER_DIR = "Archiver-Transfer";
+const TRANSFER_DIR = "Archery-Transfer"; // bis 3.31.1 Archiver-Transfer, die App nimmt beide an
 const HOST_TIMEOUT_MS = 20000;
 const BRIDGE_CACHE_MS = 5000;
 const PREVIEW_CACHE_MAX = 1500;
@@ -358,7 +358,7 @@ async function sweepStrayTransfers() {
       continue;
     }
     const [item] = await searchDownloads({ id: entry.id });
-    if (item && item.exists !== false && String(item.filename).includes(TRANSFER_DIR)) await removeFile(entry.id);
+    if (item && item.exists !== false && /(Archery|Archiver)-Transfer/.test(String(item.filename))) await removeFile(entry.id);
     await eraseDownload(entry.id);
   }
   await storageSet({ strayTransfers: keep });
