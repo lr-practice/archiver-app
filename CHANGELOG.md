@@ -9,7 +9,7 @@
   übernommen. Die App nimmt weiter auch `Archiver-Transfer` an, damit ältere
   Extensions funktionieren.
 - Einstieg: Extension-Hinweis für alle Chromium-Browser (Chrome, Brave, Edge, Arc, Vivaldi).
-- Extension: Beschreibung nennt Active Zones.
+- Texte aus dem Copy-Deck: Anmelden „Deine Bibliothek.“, neuer Claim unter Information, Einstieg „Browser-Extension verbinden.“, neue Extension-Beschreibung (zugleich Store-Kurztext).
 
 ## App 0.43.2 · Extension 3.31.1
 

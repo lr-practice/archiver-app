@@ -980,7 +980,7 @@ Alle Angaben sind Klassen in `app.css`. Die Extension hat ihre eigenen Namen
   2 / 16 px. Zeilen 12 px hoch gepolstert mit Linie `--p-rule`, Schlüssel
   132 px in `--p-dim`, Wert, Zusatz in `--p-faint`. Als Knopf Hover ink × 0.07.
 - **Sperre (Anmelden, 0.40.9, Variante B „Satz“):** Eine Spalte von höchstens
-  640 px in der Mitte. Satz (`.p-say`) „Dein Archiv. Melde dich mit deiner
+  640 px in der Mitte. Satz (`.p-say`) „Deine Bibliothek. Melde dich mit deiner
   E-Mail an.“, 28 px Abstand, dann eine Linie (`.p-lock-line`, Unterkante
   ink × 0.22, im Fokus × 0.5, bei Fehler `--danger`): das Feld in Satzgröße
   (34 px, 500, Laufweite 0), rechts ein runder Pfeil 44 px (Pille, ink auf
